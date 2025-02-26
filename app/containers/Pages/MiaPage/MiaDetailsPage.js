@@ -32,7 +32,7 @@ const MiaDetailsPage = () => {
   
     const fetchAposentado = async () => {
       try {
-        const response = await fetch(`http://localhost:3001/mia/${id}`);
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/mia/${id}`);
         if (!response.ok) {
           throw new Error("Erro ao carregar os detalhes");
         }

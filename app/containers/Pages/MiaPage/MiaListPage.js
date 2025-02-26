@@ -24,7 +24,7 @@ const MiaListPage = () => {
   // Buscar dados da API
   const fetchAposentados = async () => {
     try {
-      const response = await fetch("http://localhost:3001/mia");
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/mia`);
       if (!response.ok) {
         throw new Error("Erro ao carregar dados");
       }
