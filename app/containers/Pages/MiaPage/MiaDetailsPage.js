@@ -27,12 +27,21 @@ const MiaDetailsPage = () => {
   };
   useEffect(() => {
     let isMounted = true;
-    
+
     console.log("ID recebido:", id); // 🔹 Verifica se o ID está correto
-    const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'http://62.72.63.137:3001/';
+    const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'http://localhost:3001/';
     const fetchAposentado = async () => {
+      const token = localStorage.getItem('token');
+      const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'http://localhost:3001/';
+        
       try {
-        const response = await fetch(`${API_URL}mia/${id}`);
+          const response = await fetch(`${API_URL}mia/${id}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            }
+          });
         if (!response.ok) {
           throw new Error("Erro ao carregar os detalhes");
         }
@@ -47,23 +56,23 @@ const MiaDetailsPage = () => {
         }
       }
     };
-  
+
     if (id) {
       fetchAposentado();
     } else {
       console.warn("ID não encontrado na URL!");
     }
-  
+
     return () => {
       isMounted = false;
     };
   }, [id]);
-  
+
 
   if (!aposentado) return (
     <Typography color="error">Erro ao carregar os dados. Verifique a conexão.</Typography>
   );
-  
+
 
   return (
     <div>
@@ -85,9 +94,9 @@ const MiaDetailsPage = () => {
               <Typography variant="body2" color="textSecondary">{aposentado.profissao || "Sem profissão"}</Typography>
             </Box>
           </Box>
-          
+
           <List>
-          <ListItem>
+            <ListItem>
               <ListItemIcon><CalendarToday /></ListItemIcon>
               <ListItemText primary="Data de Nascimento" secondary={formatDate(aposentado.data_nascimento)} />
             </ListItem>
