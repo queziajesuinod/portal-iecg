@@ -16,7 +16,7 @@ const bodyParser = require('body-parser');
 
 // ✅ Configura CORS para permitir requisições do frontend
 app.use(cors({
-  origin: ['http://portal.iecg.com.br', 'http://localhost:3001'], // Domínios permitidos
+  origin: ['http://portal.iecg.com.br', 'http://localhost:3001','http://62.72.63.137:3001'], // Domínios permitidos
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   credentials: true, // Permite envio de cookies
   allowedHeaders: 'Origin, X-Requested-With, Content-Type, Accept, Authorization'
