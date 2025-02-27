@@ -29,7 +29,7 @@ const MiaDetailsPage = () => {
     let isMounted = true;
     
     console.log("ID recebido:", id); // 🔹 Verifica se o ID está correto
-    const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'http://localhost:3001/';
+    const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'http://portal.iecg.com.br/';
     const fetchAposentado = async () => {
       try {
         const response = await fetch(`${API_URL}mia/${id}`);

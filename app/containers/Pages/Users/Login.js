@@ -10,7 +10,7 @@ function Login({ setIsAuthenticated = () => { } }) {
   const [valueForm, setValueForm] = useState(null);
   const { classes } = useStyles();
   const history = useHistory();
-  const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'http://localhost:3001/';
+  const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'http://portal.iecg.com.br/';
     
   const submitForm = async (values) => {
     try {
