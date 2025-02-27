@@ -21,7 +21,7 @@ const MiaListPage = () => {
   const description = "Listagem de todos os aposentados cadastrados";
   const [aposentados, setAposentados] = useState([]);
   const history = useHistory(); // 🔹 Substitui o uso de navigate()
-  const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'http://portal.iecg.com.br/';
+  const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'http://localhost:3001/';
   // Buscar dados da API
   const fetchAposentados = async () => {
     try {
