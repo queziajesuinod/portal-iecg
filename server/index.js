@@ -1,6 +1,5 @@
-/* eslint consistent-return:0 import/order:0 */
-
 const express = require('express');
+const cors = require('cors'); // ✅ Importa o CORS
 const logger = require('./logger');
 const favicon = require('serve-favicon');
 const path = require('path');
@@ -8,12 +7,20 @@ const rawicons = require('./rawicons');
 const rawdocs = require('./rawdocs');
 const argv = require('./argv');
 const port = require('./port');
-const setup = require('./middlewares/frontendMiddleware'); // Mantendo o Middleware correto
+const setup = require('./middlewares/frontendMiddleware'); 
 const isDev = process.env.NODE_ENV !== 'production';
 const ngrok = (isDev && process.env.ENABLE_TUNNEL) || argv.tunnel ? require('ngrok') : false;
 const { resolve } = require('path');
 const app = express();
 const bodyParser = require('body-parser');
+
+// ✅ Configura CORS para permitir requisições do frontend
+app.use(cors({
+  origin: ['http://portal.iecg.com.br', 'http://localhost:3001'], // Domínios permitidos
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  credentials: true, // Permite envio de cookies
+  allowedHeaders: 'Origin, X-Requested-With, Content-Type, Accept, Authorization'
+}));
 
 // 🛠️ Importando Rotas da API
 const rotaUsers = require("./routers/users");
@@ -24,7 +31,7 @@ const aposentadoRoutes = require('./routers/aposentadoRoutes');
 
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
-app.use(express.json()); // Middleware para processar JSON
+app.use(express.json());
 
 // 🔹 Definir API Routes
 app.use('/users', rotaUsers);
@@ -33,15 +40,12 @@ app.use('/auth', rotaAuth);
 app.use('/permissoes', rotaPermissao);
 app.use('/mia', aposentadoRoutes);
 
-// 🔹 Servindo favicon (evita erro de arquivo não encontrado)
+// 🔹 Servindo favicon
 app.use(favicon(path.join(__dirname, '../public/favicons/favicon.ico')));
-
 
 // 🔹 Servindo Arquivos Estáticos (Frontend React)
 if (!isDev) {
   app.use(express.static(resolve(__dirname, '../build')));
-
-  // Se nenhuma rota do backend for encontrada, retorna o `index.html` do React
   app.get('*', (req, res) => {
     res.sendFile(resolve(__dirname, '../build', 'index.html'));
   });
