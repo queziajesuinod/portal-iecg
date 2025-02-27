@@ -10,10 +10,11 @@ function Login({ setIsAuthenticated = () => { } }) {
   const [valueForm, setValueForm] = useState(null);
   const { classes } = useStyles();
   const history = useHistory();
-
+  const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'http://localhost:3001/';
+    
   const submitForm = async (values) => {
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/login`, {
+      const response = await fetch(`${API_URL}auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"

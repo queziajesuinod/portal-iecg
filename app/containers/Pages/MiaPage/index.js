@@ -111,9 +111,10 @@ const MiaPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem('token');
-
+    const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'http://localhost:3001/';
+    
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/mia`, {
+      const response = await fetch(`${API_URL}mia`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -29,10 +29,10 @@ const MiaDetailsPage = () => {
     let isMounted = true;
     
     console.log("ID recebido:", id); // 🔹 Verifica se o ID está correto
-  
+    const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'http://localhost:3001/';
     const fetchAposentado = async () => {
       try {
-        const response = await fetch(`${process.env.REACT_APP_API_URL}/mia/${id}`);
+        const response = await fetch(`${API_URL}mia/${id}`);
         if (!response.ok) {
           throw new Error("Erro ao carregar os detalhes");
         }

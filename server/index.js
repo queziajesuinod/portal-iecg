@@ -93,5 +93,5 @@ app.listen(port, host, async (err) => {
     logger.appStarted(port, prettyHost);
   }
 
-  console.log(`🚀 Servidor rodando em: http://localhost:${port}`);
+  console.log(`🚀 Servidor rodando em: ${process.env.REACT_APP_API_URL}`);
 });
