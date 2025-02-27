@@ -136,6 +136,7 @@
     "compression-webpack-plugin": "^9.2.0",
     "connected-react18-router": "^6.9.4",
     "core-js": "^3.21.1",
+    "cors": "^2.8.5",
     "cross-env": "^5.2.1",
     "dandelion-animated-slider": "^1.0.0",
     "date-fns": "2.29.3",
