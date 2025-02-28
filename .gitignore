@@ -3,7 +3,6 @@ coverage
 build
 node_modules
 stats.json
-.env
 Dockerfile
 # Cruft
 .DS_Store

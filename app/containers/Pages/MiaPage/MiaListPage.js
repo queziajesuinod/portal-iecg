@@ -24,7 +24,7 @@ const MiaListPage = () => {
   // Buscar dados da API
   const fetchAposentados = async () => {
     const token = localStorage.getItem('token');
-    const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br:3001/';
+    const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br/';
       
     try {
         const response = await fetch(`${API_URL}mia`, {
