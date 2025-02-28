@@ -37,7 +37,7 @@ const authMiddleware = (req, res, next) => {
 
 // ✅ Configuração do CORS (Permite requisições do frontend)
 app.use(cors({
-  origin: ['http://portal.iecg.com.br:3001', 'http://localhost:3001', 'http://0.0.0.0:3001'],
+  origin: ['https://portal.iecg.com.br:3001', 'http://localhost:3001', 'http://0.0.0.0:3001'],
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
   credentials: true,
   allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization']
