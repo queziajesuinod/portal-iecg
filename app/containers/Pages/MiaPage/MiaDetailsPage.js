@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useHistory } from "react-router-dom";
 import { Helmet } from "react-helmet";
 import { PapperBlock } from 'dan-components';
 import {
@@ -11,42 +11,56 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
-  Divider
+  Divider,
+  Button
 } from "@mui/material";
-import { Phone, LocationOn, Work, School, Facebook, Healing, LocalHospital, Person, FamilyRestroom, MedicalServices, CalendarToday } from "@mui/icons-material";
+import {
+  Phone,
+  LocationOn,
+  Work,
+  School,
+  Facebook,
+  Healing,
+  LocalHospital,
+  Person,
+  FamilyRestroom,
+  MedicalServices,
+  CalendarToday
+} from "@mui/icons-material";
 
 const MiaDetailsPage = () => {
   const [aposentado, setAposentado] = useState(null);
   const location = useLocation();
+  const history = useHistory();
   const searchParams = new URLSearchParams(location.search);
   const id = searchParams.get("id");
+
   const formatDate = (dateString) => {
     if (!dateString) return "Não informado";
     const [year, month, day] = dateString.split("-");
     return `${day}/${month}/${year}`;
   };
+
   useEffect(() => {
     let isMounted = true;
 
-    console.log("ID recebido:", id); // 🔹 Verifica se o ID está correto
     const fetchAposentado = async () => {
       const token = localStorage.getItem('token');
       const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
-        
+
       try {
-          const response = await fetch(`${API_URL}/mia/${id}`, {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`
-            }
-          });
+        const response = await fetch(`${API_URL}/mia/${id}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          }
+        });
         if (!response.ok) {
           throw new Error("Erro ao carregar os detalhes");
         }
         const data = await response.json();
         if (isMounted) {
-          console.log("Dados carregados:", data); // 🔹 Verifica os dados retornados
           setAposentado(data);
         }
       } catch (error) {
@@ -67,11 +81,9 @@ const MiaDetailsPage = () => {
     };
   }, [id]);
 
-
   if (!aposentado) return (
     <Typography color="error">Erro ao carregar os dados. Verifique a conexão.</Typography>
   );
-
 
   return (
     <div>
@@ -80,17 +92,26 @@ const MiaDetailsPage = () => {
       </Helmet>
 
       <PapperBlock title="Detalhes do Aposentado" desc="Informações completas">
+        <Box display="flex" justifyContent="flex-end" mb={2}>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={() => history.push('/app/mia/cadastrar', { aposentado })}
+          >
+            Editar
+          </Button>
+        </Box>
+
         <Paper style={{ padding: 20, marginTop: 20 }}>
-          {/* Nome + Avatar */}
           <Box display="flex" alignItems="center" gap={2} mb={3}>
             <Avatar
-              src={aposentado.foto || "https://via.placeholder.com/150"}
+              src={aposentado.foto ||  "https://via.placeholder.com/100"}
               alt={aposentado.nome}
               sx={{ width: 80, height: 80 }}
             />
             <Box>
               <Typography variant="h5" fontWeight="bold">{aposentado.nome}</Typography>
-              <Typography variant="body2" color="textSecondary">{aposentado.profissao || "Sem profissão"}</Typography>
+              <Typography variant="body2" color="textSecondary" component="span">{aposentado.profissao || "Sem profissão"}</Typography>
             </Box>
           </Box>
 
