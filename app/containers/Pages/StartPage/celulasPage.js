@@ -21,7 +21,7 @@ const ListagemCelulasPage = () => {
   const fetchCelulas = async (currentPage) => {
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch(`${API_URL}/celula?page=${currentPage}&limit=${rowsPerPage}`, {
+      const res = await fetch(`${API_URL}/start/celula?page=${currentPage}&limit=${rowsPerPage}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
@@ -37,7 +37,7 @@ const ListagemCelulasPage = () => {
   }, [page]);
 
   const handleEdit = (celula) => {
-    history.push('/app/start/celula/cadastrar', { celula });
+    history.push('/app/start/celulas/cadastrar', { celula });
   };
 
   return (
