@@ -5,17 +5,36 @@ module.exports = [
     icon: 'ion-ios-contacts-outline',
     child: [
       {
-        key: 'listagem',
-        name: 'Listagem',
+        key: 'listagemMia',
+        name: 'Listagem do MIA',
         link: '/app/mia',
         icon: 'ion-ios-list-box-outline'
       },
       {
-        key: 'cadastro',
-        name: 'Cadastro',
+        key: 'cadastroMia',
+        name: 'Cadastro do MIA',
         link: '/app/mia/cadastrar',
         icon: 'ion-ios-contacts-outline'
+      }
+    ]
+  },
+  {
+    key: 'start',
+    name: 'Start',
+    icon: 'ion-ios-contacts-outline',
+    child: [
+      {
+        key: 'listagemCelulas',
+        name: 'Listagem de Células',
+        link: '/app/start/celulas',
+        icon: 'ion-ios-list-box-outline'
       },
+      {
+        key: 'cadastroCelulas',
+        name: 'Cadastro de Células',
+        link: '/app/start/celulas/cadastrar',
+        icon: 'ion-ios-contacts-outline'
+      }
     ]
   }
 ];

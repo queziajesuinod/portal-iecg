@@ -91,7 +91,6 @@ function Header(props) {
     gradient,
     mode,
     title,
-    openGuide,
     history
   } = props;
 
@@ -151,11 +150,6 @@ function Header(props) {
                   <i className="ion-ios-bulb-outline" />
                 </IconButton>
               </Tooltip>
-              <Tooltip title="Show Guide" placement="bottom">
-                <IconButton className={classes.button} onClick={openGuide} size="large">
-                  <i className="ion-ios-help-circle-outline" />
-                </IconButton>
-              </Tooltip>
             </div>
             <Typography component="h2" className={cx(classes.headerTitle, showTitle && classes.show)}>
               {title}
@@ -188,7 +182,6 @@ Header.propTypes = {
   mode: PropTypes.string.isRequired,
   title: PropTypes.string.isRequired,
   changeMode: PropTypes.func.isRequired,
-  openGuide: PropTypes.func.isRequired,
   history: PropTypes.object.isRequired,
 };
 

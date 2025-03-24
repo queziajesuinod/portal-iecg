@@ -19,6 +19,20 @@ class CelulaController {
     }
   }
 
+
+  async listarPaginado(req, res) {
+    try {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+
+      const resultado = await CelulaService.buscaPaginada(page, limit);
+      return res.status(200).json(resultado);
+    } catch (error) {
+      console.error('Erro ao listar células:', error);
+      return res.status(500).json({ erro: 'Erro ao buscar células' });
+    }
+  }
+
   async buscarPorId(req, res) {
     try {
       const celula = await CelulaService.buscarCelulaPorId(req.params.id);

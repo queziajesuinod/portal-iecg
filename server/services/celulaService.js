@@ -9,6 +9,25 @@ class CelulaService {
     return await Celula.findAll();
   }
 
+  async buscaPaginada(page, limit) {
+    const offset = (page - 1) * limit;
+  
+    const { count, rows } = await Celula.findAndCountAll({
+      limit,
+      offset,
+      order: [['createdAt', 'DESC']]
+    });
+  
+    const totalPaginas = Math.ceil(count / limit);
+  
+    return {
+      registros: rows,
+      totalPaginas,
+      paginaAtual: page,
+      totalRegistros: count
+    };
+  }
+  
   async buscarCelulaPorId(id) {
     const celula = await Celula.findByPk(id);
     if (!celula) {
