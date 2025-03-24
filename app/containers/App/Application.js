@@ -3,6 +3,8 @@ import { Switch, Route, Redirect } from 'react-router-dom';
 import Dashboard from '../Templates/Dashboard';
 import { ThemeContext } from './ThemeWrapper';
 import MiaPage from '../Pages/MiaPage';
+import BlankPage from '../Pages/BlankPage';
+import ListagemCelulasPage from '../Pages/StartPage/celulasPage';
 import ProfilePage from '../Pages/Users/Profile';
 import MiaListPage from '../Pages/MiaPage/MiaListPage';
 import MiaDetailsPage from '../Pages/MiaPage/MiaDetailsPage';
@@ -49,6 +51,10 @@ function Application(props) {
         <ProtectedRoute exact path="/app/mia" component={MiaListPage} isAuthenticated={isAuthenticated} />
         <ProtectedRoute exact path="/app/mia/detalhes" component={MiaDetailsPage} isAuthenticated={isAuthenticated} />
         <ProtectedRoute exact path="/app/profile" component={ProfilePage} isAuthenticated={isAuthenticated} />
+        <ProtectedRoute exact path="/app/start/celulas" component={ListagemCelulasPage} isAuthenticated={isAuthenticated} />
+        <ProtectedRoute exact path="/app/start/celulas/cadastrar" component={BlankPage} isAuthenticated={isAuthenticated} />
+        <ProtectedRoute exact path="/app/start/celulas/detalhes" component={BlankPage} isAuthenticated={isAuthenticated} />
+  
         {/* Redireciona para Login se nenhuma rota for encontrada */}
         <Redirect to="/login" />
       </Switch>

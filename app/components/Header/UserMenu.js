@@ -33,6 +33,7 @@ function UserMenu(props) {
 
   const handleClose = () => {
     localStorage.removeItem("isAuthenticated");
+    localStorage.clear();
     history.push("/login");
   };
 

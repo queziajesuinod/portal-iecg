@@ -4,7 +4,7 @@ const ApeloDirecionadoCelulaController = require('../controllers/apelodirecionad
 const router = express.Router();
 
 router.post('/celula/', CelulaController.criar);
-router.get('/celula/', CelulaController.listarTodas);
+router.get('/celula/', CelulaController.listarPaginado);
 router.get('/celula/:id', CelulaController.buscarPorId);
 router.put('/celula/:id', CelulaController.atualizar);
 router.delete('/celula/:id', CelulaController.deletar);

@@ -99,7 +99,6 @@ function HeaderMenu(props) {
     type,
     dataMenu,
     history,
-    openGuide,
     mode,
     toggleDrawerOpen,
     openMobileNav,
@@ -152,11 +151,6 @@ function HeaderMenu(props) {
                 <Tooltip title="Turn Dark/Light" placement="bottom">
                   <IconButton className={classes.button} onClick={() => turnMode(mode)} size="large">
                     <i className="ion-ios-bulb-outline" />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Show Guide" placement="bottom">
-                  <IconButton className={classes.button} onClick={openGuide} size="large">
-                    <i className="ion-ios-help-circle-outline" />
                   </IconButton>
                 </Tooltip>
               </div>
@@ -215,7 +209,6 @@ HeaderMenu.propTypes = {
   openMobileNav: PropTypes.bool.isRequired,
   mode: PropTypes.string.isRequired,
   changeMode: PropTypes.func.isRequired,
-  openGuide: PropTypes.func.isRequired,
   toggleDrawerOpen: PropTypes.func.isRequired,
   loadTransition: PropTypes.func.isRequired,
   history: PropTypes.object.isRequired,
