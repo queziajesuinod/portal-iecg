@@ -20,6 +20,7 @@ function SidebarContent(props) {
     setTransform(scroll);
   };
 
+
   useEffect(() => {
     const mainContent = document.getElementById('sidebar');
     mainContent.addEventListener('scroll', handleScroll);
@@ -71,6 +72,7 @@ function SidebarContent(props) {
             <Avatar
               alt={dummy.user.name}
               src={dummy.user.avatar}
+              
               className={cx(classes.avatar, classes.bigAvatar)}
             />
             <div>

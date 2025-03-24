@@ -54,7 +54,7 @@ const useStyles = makeStyles()((theme) => ({
 }));
 
 function Maintenance() {
-  const title = brand.name + ' - Maintenance';
+  const title = brand.name + ' - Manuntenção';
   const description = brand.desc;
   const { classes } = useStyles();
 
@@ -80,9 +80,9 @@ function Maintenance() {
             <Avatar className={classes.icon}><Settings /></Avatar>
           )}
         </div>
-        <Typography variant="h4" className={classes.title} gutterBottom>Under maintenance</Typography>
+        <Typography variant="h4" className={classes.title} gutterBottom>Portal em  Manutenção</Typography>
         <Typography variant="subtitle1" className={classes.subtitle}>
-          Our website is under maintenance. We will be back shortly
+          Estamos Ajustando algumas coisa, entre mais tarde
         </Typography>
       </div>
     </div>

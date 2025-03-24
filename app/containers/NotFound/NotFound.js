@@ -4,7 +4,7 @@ import brand from 'dan-api/dummy/brand';
 import { Route } from 'react-router-dom';
 import { ErrorWrap } from 'dan-components';
 
-const title = brand.name + ' - Page Not Found';
+const title = brand.name + ' - Página Não Encontrada';
 const description = brand.desc;
 
 const NotFound = () => (
@@ -23,7 +23,7 @@ const NotFound = () => (
             <meta property="twitter:title" content={title} />
             <meta property="twitter:description" content={description} />
           </Helmet>
-          <ErrorWrap title="404" desc="Oops, Page Not Found :(" />
+          <ErrorWrap title="404" desc="Oops, Página não encontrada:(" />
         </div>
       );
     }}
