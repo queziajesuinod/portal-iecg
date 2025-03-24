@@ -21,7 +21,7 @@ const Breadcrumbs = (props) => {
           parts = parts.slice(1, parts.length - 1);
           return (
             <p>
-              You are here:
+              Você está aqui:
               <span>
                 {
                   parts.map((part, partIndex) => {

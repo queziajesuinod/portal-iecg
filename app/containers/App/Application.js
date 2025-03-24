@@ -3,6 +3,7 @@ import { Switch, Route, Redirect } from 'react-router-dom';
 import Dashboard from '../Templates/Dashboard';
 import { ThemeContext } from './ThemeWrapper';
 import MiaPage from '../Pages/MiaPage';
+import ProfilePage from '../Pages/Users/Profile';
 import MiaListPage from '../Pages/MiaPage/MiaListPage';
 import MiaDetailsPage from '../Pages/MiaPage/MiaDetailsPage';
 import Login from '../Pages/Users/Login'; // Sua página de login
@@ -47,7 +48,7 @@ function Application(props) {
         <ProtectedRoute exact path="/app/mia/cadastrar" component={MiaPage} isAuthenticated={isAuthenticated} />
         <ProtectedRoute exact path="/app/mia" component={MiaListPage} isAuthenticated={isAuthenticated} />
         <ProtectedRoute exact path="/app/mia/detalhes" component={MiaDetailsPage} isAuthenticated={isAuthenticated} />
-
+        <ProtectedRoute exact path="/app/profile" component={ProfilePage} isAuthenticated={isAuthenticated} />
         {/* Redireciona para Login se nenhuma rota for encontrada */}
         <Redirect to="/login" />
       </Switch>

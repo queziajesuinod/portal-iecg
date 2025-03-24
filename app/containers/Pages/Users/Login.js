@@ -6,12 +6,31 @@ import { LoginForm } from 'dan-components';
 import useStyles from 'dan-components/Forms/user-jss';
 import dummyContents from 'dan-api/dummy/dummyContents'; // Importação correta
 
+
+function decodeJwt(token) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    console.error("Erro ao decodificar JWT:", e);
+    return null;
+  }
+}
+
+
 function Login({ setIsAuthenticated = () => { } }) {
   const [valueForm, setValueForm] = useState(null);
   const { classes } = useStyles();
   const history = useHistory();
   const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
-    
+
   const submitForm = async (values) => {
     try {
       const response = await fetch(`${API_URL}/auth/login`, {
@@ -32,13 +51,14 @@ function Login({ setIsAuthenticated = () => { } }) {
       localStorage.setItem("isAuthenticated", "true");
       setIsAuthenticated(true);
 
-      // 🔥 Extrair dados do usuário do token JWT
-      const base64Url = token.split(".")[1]; // Pega a parte do payload
-      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-      const decodedToken = JSON.parse(atob(base64));
-      // 🔹 Criar objeto do usuário
+     
+
+      const decodedToken = decodeJwt(token);
+      if (!decodedToken) throw new Error("Token inválido");
+
       const userData = {
         name: decodedToken.nome || "Usuário",
+        id: decodedToken.userId || "numberUser",
         title: "Usuário Autenticado",
         avatar: decodedToken.avatar || "default-avatar.png",
         status: "online"
