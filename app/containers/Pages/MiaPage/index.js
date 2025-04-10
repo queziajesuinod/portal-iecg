@@ -137,6 +137,12 @@ const MiaPage = () => {
     const method = isEdit ? 'PUT' : 'POST';
     const endpoint = isEdit ? `${API_URL}/mia/${formData.id}` : `${API_URL}/mia`;
 
+    // Remove o ID se for cadastro (para evitar erro do UUID)
+    const dadosParaEnviar = { ...formData };
+    if (!isEdit) {
+      delete dadosParaEnviar.id;
+    }
+
     try {
       const response = await fetch(endpoint, {
         method,
@@ -144,10 +150,11 @@ const MiaPage = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(dadosParaEnviar)
       });
 
       const data = await response.json();
+
       if (response.ok) {
         setNotification(isEdit ? 'Atualização realizada com sucesso!' : 'Cadastro realizado com sucesso!');
         if (!isEdit) {
@@ -156,7 +163,7 @@ const MiaPage = () => {
           setShowWebcam(false);
         }
       } else {
-        setNotification(`Erro: ${data.message || 'Falha ao processar'}`);
+        setNotification(`Erro: ${data.erro || data.message || 'Falha ao processar'}`);
       }
     } catch (error) {
       console.error('Erro ao enviar dados:', error);
@@ -195,10 +202,15 @@ const MiaPage = () => {
                   <AccountCircleIcon style={{ width: '80%', height: '80%', color: '#ccc' }} />
                 )}
               </div>
-              <div style={{ marginTop: 10, display: 'flex', gap: 10 }}>
+              <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 {!showWebcam && (
                   <Button variant="outlined" onClick={() => setShowWebcam(true)}>
                     Habilitar Webcam
+                  </Button>
+                )}
+                {showWebcam && (
+                  <Button variant="contained" color="primary" onClick={capturePhoto}>
+                    Capturar Foto
                   </Button>
                 )}
                 <Button variant="outlined" component="label">
@@ -213,251 +225,252 @@ const MiaPage = () => {
               </div>
             </Grid>
 
-             {/* Nome Completo */}
-             <Grid item xs={12} md={6}>
-             <TextField
-               fullWidth
-               label="Nome Completo"
-               name="nome"
-               value={formData.nome}
-               onChange={handleChange}
-               required
-             />
-           </Grid>
 
-           {/* Data de Nascimento */}
-           <Grid item xs={12} md={6}>
-             <TextField
-               fullWidth
-               label="Data de Nascimento"
-               name="data_nascimento"
-               type="date"
-               value={formData.data_nascimento}
-               onChange={handleChange}
-               InputLabelProps={{ shrink: true }}
-               required
-             />
-           </Grid>
+            {/* Nome Completo */}
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Nome Completo"
+                name="nome"
+                value={formData.nome}
+                onChange={handleChange}
+                required
+              />
+            </Grid>
 
-           {/* Endereço */}
-           <Grid item xs={12}>
-             <TextField fullWidth label="Endereço" name="endereco" value={formData.endereco} onChange={handleChange} />
-           </Grid>
+            {/* Data de Nascimento */}
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Data de Nascimento"
+                name="data_nascimento"
+                type="date"
+                value={formData.data_nascimento}
+                onChange={handleChange}
+                InputLabelProps={{ shrink: true }}
+                required
+              />
+            </Grid>
 
-           {/* Telefones */}
-           <Grid item xs={12}>
-             <TextField fullWidth label="Telefones" name="telefones" value={formData.telefones} onChange={handleChange} />
-           </Grid>
+            {/* Endereço */}
+            <Grid item xs={12}>
+              <TextField fullWidth label="Endereço" name="endereco" value={formData.endereco} onChange={handleChange} />
+            </Grid>
 
-           {/* Estado Civil */}
-           <Grid item xs={12} md={6}>
-             <TextField
-               fullWidth
-               select
-               label="Estado Civil"
-               name="estado_civil"
-               value={formData.estado_civil}
-               onChange={handleChange}
-             >
-               <MenuItem value="Solteiro">Solteiro</MenuItem>
-               <MenuItem value="Casado">Casado</MenuItem>
-               <MenuItem value="Viúvo">Viúvo</MenuItem>
-               <MenuItem value="Divorciado">Divorciado</MenuItem>
-             </TextField>
-           </Grid>
+            {/* Telefones */}
+            <Grid item xs={12}>
+              <TextField fullWidth label="Telefones" name="telefones" value={formData.telefones} onChange={handleChange} />
+            </Grid>
 
-           {/* Nome do Esposo(a) (aparece se casado) */}
-           {formData.estado_civil === 'Casado' && (
-             <Grid item xs={12} md={6}>
-               <TextField
-                 fullWidth
-                 label="Nome do Esposo(a)"
-                 name="nome_esposo"
-                 value={formData.nome_esposo}
-                 onChange={handleChange}
-               />
-             </Grid>
-           )}
+            {/* Estado Civil */}
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                select
+                label="Estado Civil"
+                name="estado_civil"
+                value={formData.estado_civil}
+                onChange={handleChange}
+              >
+                <MenuItem value="Solteiro">Solteiro</MenuItem>
+                <MenuItem value="Casado">Casado</MenuItem>
+                <MenuItem value="Viúvo">Viúvo</MenuItem>
+                <MenuItem value="Divorciado">Divorciado</MenuItem>
+              </TextField>
+            </Grid>
 
-           {/* Profissão */}
-           <Grid item xs={12} md={6}>
-             <TextField
-               fullWidth
-               label="Profissão"
-               name="profissao"
-               value={formData.profissao}
-               onChange={handleChange}
-             />
-           </Grid>
+            {/* Nome do Esposo(a) (aparece se casado) */}
+            {formData.estado_civil === 'Casado' && (
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Nome do Esposo(a)"
+                  name="nome_esposo"
+                  value={formData.nome_esposo}
+                  onChange={handleChange}
+                />
+              </Grid>
+            )}
 
-           {/* Rede Social */}
-           <Grid item xs={12} md={6}>
-             <TextField
-               fullWidth
-               label="Rede Social"
-               name="rede_social"
-               value={formData.rede_social}
-               onChange={handleChange}
-             />
-           </Grid>
+            {/* Profissão */}
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Profissão"
+                name="profissao"
+                value={formData.profissao}
+                onChange={handleChange}
+              />
+            </Grid>
 
-           {/* Indicação */}
-           <Grid item xs={12}>
-             <TextField fullWidth label="Indicação" name="indicacao" value={formData.indicacao} onChange={handleChange} />
-           </Grid>
+            {/* Rede Social */}
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Rede Social"
+                name="rede_social"
+                value={formData.rede_social}
+                onChange={handleChange}
+              />
+            </Grid>
 
-           {/* Checkboxes */}
-           <Grid item xs={12} container spacing={2}>
-             <Grid item>
-               <FormControlLabel
-                 control={
-                   <Checkbox
-                     checked={formData.frequenta_celula}
-                     onChange={handleChange}
-                     name="frequenta_celula"
-                   />
-                 }
-                 label="Frequenta Célula?"
-               />
-             </Grid>
-             <Grid item>
-               <FormControlLabel
-                 control={<Checkbox checked={formData.batizado} onChange={handleChange} name="batizado" />}
-                 label="Já foi batizado?"
-               />
-             </Grid>
-             <Grid item>
-               <FormControlLabel
-                 control={<Checkbox checked={formData.encontro} onChange={handleChange} name="encontro" />}
-                 label="Participou de um Encontro?"
-               />
-             </Grid>
-             <Grid item>
-               <FormControlLabel
-                 control={<Checkbox checked={formData.analfabeto} onChange={handleChange} name="analfabeto" />}
-                 label="É analfabeto?"
-               />
-             </Grid>
-           </Grid>
+            {/* Indicação */}
+            <Grid item xs={12}>
+              <TextField fullWidth label="Indicação" name="indicacao" value={formData.indicacao} onChange={handleChange} />
+            </Grid>
 
-           {/* Escolas */}
-           <Grid item xs={12}>
-             <TextField
-               fullWidth
-               label="Escolas (separados por vírgula)"
-               name="escolas"
-               value={formData.escolas}
-               onChange={handleChange}
-             />
-           </Grid>
+            {/* Checkboxes */}
+            <Grid item xs={12} container spacing={2}>
+              <Grid item>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={formData.frequenta_celula}
+                      onChange={handleChange}
+                      name="frequenta_celula"
+                    />
+                  }
+                  label="Frequenta Célula?"
+                />
+              </Grid>
+              <Grid item>
+                <FormControlLabel
+                  control={<Checkbox checked={formData.batizado} onChange={handleChange} name="batizado" />}
+                  label="Já foi batizado?"
+                />
+              </Grid>
+              <Grid item>
+                <FormControlLabel
+                  control={<Checkbox checked={formData.encontro} onChange={handleChange} name="encontro" />}
+                  label="Participou de um Encontro?"
+                />
+              </Grid>
+              <Grid item>
+                <FormControlLabel
+                  control={<Checkbox checked={formData.analfabeto} onChange={handleChange} name="analfabeto" />}
+                  label="É analfabeto?"
+                />
+              </Grid>
+            </Grid>
 
-           {/* Habilidades */}
-           <Grid item xs={12}>
-             <TextField
-               fullWidth
-               label="Habilidades (separados por vírgula)"
-               name="habilidades"
-               value={formData.habilidades}
-               onChange={handleChange}
-             />
-           </Grid>
+            {/* Escolas */}
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Escolas (separados por vírgula)"
+                name="escolas"
+                value={formData.escolas}
+                onChange={handleChange}
+              />
+            </Grid>
 
-           {/* Patologia */}
-           <Grid item xs={12}>
-             <TextField fullWidth label="Patologia" name="patologia" value={formData.patologia} onChange={handleChange} />
-           </Grid>
+            {/* Habilidades */}
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Habilidades (separados por vírgula)"
+                name="habilidades"
+                value={formData.habilidades}
+                onChange={handleChange}
+              />
+            </Grid>
 
-           {/* Plano de Saúde */}
-           <Grid item xs={12} md={6}>
-             <TextField
-               fullWidth
-               label="Plano de Saúde"
-               name="plano_saude"
-               value={formData.plano_saude}
-               onChange={handleChange}
-             />
-           </Grid>
+            {/* Patologia */}
+            <Grid item xs={12}>
+              <TextField fullWidth label="Patologia" name="patologia" value={formData.patologia} onChange={handleChange} />
+            </Grid>
 
-           {/* Hospital de Referência */}
-           <Grid item xs={12} md={6}>
-             <TextField
-               fullWidth
-               label="Hospital de Referência"
-               name="hospital"
-               value={formData.hospital}
-               onChange={handleChange}
-             />
-           </Grid>
+            {/* Plano de Saúde */}
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Plano de Saúde"
+                name="plano_saude"
+                value={formData.plano_saude}
+                onChange={handleChange}
+              />
+            </Grid>
 
-           {/* Filhos */}
-           <Grid item xs={12}>
-             <Typography variant="h6">Filhos</Typography>
-             <Button onClick={handleAddChild} variant="contained" color="primary" startIcon={<AddCircle />}>
-               Adicionar Filho(a)
-             </Button>
-             {formData.filhos.map((filho, index) => (
-               <Grid container spacing={2} alignItems="center" key={index} style={{ marginTop: 8 }}>
-                 <Grid item xs={5}>
-                   <TextField
-                     fullWidth
-                     label="Nome do Filho(a)"
-                     name="nome"
-                     value={filho.nome}
-                     onChange={(e) => handleChildChange(index, e)}
-                   />
-                 </Grid>
-                 <Grid item xs={5}>
-                   <TextField
-                     fullWidth
-                     label="Telefone"
-                     name="telefone"
-                     value={filho.telefone}
-                     onChange={(e) => handleChildChange(index, e)}
-                   />
-                 </Grid>
-                 <Grid item xs={2}>
-                   <IconButton onClick={() => handleRemoveChild(index)} color="error">
-                     <RemoveCircle fontSize="large" />
-                   </IconButton>
-                 </Grid>
-               </Grid>
-             ))}
-           </Grid>
+            {/* Hospital de Referência */}
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Hospital de Referência"
+                name="hospital"
+                value={formData.hospital}
+                onChange={handleChange}
+              />
+            </Grid>
 
-           {/* Remédios */}
-           <Grid item xs={12}>
-             <Typography variant="h6">Remédios</Typography>
-             <Button onClick={handleAddMedicine} variant="contained" color="primary" startIcon={<AddCircle />}>
-               Adicionar Remédio
-             </Button>
-             {formData.remedios.map((medicine, index) => (
-               <Grid container spacing={2} alignItems="center" key={index} style={{ marginTop: 8 }}>
-                 <Grid item xs={5}>
-                   <TextField
-                     fullWidth
-                     label="Nome do Remédio"
-                     name="nome"
-                     value={medicine.nome}
-                     onChange={(e) => handleMedicineChange(index, e)}
-                   />
-                 </Grid>
-                 <Grid item xs={5}>
-                   <TextField
-                     fullWidth
-                     label="Indicação"
-                     name="indicacao"
-                     value={medicine.indicacao}
-                     onChange={(e) => handleMedicineChange(index, e)}
-                   />
-                 </Grid>
-                 <Grid item xs={2}>
-                   <IconButton onClick={() => handleRemoveMedicine(index)} color="error">
-                     <RemoveCircle fontSize="large" />
-                   </IconButton>
-                 </Grid>
-               </Grid>
-             ))}
-           </Grid>
+            {/* Filhos */}
+            <Grid item xs={12}>
+              <Typography variant="h6">Filhos</Typography>
+              <Button onClick={handleAddChild} variant="contained" color="primary" startIcon={<AddCircle />}>
+                Adicionar Filho(a)
+              </Button>
+              {formData.filhos.map((filho, index) => (
+                <Grid container spacing={2} alignItems="center" key={index} style={{ marginTop: 8 }}>
+                  <Grid item xs={5}>
+                    <TextField
+                      fullWidth
+                      label="Nome do Filho(a)"
+                      name="nome"
+                      value={filho.nome}
+                      onChange={(e) => handleChildChange(index, e)}
+                    />
+                  </Grid>
+                  <Grid item xs={5}>
+                    <TextField
+                      fullWidth
+                      label="Telefone"
+                      name="telefone"
+                      value={filho.telefone}
+                      onChange={(e) => handleChildChange(index, e)}
+                    />
+                  </Grid>
+                  <Grid item xs={2}>
+                    <IconButton onClick={() => handleRemoveChild(index)} color="error">
+                      <RemoveCircle fontSize="large" />
+                    </IconButton>
+                  </Grid>
+                </Grid>
+              ))}
+            </Grid>
+
+            {/* Remédios */}
+            <Grid item xs={12}>
+              <Typography variant="h6">Remédios</Typography>
+              <Button onClick={handleAddMedicine} variant="contained" color="primary" startIcon={<AddCircle />}>
+                Adicionar Remédio
+              </Button>
+              {formData.remedios.map((medicine, index) => (
+                <Grid container spacing={2} alignItems="center" key={index} style={{ marginTop: 8 }}>
+                  <Grid item xs={5}>
+                    <TextField
+                      fullWidth
+                      label="Nome do Remédio"
+                      name="nome"
+                      value={medicine.nome}
+                      onChange={(e) => handleMedicineChange(index, e)}
+                    />
+                  </Grid>
+                  <Grid item xs={5}>
+                    <TextField
+                      fullWidth
+                      label="Indicação"
+                      name="indicacao"
+                      value={medicine.indicacao}
+                      onChange={(e) => handleMedicineChange(index, e)}
+                    />
+                  </Grid>
+                  <Grid item xs={2}>
+                    <IconButton onClick={() => handleRemoveMedicine(index)} color="error">
+                      <RemoveCircle fontSize="large" />
+                    </IconButton>
+                  </Grid>
+                </Grid>
+              ))}
+            </Grid>
 
             {/* Botão de envio */}
             <Grid item xs={12}>
