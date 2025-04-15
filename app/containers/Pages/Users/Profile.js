@@ -120,15 +120,7 @@ const ProfilePage = () => {
             </ListItem>
             <ListItem>
               <ListItemIcon><AccountCircle /></ListItemIcon>
-              <ListItemText primary="Perfil ID" secondary={user.perfilId} />
-            </ListItem>
-            <ListItem>
-              <ListItemIcon><CalendarToday /></ListItemIcon>
-              <ListItemText primary="Criado em" secondary={formatDate(user.createdAt)} />
-            </ListItem>
-            <ListItem>
-              <ListItemIcon><CalendarToday /></ListItemIcon>
-              <ListItemText primary="Atualizado em" secondary={formatDate(user.updatedAt)} />
+              <ListItemText primary="Perfil" secondary={user.Perfil.descricao} />
             </ListItem>
           </List>
         </Paper>

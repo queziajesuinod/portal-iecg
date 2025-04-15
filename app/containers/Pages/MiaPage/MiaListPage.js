@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { Helmet } from "react-helmet";
 import { useHistory } from "react-router-dom";
 import { PapperBlock } from 'dan-components';
+import { Visibility, Delete } from "@mui/icons-material";
+
 import {
   List,
   ListItem,
@@ -21,19 +23,48 @@ const MiaListPage = () => {
   const description = "Listagem de todos os aposentados cadastrados";
   const [aposentados, setAposentados] = useState([]);
   const history = useHistory(); // 🔹 Substitui o uso de navigate()
+
+  const handleDelete = async (id) => {
+    const confirm = window.confirm("Tem certeza que deseja excluir este registro?");
+    if (!confirm) return;
+  
+    const token = localStorage.getItem("token");
+    const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
+  
+    try {
+      const response = await fetch(`${API_URL}/mia/${id}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+  
+      if (!response.ok) {
+        throw new Error("Erro ao deletar aposentado");
+      }
+  
+      // Remover da lista local
+      setAposentados(prev => prev.filter(p => p.id !== id));
+    } catch (error) {
+      console.error("Erro ao deletar aposentado:", error);
+      alert("Erro ao deletar aposentado.");
+    }
+  };
+  
   // Buscar dados da API
   const fetchAposentados = async () => {
     const token = localStorage.getItem('token');
     const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
-      
+
     try {
-        const response = await fetch(`${API_URL}/mia`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          }
-        });
+      const response = await fetch(`${API_URL}/mia`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
       if (!response.ok) {
         throw new Error("Erro ao carregar dados");
       }
@@ -97,14 +128,23 @@ const MiaListPage = () => {
                       </>
                     }
                   />
-               {/* Botão de detalhes */}
-               <Button
-                    variant="contained"
-                    color="primary"
-                    onClick={() => history.push(`/app/mia/detalhes?id=${item.id}`)} // 🔹 Atualizado para React Router v5
-                  >
-                    Detalhes
-                  </Button>
+                  {/* Botão de detalhes */}
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <IconButton
+                      color="primary"
+                      onClick={() => history.push(`/app/mia/detalhes?id=${item.id}`)}
+                    >
+                      <Visibility />
+                    </IconButton>
+
+                    <IconButton
+                      color="error"
+                      onClick={() => handleDelete(item.id)}
+                    >
+                      <Delete />
+                    </IconButton>
+                  </Box>
+
 
                 </ListItem>
 
