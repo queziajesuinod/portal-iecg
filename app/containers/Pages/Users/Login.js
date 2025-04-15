@@ -78,6 +78,7 @@ function Login({ setIsAuthenticated = () => { } }) {
       const userData = {
         name: userDetails.name || "Usuário",
         id: userDetails.id || "user",
+        perfilId: userDetails.perfilId,
         title: "Usuário Autenticado",
         avatar: userDetails.image || "default-avatar.png",
         status: "online"

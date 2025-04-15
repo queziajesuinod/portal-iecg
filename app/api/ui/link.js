@@ -3,7 +3,7 @@ module.exports = {
   login: '/login',
   market: '#',
   email: '#',
-  profile: '/app/prifile',
+  profile: '/app/profile',
   calendar: '#',
   twitter: '#',
   github: '#',
