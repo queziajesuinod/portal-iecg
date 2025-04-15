@@ -36,7 +36,7 @@ class AuthService {
         nome: usuario.name
       },
       env.JWT_SECRET,
-      { expiresIn: '90m' }
+      { expiresIn: '30m' }
     );
 
     return { accessToken };
