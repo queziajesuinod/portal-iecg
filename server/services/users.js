@@ -14,6 +14,25 @@ async function getTodosUsers() {
     return users;
 }
 
+async function updateUser(id, updateData) {
+    const user = await User.findByPk(id);
+    if (!user) {
+      throw new Error('Usuário não encontrado');
+    }
+  
+    // Apenas atualiza os campos permitidos
+    const fields = ['name', 'email', 'image', 'username'];
+    fields.forEach(field => {
+      if (updateData[field] !== undefined) {
+        user[field] = updateData[field];
+      }
+    });
+  
+    await user.save();
+    return user;
+  }
+  
+
 async function getUserById(id) {
     const user = await User.findByPk(id, {
         include: [{
@@ -49,5 +68,6 @@ function hashSHA256WithSalt(password, salt) {
 module.exports = {
     getTodosUsers,
     createUser,
-    getUserById
+    getUserById,
+    updateUser
 };
