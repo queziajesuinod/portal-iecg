@@ -20,6 +20,20 @@ async function getUserDetalhe(req, res) {
     }
 }
 
+const { getTodosUsers, createUser, getUserById, updateUser } = require("../services/users");
+
+async function putUser(req, res) {
+  try {
+    const id = req.params.id;
+    const user = await updateUser(id, req.body);
+    res.status(200).json(user);
+  } catch (error) {
+    console.error('Erro ao atualizar usuário:', error);
+    res.status(400).json({ message: error.message });
+  }
+}
+
+
 async function postUsers(req, res) {
     try {
         const user = await createUser(req.body); // Função de criação de usuário
@@ -33,5 +47,6 @@ async function postUsers(req, res) {
 module.exports = {
     getUsers,
     postUsers,
-    getUserDetalhe
+    getUserDetalhe,
+    putUser
 };
