@@ -9,3 +9,4 @@ Dockerfile
 .DS_Store
 npm-debug.log
 .idea
+dock.yaml
