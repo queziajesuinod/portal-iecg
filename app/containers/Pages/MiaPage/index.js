@@ -178,7 +178,7 @@ const MiaPage = () => {
         <meta name="description" content={description} />
       </Helmet>
 
-      <PapperBlock title={isEdit ? 'Editar Aposentado' : 'Cadastro De Aposentados'} desc="Preencha os dados abaixo">
+      <PapperBlock title={isEdit ? 'Editar Mia' : 'Cadastro Mia'} desc="Preencha os dados abaixo">
         <form onSubmit={handleSubmit}>
           <Grid container spacing={2}>
             {/* FOTO */}
@@ -475,7 +475,7 @@ const MiaPage = () => {
             {/* Botão de envio */}
             <Grid item xs={12}>
               <Button type="submit" variant="contained" color="primary" fullWidth>
-                {isEdit ? 'Atualizar Aposentado' : 'Cadastrar Mia'}
+                {isEdit ? 'Atualizar Mia' : 'Cadastrar Mia'}
               </Button>
             </Grid>
           </Grid>

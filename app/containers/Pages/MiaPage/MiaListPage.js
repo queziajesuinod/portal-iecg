@@ -87,7 +87,7 @@ const MiaListPage = () => {
         <meta name="description" content={description} />
       </Helmet>
 
-      <PapperBlock title="Listagem de Mia" desc="Todos os dados do MIA">
+      <PapperBlock title="Listagem Ministério Mia" desc="Todos os dados do MIA">
         <Paper style={{ padding: 20, marginTop: 20 }}>
           <List>
             {aposentados.map((item, index) => (

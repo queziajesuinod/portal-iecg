@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { useHistory } from "react-router-dom";
 import { Helmet } from "react-helmet";
 import imageCompression from 'browser-image-compression';
+import dummyContents from 'dan-api/dummy/dummyContents'; // Importação correta
 import { PapperBlock, Notification } from 'dan-components';
 import {
   Paper,
@@ -131,6 +132,14 @@ const compressImage = async (file) => {
       if (response.ok) {
         setNotification('Imagem atualizada com sucesso!');
         setUser(prev => ({ ...prev, image: base64Image }));
+        // ✅ Atualiza também o avatar local
+      const userStorage = JSON.parse(localStorage.getItem("user"));
+      const updatedUser = {
+        ...userStorage,
+        avatar: base64Image
+      };
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+      dummyContents.user = updatedUser;
       } else {
         setNotification(`Erro: ${data.message || 'Não foi possível atualizar a imagem'}`);
       }
