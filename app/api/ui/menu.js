@@ -2,12 +2,8 @@
 
 const axios = require('axios');
 
-async function getMenuByPerfil() {
+async function getMenuByPerfil(perfilId, token) {
   try {
-    const token = localStorage.getItem('token');
-    const userStorage = JSON.parse(localStorage.getItem("user"));
-    const perfilId = userStorage?.perfilId;
-    
     const response = await axios.get(`https://portal.iecg.com.br/perfil/${perfilId}`, {
       headers: {
         Authorization: `Bearer ${token}`
@@ -16,10 +12,10 @@ async function getMenuByPerfil() {
     const perfilData = response.data;
 
     // Usa a descrição como chave do menu
-    const perfilKey = perfilData.descricao?.toLowerCase();
+    const perfilKey = perfilData.descricao?.toLowerCase().replace(/\s/g, '') || '';
 
     const menus = {
-      Administrador: [
+      administrador: [
         {
           key: 'mia',
           name: 'Ministério Mia',
@@ -59,7 +55,7 @@ async function getMenuByPerfil() {
           ]
         }
       ],
-      Start: [
+      lider: [
         {
           key: 'start',
           name: 'Start',
@@ -74,7 +70,7 @@ async function getMenuByPerfil() {
           ]
         }
       ],
-      Mia: [
+      mia: [
         {
           key: 'mia',
           name: 'Ministério Mia',
@@ -96,9 +92,9 @@ async function getMenuByPerfil() {
         }
       ]
     };
-    
 
-    return menus[perfilKey] || [];
+    const result = menus[perfilKey];
+    return Array.isArray(result) ? result : [];
   } catch (error) {
     console.error('Erro ao buscar perfil na API:', error.message);
     return [];
