@@ -9,7 +9,7 @@ class AuthService {
   async login(dto) {
     // Buscar usuário pelo e-mail para obter o salt
     const usuario = await User.findOne({
-      attributes: ['id', 'name', 'image', 'username', 'passwordHash', 'salt', 'perfilId'],
+      attributes: ['id', 'name', 'username', 'passwordHash', 'salt', 'perfilId'],
       where: { email: dto.email }
     });
 
@@ -32,11 +32,10 @@ class AuthService {
         perfilId: usuario.perfilId,
         email: dto.email,
         username: usuario.username,
-        avatar: usuario.image,
         nome: usuario.name
       },
       env.JWT_SECRET,
-      { expiresIn: '30m' }
+      { expiresIn: '60m' }
     );
 
     return { accessToken };

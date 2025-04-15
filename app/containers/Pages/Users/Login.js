@@ -25,6 +25,8 @@ function decodeJwt(token) {
 }
 
 
+
+
 function Login({ setIsAuthenticated = () => { } }) {
   const [valueForm, setValueForm] = useState(null);
   const { classes } = useStyles();
@@ -51,16 +53,33 @@ function Login({ setIsAuthenticated = () => { } }) {
       localStorage.setItem("isAuthenticated", "true");
       setIsAuthenticated(true);
 
-     
+
 
       const decodedToken = decodeJwt(token);
       if (!decodedToken) throw new Error("Token inválido");
 
+      // 🔄 Buscar dados completos do usuário
+      const userId = decodedToken.userId;
+
+      const userResponse = await fetch(`${API_URL}/users/${userId}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!userResponse.ok) {
+        throw new Error("Erro ao buscar dados do usuário");
+      }
+
+      const userDetails = await userResponse.json();
+
       const userData = {
-        name: decodedToken.nome || "Usuário",
-        id: decodedToken.userId || "numberUser",
+        name: userDetails.name || "Usuário",
+        id: userDetails.id || "user",
         title: "Usuário Autenticado",
-        avatar: decodedToken.avatar || "default-avatar.png",
+        avatar: userDetails.image || "default-avatar.png",
         status: "online"
       };
 
