@@ -1,6 +1,6 @@
 import React from 'react';
 import { Route, Redirect } from 'react-router-dom';
-import jwtDecode from 'jwt-decode';
+import * as jwtDecode from 'jwt-decode';
 
 const ProtectedRoute = ({ component: Component, isAuthenticated, ...rest }) => {
   const token = localStorage.getItem('token');
@@ -10,7 +10,7 @@ const ProtectedRoute = ({ component: Component, isAuthenticated, ...rest }) => {
     if (!token) return false;
 
     try {
-      const decoded = jwtDecode(token);
+      const decoded = jwtDecode.default(token);
       const now = Date.now() / 1000;
       return decoded.exp && decoded.exp > now;
     } catch (err) {
