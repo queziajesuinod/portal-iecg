@@ -1,6 +1,5 @@
 const { getTodosUsers, createUser, getUserById, updateUser } = require("../services/users");
 
-
 async function getUsers(req, res) {
     try {
         const users = await getTodosUsers(); // Busca todos os usuários
