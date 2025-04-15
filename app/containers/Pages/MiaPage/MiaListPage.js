@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { Helmet } from "react-helmet";
 import { useHistory } from "react-router-dom";
 import { PapperBlock } from 'dan-components';
-import { Visibility, Delete } from "@mui/icons-material";
 
 import {
   List,
@@ -10,13 +9,15 @@ import {
   ListItemAvatar,
   ListItemText,
   Avatar,
-  Button,
   Typography,
   Paper,
   Divider,
-  Box
+  Box,
+  IconButton // ✅ aqui!
 } from "@mui/material";
-import { ChatBubble, Email, Phone } from "@mui/icons-material";
+
+import { Visibility, Delete} from "@mui/icons-material";
+
 
 const MiaListPage = () => {
   const title = "Lista de Aposentados";
