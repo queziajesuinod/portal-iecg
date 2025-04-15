@@ -52,20 +52,20 @@ function UserMenu(props) {
           src={dummy.user.avatar}
         />
       </Button>
-      <<Menu
-  id="menu-appbar"
-  anchorEl={anchorEl}
-  anchorOrigin={{
-    vertical: 'top',
-    horizontal: 'right',
-  }}
-  transformOrigin={{
-    vertical: 'top',
-    horizontal: 'right',
-  }}
-  open={openMenu === 'user-setting'}
-  onClose={() => setMenuState({ anchorEl: null, openMenu: null })} // ✅ Corrigido aqui
->
+      <Menu
+        id="menu-appbar"
+        anchorEl={anchorEl}
+        anchorOrigin={{
+          vertical: 'top',
+          horizontal: 'right',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'right',
+        }}
+        open={openMenu === 'user-setting'}
+        onClose={'#'}
+      >
         <MenuItem onClick={handleProfile} component={Link} >Meu Perfil</MenuItem>
         <Divider />
         <MenuItem onClick={handleClose} component={Link} to="/">
