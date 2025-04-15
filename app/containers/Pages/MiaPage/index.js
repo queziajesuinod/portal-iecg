@@ -174,7 +174,7 @@ const MiaPage = () => {
   return (
     <div>
       <Helmet>
-        <title>{isEdit ? 'Editar Aposentado' : title}</title>
+        <title>{isEdit ? 'Editar Mia' : title}</title>
         <meta name="description" content={description} />
       </Helmet>
 
@@ -183,7 +183,7 @@ const MiaPage = () => {
           <Grid container spacing={2}>
             {/* FOTO */}
             <Grid item xs={12}>
-              <Typography variant="h6">Foto do Usuário</Typography>
+              <Typography variant="h6">Foto do Mia</Typography>
               <div style={{ width: 150, height: 150, borderRadius: '50%', overflow: 'hidden', border: '2px solid #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {showWebcam ? (
                   <Webcam
