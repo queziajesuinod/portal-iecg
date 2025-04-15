@@ -20,10 +20,10 @@ const initialState = {
   /* Settings for Themes and layout */
   theme: 'blueCyanTheme',
   direction: 'ltr',
-  type: 'dark', // light or dark
+  type: 'light', // light or dark
   gradient: true, // true or false
   decoration: true, // true or false
-  bgPosition: 'half', // half, header, full
+  bgPosition: 'full', // half, header, full
   layout: 'left-sidebar', // big-sidebar, left-sidebar, top-navigation, mega-menu
   /* End settings */
   palette: [
