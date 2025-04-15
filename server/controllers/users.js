@@ -20,8 +20,6 @@ async function getUserDetalhe(req, res) {
     }
 }
 
-const { getTodosUsers, createUser, getUserById, updateUser } = require("../services/users");
-
 async function putUser(req, res) {
   try {
     const id = req.params.id;
