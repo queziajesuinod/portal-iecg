@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useHistory } from "react-router-dom";
 import { Helmet } from "react-helmet";
+import imageCompression from 'browser-image-compression';
 import { PapperBlock, Notification } from 'dan-components';
 import {
   Paper,
@@ -62,6 +63,25 @@ const ProfilePage = () => {
     }
   };
 
+  
+
+const compressImage = async (file) => {
+  const options = {
+    maxSizeMB: 0.3, // máximo 300KB
+    maxWidthOrHeight: 500, // redimensiona se passar disso
+    useWebWorker: true
+  };
+
+  try {
+    const compressedFile = await imageCompression(file, options);
+    return await imageCompression.getDataUrlFromFile(compressedFile);
+  } catch (error) {
+    console.error("Erro ao comprimir imagem:", error);
+    return null;
+  }
+};
+
+
   useEffect(() => {
     if (id) fetchUser();
   }, [id]);
@@ -83,17 +103,17 @@ const ProfilePage = () => {
     setShowWebcam(false);
   };
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setCapturedImage(reader.result);
-        updateImage(reader.result);
-      };
-      reader.readAsDataURL(file);
+      const compressedBase64 = await compressImage(file);
+      if (compressedBase64) {
+        setCapturedImage(compressedBase64);
+        updateImage(compressedBase64);
+      }
     }
   };
+  
 
   const updateImage = async (base64Image) => {
     try {
