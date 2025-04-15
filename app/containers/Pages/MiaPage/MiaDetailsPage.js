@@ -65,7 +65,7 @@ const MiaDetailsPage = () => {
         }
       } catch (error) {
         if (isMounted) {
-          console.error("Erro ao buscar aposentado:", error);
+          console.error("Erro ao buscar Mia:", error);
         }
       }
     };
@@ -91,7 +91,7 @@ const MiaDetailsPage = () => {
         <title>Detalhes de {aposentado.nome}</title>
       </Helmet>
 
-      <PapperBlock title="Detalhes do Aposentado" desc="Informações completas">
+      <PapperBlock title="Detalhes do Mia" desc="Informações completas">
         <Box display="flex" justifyContent="flex-end" mb={2}>
           <Button
             variant="contained"

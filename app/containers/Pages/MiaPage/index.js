@@ -475,7 +475,7 @@ const MiaPage = () => {
             {/* Botão de envio */}
             <Grid item xs={12}>
               <Button type="submit" variant="contained" color="primary" fullWidth>
-                {isEdit ? 'Atualizar Aposentado' : 'Cadastrar Aposentado'}
+                {isEdit ? 'Atualizar Aposentado' : 'Cadastrar Mia'}
               </Button>
             </Grid>
           </Grid>
