@@ -1,4 +1,5 @@
-const { getTodosUsers, createUser, getUserById, login } = require("../services/users");
+const { getTodosUsers, createUser, getUserById, updateUser } = require("../services/users");
+
 
 async function getUsers(req, res) {
     try {
