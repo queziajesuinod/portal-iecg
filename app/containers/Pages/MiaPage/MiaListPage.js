@@ -20,8 +20,8 @@ import { Visibility, Delete} from "@mui/icons-material";
 
 
 const MiaListPage = () => {
-  const title = "Lista de Aposentados";
-  const description = "Listagem de todos os aposentados cadastrados";
+  const title = "Listagem Ministério MIA";
+  const description = "Listagem de todos os Integrantes do MIA cadastrados";
   const [aposentados, setAposentados] = useState([]);
   const history = useHistory(); // 🔹 Substitui o uso de navigate()
 
@@ -42,14 +42,14 @@ const MiaListPage = () => {
       });
   
       if (!response.ok) {
-        throw new Error("Erro ao deletar aposentado");
+        throw new Error("Erro ao deletar Mia");
       }
   
       // Remover da lista local
       setAposentados(prev => prev.filter(p => p.id !== id));
     } catch (error) {
-      console.error("Erro ao deletar aposentado:", error);
-      alert("Erro ao deletar aposentado.");
+      console.error("Erro ao deletar Mia:", error);
+      alert("Erro ao deletar Mia.");
     }
   };
   
@@ -72,7 +72,7 @@ const MiaListPage = () => {
       const data = await response.json();
       setAposentados(data);
     } catch (error) {
-      console.error("Erro ao buscar aposentados:", error);
+      console.error("Erro ao buscar Mia:", error);
     }
   };
 
