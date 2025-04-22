@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Paper, Toolbar, Typography, Pagination, IconButton, Tooltip
+  Paper, Toolbar, Typography, Pagination, IconButton, Tooltip, TextField
 } from '@mui/material';
 import { Helmet } from 'react-helmet';
 import EditIcon from '@mui/icons-material/Edit';
@@ -13,6 +13,7 @@ const ListagemCelulasPage = () => {
   const history = useHistory();
 
   const [celulas, setCelulas] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [rowsPerPage] = useState(10);
@@ -40,6 +41,10 @@ const ListagemCelulasPage = () => {
     history.push('/app/start/celulas/cadastrar', { celula });
   };
 
+  const celulasFiltradas = celulas.filter(c =>
+    c.celula?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div>
       <Helmet>
@@ -50,6 +55,14 @@ const ListagemCelulasPage = () => {
         <Typography className={classes.title} variant="h6">
           Listagem de Células
         </Typography>
+        <TextField
+          label="Pesquisar por nome"
+          variant="outlined"
+          size="small"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{ marginLeft: 'auto', width: 300 }}
+        />
       </Toolbar>
 
       <TableContainer component={Paper} className={classes.rootTable}>
@@ -66,7 +79,7 @@ const ListagemCelulasPage = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {celulas.map((c) => (
+            {celulasFiltradas.map((c) => (
               <TableRow key={c.id}>
                 <TableCell>{c.celula}</TableCell>
                 <TableCell>{c.rede}</TableCell>
@@ -83,6 +96,13 @@ const ListagemCelulasPage = () => {
                 </TableCell>
               </TableRow>
             ))}
+            {celulasFiltradas.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7} align="center">
+                  Nenhuma célula encontrada com esse nome.
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </TableContainer>
