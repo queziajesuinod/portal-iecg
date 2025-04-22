@@ -116,6 +116,10 @@ const MiaDetailsPage = () => {
           </Box>
 
           <List>
+          <ListItem>
+              <ListItemIcon><Person /></ListItemIcon>
+              <ListItemText primary="CPF" secondary={formatDate(aposentado.cpf)} />
+            </ListItem>
             <ListItem>
               <ListItemIcon><CalendarToday /></ListItemIcon>
               <ListItemText primary="Data de Nascimento" secondary={formatDate(aposentado.data_nascimento)} />
