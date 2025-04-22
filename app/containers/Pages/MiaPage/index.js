@@ -47,7 +47,8 @@ const MiaPage = () => {
     remedios: [],
     habilidades: '',
     analfabeto: false,
-    foto: ''
+    foto: '',
+    cpf:''
   };
 
   const [formData, setFormData] = useState(formDataInicial);
@@ -239,7 +240,7 @@ const MiaPage = () => {
             </Grid>
 
             {/* Data de Nascimento */}
-            <Grid item xs={12} md={6}>
+            <Grid item xs={12} md={3}>
               <TextField
                 fullWidth
                 label="Data de Nascimento"
@@ -248,6 +249,18 @@ const MiaPage = () => {
                 value={formData.data_nascimento}
                 onChange={handleChange}
                 InputLabelProps={{ shrink: true }}
+                required
+              />
+            </Grid>
+
+             {/* CPF */}
+             <Grid item xs={12} md={3}>
+              <TextField
+                fullWidth
+                label="CPF"
+                name="cpf"
+                value={formData.cpf}
+                onChange={handleChange}
                 required
               />
             </Grid>
