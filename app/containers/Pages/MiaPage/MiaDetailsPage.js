@@ -41,6 +41,13 @@ const MiaDetailsPage = () => {
     return `${day}/${month}/${year}`;
   };
 
+  const formatCPF = (cpf) => {
+    if (!cpf) return "Não informado";
+    const digits = cpf.replace(/\D/g, "");
+    return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+  };
+  
+
   useEffect(() => {
     let isMounted = true;
 
@@ -118,7 +125,7 @@ const MiaDetailsPage = () => {
           <List>
           <ListItem>
               <ListItemIcon><Person /></ListItemIcon>
-              <ListItemText primary="CPF" secondary={formatDate(aposentado.cpf)} />
+              <ListItemText primary="CPF" secondary={formatCPF(aposentado.cpf)} />
             </ListItem>
             <ListItem>
               <ListItemIcon><CalendarToday /></ListItemIcon>
