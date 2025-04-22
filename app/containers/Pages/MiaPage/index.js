@@ -16,11 +16,13 @@ import { AddCircle, RemoveCircle } from '@mui/icons-material';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import Webcam from 'react-webcam';
 import { useLocation } from 'react-router-dom';
+import { useHistory } from 'react-router-dom';
+
 
 const MiaPage = () => {
   const title = 'Cadastro do MIA';
   const description = 'Formulário para registrar informações';
-
+  const history = useHistory();
   const location = useLocation();
   const aposentadoEditando = location.state?.aposentado;
   const isEdit = Boolean(aposentadoEditando);
@@ -162,6 +164,9 @@ const MiaPage = () => {
           setFormData({ ...formDataInicial });
           setCapturedImage('');
           setShowWebcam(false);
+        }else
+        {
+          history.push('/app/mia');
         }
       } else {
         setNotification(`Erro: ${data.erro || data.message || 'Falha ao processar'}`);
