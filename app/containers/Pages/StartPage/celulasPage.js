@@ -5,6 +5,7 @@ import {
 } from '@mui/material';
 import { Helmet } from 'react-helmet';
 import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { useHistory } from 'react-router-dom';
 import useStyles from 'dan-components/Tables/tableStyle-jss';
 
@@ -49,6 +50,29 @@ const ListagemCelulasPage = () => {
     history.push('/app/start/celulas/cadastrar', { celula });
   };
 
+  const handleDelete = async (id) => {
+    const confirmDelete = window.confirm('Tem certeza que deseja excluir esta célula?');
+    if (!confirmDelete) return;
+
+    const token = localStorage.getItem('token');
+    try {
+      const response = await fetch(`${API_URL}/start/celula/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) throw new Error('Erro ao excluir');
+
+      fetchCelulas(); // Atualiza a lista após exclusão
+    } catch (error) {
+      console.error('Erro ao excluir célula:', error);
+      alert('Erro ao excluir célula');
+    }
+  };
+
   return (
     <div>
       <Helmet>
@@ -79,7 +103,6 @@ const ListagemCelulasPage = () => {
               <TableCell>Nome da Célula</TableCell>
               <TableCell>Rede</TableCell>
               <TableCell>Líder</TableCell>
-              <TableCell>Endereço</TableCell>
               <TableCell>Bairro</TableCell>
               <TableCell>Campus</TableCell>
               <TableCell>Ações</TableCell>
@@ -92,15 +115,21 @@ const ListagemCelulasPage = () => {
                   <TableCell>{c.celula}</TableCell>
                   <TableCell>{c.rede}</TableCell>
                   <TableCell>{c.lider}</TableCell>
-                  <TableCell>{c.endereco}</TableCell>
                   <TableCell>{c.bairro}</TableCell>
                   <TableCell>{c.campus}</TableCell>
                   <TableCell>
-                    <Tooltip title="Editar">
-                      <IconButton color="primary" onClick={() => handleEdit(c)}>
-                        <EditIcon />
-                      </IconButton>
-                    </Tooltip>
+                    <Box display="flex" gap={1}>
+                      <Tooltip title="Editar">
+                        <IconButton color="primary" onClick={() => handleEdit(c)}>
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Excluir">
+                        <IconButton color="error" onClick={() => handleDelete(c.id)}>
+                          <DeleteIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
                   </TableCell>
                 </TableRow>
               ))

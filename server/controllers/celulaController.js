@@ -25,7 +25,7 @@ class CelulaController {
   
         let resultado;
         if (celula) {
-          resultado = await CelulaService.buscaPorNomePaginada(celula, parseInt(page), parseInt(limit));
+          resultado = await CelulaService.buscaPorCelulaPaginada(celula, parseInt(page), parseInt(limit));
         } else {
           resultado = await CelulaService.buscaPaginada(parseInt(page), parseInt(limit));
         }

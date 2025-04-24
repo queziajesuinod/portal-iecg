@@ -135,7 +135,7 @@ const MiaListPage = () => {
                     />
                   </ListItemAvatar>
 
-                  <ListItemText
+                  <ListItemText  style={{ padding: "10px"}}
                     primary={<Typography variant="h6" fontWeight="bold">{item.nome}</Typography>}
                     secondary={
                       <>
