@@ -10,6 +10,24 @@ class AposentadoController {
     }
   }
 
+  async listar(req, res) {
+    try {
+      const { nome, page = 1, limit = 10 } = req.query;
+
+      let resultado;
+      if (nome) {
+        resultado = await AposentadoService.buscaPorNomePaginada(nome, parseInt(page), parseInt(limit));
+      } else {
+        resultado = await AposentadoService.buscaPaginada(parseInt(page), parseInt(limit));
+      }
+
+      return res.status(200).json(resultado);
+    } catch (error) {
+      return res.status(500).json({ erro: 'Erro ao listar aposentados', detalhe: error.message });
+    }
+  }
+
+
   async listarTodos(req, res) {
     try {
       const aposentados = await AposentadoService.buscarTodosAposentados();
