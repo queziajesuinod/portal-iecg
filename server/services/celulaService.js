@@ -1,4 +1,5 @@
 const { Celula } = require('../models');
+const { Op } = require('sequelize'); 
 
 class CelulaService {
   async criarCelula(dados) {
@@ -27,6 +28,30 @@ class CelulaService {
       totalRegistros: count
     };
   }
+
+   async buscaPorCelulaPaginada(celula, page = 1, limit = 10) {
+      const offset = (page - 1) * limit;
+    
+      const { count, rows } = await Celula.findAndCountAll({
+        where: {
+          celula: {
+            [Op.iLike]: `%${celula}%`
+          }
+        },
+        limit,
+        offset,
+        order: [['createdAt', 'DESC']]
+      });
+    
+      const totalPaginas = Math.ceil(count / limit);
+    
+      return {
+        registros: rows,
+        totalPaginas,
+        paginaAtual: page,
+        totalRegistros: count
+      };
+    }
   
   async buscarCelulaPorId(id) {
     const celula = await Celula.findByPk(id);

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Paper, Toolbar, Typography, Pagination, IconButton, Tooltip, TextField
+  Paper, Toolbar, Typography, Pagination, IconButton, Tooltip, TextField, Box
 } from '@mui/material';
 import { Helmet } from 'react-helmet';
 import EditIcon from '@mui/icons-material/Edit';
@@ -17,14 +17,22 @@ const ListagemCelulasPage = () => {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [rowsPerPage] = useState(10);
+
   const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
 
-  const fetchCelulas = async (currentPage) => {
+  const fetchCelulas = async () => {
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch(`${API_URL}/start/celula?page=${currentPage}&limit=${rowsPerPage}`, {
+      const queryParams = new URLSearchParams({
+        page,
+        limit: rowsPerPage,
+        celula: searchTerm
+      }).toString();
+
+      const res = await fetch(`${API_URL}/start/celula?${queryParams}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+
       const data = await res.json();
       setCelulas(data.registros || []);
       setTotalPages(data.totalPaginas || 1);
@@ -34,16 +42,12 @@ const ListagemCelulasPage = () => {
   };
 
   useEffect(() => {
-    fetchCelulas(page);
-  }, [page]);
+    fetchCelulas();
+  }, [page, searchTerm]);
 
   const handleEdit = (celula) => {
     history.push('/app/start/celulas/cadastrar', { celula });
   };
-
-  const celulasFiltradas = celulas.filter(c =>
-    c.celula?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   return (
     <div>
@@ -56,11 +60,14 @@ const ListagemCelulasPage = () => {
           Listagem de Células
         </Typography>
         <TextField
-          label="Pesquisar por nome"
+          label="Pesquisar por nome da célula"
           variant="outlined"
           size="small"
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setPage(1); // resetar para primeira página ao pesquisar
+          }}
           style={{ marginLeft: 'auto', width: 300 }}
         />
       </Toolbar>
@@ -79,24 +86,25 @@ const ListagemCelulasPage = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {celulasFiltradas.map((c) => (
-              <TableRow key={c.id}>
-                <TableCell>{c.celula}</TableCell>
-                <TableCell>{c.rede}</TableCell>
-                <TableCell>{c.lider}</TableCell>
-                <TableCell>{c.endereco}</TableCell>
-                <TableCell>{c.bairro}</TableCell>
-                <TableCell>{c.campus}</TableCell>
-                <TableCell>
-                  <Tooltip title="Editar">
-                    <IconButton color="primary" onClick={() => handleEdit(c)}>
-                      <EditIcon />
-                    </IconButton>
-                  </Tooltip>
-                </TableCell>
-              </TableRow>
-            ))}
-            {celulasFiltradas.length === 0 && (
+            {celulas.length > 0 ? (
+              celulas.map((c) => (
+                <TableRow key={c.id}>
+                  <TableCell>{c.celula}</TableCell>
+                  <TableCell>{c.rede}</TableCell>
+                  <TableCell>{c.lider}</TableCell>
+                  <TableCell>{c.endereco}</TableCell>
+                  <TableCell>{c.bairro}</TableCell>
+                  <TableCell>{c.campus}</TableCell>
+                  <TableCell>
+                    <Tooltip title="Editar">
+                      <IconButton color="primary" onClick={() => handleEdit(c)}>
+                        <EditIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
               <TableRow>
                 <TableCell colSpan={7} align="center">
                   Nenhuma célula encontrada com esse nome.
@@ -107,13 +115,14 @@ const ListagemCelulasPage = () => {
         </Table>
       </TableContainer>
 
-      <Pagination
-        count={totalPages}
-        page={page}
-        onChange={(e, value) => setPage(value)}
-        color="primary"
-        sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}
-      />
+      <Box mt={2} display="flex" justifyContent="center">
+        <Pagination
+          count={totalPages}
+          page={page}
+          onChange={(e, value) => setPage(value)}
+          color="primary"
+        />
+      </Box>
     </div>
   );
 };
