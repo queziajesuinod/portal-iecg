@@ -82,6 +82,33 @@ const CadastrarCelula = () => {
     }
   };
 
+  const buscarCoordenadas = async () => {
+    if (!formData.endereco) {
+      setNotification('Preencha o endereço antes de buscar coordenadas.');
+      return;
+    }
+
+    try {
+      const query = encodeURIComponent(formData.endereco);
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&addressdetails=1`);
+      const data = await res.json();
+
+      if (data.length > 0) {
+        setFormData({
+          ...formData,
+          lat: data[0].lat,
+          lon: data[0].lon
+        });
+        setNotification('Coordenadas preenchidas com sucesso!');
+      } else {
+        setNotification('Nenhum resultado encontrado para esse endereço.');
+      }
+    } catch (error) {
+      console.error('Erro ao buscar coordenadas:', error);
+      setNotification('Erro ao buscar coordenadas.');
+    }
+  };
+
   return (
     <div>
       <Helmet>
@@ -111,9 +138,31 @@ const CadastrarCelula = () => {
             <Grid item xs={12} md={6}>
               <TextField fullWidth label="Campus" name="campus" value={formData.campus} onChange={handleChange} />
             </Grid>
-            <Grid item xs={12}>
-              <TextField fullWidth label="Endereço" name="endereco" value={formData.endereco} onChange={handleChange} />
+
+            {/* Campo de endereço com botão */}
+            <Grid item xs={12} container spacing={1}>
+              <Grid item xs={9}>
+                <TextField
+                  fullWidth
+                  label="Endereço"
+                  name="endereco"
+                  value={formData.endereco}
+                  onChange={handleChange}
+                />
+              </Grid>
+              <Grid item xs={3}>
+                <Button
+                  variant="outlined"
+                  color="primary"
+                  fullWidth
+                  onClick={buscarCoordenadas}
+                  style={{ height: '100%' }}
+                >
+                  Buscar coordenadas
+                </Button>
+              </Grid>
             </Grid>
+
             <Grid item xs={12} md={6}>
               <TextField fullWidth label="Bairro" name="bairro" value={formData.bairro} onChange={handleChange} />
             </Grid>
