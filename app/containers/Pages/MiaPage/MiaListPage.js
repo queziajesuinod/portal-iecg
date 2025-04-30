@@ -129,14 +129,14 @@ const MiaListPage = () => {
                 >
                   <ListItemAvatar>
                     <Avatar
-                      src={item.foto || "https://via.placeholder.com/100"}
-                      alt={item.nome}
+                      src={item.user?.image || "https://via.placeholder.com/100"}
+                      alt={item.user?.name}
                       sx={{ width: 60, height: 60 }}
                     />
                   </ListItemAvatar>
 
-                  <ListItemText  style={{ padding: "10px"}}
-                    primary={<Typography variant="h6" fontWeight="bold">{item.nome}</Typography>}
+                  <ListItemText style={{ padding: "10px" }}
+                    primary={<Typography variant="h6" fontWeight="bold">{item.user?.name}</Typography>}
                     secondary={
                       <>
                         {item.remedios && item.remedios.length > 0 ? (

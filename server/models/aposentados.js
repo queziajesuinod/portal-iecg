@@ -4,7 +4,7 @@ const { Model, DataTypes } = require('sequelize');
 module.exports = (sequelize) => {
   class Aposentado extends Model {
     static associate(models) {
-      // Aqui você pode adicionar associações futuras, se necessário
+      Aposentado.belongsTo(models.User, { foreignKey: 'userId' });
     }
   }
 
@@ -15,60 +15,12 @@ module.exports = (sequelize) => {
       allowNull: false,
       defaultValue: DataTypes.UUIDV4,
     },
-    nome: {
-      type: DataTypes.STRING,
-      allowNull: false
-    },
-    data_nascimento: {
-      type: DataTypes.DATEONLY,
-      allowNull: false
-    },
     filhos: {
       type: DataTypes.JSONB,
       allowNull: true
     },
-    endereco: {
-      type: DataTypes.TEXT,
-      allowNull: true
-    },
-    telefones: {
-      type: DataTypes.TEXT,
-      allowNull: true
-    },
-    estado_civil: {
-      type: DataTypes.ENUM('Solteiro', 'Casado', 'Viúvo', 'Divorciado'),
-      allowNull: false
-    },
-    nome_esposo: {
-      type: DataTypes.STRING,
-      allowNull: true
-    },
-    profissao: {
-      type: DataTypes.STRING,
-      allowNull: true
-    },
-    rede_social: {
-      type: DataTypes.STRING,
-      allowNull: true
-    },
     indicacao: {
       type: DataTypes.STRING,
-      allowNull: true
-    },
-    frequenta_celula: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false
-    },
-    batizado: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false
-    },
-    encontro: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false
-    },
-    escolas: {
-      type: DataTypes.TEXT,
       allowNull: true
     },
     patologia: {
@@ -96,14 +48,6 @@ module.exports = (sequelize) => {
       defaultValue: false,
       allowNull: false
     },
-    createdAt: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW
-    },
-    updatedAt: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW
-    },
     foto: {
       type: DataTypes.TEXT,
       allowNull: true
@@ -112,6 +56,23 @@ module.exports = (sequelize) => {
       type: DataTypes.TEXT,
       allowNull: true
     },
+    user_id: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: 'Users',
+        key: 'id'
+      },
+      onDelete: 'CASCADE'
+    },
+    createdAt: {
+      type: DataTypes.DATE,
+      defaultValue: DataTypes.NOW
+    },
+    updatedAt: {
+      type: DataTypes.DATE,
+      defaultValue: DataTypes.NOW
+    }
   }, {
     sequelize,
     modelName: 'Aposentado',
