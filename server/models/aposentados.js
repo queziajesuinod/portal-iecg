@@ -4,7 +4,10 @@ const { Model, DataTypes } = require('sequelize');
 module.exports = (sequelize) => {
   class Aposentado extends Model {
     static associate(models) {
-      Aposentado.belongsTo(models.User, { foreignKey: 'userId' });
+      Aposentado.belongsTo(models.User, {
+        foreignKey: 'user_id', // usa o nome da coluna do banco
+        as: 'user'             // usa o alias esperado no include
+      });
     }
   }
 
@@ -82,3 +85,4 @@ module.exports = (sequelize) => {
 
   return Aposentado;
 };
+ 
