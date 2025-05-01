@@ -136,7 +136,7 @@ const MiaDetailsPage = () => {
             </ListItem>
             <ListItem>
               <ListItemIcon><Person /></ListItemIcon>
-              <ListItemText primary="Tipo de Pessoa" secondary={formatDate(aposentado.tipo_pessoa)} />
+              <ListItemText primary="Tipo de Pessoa" secondary={formatDate(aposentado.user?.tipo_pessoa || "Não informado")} />
             </ListItem>
             <ListItem>
               <ListItemIcon><LocationOn /></ListItemIcon>
