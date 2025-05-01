@@ -64,23 +64,27 @@ const ProfilePage = () => {
     }
   };
 
+  const formatCPF = (cpf) => {
+    if (!cpf) return 'Não informado';
+    return cpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4");
+  };
   
 
-const compressImage = async (file) => {
-  const options = {
-    maxSizeMB: 0.3, // máximo 300KB
-    maxWidthOrHeight: 500, // redimensiona se passar disso
-    useWebWorker: true
-  };
+  const compressImage = async (file) => {
+    const options = {
+      maxSizeMB: 0.3, // máximo 300KB
+      maxWidthOrHeight: 500, // redimensiona se passar disso
+      useWebWorker: true
+    };
 
-  try {
-    const compressedFile = await imageCompression(file, options);
-    return await imageCompression.getDataUrlFromFile(compressedFile);
-  } catch (error) {
-    console.error("Erro ao comprimir imagem:", error);
-    return null;
-  }
-};
+    try {
+      const compressedFile = await imageCompression(file, options);
+      return await imageCompression.getDataUrlFromFile(compressedFile);
+    } catch (error) {
+      console.error("Erro ao comprimir imagem:", error);
+      return null;
+    }
+  };
 
 
   useEffect(() => {
@@ -114,7 +118,7 @@ const compressImage = async (file) => {
       }
     }
   };
-  
+
 
   const updateImage = async (base64Image) => {
     try {
@@ -133,13 +137,13 @@ const compressImage = async (file) => {
         setNotification('Imagem atualizada com sucesso!');
         setUser(prev => ({ ...prev, image: base64Image }));
         // ✅ Atualiza também o avatar local
-      const userStorage = JSON.parse(localStorage.getItem("user"));
-      const updatedUser = {
-        ...userStorage,
-        avatar: base64Image
-      };
-      localStorage.setItem("user", JSON.stringify(updatedUser));
-      dummyContents.user = updatedUser;
+        const userStorage = JSON.parse(localStorage.getItem("user"));
+        const updatedUser = {
+          ...userStorage,
+          avatar: base64Image
+        };
+        localStorage.setItem("user", JSON.stringify(updatedUser));
+        dummyContents.user = updatedUser;
       } else {
         setNotification(`Erro: ${data.message || 'Não foi possível atualizar a imagem'}`);
       }
@@ -212,26 +216,36 @@ const compressImage = async (file) => {
 
           <List>
             <ListItem>
-              <ListItemIcon><Email /></ListItemIcon>
-              <ListItemText primary="Email" secondary={user.email} />
+              <ListItemIcon><AccountCircle /></ListItemIcon>
+              <ListItemText primary="Nome completo" secondary={user.name || 'Não informado'} />
             </ListItem>
+
+            <ListItem>
+              <ListItemIcon><CalendarToday /></ListItemIcon>
+              <ListItemText primary="Data de nascimento" secondary={formatDate(user.data_nascimento)} />
+            </ListItem>
+
+            <ListItem>
+              <ListItemIcon><VerifiedUser /></ListItemIcon>
+              <ListItemText primary="CPF" secondary={formatCPF(user.cpf)} />
+            </ListItem>
+
+            <ListItem>
+              <ListItemIcon><Email /></ListItemIcon>
+              <ListItemText primary="Email" secondary={user.email || 'Não informado'} />
+            </ListItem>
+
             <ListItem>
               <ListItemIcon><VerifiedUser /></ListItemIcon>
               <ListItemText primary="Ativo" secondary={user.active ? "Sim" : "Não"} />
             </ListItem>
+
             <ListItem>
               <ListItemIcon><AccountCircle /></ListItemIcon>
               <ListItemText primary="Perfil" secondary={user.Perfil?.descricao || 'N/A'} />
             </ListItem>
-            <ListItem>
-              <ListItemIcon><CalendarToday /></ListItemIcon>
-              <ListItemText primary="Criado em" secondary={formatDate(user.createdAt)} />
-            </ListItem>
-            <ListItem>
-              <ListItemIcon><CalendarToday /></ListItemIcon>
-              <ListItemText primary="Atualizado em" secondary={formatDate(user.updatedAt)} />
-            </ListItem>
           </List>
+
         </Paper>
       </PapperBlock>
 
