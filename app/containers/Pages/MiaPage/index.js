@@ -26,6 +26,7 @@ const MiaPage = () => {
   const location = useLocation();
   const aposentadoEditando = location.state?.aposentado;
   const isEdit = Boolean(aposentadoEditando);
+  const [aposentadoId, setAposentadoId] = useState(null);
 
   const formDataInicial = {
     id: '',
@@ -87,6 +88,7 @@ const MiaPage = () => {
   
       setFormData(data);
       setCapturedImage(data.image);
+      setAposentadoId(aposentadoEditando.id); // ← aqui é o pulo do gato
     }
   }, [isEdit, aposentadoEditando]);
   
@@ -164,7 +166,7 @@ const MiaPage = () => {
     const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
 
     const method = isEdit ? 'PUT' : 'POST';
-    const endpoint = isEdit ? `${API_URL}/mia/${formData.id}` : `${API_URL}/mia`;
+    const endpoint = isEdit ? `${API_URL}/mia/${aposentadoId}` : `${API_URL}/mia`;
 
     // Remove o ID se for cadastro (para evitar erro do UUID)
     const dadosParaEnviar = { ...formData };
