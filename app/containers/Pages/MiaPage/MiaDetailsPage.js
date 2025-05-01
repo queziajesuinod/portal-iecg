@@ -17,8 +17,8 @@ import {
 import {
   Phone,
   LocationOn,
-  Work,
   School,
+  Facebook,
   Healing,
   LocalHospital,
   Person,
@@ -45,6 +45,7 @@ const MiaDetailsPage = () => {
     const digits = cpf.replace(/\D/g, "");
     return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
   };
+  
 
   useEffect(() => {
     let isMounted = true;
@@ -110,18 +111,18 @@ const MiaDetailsPage = () => {
         <Paper style={{ padding: 20, marginTop: 20 }}>
           <Box display="flex" alignItems="center" gap={2} mb={3}>
             <Avatar
-              src={aposentado.user?.image || "https://via.placeholder.com/100"}
+              src={aposentado.user?.image ||  "https://via.placeholder.com/100"}
               alt={aposentado.user?.name}
               sx={{ width: 80, height: 80 }}
             />
             <Box>
               <Typography variant="h5" fontWeight="bold">{aposentado.user?.name}</Typography>
-              <Typography variant="body2" color="textSecondary" component="span">{aposentado.user?.profissao || "Sem profissão"}</Typography>
+              <Typography variant="body2" color="textSecondary" component="span">{aposentado.profissao || "Sem profissão"}</Typography>
             </Box>
           </Box>
 
           <List>
-            <ListItem>
+          <ListItem>
               <ListItemIcon><Person /></ListItemIcon>
               <ListItemText primary="CPF" secondary={formatCPF(aposentado.user?.cpf)} />
             </ListItem>
@@ -131,7 +132,11 @@ const MiaDetailsPage = () => {
             </ListItem>
             <ListItem>
               <ListItemIcon><Phone /></ListItemIcon>
-              <ListItemText primary="Telefone" secondary={aposentado.user?.telefones || "Não informado"} />
+              <ListItemText primary="Telefone" secondary={aposentado.user?.telefone || "Não informado"} />
+            </ListItem>
+            <ListItem>
+              <ListItemIcon><Person /></ListItemIcon>
+              <ListItemText primary="Tipo de Pessoa" secondary={formatDate(aposentado.tipo_pessoa)} />
             </ListItem>
             <ListItem>
               <ListItemIcon><LocationOn /></ListItemIcon>
@@ -141,15 +146,19 @@ const MiaDetailsPage = () => {
               <ListItemIcon><Person /></ListItemIcon>
               <ListItemText primary="Estado Civil" secondary={aposentado.user?.estado_civil} />
             </ListItem>
-            {aposentado.user?.estado_civil === "Casado" && (
+            {aposentado.estado_civil === "Casado" && (
               <ListItem>
                 <ListItemIcon><FamilyRestroom /></ListItemIcon>
                 <ListItemText primary="Nome do Esposo(a)" secondary={aposentado.user?.nome_esposo} />
               </ListItem>
             )}
             <ListItem>
+              <ListItemIcon><Facebook /></ListItemIcon>
+              <ListItemText primary="Rede Social" secondary={aposentado.user?.rede_social} />
+            </ListItem>
+            <ListItem>
               <ListItemIcon><School /></ListItemIcon>
-              <ListItemText primary="Escolas" secondary={aposentado.user?.escolas || "Não informado"} />
+              <ListItemText primary="Escolas" secondary={aposentado.escolas} />
             </ListItem>
             <ListItem>
               <ListItemIcon><Healing /></ListItemIcon>
@@ -162,10 +171,6 @@ const MiaDetailsPage = () => {
             <ListItem>
               <ListItemIcon><MedicalServices /></ListItemIcon>
               <ListItemText primary="Plano de Saúde" secondary={aposentado.plano_saude} />
-            </ListItem>
-            <ListItem>
-              <ListItemIcon><Work /></ListItemIcon>
-              <ListItemText primary="Tipo de Pessoa" secondary={aposentado.tipo_pessoa || "Não informado"} />
             </ListItem>
             <Divider />
             <Typography variant="h6" sx={{ mt: 2 }}>Filhos</Typography>
