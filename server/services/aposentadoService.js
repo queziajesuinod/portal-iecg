@@ -31,8 +31,8 @@ class AposentadoService {
         name: dados.name,
         email: dados.email,
         username: gerarUsernamePorNome(dados.name),
-        image: dados.foto || null,
-        cpf: dados.cpf || null,
+        image: dados.image || null,
+        cpf: dados.cpf,
         data_nascimento: dados.data_nascimento,
         endereco: dados.endereco,
         telefone: dados.telefone,
@@ -79,7 +79,7 @@ class AposentadoService {
       // Atualiza User
       await aposentado.user.update({
         name: dadosAtualizados.name,
-        image: dadosAtualizados.foto,
+        image: dadosAtualizados.image,
         data_nascimento: dadosAtualizados.data_nascimento,
         endereco: dadosAtualizados.endereco,
         telefone: dadosAtualizados.telefone,

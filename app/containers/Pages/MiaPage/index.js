@@ -153,7 +153,59 @@ const MiaPage = () => {
       </Helmet>
 
       <PapperBlock title={isEdit ? 'Editar Mia' : 'Cadastro Mia'} desc="Preencha os dados abaixo">
-        {/* Formulário mantido, usando campos renomeados como name, image e tipo_pessoa */}
+        <form onSubmit={handleSubmit}>
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Nome Completo"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Data de Nascimento"
+                type="date"
+                name="data_nascimento"
+                InputLabelProps={{ shrink: true }}
+                value={formData.data_nascimento}
+                onChange={handleChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="CPF"
+                name="cpf"
+                value={formData.cpf}
+                onChange={handleChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Tipo de Pessoa"
+                name="tipo_pessoa"
+                select
+                value={formData.tipo_pessoa}
+                onChange={handleChange}
+              >
+                {['Coordenadora','Coordenador','Líder','Pastor','Pastora','Apoio','Idoso'].map((tipo) => (
+                  <MenuItem key={tipo} value={tipo}>{tipo}</MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+          </Grid>
+          <Box mt={3}>
+            <Button type="submit" variant="contained" color="primary" fullWidth>
+              {isEdit ? 'Atualizar Mia' : 'Cadastrar Mia'}
+            </Button>
+          </Box>
+        </form>
       </PapperBlock>
 
       <Notification message={notification} close={() => setNotification('')} />
