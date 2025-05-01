@@ -29,7 +29,7 @@ const MiaPage = () => {
 
   const formDataInicial = {
     id: '',
-    nome: '',
+    name: '',
     email:'',
     data_nascimento: '',
     filhos: [],
@@ -247,8 +247,8 @@ const MiaPage = () => {
               <TextField
                 fullWidth
                 label="Nome Completo"
-                name="nome"
-                value={formData.nome}
+                name="name"
+                value={formData.name}
                 onChange={handleChange}
                 required
               />

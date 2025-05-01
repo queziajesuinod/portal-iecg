@@ -37,7 +37,7 @@ const MiaListPage = () => {
 
     try {
       const query = new URLSearchParams({
-        nome: searchTerm,
+        name: searchTerm,
         page,
         limit: rowsPerPage
       }).toString();
