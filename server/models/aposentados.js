@@ -20,62 +20,68 @@ module.exports = (sequelize) => {
     },
     filhos: {
       type: DataTypes.JSONB,
-      allowNull: true
+      allowNull: true,
     },
     indicacao: {
       type: DataTypes.STRING,
-      allowNull: true
+      allowNull: true,
     },
     patologia: {
       type: DataTypes.TEXT,
-      allowNull: true
+      allowNull: true,
     },
     plano_saude: {
       type: DataTypes.STRING,
-      allowNull: true
+      allowNull: true,
     },
     hospital: {
       type: DataTypes.STRING,
-      allowNull: true
+      allowNull: true,
     },
     remedios: {
       type: DataTypes.JSONB,
-      allowNull: true
+      allowNull: true,
     },
     habilidades: {
       type: DataTypes.TEXT,
-      allowNull: true
+      allowNull: true,
     },
     analfabeto: {
       type: DataTypes.BOOLEAN,
+      allowNull: false,
       defaultValue: false,
-      allowNull: false
     },
     tipo_pessoa: {
-      type: DataTypes.ENUM('Coordenadora','Coordenador', 'Líder', 'Pastor','Pastora', 'Apoio', 'Idoso'),
-      allowNull: true
+      type: DataTypes.ENUM('Coordenadora', 'Coordenador', 'Líder', 'Pastor', 'Pastora', 'Apoio', 'Idoso'),
+      allowNull: true,
     },
     user_id: {
       type: DataTypes.UUID,
-      allowNull: true,
+      allowNull: false,
       references: {
-        model: 'Users',
-        key: 'id'
-      }
+        model: {
+          tableName: 'Users',
+          schema: process.env.DB_SCHEMA || 'dev_iecg',
+        },
+        key: 'id',
+      },
+      onUpdate: 'CASCADE',
+      onDelete: 'CASCADE',
     },
     createdAt: {
       type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW
+      defaultValue: DataTypes.NOW,
     },
     updatedAt: {
       type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW
-    }
+      defaultValue: DataTypes.NOW,
+    },
   }, {
     sequelize,
     modelName: 'Aposentado',
     tableName: 'aposentados_mia',
-    schema: process.env.DB_SCHEMA || 'dev_iecg'
+    schema: process.env.DB_SCHEMA || 'dev_iecg',
+    timestamps: true,
   });
 
   return Aposentado;
