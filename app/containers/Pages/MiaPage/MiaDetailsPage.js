@@ -136,7 +136,7 @@ const MiaDetailsPage = () => {
             </ListItem>
             <ListItem>
               <ListItemIcon><Person /></ListItemIcon>
-              <ListItemText primary="Tipo de Pessoa" secondary={formatDate(aposentado.user?.tipo_pessoa || "Não informado")} />
+              <ListItemText primary="Tipo de Pessoa" secondary={aposentado.tipo_pessoa || "Não informado"} />
             </ListItem>
             <ListItem>
               <ListItemIcon><LocationOn /></ListItemIcon>
@@ -144,33 +144,33 @@ const MiaDetailsPage = () => {
             </ListItem>
             <ListItem>
               <ListItemIcon><Person /></ListItemIcon>
-              <ListItemText primary="Estado Civil" secondary={aposentado.user?.estado_civil} />
+              <ListItemText primary="Estado Civil" secondary={aposentado.user?.estado_civil || "Não informado"} />
             </ListItem>
             {aposentado.estado_civil === "Casado" && (
               <ListItem>
                 <ListItemIcon><FamilyRestroom /></ListItemIcon>
-                <ListItemText primary="Nome do Esposo(a)" secondary={aposentado.user?.nome_esposo} />
+                <ListItemText primary="Nome do Esposo(a)" secondary={aposentado.user?.nome_esposo || "Não informado"} />
               </ListItem>
             )}
             <ListItem>
               <ListItemIcon><Facebook /></ListItemIcon>
-              <ListItemText primary="Rede Social" secondary={aposentado.user?.rede_social} />
+              <ListItemText primary="Rede Social" secondary={aposentado.user?.rede_social || "Não informado"} />
             </ListItem>
             <ListItem>
               <ListItemIcon><School /></ListItemIcon>
-              <ListItemText primary="Escolas" secondary={aposentado.escolas} />
+              <ListItemText primary="Escolas" secondary={aposentado.escolas || "Não informado"} />
             </ListItem>
             <ListItem>
               <ListItemIcon><Healing /></ListItemIcon>
-              <ListItemText primary="Patologia" secondary={aposentado.patologia} />
+              <ListItemText primary="Patologia" secondary={aposentado.patologia || "Não informado"} />
             </ListItem>
             <ListItem>
               <ListItemIcon><LocalHospital /></ListItemIcon>
-              <ListItemText primary="Hospital de Referência" secondary={aposentado.hospital} />
+              <ListItemText primary="Hospital de Referência" secondary={aposentado.hospital || "Não informado"} />
             </ListItem>
             <ListItem>
               <ListItemIcon><MedicalServices /></ListItemIcon>
-              <ListItemText primary="Plano de Saúde" secondary={aposentado.plano_saude} />
+              <ListItemText primary="Plano de Saúde" secondary={aposentado.plano_saude || "Não informado"} />
             </ListItem>
             <Divider />
             <Typography variant="h6" sx={{ mt: 2 }}>Filhos</Typography>
