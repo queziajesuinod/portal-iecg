@@ -30,10 +30,11 @@ const MiaPage = () => {
   const formDataInicial = {
     id: '',
     nome: '',
+    email:'',
     data_nascimento: '',
     filhos: [],
     endereco: '',
-    telefones: '',
+    telefone: '',
     estado_civil: '',
     nome_esposo: '',
     profissao: '',
@@ -290,10 +291,12 @@ const MiaPage = () => {
             <Grid item xs={12} md={6}>
               <TextField fullWidth label="Endereço" name="endereco" value={formData.endereco} onChange={handleChange} />
             </Grid>
-
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth label="Email" name="endereco" type="email" value={formData.email} onChange={handleChange} />
+            </Grid>
             {/* Telefones */}
-            <Grid item xs={12}>
-              <TextField fullWidth label="Telefones" name="telefones" value={formData.telefones} onChange={handleChange} />
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth label="Telefone" name="telefone" value={formData.telefone} onChange={handleChange} />
             </Grid>
 
             {/* Estado Civil */}
