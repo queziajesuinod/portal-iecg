@@ -20,35 +20,46 @@ function hashSHA256WithSalt(password, salt) {
 
 class AposentadoService {
   async criarAposentado(dados) {
-    console.log('######\n\nDADOS RECEBIDOS PARA CADASTRO:\n\n', dados);
     const t = await sequelize.transaction();
-
+  
     try {
-      const cpfLimpo = dados.cpf ? dados.cpf.replace(/\D/g, '') : 'senha123';
-      const salt = crypto.randomBytes(16).toString('hex');
-      const passwordHash = hashSHA256WithSalt(cpfLimpo, salt);
-
-      const user = await User.create({
-        name: dados.name,
-        email: dados.email,
-        username: gerarUsernamePorNome(dados.name),
-        image: dados.image || null,
-        cpf: dados.cpf,
-        data_nascimento: dados.data_nascimento,
-        endereco: dados.endereco,
-        telefone: dados.telefone,
-        estado_civil: dados.estado_civil,
-        nome_esposo: dados.nome_esposo,
-        profissao: dados.profissao,
-        frequenta_celula: dados.frequenta_celula,
-        batizado: dados.batizado,
-        encontro: dados.encontro,
-        escolas: dados.escolas,
-        passwordHash,
-        salt,
-        perfilId: dados.perfilId || '251b1ad9-4a77-47f2-9a2e-b2c978dda534'
-      }, { transaction: t });
-
+      const cpfLimpo = dados.cpf ? dados.cpf.replace(/\D/g, '') : '';
+      let user = await User.findOne({
+        where: {
+          [Op.or]: [
+            { email: dados.email },
+            { cpf: cpfLimpo }
+          ]
+        },
+        transaction: t
+      });
+  
+      if (!user) {
+        const salt = crypto.randomBytes(16).toString('hex');
+        const passwordHash = hashSHA256WithSalt(cpfLimpo || 'senha123', salt);
+  
+        user = await User.create({
+          name: dados.name,
+          email: dados.email,
+          username: gerarUsernamePorNome(dados.name),
+          image: dados.image || null,
+          cpf: cpfLimpo,
+          data_nascimento: dados.data_nascimento,
+          endereco: dados.endereco,
+          telefone: dados.telefone,
+          estado_civil: dados.estado_civil,
+          nome_esposo: dados.nome_esposo,
+          profissao: dados.profissao,
+          frequenta_celula: dados.frequenta_celula,
+          batizado: dados.batizado,
+          encontro: dados.encontro,
+          escolas: dados.escolas,
+          passwordHash,
+          salt,
+          perfilId: dados.perfilId || '251b1ad9-4a77-47f2-9a2e-b2c978dda534'
+        }, { transaction: t });
+      }
+  
       const aposentado = await Aposentado.create({
         filhos: dados.filhos,
         indicacao: dados.indicacao,
@@ -59,9 +70,9 @@ class AposentadoService {
         habilidades: dados.habilidades,
         analfabeto: dados.analfabeto,
         tipo_pessoa: dados.tipo_pessoa,
-        userId: user.id
+        user_id: user.id
       }, { transaction: t });
-
+  
       await t.commit();
       return aposentado;
     } catch (error) {
@@ -69,6 +80,7 @@ class AposentadoService {
       throw new Error('Erro ao criar aposentado: ' + error.message);
     }
   }
+  
 
   async editarAposentado(id, dadosAtualizados) {
     const t = await sequelize.transaction();
