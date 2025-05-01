@@ -57,7 +57,6 @@ class AposentadoService {
         // Atualiza o user existente
         await user.update({
           name: dados.name,
-          username: gerarUsernamePorNome(dados.name),
           image: dados.image || user.image,
           data_nascimento: dados.data_nascimento,
           endereco: dados.endereco,
@@ -68,10 +67,8 @@ class AposentadoService {
           frequenta_celula: dados.frequenta_celula,
           batizado: dados.batizado,
           encontro: dados.encontro,
-          escolas: dados.escolas,
-          cpf: cpfLimpo,
-          perfilId: dados.perfilId || user.perfilId
-        }, { transaction: t });
+          escolas: dados.escolas
+         }, { transaction: t });
       } else {
         // Cria novo user
         user = await User.create({
