@@ -62,11 +62,19 @@ const MiaPage = () => {
   const webcamRef = useRef(null);
 
   useEffect(() => {
-    if (isEdit) {
-      setFormData({ ...formDataInicial, ...aposentadoEditando });
-      setCapturedImage(aposentadoEditando.image || '');
+    if (isEdit && aposentadoEditando) {
+      const dataCombinada = {
+        ...formDataInicial,
+        ...aposentadoEditando,
+        ...aposentadoEditando.user,
+        image: aposentadoEditando.user?.image || '',
+        email: aposentadoEditando.user?.email || '',
+      };
+      setFormData(dataCombinada);
+      setCapturedImage(dataCombinada.image);
     }
   }, [isEdit, aposentadoEditando]);
+  
 
   const capturePhoto = () => {
     if (webcamRef.current) {
@@ -292,7 +300,7 @@ const MiaPage = () => {
               <TextField fullWidth label="Endereço" name="endereco" value={formData.endereco} onChange={handleChange} />
             </Grid>
             <Grid item xs={12} md={6}>
-              <TextField fullWidth label="Email" name="endereco" type="email" value={formData.email} onChange={handleChange} />
+              <TextField fullWidth label="Email" name="email" type="email" value={formData.email} onChange={handleChange} required/>
             </Grid>
             {/* Telefones */}
             <Grid item xs={12} md={6}>
