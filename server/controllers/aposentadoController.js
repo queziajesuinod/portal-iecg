@@ -12,11 +12,11 @@ class AposentadoController {
 
   async listar(req, res) {
     try {
-      const { nome, page = 1, limit = 10 } = req.query;
+      const { name, page = 1, limit = 10 } = req.query;
 
       let resultado;
-      if (nome) {
-        resultado = await AposentadoService.buscaPorNomePaginada(nome, parseInt(page), parseInt(limit));
+      if (name) {
+        resultado = await AposentadoService.buscaPorNomePaginada(name, parseInt(page), parseInt(limit));
       } else {
         resultado = await AposentadoService.buscaPaginada(parseInt(page), parseInt(limit));
       }
