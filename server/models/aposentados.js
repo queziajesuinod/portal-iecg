@@ -5,8 +5,8 @@ module.exports = (sequelize) => {
   class Aposentado extends Model {
     static associate(models) {
       Aposentado.belongsTo(models.User, {
-        foreignKey: 'user_id', // usa o nome da coluna do banco
-        as: 'user'             // usa o alias esperado no include
+        foreignKey: 'user_id',
+        as: 'user',
       });
     }
   }
@@ -51,22 +51,17 @@ module.exports = (sequelize) => {
       defaultValue: false,
       allowNull: false
     },
-    foto: {
-      type: DataTypes.TEXT,
-      allowNull: true
-    },
-    cpf: {
-      type: DataTypes.TEXT,
+    tipo_pessoa: {
+      type: DataTypes.ENUM('Coordenadora','Coordenador', 'Líder', 'Pastor','Pastora', 'Apoio', 'Idoso'),
       allowNull: true
     },
     user_id: {
       type: DataTypes.UUID,
-      allowNull: false,
+      allowNull: true,
       references: {
         model: 'Users',
         key: 'id'
-      },
-      onDelete: 'CASCADE'
+      }
     },
     createdAt: {
       type: DataTypes.DATE,
@@ -85,4 +80,3 @@ module.exports = (sequelize) => {
 
   return Aposentado;
 };
- 
