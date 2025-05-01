@@ -63,17 +63,33 @@ const MiaPage = () => {
 
   useEffect(() => {
     if (isEdit && aposentadoEditando) {
-      const dataCombinada = {
+      const userData = aposentadoEditando.user || {};
+  
+      const data = {
         ...formDataInicial,
         ...aposentadoEditando,
-        ...aposentadoEditando.user,
-        image: aposentadoEditando.user?.image || '',
-        email: aposentadoEditando.user?.email || '',
+        ...userData,
+        image: userData.image || aposentadoEditando.image || '',
+        nome: userData.name || '',
+        email: userData.email || '',
+        cpf: userData.cpf || '',
+        data_nascimento: userData.data_nascimento || '',
+        endereco: userData.endereco || '',
+        telefone: userData.telefone || '',
+        estado_civil: userData.estado_civil || '',
+        nome_esposo: userData.nome_esposo || '',
+        profissao: userData.profissao || '',
+        frequenta_celula: userData.frequenta_celula || false,
+        batizado: userData.batizado || false,
+        encontro: userData.encontro || false,
+        escolas: userData.escolas || '',
       };
-      setFormData(dataCombinada);
-      setCapturedImage(dataCombinada.image);
+  
+      setFormData(data);
+      setCapturedImage(data.image);
     }
   }, [isEdit, aposentadoEditando]);
+  
   
 
   const capturePhoto = () => {
