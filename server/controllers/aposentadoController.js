@@ -48,7 +48,7 @@ class AposentadoController {
 
   async atualizar(req, res) {
     try {
-      const aposentado = await AposentadoService.atualizarAposentado(req.params.id, req.body);
+      const aposentado = await AposentadoService.editarAposentado(req.params.id, req.body);
       return res.status(200).json(aposentado);
     } catch (error) {
       return res.status(400).json({ erro: error.message });
