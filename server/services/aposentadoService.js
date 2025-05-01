@@ -20,6 +20,7 @@ function hashSHA256WithSalt(password, salt) {
 
 class AposentadoService {
   async criarAposentado(dados) {
+    console.log('######\n\nDADOS RECEBIDOS PARA CADASTRO:\n\n', dados);
     const t = await sequelize.transaction();
 
     try {
