@@ -137,14 +137,14 @@ class AposentadoService {
     };
   }
 
-  async buscaPorNomePaginada(nome, page = 1, limit = 10) {
+  async buscaPorNomePaginada(name, page = 1, limit = 10) {
     const offset = (page - 1) * limit;
     const { count, rows } = await Aposentado.findAndCountAll({
       include: [{
         model: User,
         as: 'user',
         where: {
-          name: { [Op.iLike]: `%${nome}%` }
+          name: { [Op.iLike]: `%${name}%` }
         }
       }],
       limit,
