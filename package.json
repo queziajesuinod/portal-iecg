@@ -215,6 +215,7 @@
     "remark-gfm": "^1.0.0",
     "reselect": "4.0.0",
     "sanitize.css": "8.0.0",
+    "sdk-node-apis-efi": "^1.2.20",
     "sequelize": "^6.37.5",
     "serve-favicon": "^2.5.0",
     "slick-carousel": "^1.8.1",
