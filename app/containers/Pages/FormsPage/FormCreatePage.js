@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Grid, TextField, Button, MenuItem, Typography, IconButton,
-  Checkbox, FormControlLabel, Paper
+  TextField,
+  Button,
+  Grid,
+  MenuItem,
+  Typography,
+  FormControlLabel,
+  Checkbox,
+  IconButton
 } from '@mui/material';
 import { AddCircle, RemoveCircle } from '@mui/icons-material';
 import { Helmet } from 'react-helmet';
-import { PapperBlock, Notification } from 'dan-components';
-const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
+import { Notification, PapperBlock } from 'dan-components';
 
 const tiposDeCampo = ['text', 'number', 'email', 'date', 'checkbox', 'select'];
 
@@ -19,23 +24,18 @@ const FormCreatePage = () => {
     hasPayment: false,
     startDate: '',
     endDate: '',
-    fields: [],
     gateway: '',
-    totalAmount: '',
-    minEntry: '',
-    dueDate: '',
-    returnUrl: '',
-    allowMultiplePayments: false
+    fields: []
   });
-  const [tipos, setTipos] = useState([]);
+  const [formTypes, setFormTypes] = useState([]);
   const [notification, setNotification] = useState('');
-
+  const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
 
   useEffect(() => {
     fetch(`${API_URL}/form-types`)
       .then(res => res.json())
-      .then(setTipos)
-      .catch(() => setTipos([]));
+      .then(setFormTypes)
+      .catch(() => setNotification('Erro ao carregar tipos de formulário.'));
   }, []);
 
   const handleChange = (e) => {
@@ -63,6 +63,7 @@ const FormCreatePage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem('token');
+
     try {
       const res = await fetch(`${API_URL}/forms`, {
         method: 'POST',
@@ -76,31 +77,29 @@ const FormCreatePage = () => {
       const data = await res.json();
       if (res.ok) {
         setNotification('Formulário criado com sucesso!');
-        setForm({
-          name: '', description: '', slug: '', formTypeId: '', hasPayment: false,
-          startDate: '', endDate: '', fields: [], gateway: '', totalAmount: '',
-          minEntry: '', dueDate: '', returnUrl: '', allowMultiplePayments: false
-        });
+        setForm({ name: '', description: '', slug: '', formTypeId: '', hasPayment: false, startDate: '', endDate: '', gateway: '', fields: [] });
       } else {
         setNotification(data.message || 'Erro ao criar formulário');
       }
     } catch (err) {
       console.error('Erro ao enviar formulário:', err);
-      setNotification('Erro ao conectar com o servidor');
+      setNotification('Erro ao conectar com o servidor.');
     }
   };
 
   return (
     <div>
-      <Helmet><title>Eventos</title></Helmet>
-      <PapperBlock title="Novo Eventos" desc="Configure os campos e opções do Eventos">
+      <Helmet>
+        <title>Criar Novo Formulário</title>
+      </Helmet>
+      <PapperBlock title="Criar Formulário" desc="Cadastro de formulário dinâmico">
         <form onSubmit={handleSubmit}>
           <Grid container spacing={2}>
             <Grid item xs={12} md={6}>
               <TextField label="Nome" name="name" fullWidth value={form.name} onChange={handleChange} required />
             </Grid>
             <Grid item xs={12} md={6}>
-              <TextField label="Slug (URL)" name="slug" fullWidth value={form.slug} onChange={handleChange} required />
+              <TextField label="Slug" name="slug" fullWidth value={form.slug} onChange={handleChange} required />
             </Grid>
             <Grid item xs={12}>
               <TextField label="Descrição" name="description" fullWidth value={form.description} onChange={handleChange} multiline />
@@ -111,63 +110,24 @@ const FormCreatePage = () => {
             <Grid item xs={6}>
               <TextField label="Fim" name="endDate" type="date" fullWidth value={form.endDate} onChange={handleChange} InputLabelProps={{ shrink: true }} />
             </Grid>
-
             <Grid item xs={12} md={6}>
-              <TextField
-                select
-                label="Tipo de Formulário"
-                name="formTypeId"
-                fullWidth
-                value={form.formTypeId}
-                onChange={handleChange}
-              >
-                {tipos.map(tipo => (
-                  <MenuItem key={tipo.id} value={tipo.id}>{tipo.name}</MenuItem>
+              <TextField label="Tipo de Formulário" name="formTypeId" select value={form.formTypeId} onChange={handleChange} fullWidth required>
+                {formTypes.map((type) => (
+                  <MenuItem key={type.id} value={type.id}>{type.name}</MenuItem>
                 ))}
               </TextField>
             </Grid>
-
-            <Grid item xs={12}>
-              <FormControlLabel
-                control={<Checkbox checked={form.hasPayment} onChange={handleChange} name="hasPayment" />}
-                label="Formulário com Pagamento?"
-              />
+            <Grid item xs={12} md={6}>
+              <FormControlLabel control={<Checkbox checked={form.hasPayment} onChange={handleChange} name="hasPayment" />} label="Formulário com pagamento?" />
             </Grid>
-
             {form.hasPayment && (
-              <>
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    select
-                    label="Gateway de Pagamento"
-                    name="gateway"
-                    value={form.gateway}
-                    onChange={handleChange}
-                    fullWidth
-                  >
-                    <MenuItem value="efi">Efi (Gerencianet)</MenuItem>
-                    <MenuItem value="cielo">Cielo</MenuItem>
-                  </TextField>
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <TextField label="Valor Total (R$)" name="totalAmount" type="number" fullWidth value={form.totalAmount} onChange={handleChange} />
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <TextField label="Valor Mínimo de Entrada (R$)" name="minEntry" type="number" fullWidth value={form.minEntry} onChange={handleChange} />
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <TextField label="Data Limite para Pagamento" name="dueDate" type="date" fullWidth InputLabelProps={{ shrink: true }} value={form.dueDate} onChange={handleChange} />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField label="URL de Retorno" name="returnUrl" fullWidth value={form.returnUrl} onChange={handleChange} />
-                </Grid>
-                <Grid item xs={12}>
-                  <FormControlLabel
-                    control={<Checkbox checked={form.allowMultiplePayments} onChange={handleChange} name="allowMultiplePayments" />}
-                    label="Aceita Pagamentos Múltiplos?"
-                  />
-                </Grid>
-              </>
+              <Grid item xs={12}>
+                <TextField label="Gateway de Pagamento" name="gateway" select value={form.gateway} onChange={handleChange} fullWidth required>
+                  <MenuItem value="efi">Efi (antigo Gerencianet)</MenuItem>
+                  <MenuItem value="pagseguro">PagSeguro</MenuItem>
+                  <MenuItem value="cielo">Cielo</MenuItem>
+                </TextField>
+              </Grid>
             )}
 
             <Grid item xs={12}>
@@ -205,7 +165,6 @@ const FormCreatePage = () => {
           </Grid>
         </form>
       </PapperBlock>
-
       <Notification message={notification} close={() => setNotification('')} />
     </div>
   );

@@ -58,7 +58,7 @@ const FormListPage = () => {
                 <TableRow key={form.id}>
                   <TableCell>{form.name}</TableCell>
                   <TableCell>{form.description}</TableCell>
-                  <TableCell>{form.formType?.name || '-'}</TableCell>
+                  <TableCell>{form.formType && form.formType.name ? form.formType.name : '-'}</TableCell>
                   <TableCell>{form.startDate?.split('T')[0]}</TableCell>
                   <TableCell>{form.endDate?.split('T')[0]}</TableCell>
                   <TableCell>
