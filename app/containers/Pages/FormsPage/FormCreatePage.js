@@ -32,11 +32,24 @@ const FormCreatePage = () => {
   const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
 
   useEffect(() => {
-    fetch(`${API_URL}/form-types`)
-      .then(res => res.json())
-      .then(setFormTypes)
-      .catch(() => setNotification('Erro ao carregar tipos de formulário.'));
-  }, []);
+    const fetchFormTypes = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${API_URL}/form-types`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+        const data = await res.json();
+        setFormTypes(data);
+      } catch (err) {
+        setNotification('Erro ao carregar tipos de formulário.');
+      }
+    };
+  
+    fetchFormTypes();
+  }, []);  
+
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;

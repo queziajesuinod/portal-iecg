@@ -38,8 +38,15 @@ class FormService {
   }
 
   async listarFormulariosAtivos() {
-    return Form.findAll({ where: { isActive: true }, include: [{ model: FormType, as: 'formType' }]
+    return Form.findAll({
+      where: { isActive: true },
+      include: [{
+        model: FormType,
+        as: 'formType',
+        required: false // ou true, se quiser garantir integridade
+      }]
     });
+
   }
 
   async buscarFormularioPorId(id) {

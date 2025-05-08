@@ -1,7 +1,7 @@
 module.exports = (sequelize, DataTypes) => {
     const FormPaymentConfig = sequelize.define('FormPaymentConfig', {
       formId: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: false,
         references: {
           model: 'forms',
