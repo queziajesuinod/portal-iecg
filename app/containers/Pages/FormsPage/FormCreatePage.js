@@ -1,12 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Grid, TextField, Button, MenuItem, Typography, IconButton,
   Checkbox, FormControlLabel, Paper
 } from '@mui/material';
 import { AddCircle, RemoveCircle } from '@mui/icons-material';
 import { Helmet } from 'react-helmet';
-import Notification from 'dan-components/Notification';
-import { PapperBlock } from 'dan-components';
+import { PapperBlock, Notification } from 'dan-components';
 
 const tiposDeCampo = ['text', 'number', 'email', 'date', 'checkbox', 'select'];
 
@@ -29,6 +28,7 @@ const FormCreatePage = () => {
   });
   const [tipos, setTipos] = useState([]);
   const [notification, setNotification] = useState('');
+
 
   useEffect(() => {
     fetch(`${process.env.REACT_APP_API_URL}/form-types`)
