@@ -14,8 +14,11 @@ module.exports = (sequelize, DataTypes) => {
     status: DataTypes.STRING,
     timestamp: DataTypes.DATE,
     notes: DataTypes.TEXT
-  }, {
-    tableName: 'payment_histories'
+  },  {
+    sequelize,
+    modelName: 'PaymentHistory',
+    tableName: 'paymentpayment_historiess',
+    schema: process.env.DB_SCHEMA || 'dev_iecg'
   });
   PaymentHistory.associate = models => {
     PaymentHistory.belongsTo(models.Payment);

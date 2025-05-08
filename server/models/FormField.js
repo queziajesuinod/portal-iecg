@@ -4,9 +4,12 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       required: { type: DataTypes.BOOLEAN, defaultValue: false },
       options: DataTypes.JSON
-    }, {
-        tableName: 'form_fields '
-      });
+    },  {
+      sequelize,
+      modelName: 'FormField',
+      tableName: 'forms_field',
+      schema: process.env.DB_SCHEMA || 'dev_iecg'
+    });
   
     FormField.associate = models => {
       FormField.belongsTo(models.Form);

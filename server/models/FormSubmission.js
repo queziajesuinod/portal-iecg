@@ -2,8 +2,11 @@ module.exports = (sequelize, DataTypes) => {
     const FormSubmission = sequelize.define('FormSubmission', {
       data: DataTypes.JSON
     }, {
-        tableName: 'form_submissions'
-      });
+      sequelize,
+      modelName: 'FormSubmission',
+      tableName: 'form_submissions',
+      schema: process.env.DB_SCHEMA || 'dev_iecg'
+    });
   
     FormSubmission.associate = models => {
       FormSubmission.belongsTo(models.Form);

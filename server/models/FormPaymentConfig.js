@@ -31,7 +31,10 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true
       }
     }, {
-      tableName: 'form_payment_configs'
+      sequelize,
+      modelName: 'FormPaymentConfig',
+      tableName: 'form_payment_configs',
+      schema: process.env.DB_SCHEMA || 'dev_iecg'
     });
   
     FormPaymentConfig.associate = models => {

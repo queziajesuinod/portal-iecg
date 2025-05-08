@@ -7,8 +7,10 @@ module.exports = (sequelize, DataTypes) => {
     },
     name: DataTypes.STRING
   }, {
-    tableName: 'form_types', // <- aqui está o ponto-chave
-    timestamps: false // se não houver createdAt/updatedAt
+    sequelize,
+    modelName: 'FormType',
+    tableName: 'form_types',
+    schema: process.env.DB_SCHEMA || 'dev_iecg'
   });
 
   FormType.associate = (models) => {
