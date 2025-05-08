@@ -8,7 +8,7 @@ module.exports = (sequelize, DataTypes) => {
     },
     options: DataTypes.JSON
   }, {
-    tableName: 'forms_field',
+    tableName: 'form_fields',
     schema: process.env.DB_SCHEMA || 'dev_iecg'
   });
 
