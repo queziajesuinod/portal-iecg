@@ -3,6 +3,8 @@ import {
   TextField,
   Button,
   Grid,
+  Checkbox,
+  FormControlLabel,
   MenuItem,
   Typography,
   IconButton
@@ -50,7 +52,9 @@ const FormCreatePage = () => {
     e.preventDefault();
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch(`${process.env.REACT_APP_API_URL}/forms`, {
+      const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
+
+      const res = await fetch(`${API_URL}/forms`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

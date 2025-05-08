@@ -16,6 +16,7 @@ import FormCreatePage from '../Pages/FormsPage/FormCreatePage';
 import FormPublicPage from '../Pages/FormsPage/FormPublicPage';
 import FormPaymentCheckPage from '../Pages/FormsPage/FormPaymentCheckPage';
 import FormPublicPaymentPage from '../Pages/FormsPage/FormPublicPaymentPage';
+import FormListPage from '../Pages/FormsPage/FormListPage';
 
 import dummyContents from 'dan-api/dummy/dummyContents';
 
@@ -63,6 +64,7 @@ function Application(props) {
         <ProtectedRoute exact path="/app/forms/create" component={FormCreatePage} isAuthenticated={isAuthenticated} />
         <ProtectedRoute exact path="/app/forms/edit/:id" component={FormEditPage} isAuthenticated={isAuthenticated} />
 
+        <ProtectedRoute exact path="/app/forms" component={FormListPage} isAuthenticated={isAuthenticated} />
 
         <Route exact path="/public/forms/:slug" component={FormPublicPage} />
         <Route exact path="/public/pagamentos" component={FormPaymentCheckPage} />
