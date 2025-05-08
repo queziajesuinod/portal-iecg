@@ -67,8 +67,7 @@ function Application(props) {
         <Route exact path="/public/forms/:slug" component={FormPublicPage} />
         <Route exact path="/public/pagamentos" component={FormPaymentCheckPage} />
         <Route exact path="/public/pagamento/:submissionId" component={FormPublicPaymentPage} />
-        <Route exact path="/public/pagamento/token/:token" component={FormPublicPaymentTokenPage} />  // se usar token
-
+       
         {/* Redireciona para Login se nenhuma rota for encontrada */}
         <Redirect to="/login" />
       </Switch>
