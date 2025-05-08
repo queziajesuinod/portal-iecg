@@ -11,6 +11,11 @@ import MiaListPage from '../Pages/MiaPage/MiaListPage';
 import MiaDetailsPage from '../Pages/MiaPage/MiaDetailsPage';
 import Login from '../Pages/Users/Login'; // Sua página de login
 import ProtectedRoute from "../../routes/ProtectedRoute";
+import FormEditPage from '../Pages/FormsPage/FormEditPage';
+import FormCreatePage from '../Pages/FormsPage/FormCreatePage';
+import FormPublicPage from '../Pages/FormsPage/FormPublicPage';
+import FormPaymentCheckPage from '../Pages/FormsPage/FormPaymentCheckPage';
+import FormPublicPaymentPage from '../Pages/FormsPage/FormPublicPaymentPage';
 
 import dummyContents from 'dan-api/dummy/dummyContents';
 
@@ -55,7 +60,18 @@ function Application(props) {
         <ProtectedRoute exact path="/app/start/celulas" component={ListagemCelulasPage} isAuthenticated={isAuthenticated} />
         <ProtectedRoute exact path="/app/start/celulas/cadastrar" component={CadastrarCelula} isAuthenticated={isAuthenticated} />
         <ProtectedRoute exact path="/app/start/celulas/detalhes" component={BlankPage} isAuthenticated={isAuthenticated} />
-  
+        <ProtectedRoute exact path="/app/forms/create" component={FormCreatePage} isAuthenticated={isAuthenticated} />
+        <ProtectedRoute exact path="/app/forms/edit/:id" component={FormEditPage} isAuthenticated={isAuthenticated()} />
+      <ProtectedRoute exact path="/app/forms/submissoes" component={FormSubmissionListPage} isAuthenticated={isAuthenticated()} />
+      <ProtectedRoute exact path="/app/forms/submissoes/:id" component={FormSubmissionDetailsPage} isAuthenticated={isAuthenticated()} />
+      <ProtectedRoute exact path="/app/forms/pagamentos/:submissionId" component={FormPaymentAdminPage} isAuthenticated={isAuthenticated()} />
+
+       
+       <Route exact path="/public/forms/:slug" component={FormPublicPage} />
+        <Route exact path="/public/pagamentos" component={FormPaymentCheckPage} />
+        <Route exact path="/public/pagamento/:submissionId" component={FormPublicPaymentPage} />
+        <Route exact path="/public/pagamento/token/:token" component={FormPublicPaymentTokenPage} />  // se usar token
+
         {/* Redireciona para Login se nenhuma rota for encontrada */}
         <Redirect to="/login" />
       </Switch>

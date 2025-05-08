@@ -36,5 +36,24 @@ module.exports = [
         icon: 'ion-ios-contacts-outline'
       }
     ]
+  },
+  {
+    key: 'forms',
+    name: 'Formulários',
+    icon: 'ion-ios-create-outline',
+    child: [
+      {
+        key: 'listarForms',
+        name: 'Listar Formulários',
+        link: '/app/forms',
+        icon: 'ion-ios-list-box-outline'
+      },
+      {
+        key: 'criarForm',
+        name: 'Criar Novo Formulário',
+        link: '/app/forms/create',
+        icon: 'ion-ios-add-circle-outline'
+      }
+    ]
   }
 ];
