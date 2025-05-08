@@ -7,7 +7,7 @@ module.exports = (sequelize, DataTypes) => {
     },
     name: DataTypes.STRING
   }, {
-    tableName: 'form_type', // <- aqui está o ponto-chave
+    tableName: 'form_types', // <- aqui está o ponto-chave
     timestamps: false // se não houver createdAt/updatedAt
   });
 
