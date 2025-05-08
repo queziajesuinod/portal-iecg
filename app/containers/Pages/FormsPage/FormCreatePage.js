@@ -119,10 +119,12 @@ const FormCreatePage = () => {
       const data = await res.json();
       if (res.ok) {
         setNotification('Formulário criado com sucesso!');
-        setForm({ name: '', description: '', slug: '', formTypeId: '', hasPayment: false, startDate: '', endDate: '', gateway: '', paymentValue: '', paymentType: '', allowMultiplePayments: false, fields: [] });
+        setForm({ name: '', description: '', slug: '', formTypeId: '', hasPayment: false, startDate: '', endDate: '', gateway: '', fields: [] });
       } else {
-        setNotification(data.message || 'Erro ao criar formulário');
+        const errorMessage = data.message || data.error || 'Erro ao criar formulário';
+        setNotification(errorMessage);
       }
+
     } catch (err) {
       setNotification('Erro ao conectar com o servidor.');
     }
