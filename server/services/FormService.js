@@ -3,13 +3,47 @@ const { Form, FormField, FormType, FormSubmission, FormPaymentConfig } = require
 
 class FormService {
   async criarFormulario(data) {
-    const { name, description, formTypeId, hasPayment, startDate, endDate, slug, fields } = data;
-    const form = await Form.create({ name, description, slug, formTypeId, hasPayment, startDate, endDate });
+    const {
+      name,
+      description,
+      formTypeId,
+      hasPayment,
+      startDate,
+      endDate,
+      slug,
+      fields = [],
+      configuracaoPagamento
+    } = data;
 
-    if (Array.isArray(fields)) {
-      for (const field of fields) {
-        await form.createFormField(field);
-      }
+    const form = await Form.create({
+      name,
+      description,
+      slug,
+      formTypeId,
+      hasPayment,
+      startDate,
+      endDate
+    });
+
+    for (const field of fields) {
+      await FormField.create({
+        label: field.label,
+        type: field.type,
+        required: field.required || false,
+        options: field.options || '',
+        FormId: form.id
+      });
+    }
+
+    if (hasPayment && configuracaoPagamento) {
+      await FormPaymentConfig.create({
+        formId: form.id,
+        totalAmount: configuracaoPagamento.totalAmount,
+        minEntry: configuracaoPagamento.minEntry,
+        dueDate: configuracaoPagamento.dueDate,
+        gateway: configuracaoPagamento.gateway,
+        returnUrl: configuracaoPagamento.returnUrl || null
+      });
     }
 
     return form;
@@ -24,14 +58,17 @@ class FormService {
     await form.update({ name, description, slug, startDate, endDate, hasPayment });
 
     await FormField.destroy({ where: { formId: id } });
-    for (const f of FormFields) {
-      await FormField.create({
+
+    if (Array.isArray(FormFields) && FormFields.length > 0) {
+      const novosCampos = FormFields.map(f => ({
         label: f.label,
         type: f.type,
-        options: f.options || '',
+        options: f.options || [],
         required: f.required || false,
         formId: id
-      });
+      }));
+
+      await FormField.bulkCreate(novosCampos);
     }
 
     return form;
@@ -43,26 +80,28 @@ class FormService {
       include: [{
         model: FormType,
         as: 'formType',
-        required: false // ou true, se quiser garantir integridade
+        required: false
       }]
     });
-
   }
 
   async buscarFormularioPorId(id) {
-    return Form.findOne({ where: { id, isActive: true }, include: [FormField, FormType] });
+    return Form.findOne({
+      where: { id, isActive: true },
+      include: [FormField, FormType]
+    });
   }
 
   async buscarFormularioPorSlug(slug) {
-    return Form.findOne({ where: { slug, isActive: true }, include: [FormField, FormType] });
+    return Form.findOne({
+      where: { slug, isActive: true },
+      include: [FormField, FormType]
+    });
   }
 
   async validarPeriodo(form) {
     const now = new Date();
-    if ((form.startDate && now < form.startDate) || (form.endDate && now > form.endDate)) {
-      return false;
-    }
-    return true;
+    return !((form.startDate && now < form.startDate) || (form.endDate && now > form.endDate));
   }
 
   async obterConfiguracaoPagamento(formId) {

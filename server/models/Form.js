@@ -11,20 +11,21 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: false
     },
     hasPayment: DataTypes.BOOLEAN,
-    isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
+    isActive: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true
+    },
     startDate: DataTypes.DATE,
     endDate: DataTypes.DATE
   }, {
-    sequelize,
-    modelName: 'Form',
     tableName: 'forms',
-    schema: process.env.DB_SCHEMA || 'dev_iecg'
+    schema: process.env.DB_SCHEMA || 'dev_iecg',
   });
 
   Form.associate = models => {
     Form.belongsTo(models.FormType, { foreignKey: 'formTypeId', as: 'formType' });
-    Form.hasMany(models.FormField);
-    Form.hasMany(models.FormSubmission);
+    Form.hasMany(models.FormField, { foreignKey: 'FormId' });
+    Form.hasMany(models.FormSubmission, { foreignKey: 'FormId' });
   };
 
   return Form;
