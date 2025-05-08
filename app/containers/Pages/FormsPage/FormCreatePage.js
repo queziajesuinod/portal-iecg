@@ -6,6 +6,7 @@ import {
 import { AddCircle, RemoveCircle } from '@mui/icons-material';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
+const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
 
 const tiposDeCampo = ['text', 'number', 'email', 'date', 'checkbox', 'select'];
 
@@ -31,7 +32,7 @@ const FormCreatePage = () => {
 
 
   useEffect(() => {
-    fetch(`${process.env.REACT_APP_API_URL}/form-types`)
+    fetch(`${API_URL}/form-types`)
       .then(res => res.json())
       .then(setTipos)
       .catch(() => setTipos([]));
@@ -63,7 +64,7 @@ const FormCreatePage = () => {
     e.preventDefault();
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch(`${process.env.REACT_APP_API_URL}/forms`, {
+      const res = await fetch(`${API_URL}/forms`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

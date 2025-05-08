@@ -8,7 +8,7 @@ const FormPaymentPage = ({ submissionId }) => {
   const [newAmount, setNewAmount] = useState('');
   const [message, setMessage] = useState('');
 
-  const API_URL = process.env.REACT_APP_API_URL;
+  const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
 
   useEffect(() => {
     const fetchData = async () => {

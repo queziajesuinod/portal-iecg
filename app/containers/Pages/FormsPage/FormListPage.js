@@ -9,12 +9,13 @@ const FormListPage = () => {
   const [forms, setForms] = useState([]);
   const [loading, setLoading] = useState(true);
   const history = useHistory();
+  const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
 
   useEffect(() => {
     const fetchForms = async () => {
       try {
         const token = localStorage.getItem('token');
-        const res = await fetch(`${process.env.REACT_APP_API_URL}/forms`, {
+        const res = await fetch(`${API_URL}/forms`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();

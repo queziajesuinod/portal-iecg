@@ -19,7 +19,7 @@ const FormPaymentCheckPage = () => {
     setLoading(true);
     setErro('');
     try {
-      const res = await fetch(`${process.env.REACT_APP_API_URL}/public/payments/por-cpf/${cpf}`);
+      const res = await fetch(`${API_URL}/public/payments/por-cpf/${cpf}`);
       const data = await res.json();
 
       if (res.ok) {
