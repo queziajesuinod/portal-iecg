@@ -1,4 +1,3 @@
-// FormCreatePage.jsx
 import React, { useState, useEffect } from 'react';
 import {
   TextField,
@@ -23,12 +22,14 @@ const FormCreatePage = () => {
     slug: '',
     formTypeId: '',
     hasPayment: false,
+    allowMultiplePayments: false,
     startDate: '',
     endDate: '',
     gateway: '',
-    paymentValue: '',
-    paymentType: '',
-    allowMultiplePayments: false,
+    totalAmount: '',
+    minEntry: '',
+    dueDate: '',
+    returnUrl: '',
     fields: []
   });
   const [formTypes, setFormTypes] = useState([]);
@@ -43,6 +44,7 @@ const FormCreatePage = () => {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();
+
         if (Array.isArray(data)) {
           setFormTypes(data);
         } else {
@@ -52,6 +54,7 @@ const FormCreatePage = () => {
         setNotification('Erro ao carregar tipos de formulário.');
       }
     };
+
     fetchFormTypes();
   }, []);
 
@@ -81,31 +84,6 @@ const FormCreatePage = () => {
     e.preventDefault();
     const token = localStorage.getItem('token');
 
-    const {
-      name, description, slug, formTypeId, hasPayment,
-      startDate, endDate, gateway, paymentValue,
-      paymentType, allowMultiplePayments, fields
-    } = form;
-
-    const payload = {
-      name,
-      description,
-      slug,
-      formTypeId,
-      hasPayment,
-      startDate,
-      endDate,
-      fields,
-      ...(hasPayment && {
-        configuracaoPagamento: {
-          gateway,
-          valor: paymentValue,
-          tipo: paymentType,
-          permitirMultiplosPagamentos: allowMultiplePayments
-        }
-      })
-    };
-
     try {
       const res = await fetch(`${API_URL}/forms`, {
         method: 'POST',
@@ -113,26 +91,31 @@ const FormCreatePage = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(form)
       });
 
       const data = await res.json();
       if (res.ok) {
         setNotification('Formulário criado com sucesso!');
-        setForm({ name: '', description: '', slug: '', formTypeId: '', hasPayment: false, startDate: '', endDate: '', gateway: '', fields: [] });
+        setForm({
+          name: '', description: '', slug: '', formTypeId: '', hasPayment: false,
+          allowMultiplePayments: false, startDate: '', endDate: '', gateway: '',
+          totalAmount: '', minEntry: '', dueDate: '', returnUrl: '', fields: []
+        });
       } else {
-        const errorMessage = data.message || data.error || 'Erro ao criar formulário';
-        setNotification(errorMessage);
+        setNotification(data.message || 'Erro ao criar formulário');
       }
-
     } catch (err) {
+      console.error('Erro ao enviar formulário:', err);
       setNotification('Erro ao conectar com o servidor.');
     }
   };
 
   return (
     <div>
-      <Helmet><title>Criar Novo Formulário</title></Helmet>
+      <Helmet>
+        <title>Criar Novo Formulário</title>
+      </Helmet>
       <PapperBlock title="Criar Formulário" desc="Cadastro de formulário dinâmico">
         <form onSubmit={handleSubmit}>
           <Grid container spacing={2}>
@@ -153,7 +136,7 @@ const FormCreatePage = () => {
             </Grid>
             <Grid item xs={12} md={6}>
               <TextField label="Tipo de Formulário" name="formTypeId" select value={form.formTypeId} onChange={handleChange} fullWidth required>
-                {formTypes.map((ft) => (
+                {Array.isArray(formTypes) && formTypes.map((ft) => (
                   <MenuItem key={ft.id} value={ft.id}>{ft.name}</MenuItem>
                 ))}
               </TextField>
@@ -164,23 +147,23 @@ const FormCreatePage = () => {
 
             {form.hasPayment && (
               <>
-                <Grid item xs={12}>
+                <Grid item xs={12} md={4}>
                   <TextField label="Gateway de Pagamento" name="gateway" select value={form.gateway} onChange={handleChange} fullWidth required>
-                    <MenuItem value="efi">Efi</MenuItem>
+                    <MenuItem value="efi">Efi (Gerencianet)</MenuItem>
                     <MenuItem value="pagseguro">PagSeguro</MenuItem>
                     <MenuItem value="cielo">Cielo</MenuItem>
                   </TextField>
                 </Grid>
-                <Grid item xs={6}>
-                  <TextField label="Valor do Pagamento" name="paymentValue" type="number" fullWidth value={form.paymentValue} onChange={handleChange} required />
+                <Grid item xs={4}>
+                  <TextField label="Valor Total (R$)" name="totalAmount" type="number" value={form.totalAmount} onChange={handleChange} fullWidth required />
                 </Grid>
-                <Grid item xs={6}>
-                  <TextField label="Tipo de Pagamento" name="paymentType" select fullWidth value={form.paymentType} onChange={handleChange} required>
-                    <MenuItem value="unique">Único</MenuItem>
-                    <MenuItem value="recurring">Recorrente</MenuItem>
-                  </TextField>
+                <Grid item xs={4}>
+                  <TextField label="Entrada Mínima (R$)" name="minEntry" type="number" value={form.minEntry} onChange={handleChange} fullWidth required />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid item xs={12} md={6}>
+                  <TextField label="Data de Vencimento" name="dueDate" type="date" value={form.dueDate} onChange={handleChange} fullWidth required InputLabelProps={{ shrink: true }} />
+                </Grid>
+                <Grid item xs={12} md={6}>
                   <FormControlLabel control={<Checkbox checked={form.allowMultiplePayments} onChange={handleChange} name="allowMultiplePayments" />} label="Permitir múltiplos pagamentos por pessoa" />
                 </Grid>
               </>
