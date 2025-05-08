@@ -20,8 +20,12 @@ const sequelize = new Sequelize(
     port: config.port,
     dialect: config.dialect,
     dialectOptions: config.dialectOptions,
+    define: {
+      schema: process.env.DB_SCHEMA || 'dev_iecg' // 👈 Isso aplica o schema para todos os models por padrão
+    }
   }
 );
+
 
 fs.readdirSync(__dirname)
   .filter(file => {

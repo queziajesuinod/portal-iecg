@@ -7,14 +7,15 @@ module.exports = (sequelize, DataTypes) => {
     },
     name: DataTypes.STRING
   }, {
-    sequelize,
-    modelName: 'FormType',
     tableName: 'form_types',
     schema: process.env.DB_SCHEMA || 'dev_iecg'
   });
 
   FormType.associate = (models) => {
-    FormType.hasMany(models.Form, { foreignKey: 'formTypeId', as: 'forms' });
+    FormType.hasMany(models.Form, {
+      foreignKey: 'formTypeId',
+      as: 'forms'
+    });
   };
 
   return FormType;

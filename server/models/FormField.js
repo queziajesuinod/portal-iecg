@@ -1,20 +1,23 @@
 module.exports = (sequelize, DataTypes) => {
-    const FormField = sequelize.define('FormField', {
-      label: DataTypes.STRING,
-      type: DataTypes.STRING,
-      required: { type: DataTypes.BOOLEAN, defaultValue: false },
-      options: DataTypes.JSON
-    },  {
-      sequelize,
-      modelName: 'FormField',
-      tableName: 'forms_field',
-      schema: process.env.DB_SCHEMA || 'dev_iecg'
+  const FormField = sequelize.define('FormField', {
+    label: DataTypes.STRING,
+    type: DataTypes.STRING,
+    required: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    options: DataTypes.JSON
+  }, {
+    tableName: 'forms_field',
+    schema: process.env.DB_SCHEMA || 'dev_iecg'
+  });
+
+  FormField.associate = models => {
+    FormField.belongsTo(models.Form, {
+      foreignKey: 'FormId',
+      as: 'form'
     });
-  
-    FormField.associate = models => {
-      FormField.belongsTo(models.Form);
-    };
-  
-    return FormField;
   };
-  
+
+  return FormField;
+};
