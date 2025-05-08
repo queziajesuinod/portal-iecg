@@ -62,6 +62,7 @@ app.use('/payments',authMiddleware, require('./routers/payments'));
 app.use('/public', require('./routers/publicaForms'));
 app.use('/forms',authMiddleware, require('./routers/forms'));
 app.use('/public/payments', require('./routers/publicPayments'));
+app.use('/form-types',authMiddleware, require('./routers/formTypes'));
 // 🔹 Carregar Material Icons e Documentação
 app.use('/api/icons', (req, res) => {
   res.json({ records: [{ source: rawicons(req.query) }] });

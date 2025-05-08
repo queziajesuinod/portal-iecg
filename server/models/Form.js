@@ -19,7 +19,7 @@ module.exports = (sequelize, DataTypes) => {
   });
 
   Form.associate = models => {
-    Form.belongsTo(models.FormType);
+    Form.belongsTo(models.FormType, { foreignKey: 'formTypeId', as: 'formType' });
     Form.hasMany(models.FormField);
     Form.hasMany(models.FormSubmission);
   };
