@@ -15,9 +15,12 @@ module.exports = (sequelize, DataTypes) => {
       payerPhone: DataTypes.STRING,
       returnUrl: DataTypes.STRING,
       checkoutUrl: DataTypes.STRING
-    }, {
-        tableName: 'payments'
-      });
+    },  {
+      sequelize,
+      modelName: 'Payment',
+      tableName: 'payments',
+      schema: process.env.DB_SCHEMA || 'dev_iecg'
+    });
   
     Payment.associate = models => {
       Payment.belongsTo(models.FormSubmission);

@@ -15,7 +15,10 @@ module.exports = (sequelize, DataTypes) => {
     startDate: DataTypes.DATE,
     endDate: DataTypes.DATE
   }, {
-    tableName: 'forms'
+    sequelize,
+    modelName: 'Form',
+    tableName: 'forms',
+    schema: process.env.DB_SCHEMA || 'dev_iecg'
   });
 
   Form.associate = models => {
