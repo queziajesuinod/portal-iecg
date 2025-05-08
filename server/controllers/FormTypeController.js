@@ -1,16 +1,16 @@
 // controllers/FormTypeController.js
 const FormTypeService = require('../services/FormTypeService');
 
-class FormTypeController {
-  async list(req, res) {
+const FormTypeController = {
+  async listar(req, res) {
     try {
       const tipos = await FormTypeService.listarTodos();
-      res.json(tipos);
+      return res.json(tipos); // <-- Importante: retorna direto o array
     } catch (error) {
-      console.error('Erro ao listar tipos de formulário:', error);
-      res.status(500).json({ error: 'Erro ao buscar tipos de formulário.' });
+      console.error(error);
+      return res.status(500).json({ error: error.message || 'Erro interno ao listar tipos de formulário.' });
     }
   }
-}
+};
 
-module.exports = new FormTypeController();
+module.exports = FormTypeController;
