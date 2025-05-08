@@ -6,13 +6,17 @@ const EfiService = require('../services/payments/EfiService');
 const crypto = require('crypto');
 
 class FormController {
-  async createForm(req, res) {
+  async  createForm(req, res) {
     try {
       const form = await FormService.criarFormulario(req.body);
       return res.status(201).json(form);
     } catch (error) {
       console.error('Erro ao criar formulário:', error);
-      return res.status(500).json({ error: 'Erro interno ao criar formulário.' });
+      return res.status(500).json({
+        error: 'Erro ao criar formulário.',
+        message: error.message,
+        stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined
+      });
     }
   }
 
