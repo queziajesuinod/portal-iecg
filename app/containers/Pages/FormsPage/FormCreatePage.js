@@ -32,23 +32,23 @@ const FormCreatePage = () => {
   const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
 
   useEffect(() => {
-    const fetchFormTypes = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const res = await fetch(`${API_URL}/form-types`, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-        const data = await res.json();
-        setFormTypes(data);
-      } catch (err) {
-        setNotification('Erro ao carregar tipos de formulário.');
-      }
-    };
-  
-    fetchFormTypes();
-  }, []);  
+    const token = localStorage.getItem('token');
+    fetch(`${API_URL}/form-types`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setFormTypes(data);
+        } else {
+          console.error('Formato inesperado:', data);
+          setFormTypes([]); // ou exibir notificação
+        }
+      })
+      .catch(err => {
+        console.error('Erro ao buscar tipos de formulário:', err);
+      });
+  }, []);
 
 
   const handleChange = (e) => {
@@ -125,8 +125,8 @@ const FormCreatePage = () => {
             </Grid>
             <Grid item xs={12} md={6}>
               <TextField label="Tipo de Formulário" name="formTypeId" select value={form.formTypeId} onChange={handleChange} fullWidth required>
-                {formTypes.map((type) => (
-                  <MenuItem key={type.id} value={type.id}>{type.name}</MenuItem>
+                {Array.isArray(formTypes) && formTypes.map((ft) => (
+                  <MenuItem key={ft.id} value={ft.id}>{ft.name}</MenuItem>
                 ))}
               </TextField>
             </Grid>
