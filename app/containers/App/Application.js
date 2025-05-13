@@ -66,7 +66,7 @@ function Application(props) {
 
         <ProtectedRoute exact path="/app/forms" component={FormListPage} isAuthenticated={isAuthenticated} />
 
-        <Route exact path="/public/forms/:slug" component={FormPublicPage} />
+        <Route exact path="/public/forms/iecg/:slug" component={FormPublicPage} />
         <Route exact path="/public/pagamentos" component={FormPaymentCheckPage} />
         <Route exact path="/public/pagamento/:submissionId" component={FormPublicPaymentPage} />
        
