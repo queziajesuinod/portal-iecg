@@ -25,8 +25,12 @@ class FormController {
       const form = await FormService.atualizarFormulario(req.params.id, req.body);
       return res.json({ success: true, message: 'Formulário atualizado com sucesso.' });
     } catch (error) {
-      console.error('Erro ao atualizar formulário:', error);
-      return res.status(500).json({ message: 'Erro interno ao atualizar formulário.' });
+      console.error('Erro ao criar formulário:', error);
+      return res.status(500).json({
+        error: 'Erro ao atualizar formulário.',
+        message: error.message,
+        stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined
+      });
     }
   }
 
@@ -48,8 +52,13 @@ class FormController {
       if (!periodoValido) return res.status(403).json({ message: 'Formulário fora do período de preenchimento' });
 
       return res.json(form);
-    } catch (error) {
-      return res.status(500).json({ error: 'Erro interno ao buscar formulário' });
+    }catch (error) {
+      console.error('Erro ao criar formulário:', error);
+      return res.status(500).json({
+        error: 'Erro ao buscarß formulário.',
+        message: error.message,
+        stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined
+      });
     }
   }
 
@@ -63,7 +72,12 @@ class FormController {
 
       return res.json(form);
     } catch (error) {
-      return res.status(500).json({ error: 'Erro interno ao buscar por slug' });
+      console.error('Erro ao criar formulário:', error);
+      return res.status(500).json({
+        error: 'Erro ao listar por slug formulário.',
+        message: error.message,
+        stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined
+      });
     }
   }
 
