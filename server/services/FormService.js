@@ -37,7 +37,7 @@ class FormService {
 
     if (hasPayment && configuracaoPagamento) {
       await FormPaymentConfig.create({
-        formId: form.id,
+        FormId: form.id,
         totalAmount: configuracaoPagamento.totalAmount,
         minEntry: configuracaoPagamento.minEntry,
         dueDate: configuracaoPagamento.dueDate,
@@ -57,7 +57,7 @@ class FormService {
 
     await form.update({ name, description, slug, startDate, endDate, hasPayment });
 
-    await FormField.destroy({ where: { formId: id } });
+    await FormField.destroy({ where: { FormId: id } });
 
     if (Array.isArray(FormFields) && FormFields.length > 0) {
       const novosCampos = FormFields.map(f => ({
@@ -65,7 +65,7 @@ class FormService {
         type: f.type,
         options: f.options || [],
         required: f.required || false,
-        formId: id
+        FormId: id
       }));
 
       await FormField.bulkCreate(novosCampos);
@@ -104,12 +104,12 @@ class FormService {
     return !((form.startDate && now < form.startDate) || (form.endDate && now > form.endDate));
   }
 
-  async obterConfiguracaoPagamento(formId) {
-    return FormPaymentConfig.findOne({ where: { formId } });
+  async obterConfiguracaoPagamento(FormId) {
+    return FormPaymentConfig.findOne({ where: { FormId } });
   }
 
-  async criarSubmissao(formId, fields) {
-    return FormSubmission.create({ formId, data: fields });
+  async criarSubmissao(FormId, fields) {
+    return FormSubmission.create({ FormId, data: fields });
   }
 }
 
