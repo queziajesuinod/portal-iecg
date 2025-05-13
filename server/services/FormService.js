@@ -88,14 +88,20 @@ class FormService {
   async buscarFormularioPorId(id) {
     return Form.findOne({
       where: { id, isActive: true },
-      include: [FormField, FormType]
+      include: [
+      FormField,
+      { model: FormType, as: 'formType' }
+    ]
     });
   }
 
   async buscarFormularioPorSlug(slug) {
     return Form.findOne({
       where: { slug, isActive: true },
-      include: [FormField, FormType]
+      include: [
+      FormField,
+      { model: FormType, as: 'formType' }
+    ]
     });
   }
 
