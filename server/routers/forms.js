@@ -11,7 +11,7 @@ router.get('/:id', FormController.getForm);
 
 // Cria um novo formulário (protegido)
 router.post('/', autenticado, FormController.createForm);
-router.post('/:id', autenticado, FormController.updateForm);
+router.put('/:id', autenticado, FormController.updateForm);
 router.get('/payment-status/:submissionId', autenticado, FormController.getPaymentStatus);
 router.post('/:submissionId/pay', autenticado, FormController.makeAdditionalPayment);
 
