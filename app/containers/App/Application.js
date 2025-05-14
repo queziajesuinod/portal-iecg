@@ -26,56 +26,52 @@ function Application(props) {
   const { history } = props;
   const changeMode = useContext(ThemeContext);
 
-  // 🔐 Verifica se o usuário está autenticado no localStorage
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     const storedAuth = localStorage.getItem("isAuthenticated");
-    return storedAuth === "true"; // Garante que retorna um booleano
+    return storedAuth === "true";
   });
 
-  console.log("isAuthenticated:", isAuthenticated);
-  console.log("setIsAuthenticated:", setIsAuthenticated);
-
-  // 🔥 Verifica se há um usuário salvo no localStorage ao iniciar a aplicação
   const storedUser = localStorage.getItem("user");
   if (storedUser) {
     dummyContents.user = JSON.parse(storedUser);
   }
 
-  console.log("Usuário restaurado ao iniciar a aplicação:", dummyContents.user);
   useEffect(() => {
     localStorage.setItem("isAuthenticated", isAuthenticated);
   }, [isAuthenticated]);
 
   return (
-    <Dashboard history={history} changeMode={changeMode}>
-      <Switch>
-        {/* Página de Login - Passa `setIsAuthenticated` para Login */}
-        <Route exact path="/login" render={(props) => <Login {...props} setIsAuthenticated={setIsAuthenticated} />} />
-        <Route exact path="/public/forms/iecg/:slug" component={FormPublicPage} />
-        <Route exact path="/public/pagamentos" component={FormPaymentCheckPage} />
-        <Route exact path="/public/pagamento/:submissionId" component={FormPublicPaymentPage} />
+    <Switch>
+      {/* 🔓 ROTAS PÚBLICAS */}
+      <Route exact path="/login" render={(props) => <Login {...props} setIsAuthenticated={setIsAuthenticated} />} />
+      <Route exact path="/public/forms/iecg/:slug" component={FormPublicPage} />
+      <Route exact path="/public/pagamentos" component={FormPaymentCheckPage} />
+      <Route exact path="/public/pagamento/:submissionId" component={FormPublicPaymentPage} />
 
+      {/* 🔐 ROTAS PRIVADAS COM DASHBOARD */}
+      <Route path="/app">
+        <Dashboard history={history} changeMode={changeMode}>
+          <Switch>
+            <ProtectedRoute exact path="/app" component={MiaListPage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/mia/cadastrar" component={MiaPage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/mia" component={MiaListPage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/mia/detalhes" component={MiaDetailsPage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/profile" component={ProfilePage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/start/celulas" component={ListagemCelulasPage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/start/celulas/cadastrar" component={CadastrarCelula} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/start/celulas/detalhes" component={BlankPage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/forms/create" component={FormCreatePage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/forms/edit/:id" component={FormEditPage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/forms" component={FormListPage} isAuthenticated={isAuthenticated} />
+          </Switch>
+        </Dashboard>
+      </Route>
 
-        {/* 📌 Páginas protegidas */}
-        <ProtectedRoute exact path="/app" component={MiaListPage} isAuthenticated={isAuthenticated} />
-        <ProtectedRoute exact path="/app/mia/cadastrar" component={MiaPage} isAuthenticated={isAuthenticated} />
-        <ProtectedRoute exact path="/app/mia" component={MiaListPage} isAuthenticated={isAuthenticated} />
-        <ProtectedRoute exact path="/app/mia/detalhes" component={MiaDetailsPage} isAuthenticated={isAuthenticated} />
-        <ProtectedRoute exact path="/app/profile" component={ProfilePage} isAuthenticated={isAuthenticated} />
-        <ProtectedRoute exact path="/app/start/celulas" component={ListagemCelulasPage} isAuthenticated={isAuthenticated} />
-        <ProtectedRoute exact path="/app/start/celulas/cadastrar" component={CadastrarCelula} isAuthenticated={isAuthenticated} />
-        <ProtectedRoute exact path="/app/start/celulas/detalhes" component={BlankPage} isAuthenticated={isAuthenticated} />
-        <ProtectedRoute exact path="/app/forms/create" component={FormCreatePage} isAuthenticated={isAuthenticated} />
-        <ProtectedRoute exact path="/app/forms/edit/:id" component={FormEditPage} isAuthenticated={isAuthenticated} />
-
-        <ProtectedRoute exact path="/app/forms" component={FormListPage} isAuthenticated={isAuthenticated} />
-
-
-        {/* Redireciona para Login se nenhuma rota for encontrada */}
-        <Redirect to="/login" />
-      </Switch>
-    </Dashboard>
+      {/* Redireciona tudo para login se nada bater */}
+      <Redirect to="/login" />
+    </Switch>
   );
 }
+
 
 export default Application;
