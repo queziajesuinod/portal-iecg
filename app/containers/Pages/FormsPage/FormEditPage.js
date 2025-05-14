@@ -121,7 +121,7 @@ const FormEditPage = () => {
       <Helmet>
         <title>{form.name ? `Editando: ${form.name}` : 'Editar Formulário'}</title>
       </Helmet>
-      <PapperBlock title={form.name || 'Editar Formulário'} desc="Edite os dados do formulário">
+      <PapperBlock title={form.name || 'Editar Evento'} desc="Edite os dados do formulário">
         <form onSubmit={handleSubmit}>
           <Grid container spacing={2}>
             <Grid item xs={12} md={6}>
