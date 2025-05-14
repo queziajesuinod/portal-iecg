@@ -13,9 +13,6 @@ import Login from '../Pages/Users/Login'; // Sua página de login
 import ProtectedRoute from "../../routes/ProtectedRoute";
 import FormEditPage from '../Pages/FormsPage/FormEditPage';
 import FormCreatePage from '../Pages/FormsPage/FormCreatePage';
-import FormPublicPage from '../Pages/FormsPage/FormPublicPage';
-import FormPaymentCheckPage from '../Pages/FormsPage/FormPaymentCheckPage';
-import FormPublicPaymentPage from '../Pages/FormsPage/FormPublicPaymentPage';
 import FormListPage from '../Pages/FormsPage/FormListPage';
 
 import dummyContents from 'dan-api/dummy/dummyContents';
@@ -44,10 +41,7 @@ function Application(props) {
     <Switch>
       {/* 🔓 ROTAS PÚBLICAS */}
       <Route exact path="/login" render={(props) => <Login {...props} setIsAuthenticated={setIsAuthenticated} />} />
-      <Route exact path="/public/forms/iecg/:slug" component={FormPublicPage} />
-      <Route exact path="/public/pagamentos" component={FormPaymentCheckPage} />
-      <Route exact path="/public/pagamento/:submissionId" component={FormPublicPaymentPage} />
-
+      
       {/* 🔐 ROTAS PRIVADAS COM DASHBOARD */}
       <Route path="/app">
         <Dashboard history={history} changeMode={changeMode}>
