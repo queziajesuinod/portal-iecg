@@ -51,6 +51,10 @@ function Application(props) {
       <Switch>
         {/* Página de Login - Passa `setIsAuthenticated` para Login */}
         <Route exact path="/login" render={(props) => <Login {...props} setIsAuthenticated={setIsAuthenticated} />} />
+        <Route exact path="/public/forms/iecg/:slug" component={FormPublicPage} />
+        <Route exact path="/public/pagamentos" component={FormPaymentCheckPage} />
+        <Route exact path="/public/pagamento/:submissionId" component={FormPublicPaymentPage} />
+
 
         {/* 📌 Páginas protegidas */}
         <ProtectedRoute exact path="/app" component={MiaListPage} isAuthenticated={isAuthenticated} />
@@ -66,10 +70,7 @@ function Application(props) {
 
         <ProtectedRoute exact path="/app/forms" component={FormListPage} isAuthenticated={isAuthenticated} />
 
-        <Route exact path="/public/forms/iecg/:slug" component={FormPublicPage} />
-        <Route exact path="/public/pagamentos" component={FormPaymentCheckPage} />
-        <Route exact path="/public/pagamento/:submissionId" component={FormPublicPaymentPage} />
-       
+
         {/* Redireciona para Login se nenhuma rota for encontrada */}
         <Redirect to="/login" />
       </Switch>
