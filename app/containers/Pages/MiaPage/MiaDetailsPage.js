@@ -102,7 +102,7 @@ const MiaDetailsPage = () => {
           <Button
             variant="contained"
             color="primary"
-           onClick={() => history.push('/app/mia/cadastrar', { aposentado, pageTitle: 'Cadastrar Novo Mia' })}
+           onClick={() => history.push('/app/mia/cadastrar', { aposentado, pageTitle: 'Editar Dados' })}
           >
             Editar
           </Button>
