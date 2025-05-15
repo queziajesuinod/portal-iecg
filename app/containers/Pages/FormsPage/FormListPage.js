@@ -55,7 +55,7 @@ const FormListPage = () => {
 
       if (!response.ok) throw new Error('Erro ao excluir');
 
-      fetchCelulas(); // Atualiza a lista após exclusão
+      fetchForms(); // Atualiza a lista após exclusão
     } catch (error) {
       console.error('Erro ao excluir Evento:', error);
     }
@@ -63,8 +63,7 @@ const FormListPage = () => {
 
   return (
     <div>
-      <Typography variant="h4" gutterBottom>Eventos Cadastrados</Typography>
-
+  
       {loading ? (
         <CircularProgress />
       ) : (
