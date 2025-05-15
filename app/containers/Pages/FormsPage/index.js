@@ -32,7 +32,7 @@ const FormsPage = () => {
 
   const handleEdit = (id) => {
      history.push({
-      pathname: `/app/forms/edit/${id}`,
+      pathname: `/app/eventos/editar/${id}`,
       state: { pageTitle: 'Editar Evento' }
     });
   };

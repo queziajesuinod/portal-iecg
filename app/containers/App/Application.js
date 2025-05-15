@@ -14,6 +14,9 @@ import ProtectedRoute from "../../routes/ProtectedRoute";
 import FormEditPage from '../Pages/FormsPage/FormEditPage';
 import FormCreatePage from '../Pages/FormsPage/FormCreatePage';
 import FormListPage from '../Pages/FormsPage/FormListPage';
+import FormPublicPage from '../Pages/FormsPage/FormPublicPage';
+import FormPaymentCheckPage from '../Pages/FormsPage/FormPaymentCheckPage';
+import FormPublicPaymentPage from '../Pages/FormsPage/FormPublicPaymentPage';
 
 import dummyContents from 'dan-api/dummy/dummyContents';
 
@@ -54,9 +57,9 @@ function Application(props) {
             <ProtectedRoute exact path="/app/start/celulas" component={ListagemCelulasPage} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/start/celulas/cadastrar" component={CadastrarCelula} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/start/celulas/detalhes" component={BlankPage} isAuthenticated={isAuthenticated} />
-            <ProtectedRoute exact path="/app/forms/create" component={FormCreatePage} isAuthenticated={isAuthenticated} />
-            <ProtectedRoute exact path="/app/forms/edit/:id" component={FormEditPage} isAuthenticated={isAuthenticated} />
-            <ProtectedRoute exact path="/app/forms" component={FormListPage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/eventos/cadastrar" component={FormCreatePage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/eventos/editar/:id" component={FormEditPage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/eventos" component={FormListPage} isAuthenticated={isAuthenticated} />
            <ProtectedRoute exact path="/app/eventos/:slug" component={FormPublicPage} isAuthenticated={isAuthenticated} />
            <ProtectedRoute exact path="/app/pagamentos" component={FormPaymentCheckPage} isAuthenticated={isAuthenticated} />
            <ProtectedRoute exact path="/app/pagamento/:submissionId" component={FormPublicPaymentPage}  isAuthenticated={isAuthenticated}/>

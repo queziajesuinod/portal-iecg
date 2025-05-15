@@ -223,7 +223,7 @@ const FormCreatePage = () => {
             ))}
 
             <Grid item xs={12}>
-              <Button type="submit" variant="contained" color="primary" fullWidth>Criar Formulário</Button>
+              <Button type="submit" variant="contained" color="primary" fullWidth>Criar Evento</Button>
             </Grid>
           </Grid>
         </form>

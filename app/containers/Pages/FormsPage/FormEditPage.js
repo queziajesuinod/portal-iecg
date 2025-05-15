@@ -169,7 +169,7 @@ const FormEditPage = () => {
       const data = await res.json();
       if (res.ok) {
         setNotification('Formulário atualizado com sucesso!');
-        setTimeout(() => history.push('/app/forms'), 1500);
+        setTimeout(() => history.push('/app/eventos'), 1500);
       } else {
         setNotification(data.message || 'Erro ao atualizar formulário');
       }
