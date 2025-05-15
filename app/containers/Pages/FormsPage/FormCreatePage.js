@@ -60,16 +60,26 @@ const FormCreatePage = () => {
     fetchFormTypes();
   }, []);
 
+    // Função utilitária para gerar slug a partir do nome
+  function gerarSlug(text) {
+    return text
+      .normalize('NFD')                           // Remove acentos
+      .replace(/[\u0300-\u036f]/g, '')           // Remove diacríticos
+      .toLowerCase()
+      .replace(/\s+/g, '-')                      // Espaço -> hífen
+      .replace(/[^\w-]+/g, '')                   // Remove caracteres especiais
+      .replace(/--+/g, '-')                      // Hífens duplos para um só
+      .replace(/^-+|-+$/g, '');                  // Remove hífen no início/fim
+  }
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    if (name in form.configuracaoPagamento) {
-      setForm({
-        ...form,
-        configuracaoPagamento: {
-          ...form.configuracaoPagamento,
-          [name]: type === 'checkbox' ? checked : value
-        }
-      });
+    if (name === 'name') {
+      setForm(f => ({
+        ...f,
+        name: value,
+        slug: f.slug ? f.slug : gerarSlug(value) // Só atualiza slug se estiver vazio
+      }));
     } else {
       setForm({ ...form, [name]: type === 'checkbox' ? checked : value });
     }
@@ -78,6 +88,7 @@ const FormCreatePage = () => {
   const handleAddField = () => {
     setForm({ ...form, fields: [...form.fields, { label: '', type: 'text', required: false, options: '' }] });
   };
+
 
   const handleRemoveField = (index) => {
     const updated = [...form.fields];
@@ -127,9 +138,9 @@ const FormCreatePage = () => {
   return (
     <div>
       <Helmet>
-        <title>Criar Novo Formulário</title>
+        <title>Criar Novo Evento</title>
       </Helmet>
-      <PapperBlock title="Criar Formulário" desc="Cadastro de formulário dinâmico">
+      <PapperBlock title="Criar Formulário" desc="Cadastro de  Evento">
         <form onSubmit={handleSubmit}>
           <Grid container spacing={2}>
             <Grid item xs={12} md={6}>

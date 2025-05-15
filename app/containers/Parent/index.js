@@ -32,6 +32,10 @@ function Parent(props) {
   let parts = history.location.pathname.split('/');
   const place = parts[parts.length - 1];
   parts = parts.slice(1, parts.length - 1);
+  const pageTitle =
+  (history.location.state && history.location.state.pageTitle)
+    ? history.location.state.pageTitle
+    : parts[parts.length - 1].replace('-', ' ');
   const menuItems = MenuContent
     .find(obj => (
       obj.key === place
@@ -67,7 +71,7 @@ function Parent(props) {
         <meta property="twitter:title" content={title} />
         <meta property="twitter:description" content={description} />
       </Helmet>
-      <PapperBlock title={place} desc="">
+      <PapperBlock title={pageTitle} desc="">
         {menuItems !== undefined && getMenus(menuItems.child, 'key')}
       </PapperBlock>
     </div>

@@ -19,6 +19,10 @@ const Breadcrumbs = (props) => {
           let parts = location.pathname.split('/');
           const place = parts[parts.length - 1];
           parts = parts.slice(1, parts.length - 1);
+           const pageTitle =
+  (history.location.state && history.location.state.pageTitle)
+    ? history.location.state.pageTitle
+    : parts[parts.length - 1].replace('-', ' ');
           return (
             <p>
               Você está aqui:
@@ -35,7 +39,7 @@ const Breadcrumbs = (props) => {
                   })
                 }
                 &nbsp;
-                {place}
+                {pageTitle}
               </span>
             </p>
           );

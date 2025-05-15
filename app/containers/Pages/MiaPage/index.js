@@ -194,7 +194,10 @@ const MiaPage = () => {
           setShowWebcam(false);
         }else
         {
-          history.push('/app/mia');
+            history.push({
+      pathname: `/app/mia`,
+      state: { pageTitle: 'Listagem Mia' }
+    });
         }
       } else {
         setNotification(`Erro: ${data.erro || data.message || 'Falha ao processar'}`);

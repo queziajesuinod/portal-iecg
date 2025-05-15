@@ -47,7 +47,7 @@ const ListagemCelulasPage = () => {
   }, [page, searchTerm]);
 
   const handleEdit = (celula) => {
-    history.push('/app/start/celulas/cadastrar', { celula });
+    history.push('/app/start/celulas/cadastrar', { celula , pageTitle: 'Cadastrar Célula'});
   };
 
   const handleDelete = async (id) => {

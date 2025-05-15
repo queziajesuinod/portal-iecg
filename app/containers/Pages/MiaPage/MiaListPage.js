@@ -157,7 +157,13 @@ const MiaListPage = () => {
                   <Box display="flex" alignItems="center" gap={1}>
                     <IconButton
                       color="primary"
-                      onClick={() => history.push(`/app/mia/detalhes?id=${item.id}`)}
+                      onClick={() =>
+                        history.push(
+                          `/app/mia/detalhes?id=${item.id}`,
+                          { pageTitle: 'Detalhes Dados do Mia' }
+                        )
+                      }
+
                     >
                       <Visibility />
                     </IconButton>

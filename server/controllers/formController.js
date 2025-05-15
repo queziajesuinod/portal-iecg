@@ -101,6 +101,16 @@ class FormController {
     }
   }
 
+  async deleteForm(req, res) {
+  try {
+    await FormService.deletarFormulario(req.params.id);
+    return res.json({ success: true, message: 'Evento excluído com sucesso!' });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+}
+
+
   async makeAdditionalPayment(req, res) {
     try {
       const { submissionId } = req.params;
