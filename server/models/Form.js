@@ -26,6 +26,7 @@ module.exports = (sequelize, DataTypes) => {
     Form.belongsTo(models.FormType, { foreignKey: 'formTypeId', as: 'formType' });
     Form.hasMany(models.FormField, { foreignKey: 'FormId' });
     Form.hasMany(models.FormSubmission, { foreignKey: 'FormId' });
+    Form.hasOne(models.FormPaymentConfig, { foreignKey: 'formId', as: 'FormPaymentConfig' });
   };
 
   return Form;
