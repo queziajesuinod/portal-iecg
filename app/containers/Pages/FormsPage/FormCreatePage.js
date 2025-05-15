@@ -140,7 +140,7 @@ const FormCreatePage = () => {
       <Helmet>
         <title>Criar Novo Evento</title>
       </Helmet>
-      <PapperBlock title="Criar Formulário" desc="Cadastro de  Evento">
+      <PapperBlock title="Criar Evento" desc="Cadastro de  Evento">
         <form onSubmit={handleSubmit}>
           <Grid container spacing={2}>
             <Grid item xs={12} md={6}>
