@@ -33,9 +33,10 @@ function Parent(props) {
   const place = parts[parts.length - 1];
   parts = parts.slice(1, parts.length - 1);
   const pageTitle =
-  (history.location.state && history.location.state.pageTitle)
-    ? history.location.state.pageTitle
-    : parts[parts.length - 1].replace('-', ' ');
+    history.location?.state?.pageTitle
+      ? history.location.state.pageTitle
+      : parts[parts.length - 1].replace('-', ' ');
+
   const menuItems = MenuContent
     .find(obj => (
       obj.key === place
@@ -56,7 +57,7 @@ function Parent(props) {
     }
     return (
       <Typography key={index.toString()} className={classes.title} variant="h6">
-        { item.name }
+        {item.name}
       </Typography>
     );
   });
