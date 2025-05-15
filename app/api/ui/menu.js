@@ -39,19 +39,19 @@ module.exports = [
   },
   {
     key: 'forms',
-    name: 'Formulários',
+    name: 'Eventos',
     icon: 'ion-ios-create-outline',
     child: [
       {
         key: 'listarForms',
-        name: 'Listar Formulários',
-        link: '/app/forms',
+        name: 'Listar Eventos',
+        link: '/app/eventos',
         icon: 'ion-ios-list-box-outline'
       },
       {
         key: 'criarForm',
-        name: 'Criar Novo Formulário',
-        link: '/app/forms/create',
+        name: 'Criar Novo Evento',
+        link: '/app/eventos/cadastrar',
         icon: 'ion-ios-add-circle-outline'
       }
     ]
