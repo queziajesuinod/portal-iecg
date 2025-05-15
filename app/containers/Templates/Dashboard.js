@@ -71,10 +71,11 @@ function Dashboard(props) {
   const parts = history.location.pathname.split('/');
   const place = parts[parts.length - 1].replace('-', ' ');
   // Pegue do state ou caia no path, igual seu código anterior:
-const pageTitle =
-  (history.location.state && history.location.state.pageTitle)
-    ? history.location.state.pageTitle
-    : parts[parts.length - 1].replace('-', ' ');
+  const pageTitle =
+    history.location?.state?.pageTitle
+      ? history.location.state.pageTitle
+      : parts[parts.length - 1].replace('-', ' ');
+
 
   return (
     <div
@@ -105,7 +106,7 @@ const pageTitle =
             titleException={titleException}
             handleOpenGuide={handleOpenGuide}
           >
-            { children }
+            {children}
           </LeftSidebarLayout>
         )
       }
@@ -126,7 +127,7 @@ const pageTitle =
             titleException={titleException}
             handleOpenGuide={handleOpenGuide}
           >
-            { children }
+            {children}
           </LeftSidebarBigLayout>
         )
       }
@@ -147,7 +148,7 @@ const pageTitle =
             titleException={titleException}
             handleOpenGuide={handleOpenGuide}
           >
-            { children }
+            {children}
           </RightSidebarLayout>
         )
       }
@@ -168,7 +169,7 @@ const pageTitle =
             titleException={titleException}
             handleOpenGuide={handleOpenGuide}
           >
-            { children }
+            {children}
           </DropMenuLayout>
         )
       }
@@ -189,7 +190,7 @@ const pageTitle =
             titleException={titleException}
             handleOpenGuide={handleOpenGuide}
           >
-            { children }
+            {children}
           </MegaMenuLayout>
         )
       }
