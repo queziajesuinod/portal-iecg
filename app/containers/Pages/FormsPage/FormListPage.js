@@ -89,12 +89,12 @@ const FormListPage = () => {
                   <TableCell>
                     <Box display="flex" gap={1}>
                       <Tooltip title="Editar">
-                        <IconButton color="primary" onClick={() => handleEdit(c)}>
+                        <IconButton color="primary" onClick={() => handleEdit(form.id)}>
                           <EditIcon />
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="Excluir">
-                        <IconButton color="error" onClick={() => handleDelete(c.id)}>
+                        <IconButton color="error" onClick={() => handleDelete(form.id)}>
                           <DeleteIcon />
                         </IconButton>
                       </Tooltip>
