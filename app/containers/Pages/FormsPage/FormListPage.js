@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Typography, Paper, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Button, CircularProgress
+  TableHead, TableRow, Box, CircularProgress
 } from '@mui/material';
 import { useHistory } from 'react-router-dom';
 
