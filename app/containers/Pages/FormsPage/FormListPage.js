@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
   Typography, Paper, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Box, Tooltip,IconButton, CircularProgress
+  TableHead, TableRow, Box, Tooltip, IconButton, CircularProgress
 } from '@mui/material';
+
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useHistory } from 'react-router-dom';
@@ -63,7 +64,7 @@ const FormListPage = () => {
 
   return (
     <div>
-  
+
       {loading ? (
         <CircularProgress />
       ) : (
@@ -87,6 +88,20 @@ const FormListPage = () => {
                   <TableCell>{form.endDate?.split('T')[0]}</TableCell>
                   <TableCell>
                     <Box display="flex" gap={1}>
+                      <Tooltip title="Inscrição">
+                        <IconButton
+                          color="primary"
+                          onClick={() =>
+                            history.push(
+                              `/app/eventos/${form.slug}`,
+                              { pageTitle:  `Realizar Inscrição - ${form.name}` }
+                            )
+                          }
+
+                        >
+                          <Visibility />
+                        </IconButton>
+                      </Tooltip>
                       <Tooltip title="Editar">
                         <IconButton color="primary" onClick={() => handleEdit(form.id)}>
                           <EditIcon />

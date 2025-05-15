@@ -23,10 +23,7 @@ function App(props) {
           <Route path="/app" component={Application} />
           <Route component={Auth} />
           <Route component={NotFound} />
-          <Route exact path="/public/forms/iecg/:slug" component={FormPublicPage} />
-          <Route exact path="/public/pagamentos" component={FormPaymentCheckPage} />
-          <Route exact path="/public/pagamento/:submissionId" component={FormPublicPaymentPage} />
-
+        
         </Switch>
       </Router>
     </ThemeWrapper>
