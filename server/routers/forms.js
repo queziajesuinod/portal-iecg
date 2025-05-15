@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const FormController = require('../controllers/formController');
 const autenticado = require('../middlewares/autenticado');
-const FormSubmissionController = require('../controllers/FormSubmissionController');
+const FormSubmissionController = require('../controllers/formSubmissionController');
 
 
 // Lista todos os formulários ativos (público ou autenticado, a seu critério)
