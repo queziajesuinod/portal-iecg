@@ -1,7 +1,6 @@
-// models/FormPaymentConfig.js
 module.exports = (sequelize, DataTypes) => {
   const FormPaymentConfig = sequelize.define('FormPaymentConfig', {
-    formId: {
+    FormId: {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
@@ -22,10 +21,7 @@ module.exports = (sequelize, DataTypes) => {
   });
 
   FormPaymentConfig.associate = models => {
-    FormPaymentConfig.belongsTo(models.Form, {
-      foreignKey: 'formId',
-      as: 'form'
-    });
+    FormPaymentConfig.belongsTo(models.Form, { foreignKey: 'FormId', as: 'Form' });
   };
 
   return FormPaymentConfig;
