@@ -25,11 +25,13 @@ const FormCreatePage = () => {
     allowMultiplePayments: false,
     startDate: '',
     endDate: '',
-    gateway: '',
-    totalAmount: '',
-    minEntry: '',
-    dueDate: '',
-    returnUrl: '',
+    configuracaoPagamento: {
+      gateway: '',
+      totalAmount: '',
+      minEntry: '',
+      dueDate: '',
+      returnUrl: ''
+    },
     fields: []
   });
   const [formTypes, setFormTypes] = useState([]);
@@ -60,7 +62,17 @@ const FormCreatePage = () => {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setForm({ ...form, [name]: type === 'checkbox' ? checked : value });
+    if (name in form.configuracaoPagamento) {
+      setForm({
+        ...form,
+        configuracaoPagamento: {
+          ...form.configuracaoPagamento,
+          [name]: type === 'checkbox' ? checked : value
+        }
+      });
+    } else {
+      setForm({ ...form, [name]: type === 'checkbox' ? checked : value });
+    }
   };
 
   const handleAddField = () => {
@@ -99,8 +111,9 @@ const FormCreatePage = () => {
         setNotification('Formulário criado com sucesso!');
         setForm({
           name: '', description: '', slug: '', formTypeId: '', hasPayment: false,
-          allowMultiplePayments: false, startDate: '', endDate: '', gateway: '',
-          totalAmount: '', minEntry: '', dueDate: '', returnUrl: '', fields: []
+          allowMultiplePayments: false, startDate: '', endDate: '',
+          configuracaoPagamento: { gateway: '', totalAmount: '', minEntry: '', dueDate: '', returnUrl: '' },
+          fields: []
         });
       } else {
         setNotification(data.message || 'Erro ao criar formulário');
@@ -148,20 +161,20 @@ const FormCreatePage = () => {
             {form.hasPayment && (
               <>
                 <Grid item xs={12} md={4}>
-                  <TextField label="Gateway de Pagamento" name="gateway" select value={form.gateway} onChange={handleChange} fullWidth required>
+                  <TextField label="Gateway de Pagamento" name="gateway" select value={form.configuracaoPagamento.gateway} onChange={handleChange} fullWidth required>
                     <MenuItem value="efi">Efi (Gerencianet)</MenuItem>
                     <MenuItem value="pagseguro">PagSeguro</MenuItem>
                     <MenuItem value="cielo">Cielo</MenuItem>
                   </TextField>
                 </Grid>
                 <Grid item xs={4}>
-                  <TextField label="Valor Total (R$)" name="totalAmount" type="number" value={form.totalAmount} onChange={handleChange} fullWidth required />
+                  <TextField label="Valor Total (R$)" name="totalAmount" type="number" value={form.configuracaoPagamento.totalAmount} onChange={handleChange} fullWidth required />
                 </Grid>
                 <Grid item xs={4}>
-                  <TextField label="Entrada Mínima (R$)" name="minEntry" type="number" value={form.minEntry} onChange={handleChange} fullWidth required />
+                  <TextField label="Entrada Mínima (R$)" name="minEntry" type="number" value={form.configuracaoPagamento.minEntry} onChange={handleChange} fullWidth required />
                 </Grid>
                 <Grid item xs={12} md={6}>
-                  <TextField label="Data de Vencimento" name="dueDate" type="date" value={form.dueDate} onChange={handleChange} fullWidth required InputLabelProps={{ shrink: true }} />
+                  <TextField label="Data de Vencimento" name="dueDate" type="date" value={form.configuracaoPagamento.dueDate} onChange={handleChange} fullWidth required InputLabelProps={{ shrink: true }} />
                 </Grid>
                 <Grid item xs={12} md={6}>
                   <FormControlLabel control={<Checkbox checked={form.allowMultiplePayments} onChange={handleChange} name="allowMultiplePayments" />} label="Permitir múltiplos pagamentos por pessoa" />

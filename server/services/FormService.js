@@ -77,11 +77,12 @@ class FormService {
   async listarFormulariosAtivos() {
     return Form.findAll({
       where: { isActive: true },
-      include: [{
-        model: FormType,
-        as: 'formType',
-        required: false
-      }]
+      include: [
+        FormPaymentConfig, {
+          model: FormType,
+          as: 'formType',
+          required: false
+        }]
     });
   }
 
@@ -89,9 +90,10 @@ class FormService {
     return Form.findOne({
       where: { id, isActive: true },
       include: [
-      FormField,
-      { model: FormType, as: 'formType' }
-    ]
+        FormField,
+        FormPaymentConfig,
+        { model: FormType, as: 'formType' }
+      ]
     });
   }
 
@@ -99,9 +101,10 @@ class FormService {
     return Form.findOne({
       where: { slug, isActive: true },
       include: [
-      FormField,
-      { model: FormType, as: 'formType' }
-    ]
+        FormField,
+        FormPaymentConfig,
+        { model: FormType, as: 'formType' }
+      ]
     });
   }
 
