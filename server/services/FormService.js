@@ -78,7 +78,7 @@ class FormService {
     return Form.findAll({
       where: { isActive: true },
       include: [
-        FormPaymentConfig, {
+        { model: FormPaymentConfig, as: 'FormPaymentConfig' }, {
           model: FormType,
           as: 'formType',
           required: false
@@ -91,7 +91,7 @@ class FormService {
       where: { id, isActive: true },
       include: [
         FormField,
-        FormPaymentConfig,
+       { model: FormPaymentConfig, as: 'FormPaymentConfig' },
         { model: FormType, as: 'formType' }
       ]
     });
@@ -102,7 +102,7 @@ class FormService {
       where: { slug, isActive: true },
       include: [
         FormField,
-        FormPaymentConfig,
+       { model: FormPaymentConfig, as: 'FormPaymentConfig' },
         { model: FormType, as: 'formType' }
       ]
     });
