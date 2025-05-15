@@ -31,7 +31,10 @@ const FormsPage = () => {
   }, []);
 
   const handleEdit = (id) => {
-    history.push(`/app/forms/edit/${id}`);
+     history.push({
+      pathname: `/app/forms/edit/${id}`,
+      state: { pageTitle: 'Editar Evento' }
+    });
   };
 
   return (

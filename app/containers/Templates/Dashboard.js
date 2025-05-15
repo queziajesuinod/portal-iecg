@@ -70,6 +70,12 @@ function Dashboard(props) {
   const titleException = ['/app', '/app/crm-dashboard', '/app/crypto-dashboard'];
   const parts = history.location.pathname.split('/');
   const place = parts[parts.length - 1].replace('-', ' ');
+  // Pegue do state ou caia no path, igual seu código anterior:
+const pageTitle =
+  (history.location.state && history.location.state.pageTitle)
+    ? history.location.state.pageTitle
+    : parts[parts.length - 1].replace('-', ' ');
+
   return (
     <div
       style={{ minHeight: appHeight }}
@@ -95,7 +101,7 @@ function Dashboard(props) {
             gradient={gradient}
             deco={deco}
             bgPosition={bgPosition}
-            place={place}
+            place={pageTitle}
             titleException={titleException}
             handleOpenGuide={handleOpenGuide}
           >
@@ -116,7 +122,7 @@ function Dashboard(props) {
             deco={deco}
             bgPosition={bgPosition}
             mode={mode}
-            place={place}
+            place={pageTitle}
             titleException={titleException}
             handleOpenGuide={handleOpenGuide}
           >
@@ -137,7 +143,7 @@ function Dashboard(props) {
             gradient={gradient}
             deco={deco}
             bgPosition={bgPosition}
-            place={place}
+            place={pageTitle}
             titleException={titleException}
             handleOpenGuide={handleOpenGuide}
           >
@@ -158,7 +164,7 @@ function Dashboard(props) {
             gradient={gradient}
             deco={deco}
             bgPosition={bgPosition}
-            place={place}
+            place={pageTitle}
             titleException={titleException}
             handleOpenGuide={handleOpenGuide}
           >
@@ -179,7 +185,7 @@ function Dashboard(props) {
             gradient={gradient}
             deco={deco}
             bgPosition={bgPosition}
-            place={place}
+            place={pageTitle}
             titleException={titleException}
             handleOpenGuide={handleOpenGuide}
           >

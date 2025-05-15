@@ -31,12 +31,37 @@ const FormListPage = () => {
   }, []);
 
   const handleEdit = (id) => {
-    history.push(`/app/forms/edit/${id}`);
+    history.push({
+      pathname: `/app/forms/edit/${id}`,
+      state: { pageTitle: 'Editar Evento' }
+    });
+  };
+
+  const handleDelete = async (id) => {
+    const confirmDelete = window.confirm('Tem certeza que deseja excluir esta Evento?');
+    if (!confirmDelete) return;
+
+    const token = localStorage.getItem('token');
+    try {
+      const response = await fetch(`${API_URL}/forms/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) throw new Error('Erro ao excluir');
+
+      fetchCelulas(); // Atualiza a lista após exclusão
+    } catch (error) {
+      console.error('Erro ao excluir Evento:', error);
+    }
   };
 
   return (
     <div>
-      <Typography variant="h4" gutterBottom>Formulários Cadastrados</Typography>
+      <Typography variant="h4" gutterBottom>Eventos Cadastrados</Typography>
 
       {loading ? (
         <CircularProgress />
@@ -46,7 +71,6 @@ const FormListPage = () => {
             <TableHead>
               <TableRow>
                 <TableCell>Nome</TableCell>
-                <TableCell>Descrição</TableCell>
                 <TableCell>Tipo</TableCell>
                 <TableCell>Início</TableCell>
                 <TableCell>Fim</TableCell>
@@ -57,14 +81,22 @@ const FormListPage = () => {
               {forms.map((form) => (
                 <TableRow key={form.id}>
                   <TableCell>{form.name}</TableCell>
-                  <TableCell>{form.description}</TableCell>
                   <TableCell>{form.formType && form.formType.name ? form.formType.name : '-'}</TableCell>
                   <TableCell>{form.startDate?.split('T')[0]}</TableCell>
                   <TableCell>{form.endDate?.split('T')[0]}</TableCell>
                   <TableCell>
-                    <Button onClick={() => handleEdit(form.id)} color="primary">
-                      Editar
-                    </Button>
+                    <Box display="flex" gap={1}>
+                      <Tooltip title="Editar">
+                        <IconButton color="primary" onClick={() => handleEdit(c)}>
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Excluir">
+                        <IconButton color="error" onClick={() => handleDelete(c.id)}>
+                          <DeleteIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
                   </TableCell>
                 </TableRow>
               ))}

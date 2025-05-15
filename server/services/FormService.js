@@ -21,6 +21,13 @@ class FormService {
       configuracaoPagamento
     } = data;
 
+    // Antes de criar ou editar um form
+    const existing = await Form.findOne({ where: { slug } });
+    if (existing && (!id || existing.id !== id)) {
+      throw new Error('Já existe um Evento com esse slug.');
+    }
+
+
     // Cria o formulário principal
     const form = await Form.create({
       name,
@@ -76,7 +83,7 @@ class FormService {
 
     // Busca o formulário
     const form = await Form.findByPk(id);
-    if (!form) throw new Error('Formulário não encontrado.');
+    if (!form) throw new Error('Evento não encontrado.');
 
     // Atualiza os dados do formulário
     await form.update({
@@ -177,6 +184,24 @@ class FormService {
   async criarSubmissao(FormId, fields) {
     return FormSubmission.create({ FormId, data: fields });
   }
+
+  async deletarFormulario(id) {
+    // Busca se existe submissão para o form
+    const submissionCount = await FormSubmission.count({ where: { FormId: id } });
+    if (submissionCount > 0) {
+      throw new Error('Não é possível excluir: já existem Inscrições neste Evento.');
+    }
+
+    // Deleta fields e configurações de pagamento relacionados
+    await FormField.destroy({ where: { FormId: id } });
+    await FormPaymentConfig.destroy({ where: { FormId: id } });
+
+    // Agora deleta o próprio form
+    await Form.destroy({ where: { id } });
+
+    return { success: true };
+  }
+
 }
 
 module.exports = new FormService();
