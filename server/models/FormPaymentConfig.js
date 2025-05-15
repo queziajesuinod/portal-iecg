@@ -1,46 +1,32 @@
+// models/FormPaymentConfig.js
 module.exports = (sequelize, DataTypes) => {
-    const FormPaymentConfig = sequelize.define('FormPaymentConfig', {
-      formId: {
-        type: DataTypes.UUID,
-        allowNull: false,
-        references: {
-          model: 'forms',
-          key: 'id'
-        },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE'
+  const FormPaymentConfig = sequelize.define('FormPaymentConfig', {
+    formId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: 'forms',
+        key: 'id'
       },
-      totalAmount: {
-        type: DataTypes.FLOAT,
-        allowNull: false
-      },
-      minEntry: {
-        type: DataTypes.FLOAT,
-        allowNull: false
-      },
-      dueDate: {
-        type: DataTypes.DATE,
-        allowNull: false
-      },
-      gateway: {
-        type: DataTypes.STRING,
-        allowNull: false
-      },
-      returnUrl: {
-        type: DataTypes.STRING,
-        allowNull: true
-      }
-    }, {
-      sequelize,
-      modelName: 'FormPaymentConfig',
-      tableName: 'form_payment_configs',
-      schema: process.env.DB_SCHEMA || 'dev_iecg'
+      onUpdate: 'CASCADE',
+      onDelete: 'CASCADE'
+    },
+    totalAmount: { type: DataTypes.FLOAT, allowNull: false },
+    minEntry: { type: DataTypes.FLOAT, allowNull: false },
+    dueDate: { type: DataTypes.DATE, allowNull: false },
+    gateway: { type: DataTypes.STRING, allowNull: false },
+    returnUrl: { type: DataTypes.STRING, allowNull: true }
+  }, {
+    tableName: 'form_payment_configs',
+    schema: process.env.DB_SCHEMA || 'dev_iecg'
+  });
+
+  FormPaymentConfig.associate = models => {
+    FormPaymentConfig.belongsTo(models.Form, {
+      foreignKey: 'formId',
+      as: 'form'
     });
-  
-    FormPaymentConfig.associate = models => {
-      FormPaymentConfig.belongsTo(models.Form, { foreignKey: 'formId' });
-    };
-  
-    return FormPaymentConfig;
   };
-  
+
+  return FormPaymentConfig;
+};

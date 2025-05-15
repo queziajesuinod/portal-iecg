@@ -1,12 +1,10 @@
+// models/FormField.js
 module.exports = (sequelize, DataTypes) => {
   const FormField = sequelize.define('FormField', {
     label: DataTypes.STRING,
     type: DataTypes.STRING,
-    required: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false
-    },
-    options: DataTypes.JSON
+    required: { type: DataTypes.BOOLEAN, defaultValue: false },
+    options: DataTypes.JSON // pode ser string ou array, defina conforme seu frontend
   }, {
     tableName: 'form_fields',
     schema: process.env.DB_SCHEMA || 'dev_iecg'

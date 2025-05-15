@@ -1,3 +1,4 @@
+// models/Form.js
 module.exports = (sequelize, DataTypes) => {
   const Form = sequelize.define('Form', {
     name: DataTypes.STRING,
@@ -19,14 +20,14 @@ module.exports = (sequelize, DataTypes) => {
     endDate: DataTypes.DATE
   }, {
     tableName: 'forms',
-    schema: process.env.DB_SCHEMA || 'dev_iecg',
+    schema: process.env.DB_SCHEMA || 'dev_iecg'
   });
 
   Form.associate = models => {
     Form.belongsTo(models.FormType, { foreignKey: 'formTypeId', as: 'formType' });
-    Form.hasMany(models.FormField, { foreignKey: 'FormId' });
-    Form.hasMany(models.FormSubmission, { foreignKey: 'FormId' });
-    Form.hasOne(models.FormPaymentConfig, { foreignKey: 'formId', as: 'FormPaymentConfig' });
+    Form.hasMany(models.FormField, { foreignKey: 'FormId', as: 'fields' });
+    Form.hasMany(models.FormSubmission, { foreignKey: 'FormId', as: 'submissions' });
+    Form.hasOne(models.FormPaymentConfig, { foreignKey: 'formId', as: 'paymentConfig' });
   };
 
   return Form;

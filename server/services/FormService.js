@@ -78,11 +78,10 @@ class FormService {
     return Form.findAll({
       where: { isActive: true },
       include: [
-        { model: FormPaymentConfig, as: 'FormPaymentConfig' }, {
-          model: FormType,
-          as: 'formType',
-          required: false
-        }]
+        { model: FormField, as: 'fields' },
+        { model: FormPaymentConfig, as: 'paymentConfig' },
+        { model: FormType, as: 'formType' }
+      ]
     });
   }
 
@@ -90,8 +89,8 @@ class FormService {
     return Form.findOne({
       where: { id, isActive: true },
       include: [
-        FormField,
-       { model: FormPaymentConfig, as: 'FormPaymentConfig' },
+        { model: FormField, as: 'fields' },
+        { model: FormPaymentConfig, as: 'paymentConfig' },
         { model: FormType, as: 'formType' }
       ]
     });
@@ -101,8 +100,8 @@ class FormService {
     return Form.findOne({
       where: { slug, isActive: true },
       include: [
-        FormField,
-       { model: FormPaymentConfig, as: 'FormPaymentConfig' },
+        { model: FormField, as: 'fields' },
+        { model: FormPaymentConfig, as: 'paymentConfig' },
         { model: FormType, as: 'formType' }
       ]
     });
