@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const FormController = require('../controllers/formController');
 const autenticado = require('../middlewares/autenticado');
+const FormSubmissionController = require('../controllers/FormSubmissionController');
+
 
 // Lista todos os formulários ativos (público ou autenticado, a seu critério)
 router.get('/', FormController.listForms);
@@ -15,5 +17,6 @@ router.put('/:id', autenticado, FormController.updateForm);
 router.delete('/:id', autenticado, FormController.deleteForm);
 router.get('/payment-status/:submissionId', autenticado, FormController.getPaymentStatus);
 router.post('/:submissionId/pay', autenticado, FormController.makeAdditionalPayment);
+router.post('/:formId/submit', FormSubmissionController.create);
 
 module.exports = router;
