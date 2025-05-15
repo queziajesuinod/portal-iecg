@@ -26,9 +26,9 @@ const FormPublicPage = () => {
         const res = await fetch(`${API_URL}/public/forms/${slug}`);
         const data = await res.json();
         if (res.ok) setForm(data);
-        else setError(data.message || 'Formulário não encontrado.');
+        else setError(data.message || 'Evento não encontrado.');
       } catch (err) {
-        setError('Erro ao carregar formulário.');
+        setError('Erro ao carregar Evento.');
       }
     };
     fetchForm();
@@ -56,13 +56,13 @@ const FormPublicPage = () => {
         if (data.checkoutUrl) {
           window.location.href = data.checkoutUrl;
         } else {
-          alert('Formulário enviado com sucesso!');
+          alert('Inscrição enviado com sucesso!');
         }
       } else {
-        setError(data.message || 'Erro ao enviar formulário.');
+        setError(data.message || 'Erro ao enviar Inscrição.');
       }
     } catch (err) {
-      setError('Erro ao enviar formulário.');
+      setError('Erro ao enviar Inscrição.');
     } finally {
       setSubmitting(false);
     }
@@ -113,7 +113,7 @@ const FormPublicPage = () => {
           ))}
           <Grid item xs={12}>
             <Button type="submit" variant="contained" color="primary" fullWidth disabled={submitting}>
-              {submitting ? 'Enviando...' : 'Enviar Formulário'}
+              {submitting ? 'Enviando...' : 'Enviar Inscrição'}
             </Button>
           </Grid>
         </Grid>
