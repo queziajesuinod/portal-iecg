@@ -57,6 +57,10 @@ function Application(props) {
             <ProtectedRoute exact path="/app/forms/create" component={FormCreatePage} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/forms/edit/:id" component={FormEditPage} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/forms" component={FormListPage} isAuthenticated={isAuthenticated} />
+           <ProtectedRoute exact path="/app/eventos/:slug" component={FormPublicPage} isAuthenticated={isAuthenticated} />
+           <ProtectedRoute exact path="/app/pagamentos" component={FormPaymentCheckPage} isAuthenticated={isAuthenticated} />
+           <ProtectedRoute exact path="/app/pagamento/:submissionId" component={FormPublicPaymentPage}  isAuthenticated={isAuthenticated}/>
+
           </Switch>
         </Dashboard>
       </Route>
