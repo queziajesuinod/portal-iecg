@@ -1,7 +1,9 @@
 import React from 'react';
 import { PropTypes } from 'prop-types';
 import { Router, Switch, Route } from 'react-router-dom';
-import NotFound from 'containers/Pages/Standalone/NotFoundDedicated';
+import {
+  NotFound,
+} from '../pageListAsync';
 import Auth from './Auth';
 import Application from './Application';
 import LoginDedicated from '../Pages/Standalone/LoginDedicated';

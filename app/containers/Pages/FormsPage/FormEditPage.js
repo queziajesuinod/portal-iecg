@@ -1,14 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import {
-  TextField, Button, Grid, MenuItem, Typography, IconButton, Checkbox, FormControlLabel
+  TextField,
+  Button,
+  Grid,
+  MenuItem,
+  Typography,
+  FormControlLabel,
+  Checkbox,
+  IconButton,
+  Box
 } from '@mui/material';
 import { AddCircle, RemoveCircle } from '@mui/icons-material';
 import { Helmet } from 'react-helmet';
-import { PapperBlock, Notification } from 'dan-components';
+import { Notification, PapperBlock } from 'dan-components';
 import { useParams, useHistory } from 'react-router-dom';
 
 const tiposDeCampo = ['text', 'number', 'email', 'date', 'checkbox', 'select'];
-const gatewaysDisponiveis = ['efi', 'pagseguro', 'cielo'];
+
+const formatDate = (dateString) => {
+  if (!dateString) return '';
+  return dateString.split('T')[0];
+};
 
 const FormEditPage = () => {
   const { id } = useParams();
@@ -24,59 +36,97 @@ const FormEditPage = () => {
     allowMultiplePayments: false,
     startDate: '',
     endDate: '',
-    gateway: '',
-    totalAmount: '',
-    minEntry: '',
-    dueDate: '',
-    returnUrl: '',
+    configuracaoPagamento: {
+      gateway: '',
+      totalAmount: '',
+      minEntry: '',
+      dueDate: '',
+      returnUrl: ''
+    },
     fields: []
   });
+
   const [formTypes, setFormTypes] = useState([]);
   const [notification, setNotification] = useState('');
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-
-    const carregarFormTypes = async () => {
-      const res = await fetch(`${API_URL}/form-types`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const tipos = await res.json();
-      setFormTypes(tipos);
+    // Carrega tipos de formulário
+    const fetchFormTypes = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${API_URL}/form-types`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setFormTypes(data);
+        } else {
+          setNotification('Erro ao carregar tipos de formulário.');
+        }
+      } catch (error) {
+        setNotification('Erro ao carregar tipos de formulário.');
+      }
     };
 
-    const carregarFormulario = async () => {
-      const res = await fetch(`${API_URL}/forms/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const dados = await res.json();
-      setForm({
-        ...dados,
-        formTypeId: dados.formTypeId || '',
-        fields: dados.FormFields || [],
-        allowMultiplePayments: dados.allowMultiplePayments || false,
-        gateway: dados?.FormPaymentConfig?.gateway || '',
-        totalAmount: dados?.FormPaymentConfig?.totalAmount || '',
-        minEntry: dados?.FormPaymentConfig?.minEntry || '',
-        dueDate: dados?.FormPaymentConfig?.dueDate?.substring(0, 10) || '',
-        returnUrl: dados?.FormPaymentConfig?.returnUrl || ''
-      });
+    // Carrega dados do formulário
+    const fetchForm = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${API_URL}/forms/${id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+
+        setForm({
+          name: data.name || '',
+          description: data.description || '',
+          slug: data.slug || '',
+          formTypeId: data.formTypeId || '',
+          hasPayment: data.hasPayment || false,
+          allowMultiplePayments: data.allowMultiplePayments || false,
+          startDate: formatDate(data.startDate),
+          endDate: formatDate(data.endDate),
+          configuracaoPagamento: {
+            gateway: data.FormPaymentConfig?.gateway || '',
+            totalAmount: data.FormPaymentConfig?.totalAmount || '',
+            minEntry: data.FormPaymentConfig?.minEntry || '',
+            dueDate: formatDate(data.FormPaymentConfig?.dueDate),
+            returnUrl: data.FormPaymentConfig?.returnUrl || ''
+          },
+          fields: (data.FormFields || []).map(f => ({
+            label: f.label,
+            type: f.type,
+            required: f.required,
+            options: f.options
+          }))
+        });
+      } catch (error) {
+        setNotification('Erro ao carregar formulário.');
+      }
     };
 
-    carregarFormTypes();
-    carregarFormulario();
-  }, [id, API_URL]);
+    fetchFormTypes();
+    fetchForm();
+    // eslint-disable-next-line
+  }, [id]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setForm({ ...form, [name]: type === 'checkbox' ? checked : value });
-  };
 
-  const handleFieldChange = (index, e) => {
-    const { name, value, type, checked } = e.target;
-    const updated = [...form.fields];
-    updated[index][name] = type === 'checkbox' ? checked : value;
-    setForm({ ...form, fields: updated });
+    // Pagamento
+    if (name.startsWith('pagamento_')) {
+      setForm({
+        ...form,
+        configuracaoPagamento: {
+          ...form.configuracaoPagamento,
+          [name.replace('pagamento_', '')]: value
+        }
+      });
+    } else if (name === 'hasPayment' || name === 'allowMultiplePayments') {
+      setForm({ ...form, [name]: checked });
+    } else {
+      setForm({ ...form, [name]: value });
+    }
   };
 
   const handleAddField = () => {
@@ -89,9 +139,22 @@ const FormEditPage = () => {
     setForm({ ...form, fields: updated });
   };
 
+  const handleFieldChange = (index, e) => {
+    const { name, value, type, checked } = e.target;
+    const updated = [...form.fields];
+    updated[index][name] = type === 'checkbox' ? checked : value;
+    setForm({ ...form, fields: updated });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem('token');
+
+    // Payload
+    const payload = {
+      ...form,
+      configuracaoPagamento: form.hasPayment ? form.configuracaoPagamento : undefined,
+    };
 
     try {
       const res = await fetch(`${API_URL}/forms/${id}`, {
@@ -100,7 +163,7 @@ const FormEditPage = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(form)
+        body: JSON.stringify(payload)
       });
 
       const data = await res.json();
@@ -111,7 +174,6 @@ const FormEditPage = () => {
         setNotification(data.message || 'Erro ao atualizar formulário');
       }
     } catch (err) {
-      console.error('Erro ao atualizar formulário:', err);
       setNotification('Erro ao conectar com o servidor.');
     }
   };
@@ -119,9 +181,9 @@ const FormEditPage = () => {
   return (
     <div>
       <Helmet>
-        <title>{form.name ? `Editando: ${form.name}` : 'Editar Formulário'}</title>
+        <title>{form.name ? `Editar: ${form.name}` : 'Editar Formulário'}</title>
       </Helmet>
-      <PapperBlock title={form.name || 'Editar Evento'} desc="Edite os dados do formulário">
+      <PapperBlock title={form.name || 'Editar Formulário'} desc="Edite os dados do formulário">
         <form onSubmit={handleSubmit}>
           <Grid container spacing={2}>
             <Grid item xs={12} md={6}>
@@ -149,26 +211,25 @@ const FormEditPage = () => {
             <Grid item xs={12} md={6}>
               <FormControlLabel control={<Checkbox checked={form.hasPayment} onChange={handleChange} name="hasPayment" />} label="Formulário com pagamento?" />
             </Grid>
-
             {form.hasPayment && (
               <>
                 <Grid item xs={12} md={4}>
-                  <TextField label="Gateway de Pagamento" name="gateway" select value={form.gateway} onChange={handleChange} fullWidth required>
-                    {gatewaysDisponiveis.map(g => (
-                      <MenuItem key={g} value={g}>{g.toUpperCase()}</MenuItem>
-                    ))}
+                  <TextField label="Gateway de Pagamento" name="pagamento_gateway" select value={form.configuracaoPagamento.gateway} onChange={handleChange} fullWidth required>
+                    <MenuItem value="efi">Efi (Gerencianet)</MenuItem>
+                    <MenuItem value="pagseguro">PagSeguro</MenuItem>
+                    <MenuItem value="cielo">Cielo</MenuItem>
                   </TextField>
                 </Grid>
                 <Grid item xs={4}>
-                  <TextField label="Valor Total (R$)" name="totalAmount" type="number" value={form.totalAmount} onChange={handleChange} fullWidth required />
+                  <TextField label="Valor Total (R$)" name="pagamento_totalAmount" type="number" value={form.configuracaoPagamento.totalAmount} onChange={handleChange} fullWidth required />
                 </Grid>
                 <Grid item xs={4}>
-                  <TextField label="Entrada Mínima (R$)" name="minEntry" type="number" value={form.minEntry} onChange={handleChange} fullWidth required />
+                  <TextField label="Entrada Mínima (R$)" name="pagamento_minEntry" type="number" value={form.configuracaoPagamento.minEntry} onChange={handleChange} fullWidth required />
                 </Grid>
-                <Grid item xs={6}>
-                  <TextField label="Data de Vencimento" name="dueDate" type="date" value={form.dueDate} onChange={handleChange} fullWidth required InputLabelProps={{ shrink: true }} />
+                <Grid item xs={12} md={6}>
+                  <TextField label="Data de Vencimento" name="pagamento_dueDate" type="date" value={form.configuracaoPagamento.dueDate} onChange={handleChange} fullWidth required InputLabelProps={{ shrink: true }} />
                 </Grid>
-                <Grid item xs={6}>
+                <Grid item xs={12} md={6}>
                   <FormControlLabel control={<Checkbox checked={form.allowMultiplePayments} onChange={handleChange} name="allowMultiplePayments" />} label="Permitir múltiplos pagamentos por pessoa" />
                 </Grid>
               </>
@@ -204,7 +265,9 @@ const FormEditPage = () => {
             ))}
 
             <Grid item xs={12}>
-              <Button type="submit" variant="contained" color="primary" fullWidth>Atualizar Formulário</Button>
+              <Button type="submit" variant="contained" color="primary" fullWidth>
+                Atualizar Formulário
+              </Button>
             </Grid>
           </Grid>
         </form>
