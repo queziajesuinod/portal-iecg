@@ -76,53 +76,55 @@ const FormPublicPage = () => {
   if (!form) return <Box p={4}><Typography>Carregando formulário...</Typography></Box>;
 
   return (
-    <Box p={4} maxWidth={700} mx="auto">
-      <Typography variant="h4" gutterBottom>{form.name}</Typography>
-      <Typography variant="subtitle1" paragraph>{form.description}</Typography>
-      <form onSubmit={handleSubmit}>
-        <Grid container spacing={2}>
-          {form.FormFields.map((field, index) => (
-            <Grid item xs={12} sm={field.type === 'checkbox' ? 12 : 6} key={index}>
-              {field.type === 'checkbox' ? (
-                <FormControlLabel
-                  control={<Checkbox name={field.label} onChange={handleChange} />}
-                  label={field.label}
-                />
-              ) : field.type === 'select' ? (
-                <TextField
-                  fullWidth
-                  select
-                  label={field.label}
-                  name={field.label}
-                  onChange={handleChange}
-                  SelectProps={{ native: true }}
-                  required={field.required}
-                >
-                  <option value="">Selecione...</option>
-                  {(field.options || '').split(',').map(opt => (
-                    <option key={opt} value={opt.trim()}>{opt.trim()}</option>
-                  ))}
-                </TextField>
-              ) : (
-                <TextField
-                  fullWidth
-                  label={field.label}
-                  name={field.label}
-                  type={field.type || 'text'}
-                  onChange={handleChange}
-                  required={field.required}
-                />
-              )}
+
+    <PapperBlock title={form.name} desc={form.description}>
+      <Box p={4} maxWidth={700} mx="auto">
+
+        <form onSubmit={handleSubmit}>
+          <Grid container spacing={2}>
+            {form.FormFields.map((field, index) => (
+              <Grid item xs={12} sm={field.type === 'checkbox' ? 12 : 6} key={index}>
+                {field.type === 'checkbox' ? (
+                  <FormControlLabel
+                    control={<Checkbox name={field.label} onChange={handleChange} />}
+                    label={field.label}
+                  />
+                ) : field.type === 'select' ? (
+                  <TextField
+                    fullWidth
+                    select
+                    label={field.label}
+                    name={field.label}
+                    onChange={handleChange}
+                    SelectProps={{ native: true }}
+                    required={field.required}
+                  >
+                    <option value="">Selecione {field.label}</option>
+                    {(field.options || '').split(',').map(opt => (
+                      <option key={opt} value={opt.trim()}>{opt.trim()}</option>
+                    ))}
+                  </TextField>
+                ) : (
+                  <TextField
+                    fullWidth
+                    label={field.label}
+                    name={field.label}
+                    type={field.type || 'text'}
+                    onChange={handleChange}
+                    required={field.required}
+                  />
+                )}
+              </Grid>
+            ))}
+            <Grid item xs={12}>
+              <Button type="submit" variant="contained" color="primary" fullWidth disabled={submitting}>
+                {submitting ? 'Enviando...' : 'Enviar Inscrição'}
+              </Button>
             </Grid>
-          ))}
-          <Grid item xs={12}>
-            <Button type="submit" variant="contained" color="primary" fullWidth disabled={submitting}>
-              {submitting ? 'Enviando...' : 'Enviar Inscrição'}
-            </Button>
           </Grid>
-        </Grid>
-      </form>
-    </Box>
+        </form>
+      </Box>
+    </PapperBlock>
   );
 };
 
