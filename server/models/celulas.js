@@ -11,9 +11,8 @@ module.exports = (sequelize) => {
   Celula.init({
     id: {
       type: DataTypes.UUID,
-      primaryKey: true,
-      allowNull: false,
       defaultValue: DataTypes.UUIDV4,
+      primaryKey: true
     },
     celula: {
       type: DataTypes.STRING,

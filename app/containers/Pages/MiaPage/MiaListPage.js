@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Helmet } from "react-helmet";
 import { useHistory } from "react-router-dom";
-import { PapperBlock } from 'dan-components';
+import { PapperBlock, Notification } from 'dan-components';
 import {
   List,
   ListItem,
@@ -27,6 +27,7 @@ const MiaListPage = () => {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [rowsPerPage] = useState(10);
+  const [notification, setNotification] = useState('');
 
   const history = useHistory();
 
@@ -82,13 +83,17 @@ const MiaListPage = () => {
       });
 
       if (!response.ok) {
-        throw new Error("Erro ao deletar Mia");
+        const data = await response.json();
+        const errorMessage = data.erro || data.message || "Erro ao deletar Mia.";
+        setNotification(`Erro: ${errorMessage}`);
+        return;
       }
 
       setAposentados((prev) => prev.filter((p) => p.id !== id));
+      setNotification("Registro deletado com sucesso!");
     } catch (error) {
       console.error("Erro ao deletar Mia:", error);
-      alert("Erro ao deletar Mia.");
+      setNotification("Erro ao conectar com o servidor. Por favor, tente novamente mais tarde.");
     }
   };
 
@@ -193,6 +198,8 @@ const MiaListPage = () => {
           </Box>
         </Paper>
       </PapperBlock>
+
+      <Notification message={notification} close={() => setNotification('')} />
     </div>
   );
 };
