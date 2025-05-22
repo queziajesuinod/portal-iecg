@@ -10,6 +10,7 @@ import {
   Typography,
   Box
 } from '@mui/material';
+import { PapperBlock } from 'dan-components';
 
 const FormPublicPage = () => {
   const { slug } = useParams();
@@ -99,7 +100,7 @@ const FormPublicPage = () => {
                     SelectProps={{ native: true }}
                     required={field.required}
                   >
-                    <option value="">Selecione {field.label}</option>
+                    <option value=""></option>
                     {(field.options || '').split(',').map(opt => (
                       <option key={opt} value={opt.trim()}>{opt.trim()}</option>
                     ))}
@@ -112,10 +113,49 @@ const FormPublicPage = () => {
                     type={field.type || 'text'}
                     onChange={handleChange}
                     required={field.required}
+                    InputLabelProps={field.type === 'date' ? { shrink: true } : undefined}
                   />
                 )}
               </Grid>
             ))}
+            {form.hasPayment && (
+              <>
+                <Grid item xs={12}>
+                  <Typography variant="h6">Informações de Pagamento</Typography>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    label="Valor Total (R$)"
+                    name="totalAmount"
+                    type="number"
+                    onChange={handleChange}
+                    required
+                  />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    label="Entrada Mínima (R$)"
+                    name="minEntry"
+                    type="number"
+                    onChange={handleChange}
+                    required
+                  />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    label="Data de Vencimento"
+                    name="dueDate"
+                    type="date"
+                    InputLabelProps={{ shrink: true }}
+                    onChange={handleChange}
+                    required
+                  />
+                </Grid>
+              </>
+            )}
             <Grid item xs={12}>
               <Button type="submit" variant="contained" color="primary" fullWidth disabled={submitting}>
                 {submitting ? 'Enviando...' : 'Enviar Inscrição'}

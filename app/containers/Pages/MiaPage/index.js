@@ -192,19 +192,19 @@ const MiaPage = () => {
           setFormData({ ...formDataInicial });
           setCapturedImage('');
           setShowWebcam(false);
-        }else
-        {
-            history.push({
-      pathname: `/app/mia`,
-      state: { pageTitle: 'Listagem Mia' }
-    });
+        } else {
+          history.push({
+            pathname: `/app/mia`,
+            state: { pageTitle: 'Listagem Mia' }
+          });
         }
       } else {
-        setNotification(`Erro: ${data.erro || data.message || 'Falha ao processar'}`);
+        const errorMessage = data.erro || data.message || 'Falha ao processar a solicitação.';
+        setNotification(`Erro: ${errorMessage}`);
       }
     } catch (error) {
       console.error('Erro ao enviar dados:', error);
-      setNotification('Erro ao conectar com o servidor.');
+      setNotification('Erro ao conectar com o servidor. Por favor, tente novamente mais tarde.');
     }
   };
 

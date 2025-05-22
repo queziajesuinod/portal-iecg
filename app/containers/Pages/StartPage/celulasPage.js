@@ -8,6 +8,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useHistory } from 'react-router-dom';
 import useStyles from 'dan-components/Tables/tableStyle-jss';
+import Notification from 'dan-components/Notification/Notification';
 
 const ListagemCelulasPage = () => {
   const { classes, cx } = useStyles();
@@ -18,6 +19,7 @@ const ListagemCelulasPage = () => {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [rowsPerPage] = useState(10);
+  const [notification, setNotification] = useState('');
 
   const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
 
@@ -64,12 +66,18 @@ const ListagemCelulasPage = () => {
         }
       });
 
-      if (!response.ok) throw new Error('Erro ao excluir');
+      if (!response.ok) {
+        const data = await response.json();
+        const errorMessage = data.erro || data.message || 'Erro ao excluir célula.';
+        setNotification(`Erro: ${errorMessage}`);
+        return;
+      }
 
       fetchCelulas(); // Atualiza a lista após exclusão
+      setNotification('Célula excluída com sucesso!');
     } catch (error) {
       console.error('Erro ao excluir célula:', error);
-      alert('Erro ao excluir célula');
+      setNotification('Erro ao conectar com o servidor. Por favor, tente novamente mais tarde.');
     }
   };
 
@@ -152,6 +160,8 @@ const ListagemCelulasPage = () => {
           color="primary"
         />
       </Box>
+
+      <Notification message={notification} close={() => setNotification('')} />
     </div>
   );
 };

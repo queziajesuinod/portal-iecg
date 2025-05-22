@@ -54,9 +54,21 @@ const CadastrarCelula = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validação básica para campos obrigatórios
+    if (!formData.celula || !formData.lider || !formData.email_lider) {
+      setNotification('Preencha os campos obrigatórios: Nome da Célula, Líder e Email do Líder.');
+      return;
+    }
+
     const token = localStorage.getItem('token');
     const method = isEdit ? 'PUT' : 'POST';
-    const endpoint = isEdit ? `${API_URL}/start/celula/${formData.id}` : `${API_URL}/celulas`;
+    const endpoint = isEdit ? `${API_URL}/start/celula/${formData.id}` : `${API_URL}/start/celula`;
+
+    const payload = { ...formData };
+    if (!isEdit) {
+      delete payload.id; // Remove o campo 'id' ao criar uma nova célula
+    }
 
     try {
       const res = await fetch(endpoint, {
@@ -65,7 +77,7 @@ const CadastrarCelula = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
 
       const data = await res.json();

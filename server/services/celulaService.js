@@ -3,7 +3,12 @@ const { Op } = require('sequelize');
 
 class CelulaService {
   async criarCelula(dados) {
-    return await Celula.create(dados);
+    console.log('Dados recebidos para criação:', dados);
+
+    const celula = await Celula.create(dados);
+    console.log('Célula criada no banco de dados:', celula);
+
+    return celula;
   }
 
   async buscarTodasCelulas() {

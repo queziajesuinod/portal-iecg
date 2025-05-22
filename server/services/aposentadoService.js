@@ -36,8 +36,8 @@ class AposentadoService {
       });
 
       if (existente) {
-        await t.rollback();
-        throw new Error('Já existe um aposentado cadastrado com este CPF.');
+        if (!t.finished) await t.rollback();
+        throw new Error('Erro: Já existe um aposentado cadastrado com este CPF. Por favor, verifique os dados e tente novamente.');
       }
 
       let user = await User.findOne({
@@ -109,7 +109,7 @@ class AposentadoService {
       await t.commit();
       return aposentado;
     } catch (error) {
-      await t.rollback();
+      if (!t.finished) await t.rollback();
       throw new Error('Erro ao criar aposentado: ' + error.message);
     }
   }

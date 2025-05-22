@@ -3,9 +3,23 @@ const CelulaService = require('../services/celulaService');
 class CelulaController {
   async criar(req, res) {
     try {
+      console.log('Dados recebidos no corpo da requisição:', req.body);
+
+      if (!req.body || Object.keys(req.body).length === 0) {
+        return res.status(400).json({ erro: 'Dados inválidos ou ausentes' });
+      }
+
+      // Remove o campo 'id' do corpo da requisição, caso esteja presente
+      if (req.body.id) {
+        delete req.body.id;
+      }
+
       const celula = await CelulaService.criarCelula(req.body);
+      console.log('Célula criada com sucesso:', celula);
+
       return res.status(201).json(celula);
     } catch (error) {
+      console.error('Erro ao criar célula:', error);
       return res.status(400).json({ erro: error.message });
     }
   }
@@ -53,27 +67,46 @@ class CelulaController {
 
   async buscarPorId(req, res) {
     try {
+      if (!req.params.id) {
+        return res.status(400).json({ erro: 'ID da célula é obrigatório' });
+      }
+
       const celula = await CelulaService.buscarCelulaPorId(req.params.id);
       return res.status(200).json(celula);
     } catch (error) {
+      console.error('Erro ao buscar célula por ID:', error);
       return res.status(404).json({ erro: error.message });
     }
   }
 
   async atualizar(req, res) {
     try {
+      if (!req.params.id) {
+        return res.status(400).json({ erro: 'ID da célula é obrigatório' });
+      }
+
+      if (!req.body || Object.keys(req.body).length === 0) {
+        return res.status(400).json({ erro: 'Dados para atualização são obrigatórios' });
+      }
+
       const celula = await CelulaService.atualizarCelula(req.params.id, req.body);
       return res.status(200).json(celula);
     } catch (error) {
+      console.error('Erro ao atualizar célula:', error);
       return res.status(400).json({ erro: error.message });
     }
   }
 
   async deletar(req, res) {
     try {
+      if (!req.params.id) {
+        return res.status(400).json({ erro: 'ID da célula é obrigatório' });
+      }
+
       const resposta = await CelulaService.deletarCelula(req.params.id);
       return res.status(200).json(resposta);
     } catch (error) {
+      console.error('Erro ao deletar célula:', error);
       return res.status(400).json({ erro: error.message });
     }
   }
