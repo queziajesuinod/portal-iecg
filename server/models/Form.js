@@ -1,6 +1,11 @@
 // Form.js
 module.exports = (sequelize, DataTypes) => {
   const Form = sequelize.define('Form', {
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true
+    },
     name: DataTypes.STRING,
     description: DataTypes.TEXT,
     slug: {
@@ -17,7 +22,11 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: true
     },
     startDate: DataTypes.DATE,
-    endDate: DataTypes.DATE
+    endDate: DataTypes.DATE,
+    order: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0
+    }
   }, {
     tableName: 'forms',
     schema: process.env.DB_SCHEMA || 'dev_iecg',

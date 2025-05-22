@@ -17,6 +17,7 @@ import FormListPage from '../Pages/FormsPage/FormListPage';
 import FormPublicPage from '../Pages/FormsPage/FormPublicPage';
 import FormPaymentCheckPage from '../Pages/FormsPage/FormPaymentCheckPage';
 import FormPublicPaymentPage from '../Pages/FormsPage/FormPublicPaymentPage';
+import ProcessPaymentPage from '../Pages/PaymentsPage/ProcessPaymentPage';
 
 import dummyContents from 'dan-api/dummy/dummyContents';
 
@@ -63,6 +64,7 @@ function Application(props) {
            <ProtectedRoute exact path="/app/eventos/:slug" component={FormPublicPage} isAuthenticated={isAuthenticated} />
            <ProtectedRoute exact path="/app/pagamentos" component={FormPaymentCheckPage} isAuthenticated={isAuthenticated} />
            <ProtectedRoute exact path="/app/pagamento/:submissionId" component={FormPublicPaymentPage}  isAuthenticated={isAuthenticated}/>
+           <ProtectedRoute exact path="/app/process-payment" component={ProcessPaymentPage} isAuthenticated={isAuthenticated} />
 
           </Switch>
         </Dashboard>
