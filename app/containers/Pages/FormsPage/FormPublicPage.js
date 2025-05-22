@@ -1,6 +1,6 @@
 // FormPublicPage.jsx – Página pública isolada para preenchimento de formulário
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useHistory } from 'react-router-dom';
 import {
   TextField,
   Checkbox,
@@ -14,6 +14,7 @@ import { PapperBlock } from 'dan-components';
 
 const FormPublicPage = () => {
   const { slug } = useParams();
+  const history = useHistory();
   const [form, setForm] = useState(null);
   const [values, setValues] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -45,6 +46,19 @@ const FormPublicPage = () => {
     setSubmitting(true);
     setError('');
 
+    // Validação do valor de pagamento
+    if (form.hasPayment) {
+      const minEntry = parseFloat(form?.configuracaoPagamento?.minEntry || 0);
+      const totalAmount = parseFloat(form?.configuracaoPagamento?.totalAmount || 0);
+      const amount = parseFloat(values.amount);
+
+      if (isNaN(amount) || amount < minEntry || amount > totalAmount) {
+        setError(`O valor deve estar entre R$ ${minEntry} e R$ ${totalAmount}.`);
+        setSubmitting(false);
+        return;
+      }
+    }
+
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/forms/${form.id}/submit`, {
@@ -53,21 +67,32 @@ const FormPublicPage = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ formId: form.id, fields: values, paymentInfo: values.paymentInfo || null })
+        body: JSON.stringify({
+          formId: form.id,
+          fields: values,
+          paymentInfo: form.hasPayment ? { amount: values.amount } : null
+        })
       });
 
       const data = await res.json();
       if (res.ok) {
-        if (data.checkoutUrl) {
-          window.location.href = data.checkoutUrl;
+        if (form.hasPayment) {
+          history.push('/app/process-payment', {
+            paymentData: {
+              payerName: values.payerName,
+              payerEmail: values.payerEmail,
+              payerPhone: values.payerPhone,
+              amount: values.amount,
+            },
+          });
         } else {
-          alert('Inscrição enviado com sucesso!');
+          alert('Inscrição enviada com sucesso!');
         }
       } else {
-        setError(data.message || 'Erro ao enviar Inscrição.');
+        setError(data.message || 'Erro ao enviar inscrição.');
       }
     } catch (err) {
-      setError('Erro ao enviar Inscrição.');
+      setError('Erro ao enviar inscrição.');
     } finally {
       setSubmitting(false);
     }
@@ -126,30 +151,9 @@ const FormPublicPage = () => {
                 <Grid item xs={12} md={6}>
                   <TextField
                     fullWidth
-                    label="Valor Total (R$)"
-                    name="totalAmount"
+                    label="Valor a Pagar (R$)"
+                    name="amount"
                     type="number"
-                    onChange={handleChange}
-                    required
-                  />
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    label="Entrada Mínima (R$)"
-                    name="minEntry"
-                    type="number"
-                    onChange={handleChange}
-                    required
-                  />
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    label="Data de Vencimento"
-                    name="dueDate"
-                    type="date"
-                    InputLabelProps={{ shrink: true }}
                     onChange={handleChange}
                     required
                   />

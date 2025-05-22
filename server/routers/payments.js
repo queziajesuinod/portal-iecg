@@ -5,5 +5,6 @@ const autenticado = require('../middlewares/autenticado');
 const PaymentController = require('../controllers/paymentController');
 
 router.get('/:id/history', autenticado, PaymentController.getHistory);
+router.post('/process', autenticado, PaymentController.processPayment);
 
 module.exports = router;

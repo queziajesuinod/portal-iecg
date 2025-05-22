@@ -14,6 +14,8 @@ import { AddCircle, RemoveCircle } from '@mui/icons-material';
 import { Helmet } from 'react-helmet';
 import { Notification, PapperBlock } from 'dan-components';
 import { useParams, useHistory } from 'react-router-dom';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
+import DragHandleIcon from '@mui/icons-material/DragHandle';
 
 const tiposDeCampo = ['text', 'number', 'email', 'date', 'checkbox', 'select'];
 
@@ -146,6 +148,21 @@ const FormEditPage = () => {
     setForm({ ...form, fields: updated });
   };
 
+  const handleDragEnd = (result) => {
+    if (!result.destination) return;
+
+    const reorderedFields = Array.from(form.fields);
+    const [removed] = reorderedFields.splice(result.source.index, 1);
+    reorderedFields.splice(result.destination.index, 0, removed);
+
+    const updatedFields = reorderedFields.map((field, index) => ({
+      ...field,
+      order: index + 1,
+    }));
+
+    setForm((prevForm) => ({ ...prevForm, fields: updatedFields }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem('token');
@@ -196,10 +213,10 @@ const FormEditPage = () => {
               <TextField label="Descrição" name="description" fullWidth value={form.description} onChange={handleChange} multiline />
             </Grid>
             <Grid item xs={6}>
-              <TextField label="Início" name="startDate" type="date" fullWidth value={form.startDate} onChange={handleChange} InputLabelProps={{ shrink: true }} />
+              <TextField label="Início" name="startDate" type="date" fullWidth value={form.startDate} onChange={handleChange} InputLabelProps={{ shrink: true }} required />
             </Grid>
             <Grid item xs={6}>
-              <TextField label="Fim" name="endDate" type="date" fullWidth value={form.endDate} onChange={handleChange} InputLabelProps={{ shrink: true }} />
+              <TextField label="Fim" name="endDate" type="date" fullWidth value={form.endDate} onChange={handleChange} InputLabelProps={{ shrink: true }} required />
             </Grid>
             <Grid item xs={12} md={6}>
               <TextField label="Tipo de Formulário" name="formTypeId" select value={form.formTypeId} onChange={handleChange} fullWidth required>
@@ -240,29 +257,96 @@ const FormEditPage = () => {
               <Button variant="outlined" onClick={handleAddField} startIcon={<AddCircle />}>Adicionar Campo</Button>
             </Grid>
 
-            {form.fields.map((field, index) => (
-              <React.Fragment key={index}>
-                <Grid item xs={4}>
-                  <TextField label="Label" name="label" value={field.label} onChange={(e) => handleFieldChange(index, e)} fullWidth />
-                </Grid>
-                <Grid item xs={3}>
-                  <TextField label="Tipo" name="type" select value={field.type} onChange={(e) => handleFieldChange(index, e)} fullWidth>
-                    {tiposDeCampo.map(tipo => (
-                      <MenuItem key={tipo} value={tipo}>{tipo}</MenuItem>
+            <DragDropContext onDragEnd={handleDragEnd} >
+              <Droppable droppableId="fields">
+                {(provided) => (
+                  <div {...provided.droppableProps} ref={provided.innerRef} style={{ padding: '10px', backgroundColor: '#f9f9f9', borderRadius: '8px',width: '100%'}}>
+                    {form.fields.map((field, index) => (
+                      <Draggable key={index} draggableId={`field-${index}`} index={index}>
+                        {(provided, snapshot) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            style={{
+                              ...provided.draggableProps.style,
+                              padding: '10px',
+                              marginBottom: '8px',
+                              backgroundColor: snapshot.isDragging ? '#e0f7fa' : '#ffffff',
+                              border: '1px solid #ddd',
+                              borderRadius: '4px',
+                              boxShadow: snapshot.isDragging ? '0 4px 8px rgba(182, 182, 182, 0.1)' : 'none',
+                              display: 'flex',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <div {...provided.dragHandleProps} style={{ marginRight: '10px', cursor: 'grab', color: '#888' }}>
+                              <DragHandleIcon />
+                            </div>
+                            <Grid container spacing={2} alignItems="center" style={{ flex: 1, width: '100%' }}>
+                              <Grid item xs={3}>
+                                <TextField
+                                  label="Label"
+                                  name="label"
+                                  value={field.label}
+                                  onChange={(e) => handleFieldChange(index, e)}
+                                  fullWidth
+                                />
+                              </Grid>
+                              <Grid item xs={2}>
+                                <TextField
+                                  label="Tipo"
+                                  name="type"
+                                  select
+                                  value={field.type}
+                                  onChange={(e) => handleFieldChange(index, e)}
+                                  fullWidth
+                                >
+                                  {tiposDeCampo.map((tipo) => (
+                                    <MenuItem key={tipo} value={tipo}>
+                                      {tipo}
+                                    </MenuItem>
+                                  ))}
+                                </TextField>
+                              </Grid>
+                              <Grid item xs={3}>
+                                <TextField
+                                  label="Opções separado por virgula (se for select)"
+                                  name="options"
+                                  value={field.options}
+                                  onChange={(e) => handleFieldChange(index, e)}
+                                  fullWidth
+                                />
+                              </Grid>
+                              <Grid item xs={2}>
+                                <FormControlLabel
+                                  control={
+                                    <Checkbox
+                                      checked={field.required}
+                                      onChange={(e) => handleFieldChange(index, e)}
+                                      name="required"
+                                    />
+                                  }
+                                  label="required?"
+                                />
+                              </Grid>
+                              <Grid item xs={1}>
+                                <IconButton
+                                  onClick={() => handleRemoveField(index)}
+                                  color="error"
+                                >
+                                  <RemoveCircle />
+                                </IconButton>
+                              </Grid>
+                            </Grid>
+                          </div>
+                        )}
+                      </Draggable>
                     ))}
-                  </TextField>
-                </Grid>
-                <Grid item xs={3}>
-                  <TextField label="Opções (se for select)" name="options" value={field.options} onChange={(e) => handleFieldChange(index, e)} fullWidth />
-                </Grid>
-                <Grid item xs={1}>
-                  <FormControlLabel control={<Checkbox checked={field.required} onChange={(e) => handleFieldChange(index, e)} name="required" />} label="Obrig?" />
-                </Grid>
-                <Grid item xs={1}>
-                  <IconButton onClick={() => handleRemoveField(index)} color="error"><RemoveCircle /></IconButton>
-                </Grid>
-              </React.Fragment>
-            ))}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </DragDropContext>
 
             <Grid item xs={12}>
               <Button type="submit" variant="contained" color="primary" fullWidth>

@@ -4,30 +4,54 @@ import {
   Button,
   Grid,
   Typography,
-  Box
+  Box,
+  CircularProgress
 } from '@mui/material';
-import { useHistory } from 'react-router-dom';
+import { useHistory, useLocation } from 'react-router-dom';
 import { Notification } from 'dan-components';
 
 const ProcessPaymentPage = () => {
+  const location = useLocation();
+  const { paymentData: initialPaymentData } = location.state || {};
+
   const [paymentData, setPaymentData] = useState({
-    payerName: '',
-    payerEmail: '',
-    payerPhone: '',
-    amount: '',
+    payerName: initialPaymentData?.payerName || '',
+    payerEmail: initialPaymentData?.payerEmail || '',
+    payerPhone: initialPaymentData?.payerPhone || '',
+    amount: initialPaymentData?.amount || '',
   });
   const [notification, setNotification] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState({});
   const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
   const history = useHistory();
+
+  const validateFields = () => {
+    const newErrors = {};
+    if (!paymentData.payerName.trim()) newErrors.payerName = 'Nome é obrigatório';
+    if (!paymentData.payerEmail.trim() || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(paymentData.payerEmail)) {
+      newErrors.payerEmail = 'E-mail inválido';
+    }
+    if (!paymentData.payerPhone.trim() || !/^\d{10,11}$/.test(paymentData.payerPhone)) {
+      newErrors.payerPhone = 'Telefone inválido';
+    }
+    if (!paymentData.amount || parseFloat(paymentData.amount) <= 0) {
+      newErrors.amount = 'Valor deve ser maior que zero';
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setPaymentData({ ...paymentData, [name]: value });
+    setErrors({ ...errors, [name]: '' }); // Limpa o erro do campo ao alterar
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!validateFields()) return;
+
     setSubmitting(true);
     setNotification('');
 
@@ -39,14 +63,17 @@ const ProcessPaymentPage = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(paymentData),
+        body: JSON.stringify({
+          ...paymentData, // Envia os dados do pagador e o valor
+          returnUrl: `${window.location.origin}/payment-success`, // URL de retorno após o pagamento
+        }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
         if (data.checkoutUrl) {
-          window.location.href = data.checkoutUrl;
+          window.location.href = data.checkoutUrl; // Redireciona para o gateway de pagamento
         } else {
           setNotification('Pagamento processado com sucesso!');
         }
@@ -67,7 +94,7 @@ const ProcessPaymentPage = () => {
         Processar Pagamento
       </Typography>
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} noValidate>
         <Grid container spacing={2}>
           <Grid item xs={12}>
             <TextField
@@ -77,6 +104,8 @@ const ProcessPaymentPage = () => {
               value={paymentData.payerName}
               onChange={handleChange}
               required
+              error={!!errors.payerName}
+              helperText={errors.payerName}
             />
           </Grid>
           <Grid item xs={12}>
@@ -88,6 +117,8 @@ const ProcessPaymentPage = () => {
               value={paymentData.payerEmail}
               onChange={handleChange}
               required
+              error={!!errors.payerEmail}
+              helperText={errors.payerEmail}
             />
           </Grid>
           <Grid item xs={12}>
@@ -98,6 +129,8 @@ const ProcessPaymentPage = () => {
               value={paymentData.payerPhone}
               onChange={handleChange}
               required
+              error={!!errors.payerPhone}
+              helperText={errors.payerPhone}
             />
           </Grid>
           <Grid item xs={12}>
@@ -109,6 +142,8 @@ const ProcessPaymentPage = () => {
               value={paymentData.amount}
               onChange={handleChange}
               required
+              error={!!errors.amount}
+              helperText={errors.amount}
             />
           </Grid>
           <Grid item xs={12}>
@@ -118,6 +153,7 @@ const ProcessPaymentPage = () => {
               color="primary"
               fullWidth
               disabled={submitting}
+              startIcon={submitting && <CircularProgress size={20} />}
             >
               {submitting ? 'Processando...' : 'Processar Pagamento'}
             </Button>
