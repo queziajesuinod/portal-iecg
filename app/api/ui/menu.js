@@ -36,24 +36,5 @@ module.exports = [
         icon: 'ion-ios-contacts-outline'
       }
     ]
-  },
-  {
-    key: 'forms',
-    name: 'Eventos',
-    icon: 'ion-ios-create-outline',
-    child: [
-      {
-        key: 'listarForms',
-        name: 'Listar Eventos',
-        link: '/app/eventos',
-        icon: 'ion-ios-list-box-outline'
-      },
-      {
-        key: 'criarForm',
-        name: 'Criar Novo Evento',
-        link: '/app/eventos/cadastrar',
-        icon: 'ion-ios-add-circle-outline'
-      }
-    ]
   }
 ];
