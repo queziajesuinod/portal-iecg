@@ -11,13 +11,6 @@ import MiaListPage from '../Pages/MiaPage/MiaListPage';
 import MiaDetailsPage from '../Pages/MiaPage/MiaDetailsPage';
 import Login from '../Pages/Users/Login'; // Sua página de login
 import ProtectedRoute from "../../routes/ProtectedRoute";
-import FormEditPage from '../Pages/FormsPage/FormEditPage';
-import FormCreatePage from '../Pages/FormsPage/FormCreatePage';
-import FormListPage from '../Pages/FormsPage/FormListPage';
-import FormPublicPage from '../Pages/FormsPage/FormPublicPage';
-import FormPaymentCheckPage from '../Pages/FormsPage/FormPaymentCheckPage';
-import FormPublicPaymentPage from '../Pages/FormsPage/FormPublicPaymentPage';
-import ProcessPaymentPage from '../Pages/PaymentsPage/ProcessPaymentPage';
 
 import dummyContents from 'dan-api/dummy/dummyContents';
 
