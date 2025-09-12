@@ -8,9 +8,6 @@ import Auth from './Auth';
 import Application from './Application';
 import LoginDedicated from '../Pages/Standalone/LoginDedicated';
 import ThemeWrapper from './ThemeWrapper';
-import FormPublicPage from '../Pages/FormsPage/FormPublicPage';
-import FormPaymentCheckPage from '../Pages/FormsPage/FormPaymentCheckPage';
-import FormPublicPaymentPage from '../Pages/FormsPage/FormPublicPaymentPage';
 window.__MUI_USE_NEXT_TYPOGRAPHY_VARIANTS__ = true;
 
 function App(props) {
