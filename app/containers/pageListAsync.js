@@ -58,8 +58,3 @@ export const Parent = loadable(() =>
     import('./Pages/MiaPage'), {
       fallback: <Loading />,
     });
-
-    export const Forms = loadable(() =>
-    import('./Pages/FormsPage'), {
-      fallback: <Loading />,
-    });
