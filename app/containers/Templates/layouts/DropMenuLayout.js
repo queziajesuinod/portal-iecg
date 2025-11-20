@@ -6,6 +6,7 @@ import Typography from '@mui/material/Typography';
 
 import { HeaderMenu, BreadCrumb } from 'dan-components';
 import dataMenu from 'dan-api/ui/menu';
+import { filterMenuByPermissions, getStoredPermissions } from '../../../utils/permissions.js';
 import Decoration from '../Decoration';
 import useStyles from '../appStyles-jss';
 
@@ -27,11 +28,13 @@ function DropMenuLayout(props) {
     sidebarOpen,
     loadTransition
   } = props;
+  const permissions = getStoredPermissions();
+  const filteredMenu = filterMenuByPermissions(dataMenu, permissions);
   return (
     <Fragment>
       <HeaderMenu
         type="top-navigation"
-        dataMenu={dataMenu}
+        dataMenu={filteredMenu}
         changeMode={changeMode}
         mode={mode}
         history={history}

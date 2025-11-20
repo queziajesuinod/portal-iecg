@@ -4,7 +4,9 @@ const { Model, DataTypes } = require('sequelize');
 module.exports = (sequelize) => {
   class Celula extends Model {
     static associate(models) {
-      // Associações futuras aqui, se necessário
+      if (models.Campus) {
+        Celula.belongsTo(models.Campus, { foreignKey: 'campusId', as: 'campusRef' });
+      }
     }
   }
 
@@ -80,6 +82,10 @@ module.exports = (sequelize) => {
     },
     lon: {
       type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    campusId: {
+      type: DataTypes.UUID,
       allowNull: true
     }
   }, {

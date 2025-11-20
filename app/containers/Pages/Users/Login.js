@@ -4,8 +4,7 @@ import { useHistory } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
 import { LoginForm } from 'dan-components';
 import useStyles from 'dan-components/Forms/user-jss';
-import dummyContents from 'dan-api/dummy/dummyContents'; // Importação correta
-
+import dummyContents from 'dan-api/dummy/dummyContents';
 
 function decodeJwt(token) {
   try {
@@ -19,80 +18,91 @@ function decodeJwt(token) {
     );
     return JSON.parse(jsonPayload);
   } catch (e) {
-    console.error("Erro ao decodificar JWT:", e);
+    console.error('Erro ao decodificar JWT:', e);
     return null;
   }
 }
 
-
-
-
-function Login({ setIsAuthenticated = () => { } }) {
-  const [valueForm, setValueForm] = useState(null);
+function Login({ setIsAuthenticated = () => {} }) {
+  const [valueForm, setValueForm] = useState(null); // Mantido para compatibilidade
   const { classes } = useStyles();
   const history = useHistory();
-  const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
+  const fallbackHost = `${window.location.protocol}//${window.location.host}`;
+  const API_URL = (process.env.REACT_APP_API_URL && process.env.REACT_APP_API_URL.replace(/\/$/, '')) || fallbackHost || 'https://portal.iecg.com.br';
 
   const submitForm = async (values) => {
     try {
       const response = await fetch(`${API_URL}/auth/login`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json"
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(values)
+        body: JSON.stringify(values),
       });
 
       if (!response.ok) {
-        throw new Error("Falha na autenticação");
+        throw new Error('Falha na autenticacao');
       }
 
       const data = await response.json();
       const token = data.accessToken;
-      localStorage.setItem("token", token);
-      localStorage.setItem("isAuthenticated", "true");
+      localStorage.setItem('token', token);
+      localStorage.setItem('isAuthenticated', 'true');
       setIsAuthenticated(true);
 
-
-
       const decodedToken = decodeJwt(token);
-      if (!decodedToken) throw new Error("Token inválido");
+      if (!decodedToken) throw new Error('Token invalido');
 
-      // 🔄 Buscar dados completos do usuário
       const userId = decodedToken.userId;
+      let userDetails = {};
+      let permissions = data?.permissoes || [];
 
-      const userResponse = await fetch(`${API_URL}/users/${userId}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
+      if (userId) {
+        try {
+          const userResponse = await fetch(`${API_URL}/users/${userId}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+          });
+
+          if (userResponse.ok) {
+            userDetails = await userResponse.json();
+          } else {
+            console.warn('Falha ao buscar dados do usuario, seguindo com token somente');
+          }
+        } catch (err) {
+          console.warn('Erro ao buscar usuario, seguindo com token somente', err);
         }
-      });
-
-      if (!userResponse.ok) {
-        throw new Error("Erro ao buscar dados do usuário");
       }
 
-      const userDetails = await userResponse.json();
+      if (!permissions.length) {
+        permissions =
+          userDetails?.Perfil?.permissoes?.map((p) => p.nome) ||
+          userDetails?.perfil?.permissoes?.map((p) => p.nome) ||
+          [];
+      }
 
       const userData = {
-        name: userDetails.name || "Usuário",
-        id: userDetails.id || "user",
-        perfilId: userDetails.perfilId,
-        title: "Usuário Autenticado",
-        avatar: userDetails.image || "default-avatar.png",
-        status: "online"
+        name: userDetails.name || decodedToken?.nome || 'Usuario',
+        id: userDetails.id || userId || 'user',
+        perfilId: userDetails.perfilId || decodedToken?.perfilId,
+        title: 'Usuario Autenticado',
+        avatar: userDetails.image || 'default-avatar.png',
+        status: 'online',
+        permissions,
       };
 
-      // 🔥 Salvar usuário no `localStorage`
-      localStorage.setItem("user", JSON.stringify(userData));
+      localStorage.setItem('user', JSON.stringify(userData));
+      localStorage.setItem('permissions', JSON.stringify(permissions));
       dummyContents.user = userData;
-      console.log("Usuário autenticado:", dummyContents.user);
 
-      // 🔄 Redirecionar após login bem-sucedido
-      history.push("/app");
+      history.push('/app');
     } catch (error) {
-      console.error("Erro ao fazer login:", error);
+      console.error('Erro ao fazer login:', error);
+      // Mesmo em erro, garanta que flag de auth volte para falso
+      setIsAuthenticated(false);
     }
   };
 

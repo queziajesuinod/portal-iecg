@@ -33,22 +33,19 @@ class CelulaController {
     }
   }
 
-   async listar(req, res) {
-      try {
-        const { celula, page = 1, limit = 10 } = req.query;
-  
-        let resultado;
-        if (celula) {
-          resultado = await CelulaService.buscaPorCelulaPaginada(celula, parseInt(page), parseInt(limit));
-        } else {
-          resultado = await CelulaService.buscaPaginada(parseInt(page), parseInt(limit));
-        }
-  
-        return res.status(200).json(resultado);
-      } catch (error) {
-        return res.status(500).json({ erro: 'Erro ao listar aposentados', detalhe: error.message });
-      }
+  async listar(req, res) {
+    try {
+      const { celula, campus, campusId, rede, bairro, page = 1, limit = 10 } = req.query;
+      const resultado = await CelulaService.buscaComFiltros(
+        { celula, campus, campusId, rede, bairro },
+        parseInt(page, 10),
+        parseInt(limit, 10)
+      );
+      return res.status(200).json(resultado);
+    } catch (error) {
+      return res.status(500).json({ erro: 'Erro ao listar celulas', detalhe: error.message });
     }
+  }
 
 
   async listarPaginado(req, res) {

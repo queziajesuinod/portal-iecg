@@ -11,6 +11,7 @@ import {
 } from 'dan-components';
 import dataMenu from 'dan-api/ui/menu';
 import Decoration from '../Decoration';
+import { filterMenuByPermissions, getStoredPermissions } from '../../../utils/permissions.js';
 import useStyles from '../appStyles-jss';
 
 function LeftSidebarLayout(props) {
@@ -31,6 +32,9 @@ function LeftSidebarLayout(props) {
     titleException,
     handleOpenGuide
   } = props;
+
+  const permissions = getStoredPermissions();
+  const filteredMenu = filterMenuByPermissions(dataMenu, permissions);
   return (
     <Fragment>
       <Header
@@ -48,7 +52,7 @@ function LeftSidebarLayout(props) {
         open={sidebarOpen}
         toggleDrawerOpen={toggleDrawer}
         loadTransition={loadTransition}
-        dataMenu={dataMenu}
+        dataMenu={filteredMenu}
         leftSidebar
       />
       <main className={cx(classes.content, !sidebarOpen ? classes.contentPaddingLeft : '')} id="mainContent">

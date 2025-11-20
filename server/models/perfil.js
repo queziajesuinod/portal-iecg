@@ -1,30 +1,41 @@
 'use strict';
 const { Model, DataTypes } = require('sequelize');
 
-module.exports = (sequelize, DataTypes) => {
+module.exports = (sequelize) => {
   class Perfil extends Model {
     static associate(models) {
-      // Define que um perfil tem muitos usuários
+      // Define que um perfil tem muitos usuarios
       if (models.User) {
         Perfil.hasMany(models.User, { foreignKey: 'perfilId' });
+      }
+      if (models.Permissao) {
+        Perfil.belongsToMany(models.Permissao, {
+          through: models.PerfilPermissao,
+          foreignKey: 'perfilId',
+          otherKey: 'permissaoId',
+          as: 'permissoes',
+        });
       }
     }
   }
 
-  Perfil.init({
-    id: {
-      type: DataTypes.UUID,
-      primaryKey: true,
-      allowNull: false,
-      defaultValue: DataTypes.UUIDV4,
+  Perfil.init(
+    {
+      id: {
+        type: DataTypes.UUID,
+        primaryKey: true,
+        allowNull: false,
+        defaultValue: DataTypes.UUIDV4,
+      },
+      descricao: DataTypes.STRING,
     },
-    descricao: DataTypes.STRING,
-  }, {
-    sequelize,
-    modelName: 'Perfil',
-    tableName: 'Perfis',  // Define explicitamente o nome da tabela
-    schema: process.env.DB_SCHEMA || 'dev_iecg'
-  });
+    {
+      sequelize,
+      modelName: 'Perfil',
+      tableName: 'Perfis',
+      schema: process.env.DB_SCHEMA || 'dev_iecg',
+    }
+  );
 
   return Perfil;
 };

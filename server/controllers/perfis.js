@@ -1,4 +1,4 @@
-const { getTodosPerfis, createPerfil, getPerfilById } = require("../services/perfil");
+const { getTodosPerfis, createPerfil, getPerfilById, atualizarPermissoes } = require("../services/perfil");
 
 async function getPerfils(req, res) {
   try {
@@ -30,8 +30,19 @@ async function postPerfil(req, res) {
   }
 }
 
+async function updatePerfilPermissoes(req, res) {
+  try {
+    const perfilAtualizado = await atualizarPermissoes(req.params.id, req.body.permissoesIds || []);
+    res.status(200).json(perfilAtualizado);
+  } catch (error) {
+    console.error('Erro ao atualizar permissoes do perfil:', error);
+    res.status(400).send({ message: error.message });
+  }
+}
+
 module.exports = {
   getPerfils,
   postPerfil,
-  getPerfilDetalhe
+  getPerfilDetalhe,
+  updatePerfilPermissoes
 };

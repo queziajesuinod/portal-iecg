@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { useLocation, useHistory } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import {
   Grid,
   TextField,
   Button,
-  MenuItem,
-  Typography
+  MenuItem
 } from '@mui/material';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
+import { formatPhoneNumber } from '../../../utils/formatPhone';
 
 const formInicial = {
   id: '',
@@ -31,25 +31,73 @@ const formInicial = {
   lon: '',
 };
 
+const REDE_OPTIONS = [
+  'RELEVANTE JUNIORS RAPAZES',
+  'RELEVANTEEN RAPAZES',
+  'RELEVANTEEN MOÇAS',
+  'JUVENTUDE RELEVANTE RAPAZES',
+  'MULHERES IECG',
+  'IECG KIDS',
+  'HOMENS IECG',
+  'JUVENTUDE RELEVANTE MOÇAS',
+  'RELEVANTE JUNIORS MOÇAS'
+];
+
+const resolveApiUrl = () => {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL.replace(/\/$/, '');
+  }
+  const { protocol, hostname, port } = window.location;
+  if (port === '3005') {
+    return `${protocol}//${hostname}:3005`;
+  }
+  return `${protocol}//${hostname}${port ? `:${port}` : ''}`;
+};
+
 const CadastrarCelula = () => {
   const [formData, setFormData] = useState(formInicial);
   const [notification, setNotification] = useState('');
+  const [campi, setCampi] = useState([]);
   const location = useLocation();
-  const history = useHistory();
   const celulaEditando = location.state?.celula;
   const isEdit = Boolean(celulaEditando);
 
-  const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
+  const API_URL = resolveApiUrl();
 
   useEffect(() => {
-    if (isEdit) {
-      setFormData(celulaEditando);
+    if (isEdit && celulaEditando) {
+      setFormData({
+        ...formInicial,
+        ...celulaEditando,
+        cel_lider: formatPhoneNumber(celulaEditando.cel_lider || '')
+      });
     }
   }, [isEdit, celulaEditando]);
 
+  useEffect(() => {
+    const carregarCampi = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${API_URL}/start/campus`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) {
+          throw new Error(`Status ${res.status}`);
+        }
+        const data = await res.json();
+        setCampi(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('Erro ao carregar campus:', err);
+        setCampi([]);
+      }
+    };
+    carregarCampi();
+  }, [API_URL]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    const nextValue = name === 'cel_lider' ? formatPhoneNumber(value) : value;
+    setFormData({ ...formData, [name]: nextValue });
   };
 
   const handleSubmit = async (e) => {
@@ -106,11 +154,31 @@ const CadastrarCelula = () => {
       const data = await res.json();
 
       if (data.length > 0) {
-        setFormData({
-          ...formData,
-          lat: data[0].lat,
-          lon: data[0].lon
-        });
+        const { lat, lon, address = {} } = data[0];
+        const bairro =
+          address.suburb ||
+          address.neighbourhood ||
+          address.city_district ||
+          address.quarter ||
+          address.village ||
+          '';
+        const cidade =
+          address.city ||
+          address.town ||
+          address.village ||
+          address.municipality ||
+          address.state_district ||
+          '';
+        const estado = address.state || address.region || address.state_district || '';
+
+        setFormData((prev) => ({
+          ...prev,
+          lat,
+          lon,
+          bairro: bairro || prev.bairro,
+          cidade: cidade || prev.cidade,
+          estado: estado || prev.estado
+        }));
         setNotification('Coordenadas preenchidas com sucesso!');
       } else {
         setNotification('Nenhum resultado encontrado para esse endereço.');
@@ -133,7 +201,18 @@ const CadastrarCelula = () => {
               <TextField fullWidth label="Nome da Célula" name="celula" value={formData.celula} onChange={handleChange} required />
             </Grid>
             <Grid item xs={12} md={6}>
-              <TextField fullWidth label="Rede" name="rede" value={formData.rede} onChange={handleChange} />
+              <TextField
+                select
+                fullWidth
+                label="Rede"
+                name="rede"
+                value={formData.rede}
+                onChange={handleChange}
+              >
+                {REDE_OPTIONS.map((opt) => (
+                  <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                ))}
+              </TextField>
             </Grid>
             <Grid item xs={12} md={6}>
               <TextField fullWidth label="Líder" name="lider" value={formData.lider} onChange={handleChange} />
@@ -148,7 +227,20 @@ const CadastrarCelula = () => {
               <TextField fullWidth label="Anfitrião" name="anfitriao" value={formData.anfitriao} onChange={handleChange} />
             </Grid>
             <Grid item xs={12} md={6}>
-              <TextField fullWidth label="Campus" name="campus" value={formData.campus} onChange={handleChange} />
+              <TextField
+                select
+                fullWidth
+                label="Campus"
+                name="campus"
+                value={formData.campus}
+                onChange={handleChange}
+              >
+                {campi.map((campus) => (
+                  <MenuItem key={campus.id} value={campus.nome}>
+                    {campus.nome}
+                  </MenuItem>
+                ))}
+              </TextField>
             </Grid>
 
             {/* Campo de endereço com botão */}

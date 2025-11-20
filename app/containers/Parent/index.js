@@ -8,6 +8,7 @@ import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import { Link } from 'react-router-dom';
 import MenuContent from 'dan-api/ui/menu';
+import { filterMenuByPermissions, getStoredPermissions } from '../../utils/permissions.js';
 import { PapperBlock } from 'dan-components';
 
 const useStyles = makeStyles()(() => ({
@@ -37,7 +38,9 @@ function Parent(props) {
       ? history.location.state.pageTitle
       : parts[parts.length - 1].replace('-', ' ');
 
-  const menuItems = MenuContent
+  const permissions = getStoredPermissions();
+  const filteredMenu = filterMenuByPermissions(MenuContent, permissions);
+  const menuItems = filteredMenu
     .find(obj => (
       obj.key === place
     ));

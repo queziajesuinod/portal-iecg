@@ -1,14 +1,16 @@
-const { Perfil } = require('../models');  // Importa o modelo inicializado
+const { Perfil, Permissao } = require('../models');  // Importa os modelos inicializados
 const uuid = require('uuid');
 
 async function getTodosPerfis() {
-  const perfis = await Perfil.findAll();
-  return perfis;
+  return Perfil.findAll({
+    include: [{ model: Permissao, as: 'permissoes', through: { attributes: [] } }]
+  });
 }
 
 async function getPerfilById(id) {
-  const perfil = await Perfil.findByPk(id);
-  return perfil;
+  return Perfil.findByPk(id, {
+    include: [{ model: Permissao, as: 'permissoes', through: { attributes: [] } }]
+  });
 }
 
 async function createPerfil(body) {
@@ -20,8 +22,23 @@ async function createPerfil(body) {
   return newPerfil;
 }
 
+async function atualizarPermissoes(perfilId, permissoesIds = []) {
+  const perfil = await Perfil.findByPk(perfilId);
+  if (!perfil) {
+    throw new Error('Perfil nao encontrado');
+  }
+  const permissoes = await Permissao.findAll({
+    where: { id: permissoesIds }
+  });
+  await perfil.setPermissoes(permissoes);
+  return perfil.reload({
+    include: [{ model: Permissao, as: 'permissoes', through: { attributes: [] } }]
+  });
+}
+
 module.exports = {
   getTodosPerfis,
   createPerfil,
-  getPerfilById
+  getPerfilById,
+  atualizarPermissoes
 };

@@ -14,5 +14,6 @@ router.get('/direcionamentos/', ApeloDirecionadoCelulaController.listarTodos);
 router.get('/direcionamentos/:id', ApeloDirecionadoCelulaController.buscarPorId);
 router.put('/direcionamentos/:id', ApeloDirecionadoCelulaController.atualizar);
 router.delete('/direcionamentos/:id', ApeloDirecionadoCelulaController.deletar);
+router.use('/campus', require('./campus'));
 
 module.exports = router;

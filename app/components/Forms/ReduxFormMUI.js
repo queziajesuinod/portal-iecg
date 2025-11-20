@@ -8,13 +8,19 @@ import Switch from '@mui/material/Switch';
 /* Textfield */
 export const TextFieldRedux = ({ meta: { touched, error }, input, ...rest }) => {
   const [val, setVal] = useState('');
+  const handleChange = (e) => {
+    setVal(e.target.value);
+    if (input && input.onChange) {
+      input.onChange(e);
+    }
+  };
   return (
     <TextField
       variant="standard"
       {...rest}
       {...input}
       value={val || input.value}
-      onChange={(e) => setVal(e.target.value)}
+      onChange={handleChange}
       error={touched && Boolean(error)} />
   );
 };
