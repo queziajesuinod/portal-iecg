@@ -1,5 +1,5 @@
 const { sign } = require('jsonwebtoken');
-const { User } = require('../models');
+const { User, Perfil, Permissao } = require('../models');
 const crypto = require('crypto');
 const dotenv = require('dotenv');
 const fs = require('fs');
@@ -10,7 +10,11 @@ class AuthService {
     // Buscar usuário pelo e-mail para obter o salt
     const usuario = await User.findOne({
       attributes: ['id', 'name', 'username', 'passwordHash', 'salt', 'perfilId'],
-      where: { email: dto.email }
+      where: { email: dto.email },
+      include: [{
+        model: Perfil,
+        include: [{ model: Permissao, as: 'permissoes', through: { attributes: [] } }]
+      }]
     });
 
     if (!usuario) {
@@ -38,7 +42,9 @@ class AuthService {
       { expiresIn: '60m' }
     );
 
-    return { accessToken };
+    const permissoesNomes = usuario.Perfil?.permissoes?.map((p) => p.nome) || [];
+
+    return { accessToken, permissoes: permissoesNomes };
   }
 }
 

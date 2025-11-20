@@ -8,9 +8,8 @@ import TextField from '@mui/material/TextField';
 import Paper from '@mui/material/Paper';
 import MenuItem from '@mui/material/MenuItem';
 import suggestionsApi from 'dan-api/ui/menu';
+import { filterMenuByPermissions, getStoredPermissions } from '../../utils/permissions.js';
 import useStyles from './search-jss';
-
-const menu = [];
 
 function renderInput(inputProps) {
   const { ref, ...rest } = inputProps;
@@ -64,39 +63,42 @@ function getSuggestionValue(suggestion) {
   return suggestion.name;
 }
 
-function getSuggestions(value) {
-  const inputValue = value.trim().toLowerCase();
-  const inputLength = inputValue.length;
-  let count = 0;
-  return inputLength === 0 ? [] : menu.filter(suggestion => {
-    const keep = (!inputValue || suggestion.name.toLowerCase().indexOf(inputValue.toLowerCase()) !== -1) && count < 5;
-
-    if (keep) {
-      count += 1;
-    }
-
-    return keep;
-  });
-}
-
 function SearchUi(props) {
   const [value, setValue] = useState('');
   const [suggestions, setSuggestions] = useState([]);
+  const [menu, setMenu] = useState([]);
   const { classes } = useStyles();
 
   useEffect(() => {
-    suggestionsApi.map(item => {
+    const permissions = getStoredPermissions();
+    const filteredMenu = filterMenuByPermissions(suggestionsApi, permissions);
+    const flattened = [];
+    filteredMenu.forEach(item => {
       if (item.child) {
-        item.child.map(itemChild => {
+        item.child.forEach(itemChild => {
           if (itemChild.link) {
-            menu.push(itemChild);
+            flattened.push(itemChild);
           }
-          return menu;
         });
       }
-      return false;
     });
+    setMenu(flattened);
   }, []);
+
+  const getSuggestions = (textValue) => {
+    const inputValue = textValue.trim().toLowerCase();
+    const inputLength = inputValue.length;
+    let count = 0;
+    return inputLength === 0 ? [] : menu.filter(suggestion => {
+      const keep = (!inputValue || suggestion.name.toLowerCase().indexOf(inputValue.toLowerCase()) !== -1) && count < 5;
+
+      if (keep) {
+        count += 1;
+      }
+
+      return keep;
+    });
+  };
 
   const handleSuggestionsFetchRequested = (e) => {
     setSuggestions(getSuggestions(e.value));

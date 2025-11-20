@@ -1,23 +1,30 @@
 import React, { useContext, useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { Switch, Route, Redirect } from 'react-router-dom';
 import Dashboard from '../Templates/Dashboard';
 import { ThemeContext } from './ThemeWrapper';
 import MiaPage from '../Pages/MiaPage';
+import WelcomePage from '../Pages/StartPage/WelcomePage';
 import BlankPage from '../Pages/BlankPage';
 import ListagemCelulasPage from '../Pages/StartPage/celulasPage';
 import CadastrarCelula from '../Pages/StartPage/cadastrarCelulasPage';
+import CampusPage from '../Pages/StartPage/campusPage';
 import ProfilePage from '../Pages/Users/Profile';
 import MiaListPage from '../Pages/MiaPage/MiaListPage';
 import MiaDetailsPage from '../Pages/MiaPage/MiaDetailsPage';
+import AttendanceListPage from '../Pages/MiaPage/AttendanceListPage';
+import AttendanceDetailPage from '../Pages/MiaPage/AttendanceDetailPage';
 import Login from '../Pages/Users/Login'; // Sua página de login
 import ProtectedRoute from "../../routes/ProtectedRoute";
+import PerfilPermissaoPage from '../Pages/Admin/PerfilPermissaoPage';
+import UserCreatePage from '../Pages/Admin/UserCreatePage';
+import UsersListPage from '../Pages/Admin/UsersListPage';
 
 import dummyContents from 'dan-api/dummy/dummyContents';
 
 
 
-function Application(props) {
-  const { history } = props;
+function Application({ history }) {
   const changeMode = useContext(ThemeContext);
 
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -37,20 +44,26 @@ function Application(props) {
   return (
     <Switch>
       {/* 🔓 ROTAS PÚBLICAS */}
-      <Route exact path="/login" render={(props) => <Login {...props} setIsAuthenticated={setIsAuthenticated} />} />
+      <Route exact path="/login" render={(routeProps) => <Login {...routeProps} setIsAuthenticated={setIsAuthenticated} />} />
       
       {/* 🔐 ROTAS PRIVADAS COM DASHBOARD */}
       <Route path="/app">
         <Dashboard history={history} changeMode={changeMode}>
           <Switch>
-            <ProtectedRoute exact path="/app" component={MiaListPage} isAuthenticated={isAuthenticated} />
-            <ProtectedRoute exact path="/app/mia/cadastrar" component={MiaPage} isAuthenticated={isAuthenticated} />
-            <ProtectedRoute exact path="/app/mia" component={MiaListPage} isAuthenticated={isAuthenticated} />
-            <ProtectedRoute exact path="/app/mia/detalhes" component={MiaDetailsPage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app" component={WelcomePage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/mia/cadastrar" component={MiaPage} isAuthenticated={isAuthenticated} requiredPermission="MIA_CADASTRAR" />
+            <ProtectedRoute exact path="/app/mia" component={MiaListPage} isAuthenticated={isAuthenticated} requiredPermission="MIA_LISTAR" />
+            <ProtectedRoute exact path="/app/mia/detalhes" component={MiaDetailsPage} isAuthenticated={isAuthenticated} requiredPermission="MIA_LISTAR" />
+            <ProtectedRoute exact path="/app/mia/listas-presenca" component={AttendanceListPage} isAuthenticated={isAuthenticated} requiredPermission="MIA_LISTAR" />
+            <ProtectedRoute exact path="/app/mia/listas-presenca/:id" component={AttendanceDetailPage} isAuthenticated={isAuthenticated} requiredPermission="MIA_LISTAR" />
             <ProtectedRoute exact path="/app/profile" component={ProfilePage} isAuthenticated={isAuthenticated} />
-            <ProtectedRoute exact path="/app/start/celulas" component={ListagemCelulasPage} isAuthenticated={isAuthenticated} />
-            <ProtectedRoute exact path="/app/start/celulas/cadastrar" component={CadastrarCelula} isAuthenticated={isAuthenticated} />
-            <ProtectedRoute exact path="/app/start/celulas/detalhes" component={BlankPage} isAuthenticated={isAuthenticated} />x
+            <ProtectedRoute exact path="/app/start/celulas" component={ListagemCelulasPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
+            <ProtectedRoute exact path="/app/start/celulas/cadastrar" component={CadastrarCelula} isAuthenticated={isAuthenticated} requiredPermission="CELULA_CADASTRAR" />
+            <ProtectedRoute exact path="/app/start/celulas/detalhes" component={BlankPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
+            <ProtectedRoute exact path="/app/start/campus" component={CampusPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
+            <ProtectedRoute exact path="/app/admin/perfis" component={PerfilPermissaoPage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_PERFIS" />
+            <ProtectedRoute exact path="/app/admin/usuarios/novo" component={UserCreatePage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_USUARIOS" />
+            <ProtectedRoute exact path="/app/admin/usuarios" component={UsersListPage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_USUARIOS" />
           </Switch>
         </Dashboard>
       </Route>
@@ -63,3 +76,9 @@ function Application(props) {
 
 
 export default Application;
+
+Application.propTypes = {
+  history: PropTypes.shape({
+    push: PropTypes.func,
+  }).isRequired,
+};

@@ -10,6 +10,7 @@ import {
   BreadCrumb,
 } from 'dan-components';
 import dataMenu from 'dan-api/ui/menu';
+import { filterMenuByPermissions, getStoredPermissions } from '../../../utils/permissions.js';
 import Decoration from '../Decoration';
 import useStyles from '../appStyles-jss';
 
@@ -31,6 +32,9 @@ function LeftSidebarBigLayout(props) {
     titleException,
     handleOpenGuide,
   } = props;
+
+  const permissions = getStoredPermissions();
+  const filteredMenu = filterMenuByPermissions(dataMenu, permissions);
   return (
     <Fragment>
       <Header
@@ -45,7 +49,7 @@ function LeftSidebarBigLayout(props) {
         openGuide={handleOpenGuide}
       />
       <SidebarBig
-        dataMenu={dataMenu}
+        dataMenu={filteredMenu}
         loadTransition={loadTransition}
         open={sidebarOpen}
         toggleDrawerOpen={toggleDrawer}

@@ -16,7 +16,7 @@ import {
   TextField,
   Pagination
 } from "@mui/material";
-import { Visibility, Delete } from "@mui/icons-material";
+import { Visibility, Delete, Edit } from "@mui/icons-material";
 
 const MiaListPage = () => {
   const title = "Listagem Ministério MIA";
@@ -28,6 +28,7 @@ const MiaListPage = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [rowsPerPage] = useState(10);
   const [notification, setNotification] = useState('');
+  const [totalRegistros, setTotalRegistros] = useState(0);
 
   const history = useHistory();
 
@@ -56,8 +57,10 @@ const MiaListPage = () => {
       }
 
       const data = await response.json();
-      setAposentados(data.registros || []);
+      const registros = data.registros || [];
+      setAposentados(registros);
       setTotalPages(data.totalPaginas || 1);
+      setTotalRegistros(data.totalRegistros || registros.length);
     } catch (error) {
       console.error("Erro ao buscar Mia:", error);
     }
@@ -145,8 +148,8 @@ const MiaListPage = () => {
                     secondary={
                       <>
                         {item.remedios && item.remedios.length > 0 ? (
-                          item.remedios.map((remedio, index) => (
-                            <Typography key={index} variant="body2" color="textSecondary">
+                          item.remedios.map((remedio, remedioIndex) => (
+                            <Typography key={remedioIndex} variant="body2" color="textSecondary">
                               {remedio.nome} - {remedio.indicacao}
                             </Typography>
                           ))
@@ -172,6 +175,12 @@ const MiaListPage = () => {
                     >
                       <Visibility />
                     </IconButton>
+                    <IconButton
+                      color="secondary"
+                      onClick={() => history.push('/app/mia/cadastrar', { aposentado: item, pageTitle: 'Editar Mia' })}
+                    >
+                      <Edit />
+                    </IconButton>
 
                     <IconButton
                       color="error"
@@ -186,6 +195,10 @@ const MiaListPage = () => {
               </React.Fragment>
             ))}
           </List>
+
+          <Typography variant="body2" color="textSecondary">
+            Total de registros: {totalRegistros}
+          </Typography>
 
           {/* Paginação */}
           <Box mt={2} display="flex" justifyContent="center">

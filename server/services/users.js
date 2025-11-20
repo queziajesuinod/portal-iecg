@@ -1,4 +1,4 @@
-const { User,Perfil } = require('../models'); // Importa a partir de models/index.js
+const { User,Perfil, Permissao } = require('../models'); // Importa a partir de models/index.js
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -8,7 +8,8 @@ async function getTodosUsers() {
     const users = await User.findAll({
         include: [{
             model: Perfil,
-            required: true // INNER JOIN com Perfil
+            required: false, // LEFT JOIN para listar mesmo sem perfil associado
+            include: [{ model: Permissao, as: 'permissoes', through: { attributes: [] } }]
         }]
     });
     return users;
@@ -21,7 +22,7 @@ async function updateUser(id, updateData) {
     }
   
     // Apenas atualiza os campos permitidos
-    const fields = ['name', 'email', 'image', 'username'];
+    const fields = ['name', 'email', 'image', 'username', 'perfilId', 'active'];
     fields.forEach(field => {
       if (updateData[field] !== undefined) {
         user[field] = updateData[field];
@@ -37,7 +38,8 @@ async function getUserById(id) {
     const user = await User.findByPk(id, {
         include: [{
             model: Perfil,
-            required: true
+            required: false,
+            include: [{ model: Permissao, as: 'permissoes', through: { attributes: [] } }]
         }]
     });
     return user;

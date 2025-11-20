@@ -17,6 +17,8 @@ import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import Webcam from 'react-webcam';
 import { useLocation } from 'react-router-dom';
 import { useHistory } from 'react-router-dom';
+import { formatPhoneNumber } from '../../../utils/formatPhone';
+import { formatCpf } from '../../../utils/formatCpf';
 
 
 const MiaPage = () => {
@@ -65,7 +67,13 @@ const MiaPage = () => {
   useEffect(() => {
     if (isEdit && aposentadoEditando) {
       const userData = aposentadoEditando.user || {};
-  
+      const filhosFormatados = Array.isArray(aposentadoEditando.filhos)
+        ? aposentadoEditando.filhos.map((filho) => ({
+            ...filho,
+            telefone: formatPhoneNumber(filho.telefone || '')
+          }))
+        : [];
+
       const data = {
         ...formDataInicial,
         ...aposentadoEditando,
@@ -73,10 +81,10 @@ const MiaPage = () => {
         image: userData.image || aposentadoEditando.image || '',
         nome: userData.name || '',
         email: userData.email || '',
-        cpf: userData.cpf || '',
+        cpf: formatCpf(userData.cpf || aposentadoEditando.cpf || ''),
         data_nascimento: userData.data_nascimento || '',
         endereco: userData.endereco || '',
-        telefone: userData.telefone || '',
+        telefone: formatPhoneNumber(userData.telefone || aposentadoEditando.telefone || ''),
         estado_civil: userData.estado_civil || '',
         nome_esposo: userData.nome_esposo || '',
         profissao: userData.profissao || '',
@@ -84,11 +92,12 @@ const MiaPage = () => {
         batizado: userData.batizado || false,
         encontro: userData.encontro || false,
         escolas: userData.escolas || '',
+        filhos: filhosFormatados
       };
-  
+
       setFormData(data);
       setCapturedImage(data.image);
-      setAposentadoId(aposentadoEditando.id); // ← aqui é o pulo do gato
+      setAposentadoId(aposentadoEditando.id); // ��? aqui Ǹ o pulo do gato
     }
   }, [isEdit, aposentadoEditando]);
   
@@ -125,7 +134,17 @@ const MiaPage = () => {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData({ ...formData, [name]: type === 'checkbox' ? checked : value });
+    let nextValue = value;
+
+    if (type === 'checkbox') {
+      nextValue = checked;
+    } else if (name === 'telefone') {
+      nextValue = formatPhoneNumber(value);
+    } else if (name === 'cpf') {
+      nextValue = formatCpf(value);
+    }
+
+    setFormData({ ...formData, [name]: nextValue });
   };
 
   const handleAddChild = () => {
@@ -140,7 +159,7 @@ const MiaPage = () => {
   const handleChildChange = (index, e) => {
     const { name, value } = e.target;
     const updatedFilhos = [...formData.filhos];
-    updatedFilhos[index][name] = value;
+    updatedFilhos[index][name] = name === 'telefone' ? formatPhoneNumber(value) : value;
     setFormData({ ...formData, filhos: updatedFilhos });
   };
 
@@ -285,7 +304,6 @@ const MiaPage = () => {
                 value={formData.data_nascimento}
                 onChange={handleChange}
                 InputLabelProps={{ shrink: true }}
-                required
               />
             </Grid>
 
@@ -321,7 +339,7 @@ const MiaPage = () => {
               <TextField fullWidth label="Endereço" name="endereco" value={formData.endereco} onChange={handleChange} />
             </Grid>
             <Grid item xs={12} md={6}>
-              <TextField fullWidth label="Email" name="email" type="email" value={formData.email} onChange={handleChange} required/>
+              <TextField fullWidth label="Email" name="email" type="email" value={formData.email} onChange={handleChange} />
             </Grid>
             {/* Telefones */}
             <Grid item xs={12} md={6}>

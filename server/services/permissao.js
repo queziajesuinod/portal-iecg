@@ -1,4 +1,4 @@
-const Permissao = require('../models/permissoes')
+const { Permissao } = require('../models')
 const uuid = require('uuid')
 class PermissaoService {
     async cadastrar(dto) {

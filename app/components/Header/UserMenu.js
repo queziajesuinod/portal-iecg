@@ -1,6 +1,4 @@
 import React, { useState } from 'react';
-import PropTypes from 'prop-types';
-
 import { Link } from 'react-router-dom';
 import Avatar from '@mui/material/Avatar';
 import Button from '@mui/material/Button';
@@ -10,12 +8,9 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import dummy from 'dan-api/dummy/dummyContents';
-import link from 'dan-api/ui/link';
-import useStyles from './header-jss';
 import { useHistory } from "react-router-dom";
 
-function UserMenu(props) {
-  const { classes, cx } = useStyles();
+function UserMenu() {
   const [menuState, setMenuState] = useState({
     anchorEl: null,
     openMenu: null
@@ -42,7 +37,6 @@ function UserMenu(props) {
     history.push("/app/profile");
   };
 
-  const { dark } = props;
   const { anchorEl, openMenu } = menuState;
   return (
     <div>
@@ -55,18 +49,18 @@ function UserMenu(props) {
       <Menu
         id="menu-appbar"
         anchorEl={anchorEl}
-        anchorOrigin={{
-          vertical: 'top',
-          horizontal: 'right',
-        }}
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'right',
-        }}
-        open={openMenu === 'user-setting'}
-        onClose={'#'}
-      >
-        <MenuItem onClick={handleProfile} component={Link} >Meu Perfil</MenuItem>
+      anchorOrigin={{
+        vertical: 'top',
+        horizontal: 'right',
+      }}
+      transformOrigin={{
+        vertical: 'top',
+        horizontal: 'right',
+      }}
+      open={openMenu === 'user-setting'}
+      onClose={() => setMenuState({ anchorEl: null, openMenu: null })}
+    >
+        <MenuItem onClick={handleProfile} component={Link} to="/app/profile">Meu Perfil</MenuItem>
         <Divider />
         <MenuItem onClick={handleClose} component={Link} to="/">
           <ListItemIcon>
@@ -78,14 +72,5 @@ function UserMenu(props) {
     </div>
   );
 }
-
-UserMenu.propTypes = {
-
-  dark: PropTypes.bool,
-};
-
-UserMenu.defaultProps = {
-  dark: false
-};
 
 export default UserMenu;
