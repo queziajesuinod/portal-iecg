@@ -32,7 +32,7 @@ const MiaListPage = () => {
 
   const history = useHistory();
 
-  const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
+  const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'http://localhost:3005';
 
   const fetchAposentados = async () => {
     const token = localStorage.getItem("token");

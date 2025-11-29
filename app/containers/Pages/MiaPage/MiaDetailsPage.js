@@ -52,7 +52,7 @@ const MiaDetailsPage = () => {
 
     const fetchAposentado = async () => {
       const token = localStorage.getItem('token');
-      const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
+      const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'http://localhost:3005';
 
       try {
         const response = await fetch(`${API_URL}/mia/${id}`, {
