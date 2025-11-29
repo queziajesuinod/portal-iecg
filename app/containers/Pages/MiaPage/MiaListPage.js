@@ -32,7 +32,10 @@ const MiaListPage = () => {
 
   const history = useHistory();
 
-  const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'http://localhost:3005';
+  // Trim env var to remove accidental spaces and fallback to current origin for local dev
+  const API_URL = (
+    process.env.REACT_APP_API_URL?.trim() || window.location.origin || 'http://localhost:3005'
+  ).replace(/\/$/, '');
 
   const fetchAposentados = async () => {
     const token = localStorage.getItem("token");

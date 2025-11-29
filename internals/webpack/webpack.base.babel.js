@@ -218,6 +218,7 @@ module.exports = options => ({
       vm: false,
       console: false,
       tty: false,
+      process: require.resolve('process/browser'),
     },
     alias: {
       'dan-components': path.resolve(__dirname, '../../app/components/'),
@@ -227,6 +228,8 @@ module.exports = options => ({
       'dan-api': path.resolve(__dirname, '../../app/api/'),
       'dan-images': path.resolve(__dirname, '../../public/images/'),
       'dan-vendor': path.resolve(__dirname, '../../node_modules/'),
+      'process/browser': require.resolve('process/browser.js'),
+      process: require.resolve('process/browser.js'),
     }
   },
   devtool: options.devtool,
