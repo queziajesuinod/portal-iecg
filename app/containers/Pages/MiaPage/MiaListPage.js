@@ -34,7 +34,7 @@ const MiaListPage = () => {
 
   // Trim env var to remove accidental spaces and fallback to current origin for local dev
   const API_URL = (
-    process.env.REACT_APP_API_URL?.trim() || window.location.origin || 'http://localhost:3005'
+    process.env.REACT_APP_API_URL?.trim() || window.location.origin || 'https://portal.iecg.com.br/'
   ).replace(/\/$/, '');
 
   const fetchAposentados = async () => {

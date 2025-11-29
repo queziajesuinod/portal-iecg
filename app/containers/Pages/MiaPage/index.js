@@ -182,7 +182,7 @@ const MiaPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem('token');
-    const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'http://localhost:3005';
+    const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br/';
 
     const method = isEdit ? 'PUT' : 'POST';
     const endpoint = isEdit ? `${API_URL}/mia/${aposentadoId}` : `${API_URL}/mia`;
