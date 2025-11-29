@@ -7,7 +7,7 @@ import {
 } from '@mui/material';
 
 const fallbackHost = `${window.location.protocol}//${window.location.host}`;
-const API_URL = (process.env.REACT_APP_API_URL && process.env.REACT_APP_API_URL.replace(/\/$/, '')) || fallbackHost || 'https://portal.iecg.com.br/';
+const API_URL = (process.env.REACT_APP_API_URL && process.env.REACT_APP_API_URL.replace(/\/$/, '')) || fallbackHost || 'https://portal.iecg.com.br';
 
 const PerfilPermissaoPage = () => {
   const [perfis, setPerfis] = useState([]);
