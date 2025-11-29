@@ -44,7 +44,7 @@ const ProfilePage = () => {
   const userStorage = JSON.parse(localStorage.getItem("user"));
   const id = userStorage?.id;
   const token = localStorage.getItem('token');
-  const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'http://localhost:3005';
+  const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br/';
 
   const fetchUser = async () => {
     try {

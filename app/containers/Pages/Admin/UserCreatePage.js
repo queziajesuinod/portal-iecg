@@ -4,7 +4,7 @@ import { PapperBlock } from 'dan-components';
 import { TextField, Button, MenuItem, Box, Typography } from '@mui/material';
 
 const fallbackHost = `${window.location.protocol}//${window.location.host}`;
-const API_URL = (process.env.REACT_APP_API_URL && process.env.REACT_APP_API_URL.replace(/\/$/, '')) || fallbackHost || 'http://localhost:3005';
+const API_URL = (process.env.REACT_APP_API_URL && process.env.REACT_APP_API_URL.replace(/\/$/, '')) || fallbackHost || 'https://portal.iecg.com.br/';
 
 const UserCreatePage = () => {
   const [perfis, setPerfis] = useState([]);
