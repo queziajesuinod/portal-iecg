@@ -23,6 +23,9 @@ class ApeloDirecionadoCelulaService {
     if (filtro.nome) {
       where.nome = { [Op.iLike]: `%${filtro.nome}%` };
     }
+    if (filtro.decisao) {
+      where.decisao = filtro.decisao;
+    }
 
     const page = parseInt(filtro.page, 10) || 1;
     const limit = parseInt(filtro.limit, 10) || 10;

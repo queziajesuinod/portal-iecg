@@ -36,7 +36,9 @@ const initialForm = {
   idade: '',
   bairro_proximo: [],
   headerImageUrl: '',
-  direcionar_celula: true
+  direcionar_celula: true,
+  campus_iecg: '',
+  status: ''
 };
 
 const ApeloPublicPage = () => {
@@ -94,7 +96,9 @@ const ApeloPublicPage = () => {
       idade: form.idade ? Number(form.idade) : null,
       bairro_proximo: form.bairro_proximo,
       decisao: form.decisao,
-      direcionar_celula: !!form.direcionar_celula
+      direcionar_celula: !!form.direcionar_celula,
+      campus_iecg: form.campus_iecg,
+      status: form.status
     };
     try {
       const res = await fetch(`${API_URL}/public/direcionamentos`, {
@@ -173,9 +177,12 @@ const ApeloPublicPage = () => {
                 {REDE_OPTIONS.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
               </TextField>
             </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField fullWidth label="Idade" name="idade" type="number" value={form.idade} onChange={handleChange} />
-              </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth label="Idade" name="idade" type="number" value={form.idade} onChange={handleChange} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth label="Campus IECG (opcional)" name="campus_iecg" value={form.campus_iecg} onChange={handleChange} />
+            </Grid>
               <Grid item xs={12}>
                 <FormControlLabel
                   control={
@@ -226,14 +233,24 @@ const ApeloPublicPage = () => {
                     onChange={(e) => setBairroTemp(e.target.value)}
                     disabled={!form.direcionar_celula}
                   />
-                  <Button variant="outlined" onClick={addBairroProximo} disabled={!form.direcionar_celula}>Adicionar</Button>
-                </Box>
-                <Box mt={1} display="flex" gap={1} flexWrap="wrap">
-                  {form.bairro_proximo.map((b) => (
-                    <Chip key={b} label={b} onDelete={() => removeBairroProximo(b)} disabled={!form.direcionar_celula} />
-                  ))}
-                </Box>
-              </Grid>
+                <Button variant="outlined" onClick={addBairroProximo} disabled={!form.direcionar_celula}>Adicionar</Button>
+              </Box>
+              <Box mt={1} display="flex" gap={1} flexWrap="wrap">
+                {form.bairro_proximo.map((b) => (
+                  <Chip key={b} label={b} onDelete={() => removeBairroProximo(b)} disabled={!form.direcionar_celula} />
+                ))}
+              </Box>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Status (opcional)"
+                name="status"
+                value={form.status}
+                onChange={handleChange}
+                placeholder="Ex.: DIRECIONADO_COM_SUCESSO"
+              />
+            </Grid>
             <Grid item xs={12}>
               <Button type="submit" variant="contained" color="primary" fullWidth disabled={submitting}>
                 {submitting ? 'Enviando...' : 'Me Inscrever'}
