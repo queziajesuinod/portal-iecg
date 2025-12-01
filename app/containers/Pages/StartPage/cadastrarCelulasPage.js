@@ -19,7 +19,9 @@ const formInicial = {
   cel_lider: '',
   anfitriao: '',
   campus: '',
+  numero: '',
   endereco: '',
+  cep: '',
   bairro: '',
   cidade: '',
   estado: '',
@@ -113,7 +115,11 @@ const CadastrarCelula = () => {
     const method = isEdit ? 'PUT' : 'POST';
     const endpoint = isEdit ? `${API_URL}/start/celula/${formData.id}` : `${API_URL}/start/celula`;
 
-    const payload = { ...formData };
+    const payload = {
+      ...formData,
+      lat: formData.lat ? parseFloat(formData.lat) : null,
+      lon: formData.lon ? parseFloat(formData.lon) : null
+    };
     if (!isEdit) {
       delete payload.id; // Remove o campo 'id' ao criar uma nova célula
     }
@@ -143,13 +149,15 @@ const CadastrarCelula = () => {
   };
 
   const buscarCoordenadas = async () => {
-    if (!formData.endereco) {
-      setNotification('Preencha o endereço antes de buscar coordenadas.');
+    const { endereco, numero, bairro, cidade, estado, cep } = formData;
+    const queryParts = [endereco, numero, bairro, cidade, estado, cep].filter(Boolean);
+    if (!queryParts.length) {
+      setNotification('Informe endereço, número, bairro, cidade, estado ou CEP para buscar coordenadas.');
       return;
     }
 
     try {
-      const query = encodeURIComponent(formData.endereco);
+      const query = encodeURIComponent(queryParts.join(' '));
       const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&addressdetails=1`);
       const data = await res.json();
 
@@ -162,6 +170,8 @@ const CadastrarCelula = () => {
           address.quarter ||
           address.village ||
           '';
+        const logradouro = address.road || address.pedestrian || address.cycleway || '';
+        const numeroEncontrado = address.house_number || '';
         const cidade =
           address.city ||
           address.town ||
@@ -170,14 +180,18 @@ const CadastrarCelula = () => {
           address.state_district ||
           '';
         const estado = address.state || address.region || address.state_district || '';
+        const cepEncontrado = address.postcode || '';
 
         setFormData((prev) => ({
           ...prev,
           lat,
           lon,
+          endereco: logradouro || prev.endereco,
+          numero: numeroEncontrado || prev.numero,
           bairro: bairro || prev.bairro,
           cidade: cidade || prev.cidade,
-          estado: estado || prev.estado
+          estado: estado || prev.estado,
+          cep: cepEncontrado || prev.cep
         }));
         setNotification('Coordenadas preenchidas com sucesso!');
       } else {
@@ -265,6 +279,13 @@ const CadastrarCelula = () => {
                   Buscar coordenadas
                 </Button>
               </Grid>
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth label="Número da casa" name="numero" value={formData.numero} onChange={handleChange} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth label="CEP" name="cep" value={formData.cep} onChange={handleChange} />
             </Grid>
 
             <Grid item xs={12} md={6}>

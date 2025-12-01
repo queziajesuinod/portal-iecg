@@ -9,44 +9,45 @@ import BlankPage from '../Pages/BlankPage';
 import ListagemCelulasPage from '../Pages/StartPage/celulasPage';
 import CadastrarCelula from '../Pages/StartPage/cadastrarCelulasPage';
 import CampusPage from '../Pages/StartPage/campusPage';
+import ApelosDirecionadosPage from '../Pages/StartPage/ApelosDirecionadosPage';
+import ApeloPublicPage from '../Pages/Public/ApeloPublicPage';
 import ProfilePage from '../Pages/Users/Profile';
 import MiaListPage from '../Pages/MiaPage/MiaListPage';
 import MiaDetailsPage from '../Pages/MiaPage/MiaDetailsPage';
 import AttendanceListPage from '../Pages/MiaPage/AttendanceListPage';
 import AttendanceDetailPage from '../Pages/MiaPage/AttendanceDetailPage';
-import Login from '../Pages/Users/Login'; // Sua página de login
-import ProtectedRoute from "../../routes/ProtectedRoute";
+import Login from '../Pages/Users/Login';
+import ProtectedRoute from '../../routes/ProtectedRoute';
 import PerfilPermissaoPage from '../Pages/Admin/PerfilPermissaoPage';
 import UserCreatePage from '../Pages/Admin/UserCreatePage';
 import UsersListPage from '../Pages/Admin/UsersListPage';
-
 import dummyContents from 'dan-api/dummy/dummyContents';
-
-
 
 function Application({ history }) {
   const changeMode = useContext(ThemeContext);
 
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    const storedAuth = localStorage.getItem("isAuthenticated");
-    return storedAuth === "true";
+    const storedAuth = localStorage.getItem('isAuthenticated');
+    return storedAuth === 'true';
   });
 
-  const storedUser = localStorage.getItem("user");
+  const storedUser = localStorage.getItem('user');
   if (storedUser) {
     dummyContents.user = JSON.parse(storedUser);
   }
 
   useEffect(() => {
-    localStorage.setItem("isAuthenticated", isAuthenticated);
+    localStorage.setItem('isAuthenticated', isAuthenticated);
   }, [isAuthenticated]);
 
   return (
     <Switch>
-      {/* 🔓 ROTAS PÚBLICAS */}
+      {/* Rotas publicas */}
       <Route exact path="/login" render={(routeProps) => <Login {...routeProps} setIsAuthenticated={setIsAuthenticated} />} />
-      
-      {/* 🔐 ROTAS PRIVADAS COM DASHBOARD */}
+      <Route exact path="/apelo" component={ApeloPublicPage} />
+      <Route exact path="/public/apelo" component={ApeloPublicPage} />
+
+      {/* Rotas privadas com dashboard */}
       <Route path="/app">
         <Dashboard history={history} changeMode={changeMode}>
           <Switch>
@@ -61,6 +62,7 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/start/celulas/cadastrar" component={CadastrarCelula} isAuthenticated={isAuthenticated} requiredPermission="CELULA_CADASTRAR" />
             <ProtectedRoute exact path="/app/start/celulas/detalhes" component={BlankPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
             <ProtectedRoute exact path="/app/start/campus" component={CampusPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
+            <ProtectedRoute exact path="/app/start/direcionamentos" component={ApelosDirecionadosPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
             <ProtectedRoute exact path="/app/admin/perfis" component={PerfilPermissaoPage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_PERFIS" />
             <ProtectedRoute exact path="/app/admin/usuarios/novo" component={UserCreatePage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_USUARIOS" />
             <ProtectedRoute exact path="/app/admin/usuarios" component={UsersListPage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_USUARIOS" />
@@ -73,7 +75,6 @@ function Application({ history }) {
     </Switch>
   );
 }
-
 
 export default Application;
 

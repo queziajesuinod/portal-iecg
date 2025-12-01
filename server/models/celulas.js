@@ -48,6 +48,14 @@ module.exports = (sequelize) => {
       type: DataTypes.STRING,
       allowNull: true
     },
+    numero: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    cep: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     bairro: {
       type: DataTypes.STRING,
       allowNull: true
@@ -87,6 +95,11 @@ module.exports = (sequelize) => {
     campusId: {
       type: DataTypes.UUID,
       allowNull: true
+    },
+    ativo: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true
     }
   }, {
     sequelize,

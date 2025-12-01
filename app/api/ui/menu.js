@@ -47,6 +47,13 @@ module.exports = [
         permission: 'CELULA_CADASTRAR'
       },
       {
+        key: 'apelosDirecionados',
+        name: 'Apelos Direcionados',
+        link: '/app/start/direcionamentos',
+        icon: 'ion-ios-git-compare',
+        permission: 'APELOS_LISTAR'
+      },
+      {
         key: 'listagemCampus',
         name: 'Listagem de Campus',
         link: '/app/start/campus',

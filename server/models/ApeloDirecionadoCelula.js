@@ -4,7 +4,12 @@ const { Model, DataTypes } = require('sequelize');
 module.exports = (sequelize) => {
   class ApeloDirecionadoCelula extends Model {
     static associate(models) {
-      // Associações futuras
+      if (models.Celula) {
+        ApeloDirecionadoCelula.belongsTo(models.Celula, { foreignKey: 'celula_id', as: 'celulaAtual' });
+      }
+      if (models.ApeloDirecionadoHistorico) {
+        ApeloDirecionadoCelula.hasMany(models.ApeloDirecionadoHistorico, { foreignKey: 'apelo_id', as: 'historicos' });
+      }
     }
   }
 
@@ -35,6 +40,26 @@ module.exports = (sequelize) => {
       type: DataTypes.STRING,
       allowNull: true
     },
+    cidade_apelo: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    estado_apelo: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    direcionado_celula: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true
+    },
+    idade: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    bairro_proximo: {
+      type: DataTypes.JSONB,
+      allowNull: true
+    },
     lider_direcionado: {
       type: DataTypes.STRING,
       allowNull: true
@@ -57,6 +82,14 @@ module.exports = (sequelize) => {
     },
     status: {
       type: DataTypes.STRING,
+      allowNull: true
+    },
+    celula_id: {
+      type: DataTypes.UUID,
+      allowNull: true
+    },
+    data_direcionamento: {
+      type: DataTypes.DATEONLY,
       allowNull: true
     },
     createdAt: {

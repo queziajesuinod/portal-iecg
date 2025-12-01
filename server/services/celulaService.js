@@ -17,6 +17,9 @@ class CelulaService {
         dados.campusId = campus.id;
       }
     }
+    if (typeof dados.ativo === 'undefined') {
+      dados.ativo = true;
+    }
 
     const celula = await Celula.create(dados);
     console.log('Célula criada no banco de dados:', celula);
@@ -49,6 +52,10 @@ class CelulaService {
     }
     if (filtros.bairro) {
       where.bairro = { [Op.iLike]: `%${filtros.bairro}%` };
+    }
+    if (typeof filtros.ativo !== 'undefined' && filtros.ativo !== '') {
+      const ativoValor = String(filtros.ativo).toLowerCase();
+      where.ativo = !(ativoValor === 'false' || ativoValor === '0' || ativoValor === 'no' || ativoValor === 'off');
     }
 
     const { count, rows } = await Celula.findAndCountAll({
