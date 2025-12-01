@@ -12,7 +12,8 @@ class ApeloDirecionadoCelulaController {
 
   async listarTodos(req, res) {
     try {
-      const lista = await ApeloDirecionadoCelulaService.listarTodos();
+      const { month, status, page, limit, nome } = req.query;
+      const lista = await ApeloDirecionadoCelulaService.listarTodos({ month, status, page, limit, nome });
       return res.status(200).json(lista);
     } catch (error) {
       return res.status(500).json({ erro: 'Erro ao buscar registros' });
@@ -41,6 +42,49 @@ class ApeloDirecionadoCelulaController {
     try {
       const resposta = await ApeloDirecionadoCelulaService.deletar(req.params.id);
       return res.status(200).json(resposta);
+    } catch (error) {
+      return res.status(400).json({ erro: error.message });
+    }
+  }
+
+  async listarPorCelula(req, res) {
+    try {
+      const { celulaId } = req.params;
+      const registros = await ApeloDirecionadoCelulaService.listarPorCelula(celulaId);
+      return res.status(200).json(registros);
+    } catch (error) {
+      return res.status(400).json({ erro: error.message });
+    }
+  }
+
+  async resumoPorCelula(req, res) {
+    try {
+      const resumo = await ApeloDirecionadoCelulaService.resumoPorCelula();
+      return res.status(200).json(resumo);
+    } catch (error) {
+      return res.status(400).json({ erro: error.message });
+    }
+  }
+
+  async mover(req, res) {
+    try {
+      const { id } = req.params;
+      const { celulaDestinoId, motivo } = req.body;
+      if (!celulaDestinoId) {
+        return res.status(400).json({ erro: 'celulaDestinoId é obrigatório' });
+      }
+      const item = await ApeloDirecionadoCelulaService.moverApelo(id, celulaDestinoId, motivo);
+      return res.status(200).json(item);
+    } catch (error) {
+      return res.status(400).json({ erro: error.message });
+    }
+  }
+
+  async historico(req, res) {
+    try {
+      const { id } = req.params;
+      const historico = await ApeloDirecionadoCelulaService.historico(id);
+      return res.status(200).json(historico);
     } catch (error) {
       return res.status(400).json({ erro: error.message });
     }

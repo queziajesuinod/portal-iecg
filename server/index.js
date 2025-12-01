@@ -58,6 +58,8 @@ app.use('/perfil', authMiddleware, require("./routers/perfis"));
 app.use('/permissoes', authMiddleware, require("./routers/permissao"));
 app.use('/mia', authMiddleware, require('./routers/aposentadoRoutes'));
 app.use('/start', authMiddleware, require('./routers/startRoutes'));
+// Rota pública para apelos direcionados (sem autenticação)
+app.use('/public', require('./routers/publicStartRoutes'));
 // 🔹 Carregar Material Icons e Documentação
 app.use('/api/icons', (req, res) => {
   res.json({ records: [{ source: rawicons(req.query) }] });
