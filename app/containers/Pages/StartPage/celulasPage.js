@@ -409,6 +409,18 @@ const ListagemCelulasPage = () => {
     return <Chip size="small" label={cfg.label} color={cfg.color} sx={{ fontWeight: 600 }} />;
   };
 
+  const DECISAO_OPTIONS = [
+    { value: 'apelo_decisao', label: 'Aceitar Jesus como meu Senhor e Salvador', color: 'success' },
+    { value: 'apelo_volta', label: 'Voltar para Jesus (estava afastado e estou me reconciliando)', color: 'info' },
+    { value: 'encaminhamento_celula', label: 'Encaminhamento de Célula', color: 'warning' }
+  ];
+
+  const renderDecisaoChip = (decisao) => {
+    const opt = DECISAO_OPTIONS.find((o) => o.value === decisao);
+    if (!opt) return decisao || '-';
+    return <Chip size="small" label={opt.label} color={opt.color} sx={{ fontWeight: 600 }} />;
+  };
+
   const renderAtivoChip = (ativo) => {
     const isAtivo = ativo !== false;
     return (
@@ -875,7 +887,7 @@ const ListagemCelulasPage = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={apelosDialogOpen} onClose={closeApelosDialog} fullWidth maxWidth="md">
+      <Dialog open={apelosDialogOpen} onClose={closeApelosDialog} fullWidth maxWidth="lg">
         <DialogTitle>
           Apelos direcionados - {apelosCelula?.celula || 'Célula'}
         </DialogTitle>
@@ -907,7 +919,7 @@ const ListagemCelulasPage = () => {
                 {apelosList.map((apelo) => (
                   <TableRow key={apelo.id}>
                     <TableCell>{apelo.nome}</TableCell>
-                    <TableCell>{apelo.decisao}</TableCell>
+                    <TableCell>{renderDecisaoChip(apelo.decisao)}</TableCell>
                     <TableCell>{apelo.data_direcionamento || '-'}</TableCell>
                     <TableCell>{apelo.campus_iecg}</TableCell>
                     <TableCell>{renderStatusChip(apelo.status)}</TableCell>

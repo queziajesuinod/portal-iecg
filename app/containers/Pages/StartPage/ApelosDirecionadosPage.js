@@ -48,6 +48,7 @@ const ApelosDirecionadosPage = () => {
   const [monthFilter, setMonthFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [nomeFilter, setNomeFilter] = useState('');
+  const [decisaoFilter, setDecisaoFilter] = useState('');
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -80,6 +81,7 @@ const ApelosDirecionadosPage = () => {
       if (monthFilter) params.append('month', monthFilter);
       if (statusFilter) params.append('status', statusFilter);
       if (nomeFilter) params.append('nome', nomeFilter);
+      if (decisaoFilter) params.append('decisao', decisaoFilter);
       params.append('page', page);
       params.append('limit', 10);
       const res = await fetch(`${API_URL}/start/direcionamentos/?${params.toString()}`, {
@@ -126,7 +128,7 @@ const ApelosDirecionadosPage = () => {
   useEffect(() => {
     fetchApelos();
     fetchCelulas();
-  }, [monthFilter, statusFilter, nomeFilter, page]);
+  }, [monthFilter, statusFilter, nomeFilter, decisaoFilter, page]);
 
   const abrirMover = (apelo) => {
     setApeloSelecionado(apelo);
@@ -220,6 +222,18 @@ const ApelosDirecionadosPage = () => {
 
   const statusLabel = (status) => statusConfig[status]?.label || status || '-';
 
+  const DECISAO_OPTIONS = [
+    { value: 'apelo_decisao', label: 'Aceitar Jesus como meu Senhor e Salvador', color: 'success' },
+    { value: 'apelo_volta', label: 'Voltar para Jesus (estava afastado e estou me reconciliando)', color: 'info' },
+    { value: 'encaminhamento_celula', label: 'Encaminhamento de Célula', color: 'warning' }
+  ];
+
+  const renderDecisaoChip = (decisao) => {
+    const opt = DECISAO_OPTIONS.find((o) => o.value === decisao);
+    if (!opt) return decisao || '-';
+    return <Chip size="small" label={opt.label} color={opt.color} sx={{ fontWeight: 600 }} />;
+  };
+
   const renderStatusChip = (status) => {
     const cfg = statusConfig[status] || { label: statusLabel(status), color: 'default' };
     return <Chip size="small" label={cfg.label} color={cfg.color} sx={{ fontWeight: 600 }} />;
@@ -305,6 +319,22 @@ const ApelosDirecionadosPage = () => {
           />
           <TextField
             select
+            label="Decisão"
+            size="small"
+            value={decisaoFilter}
+            onChange={(e) => {
+              setDecisaoFilter(e.target.value);
+              setPage(1);
+            }}
+            sx={{ minWidth: 220 }}
+          >
+            <MenuItem value="">Todas</MenuItem>
+            {DECISAO_OPTIONS.map((opt) => (
+              <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            select
             label="Status"
             size="small"
             value={statusFilter}
@@ -343,7 +373,7 @@ const ApelosDirecionadosPage = () => {
               {apelos.map((apelo) => (
                 <TableRow key={apelo.id}>
                   <TableCell>{apelo.nome}</TableCell>
-                  <TableCell>{apelo.decisao}</TableCell>
+                  <TableCell>{renderDecisaoChip(apelo.decisao)}</TableCell>
                   <TableCell>{formatDate(apelo.data_direcionamento)}</TableCell>
                   <TableCell>
                     <Box display="flex" alignItems="center" gap={1}>
@@ -490,7 +520,7 @@ const ApelosDirecionadosPage = () => {
                       top={6}
                     />
                     <Paper variant="outlined" sx={{ p: 1.5, flex: 1 }}>
-                      <Typography variant="subtitle2" fontWeight={600}>
+                      <Typography variant="subtitle2" fontWeight={600} sx={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
                         {isStatus ? 'Alteração de status' : 'Movimentação de célula'}
                       </Typography>
                       {isStatus ? (
