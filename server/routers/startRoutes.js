@@ -18,6 +18,7 @@ router.post('/direcionamentos/:id/mover', ApeloDirecionadoCelulaController.mover
 router.get('/direcionamentos/:id', ApeloDirecionadoCelulaController.buscarPorId);
 router.put('/direcionamentos/:id', ApeloDirecionadoCelulaController.atualizar);
 router.delete('/direcionamentos/:id', ApeloDirecionadoCelulaController.deletar);
+router.post('/direcionamentos/processar-fila', ApeloDirecionadoCelulaController.processarFila);
 router.use('/campus', require('./campus'));
 
 module.exports = router;

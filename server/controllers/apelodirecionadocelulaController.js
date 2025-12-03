@@ -1,5 +1,6 @@
 const ApeloDirecionadoCelulaService = require('../services/ApeloDirecionadoCelulaService');
 const WebhookService = require('../services/WebhookService');
+const ApeloFilaService = require('../services/ApeloFilaService');
 
 class ApeloDirecionadoCelulaController {
   async criar(req, res) {
@@ -88,6 +89,15 @@ class ApeloDirecionadoCelulaController {
       const { id } = req.params;
       const historico = await ApeloDirecionadoCelulaService.historico(id);
       return res.status(200).json(historico);
+    } catch (error) {
+      return res.status(400).json({ erro: error.message });
+    }
+  }
+
+  async processarFila(req, res) {
+    try {
+      const resultado = await ApeloFilaService.processarFila();
+      return res.status(200).json(resultado);
     } catch (error) {
       return res.status(400).json({ erro: error.message });
     }
