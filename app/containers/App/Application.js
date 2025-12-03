@@ -12,6 +12,7 @@ import CampusPage from '../Pages/StartPage/campusPage';
 import ApelosDirecionadosPage from '../Pages/StartPage/ApelosDirecionadosPage';
 import ApeloPublicPage from '../Pages/Public/ApeloPublicPage';
 import ProfilePage from '../Pages/Users/Profile';
+import WebhooksPage from '../Pages/Webhooks/WebhooksPage';
 import MiaListPage from '../Pages/MiaPage/MiaListPage';
 import MiaDetailsPage from '../Pages/MiaPage/MiaDetailsPage';
 import AttendanceListPage from '../Pages/MiaPage/AttendanceListPage';
@@ -66,6 +67,7 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/admin/perfis" component={PerfilPermissaoPage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_PERFIS" />
             <ProtectedRoute exact path="/app/admin/usuarios/novo" component={UserCreatePage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_USUARIOS" />
             <ProtectedRoute exact path="/app/admin/usuarios" component={UsersListPage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_USUARIOS" />
+            <ProtectedRoute exact path="/app/admin/webhooks" component={WebhooksPage} isAuthenticated={isAuthenticated} requiredPermission="WEBHOOKS_VIEW" />
           </Switch>
         </Dashboard>
       </Route>

@@ -30,6 +30,7 @@ import HistoryIcon from '@mui/icons-material/History';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { PapperBlock, Notification } from 'dan-components';
+import { sendWebhookEvent } from '../../../utils/webhookClient';
 
 const resolveApiUrl = () => {
   if (process.env.REACT_APP_API_URL) {
@@ -162,6 +163,10 @@ const ApelosDirecionadosPage = () => {
         throw new Error(data?.erro || 'Falha ao mover apelo.');
       }
       setNotification('Apelo movido com sucesso.');
+      sendWebhookEvent('apelo.moved', {
+        apeloId: apeloSelecionado.id,
+        destinoCelulaId: celulaDestinoId
+      });
       setMoveDialogOpen(false);
       fetchApelos();
     } catch (err) {
@@ -599,6 +604,11 @@ const ApelosDirecionadosPage = () => {
                   throw new Error(data?.erro || 'Falha ao atualizar status.');
                 }
                 setNotification('Status atualizado com sucesso.');
+                sendWebhookEvent('apelo.status_changed', {
+                  apeloId: apeloSelecionado.id,
+                  status: novoStatus,
+                  motivo: motivoStatus
+                });
                 setStatusDialogOpen(false);
                 setMotivoStatus('');
                 fetchApelos();
