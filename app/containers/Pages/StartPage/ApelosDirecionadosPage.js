@@ -249,10 +249,9 @@ const ApelosDirecionadosPage = () => {
     const R = 6371; // km
     const dLat = toRad(lat2 - lat1);
     const dLon = toRad(lon2 - lon1);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+      + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2))
+      * Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   };
@@ -357,24 +356,24 @@ const ApelosDirecionadosPage = () => {
         </Box>
         <TableContainer component={Paper}>
           <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Nome</TableCell>
-              <TableCell>Decisão</TableCell>
-              <TableCell>Data direcionamento</TableCell>
-              <TableCell>Célula atual</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell align="right">Ações</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {apelos.length === 0 && (
+            <TableHead>
               <TableRow>
-                <TableCell colSpan={6} align="center">
-                  {loading ? 'Carregando...' : 'Nenhum apelo encontrado.'}
-                </TableCell>
+                <TableCell>Nome</TableCell>
+                <TableCell>Decisão</TableCell>
+                <TableCell>Data direcionamento</TableCell>
+                <TableCell>Célula atual</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell align="right">Ações</TableCell>
               </TableRow>
-            )}
+            </TableHead>
+            <TableBody>
+              {apelos.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} align="center">
+                    {loading ? 'Carregando...' : 'Nenhum apelo encontrado.'}
+                  </TableCell>
+                </TableRow>
+              )}
               {apelos.map((apelo) => (
                 <TableRow key={apelo.id}>
                   <TableCell>{apelo.nome}</TableCell>
@@ -396,7 +395,7 @@ const ApelosDirecionadosPage = () => {
                   <TableCell>{renderStatusChip(apelo.status)}</TableCell>
                   <TableCell align="right">
                     <Box display="flex" gap={1} justifyContent="flex-end">
-                  
+
                       <Tooltip title="Histórico de movimentações">
                         <HistoryIcon fontSize="small" style={{ cursor: 'pointer' }} onClick={() => abrirHistorico(apelo)} />
                       </Tooltip>
