@@ -1,9 +1,12 @@
 const ApeloDirecionadoCelulaService = require('../services/ApeloDirecionadoCelulaService');
+const WebhookService = require('../services/WebhookService');
 
 class ApeloDirecionadoCelulaController {
   async criar(req, res) {
     try {
       const item = await ApeloDirecionadoCelulaService.criar(req.body);
+      // Dispara webhook de criação (não bloqueia a resposta)
+      WebhookService.sendEvent('apelo.created', item).catch(() => {});
       return res.status(201).json(item);
     } catch (error) {
       return res.status(400).json({ erro: error.message });
