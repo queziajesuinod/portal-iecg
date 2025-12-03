@@ -1,8 +1,8 @@
 import React, { Fragment } from 'react';
 import PropTypes from 'prop-types';
-
-import { Link, Route } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import useStyles from './breadCrumb-jss';
+import { getPageTitle } from '../../config/pageTitles';
 
 const Breadcrumbs = (props) => {
   const { classes, cx } = useStyles();
@@ -11,47 +11,40 @@ const Breadcrumbs = (props) => {
     separator,
     location
   } = props;
+
+  const pathname = location.pathname.replace(/\/+$/, '');
+  const normalizedPath = pathname.replace(/^\/+/, '');
+  const segments = normalizedPath.split('/');
+  const placeKey = normalizedPath || 'app';
+  const parts = segments.slice(0, -1);
+
   return (
     <section className={cx(theme === 'dark' ? classes.dark : classes.light, classes.breadcrumbs)}>
-      <Route
-        path="*"
-        render={() => {
-          let parts = location.pathname.split('/');
-          const place = parts[parts.length - 1];
-          parts = parts.slice(1, parts.length - 1);
-          const pageTitle =
-            history.location?.state?.pageTitle
-              ? history.location.state.pageTitle
-              : parts[parts.length - 1].replace('-', ' ');
-
-          return (
-            <p>
-              Você está aqui:
-              <span>
-                {
-                  parts.map((part, partIndex) => {
-                    const path = ['', ...parts.slice(0, partIndex + 1)].join('/');
-                    return (
-                      <Fragment key={path}>
-                        <Link to={path}>{part}</Link>
-                        {separator}
-                      </Fragment>
-                    );
-                  })
-                }
-                &nbsp;
-                {pageTitle}
-              </span>
-            </p>
-          );
-        }}
-      />
+      <p>
+        Você está em:
+        <span>
+          {
+            parts.map((part, partIndex) => {
+              const pathParts = parts.slice(0, partIndex + 1).join('/');
+              const linkPath = `/${pathParts}`;
+              const partTitle = getPageTitle(pathParts || 'app');
+              return (
+                <Fragment key={linkPath}>
+                  <Link to={linkPath}>{partTitle}</Link>
+                  { separator }
+                </Fragment>
+              );
+            })
+          }
+          &nbsp;
+          {getPageTitle(placeKey)}
+        </span>
+      </p>
     </section>
   );
 };
 
 Breadcrumbs.propTypes = {
-
   location: PropTypes.object.isRequired,
   theme: PropTypes.string.isRequired,
   separator: PropTypes.string.isRequired,

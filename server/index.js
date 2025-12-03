@@ -10,16 +10,20 @@ const argv = require('./argv');
 const port = require('./port');
 const setup = require('./middlewares/frontendMiddleware');
 const cors = require('cors');
-const jwt = require('jsonwebtoken'); // 🔐 Para validar o token
+const jwt = require('jsonwebtoken');
 const isDev = process.env.NODE_ENV !== 'production';
 const ngrok = (isDev && process.env.ENABLE_TUNNEL) || argv.tunnel ? require('ngrok') : false;
 const { resolve } = require('path');
 const app = express();
 const bodyParser = require('body-parser');
+const WebhookController = require('./controllers/webhookController');
+const customHost = argv.host || process.env.HOST;
+const host = customHost || null; // Permite IPv6/IPv4
+const prettyHost = customHost || 'localhost';
 
-// ✅ Middleware de autenticação JWT (Protege APIs)
+// Middleware de autenticação JWT (protege as APIs)
 const authMiddleware = (req, res, next) => {
-  if (req.path.startsWith('/auth')) return next(); // Permite acesso à rota de login
+  if (req.path.startsWith('/auth')) return next(); // permite login
 
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) {
@@ -35,7 +39,7 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
-// ✅ Configuração do CORS (Permite requisições do frontend)
+// CORS
 app.use(cors({
   origin: ['https://portal.iecg.com.br', 'http://localhost:3005', 'http://0.0.0.0:3005'],
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
@@ -44,23 +48,25 @@ app.use(cors({
 }));
 app.options('*', cors());
 
-// ✅ Middleware para processar JSON e formulários
+// Body parsers
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 app.use(express.json());
 
-// 🔓 **ROTA PÚBLICA** (Autenticação)
-app.use('/auth', require("./routers/auth"));
-
-// 🔒 **ROTAS PROTEGIDAS** (Exigem um token JWT válido)
-app.use('/users', authMiddleware, require("./routers/users"));
-app.use('/perfil', authMiddleware, require("./routers/perfis"));
-app.use('/permissoes', authMiddleware, require("./routers/permissao"));
+// Rotas públicas
+app.use('/auth', require('./routers/auth'));
+app.post('/webhooks/events', WebhookController.sendEvent);
+// Rotas protegidas
+app.use('/users', authMiddleware, require('./routers/users'));
+app.use('/perfil', authMiddleware, require('./routers/perfis'));
+app.use('/permissoes', authMiddleware, require('./routers/permissao'));
 app.use('/mia', authMiddleware, require('./routers/aposentadoRoutes'));
 app.use('/start', authMiddleware, require('./routers/startRoutes'));
-// Rota pública para apelos direcionados (sem autenticação)
+app.use('/webhooks', authMiddleware, require('./routers/webhooks'));
+// Rota pública para apelos direcionados
 app.use('/public', require('./routers/publicStartRoutes'));
-// 🔹 Carregar Material Icons e Documentação
+
+// Assets utilitários
 app.use('/api/icons', (req, res) => {
   res.json({ records: [{ source: rawicons(req.query) }] });
 });
@@ -68,40 +74,34 @@ app.use('/api/docs', (req, res) => {
   res.json({ records: [{ source: rawdocs(req.query) }] });
 });
 
-// 🔹 Servindo arquivos estáticos e favicon
+// Estáticos
 app.use('/', express.static('public', { etag: false }));
 app.use(favicon(path.join('public', 'favicons', 'favicon.ico')));
 
-// 🔹 Mantendo o Frontend funcionando corretamente
+// Frontend
 setup(app, {
   outputPath: resolve(process.cwd(), 'build'),
   publicPath: '/',
 });
 
-// 🔹 Configuração de Host e Porta
-const customHost = argv.host || process.env.HOST;
-const host = customHost || null; // Permite IPv6/IPv4
-const prettyHost = customHost || 'localhost';
-
-// 🔹 Habilitando GZIP para otimizar carregamento do frontend
+// GZIP para JS
 app.get('*.js', (req, res, next) => {
-  req.url = req.url + '.gz';
+  req.url = `${req.url}.gz`;
   res.set('Content-Encoding', 'gzip');
   next();
 });
 
-// 🔥 Iniciando o Servidor
+// Iniciar servidor
 app.listen(port, host, async (err) => {
   if (err) {
     return logger.error(err.message);
   }
 
-  // Conectar ao ngrok se estiver em modo desenvolvimento
   if (ngrok) {
     let url;
     try {
       url = await ngrok.connect(port);
-      logger.info(`🔗 Ngrok rodando em: ${url}`);
+      logger.info(`Ngrok rodando em: ${url}`);
     } catch (e) {
       return logger.error(e);
     }
@@ -110,5 +110,5 @@ app.listen(port, host, async (err) => {
     logger.appStarted(port, prettyHost);
   }
 
-  console.log(`🚀 Servidor rodando em: ${process.env.REACT_APP_API_URL}`);
+  console.log(`Servidor rodando em: ${process.env.REACT_APP_API_URL}`);
 });

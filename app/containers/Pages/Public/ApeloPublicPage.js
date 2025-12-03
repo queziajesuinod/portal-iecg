@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Button, Container, Grid, MenuItem, Paper, TextField, Typography, Chip, FormControlLabel, Checkbox } from '@mui/material';
 import Outer from '../../Templates/Outer';
+import { sendWebhookEvent } from '../../../utils/webhookClient';
 
 const REDE_OPTIONS = [
   'RELEVANTE JUNIORS RAPAZES',
@@ -110,6 +111,8 @@ const ApeloPublicPage = () => {
         const data = await res.json().catch(() => ({}));
         throw new Error(data?.erro || data?.message || 'Erro ao enviar o apelo.');
       }
+      const data = await res.json().catch(() => ({}));
+      sendWebhookEvent('apelo.created', { ...payload, id: data?.id });
       setNotification('Apelo enviado com sucesso! Obrigado pelo envio.');
       setForm(initialForm);
     } catch (err) {

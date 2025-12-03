@@ -87,6 +87,13 @@ module.exports = [
         link: '/app/admin/usuarios',
         icon: 'ion-ios-people',
         permission: 'ADMIN_USUARIOS'
+      },
+      {
+        key: 'webhooks',
+        name: 'Webhooks',
+        link: '/app/admin/webhooks',
+        icon: 'ion-ios-git-compare',
+        permission: 'WEBHOOKS_VIEW'
       }
     ]
   }

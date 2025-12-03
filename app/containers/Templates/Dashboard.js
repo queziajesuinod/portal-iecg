@@ -6,6 +6,7 @@ import { connect } from 'react-redux';
 
 import { GuideSlider } from 'dan-components';
 import { toggleAction, openAction, playTransitionAction } from 'dan-redux/actions/uiActions';
+import { getPageTitle } from '../../config/pageTitles';
 import LeftSidebarLayout from './layouts/LeftSidebarLayout';
 import RightSidebarLayout from './layouts/RightSidebarLayout';
 import LeftSidebarBigLayout from './layouts/LeftSidebarBigLayout';
@@ -68,13 +69,9 @@ function Dashboard(props) {
     changeMode
   } = props;
   const titleException = ['/app', '/app/crm-dashboard', '/app/crypto-dashboard'];
-  const parts = history.location.pathname.split('/');
-  const place = parts[parts.length - 1].replace('-', ' ');
-  // Pegue do state ou caia no path, igual seu código anterior:
-  const pageTitle =
-    history.location?.state?.pageTitle
-      ? history.location.state.pageTitle
-      : parts[parts.length - 1].replace('-', ' ');
+  const normalizedPath = history.location.pathname.replace(/^\/+/, '').replace(/\/+$/, '');
+  const routeKey = normalizedPath || 'app';
+  const pageTitle = getPageTitle(routeKey);
 
 
   return (
@@ -226,7 +223,7 @@ const mapStateToProps = state => ({
 });
 
 const mapDispatchToProps = dispatch => ({
-  toggleDrawer: () => dispatch(toggleAction),
+  toggleDrawer: () => dispatch(toggleAction()),
   initialOpen: bindActionCreators(openAction, dispatch),
   loadTransition: bindActionCreators(playTransitionAction, dispatch),
 });
