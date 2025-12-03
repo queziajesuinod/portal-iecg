@@ -215,6 +215,7 @@ const ApelosDirecionadosPage = () => {
   };
 
   const statusConfig = {
+    APELO_CADASTRADO: { label: 'Novo', color: 'default' },
     DIRECIONADO_COM_SUCESSO: { label: 'Direcionado', color: 'info' },
     ENVIO_LIDER_PENDENTE_WHATS_ERRADO: { label: 'Pendência de Envio para Líder', color: 'warning' },
     CONSOLIDADO_CELULA: { label: 'Consolidado na célula', color: 'success' },

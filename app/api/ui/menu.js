@@ -54,6 +54,13 @@ module.exports = [
         permission: 'APELOS_LISTAR'
       },
       {
+        key: 'filaApelos',
+        name: 'Fila de Apelos',
+        link: '/app/start/fila-apelos',
+        icon: 'ion-ios-timer',
+        permission: 'APELOS_LISTAR'
+      },
+      {
         key: 'listagemCampus',
         name: 'Listagem de Campus',
         link: '/app/start/campus',

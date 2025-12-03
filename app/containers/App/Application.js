@@ -10,6 +10,7 @@ import ListagemCelulasPage from '../Pages/StartPage/celulasPage';
 import CadastrarCelula from '../Pages/StartPage/cadastrarCelulasPage';
 import CampusPage from '../Pages/StartPage/campusPage';
 import ApelosDirecionadosPage from '../Pages/StartPage/ApelosDirecionadosPage';
+import FilaApelosPage from '../Pages/StartPage/FilaApelosPage';
 import ApeloPublicPage from '../Pages/Public/ApeloPublicPage';
 import ProfilePage from '../Pages/Users/Profile';
 import WebhooksPage from '../Pages/Webhooks/WebhooksPage';
@@ -64,6 +65,7 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/start/celulas/detalhes" component={BlankPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
             <ProtectedRoute exact path="/app/start/campus" component={CampusPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
             <ProtectedRoute exact path="/app/start/direcionamentos" component={ApelosDirecionadosPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
+            <ProtectedRoute exact path="/app/start/fila-apelos" component={FilaApelosPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
             <ProtectedRoute exact path="/app/admin/perfis" component={PerfilPermissaoPage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_PERFIS" />
             <ProtectedRoute exact path="/app/admin/usuarios/novo" component={UserCreatePage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_USUARIOS" />
             <ProtectedRoute exact path="/app/admin/usuarios" component={UsersListPage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_USUARIOS" />
