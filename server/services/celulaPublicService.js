@@ -2,16 +2,26 @@ const { Celula } = require('../models');
 const { Op } = require('sequelize');
 
 class CelulaPublicService {
+  _sanitizarCelular(valor) {
+    if (!valor) return '';
+    return String(valor).replace(/\D/g, '');
+  }
+
   async buscarPorContato(contato) {
     if (!contato) {
       throw new Error('Parametro de contato (email ou cel_lider) e obrigatorio');
     }
 
+    const contatoSanitizado = this._sanitizarCelular(contato);
+    const isTelefone = contatoSanitizado.length >= 8;
+
     const celula = await Celula.findOne({
       where: {
         [Op.or]: [
           { email_lider: contato },
-          { cel_lider: contato }
+          ...(isTelefone
+            ? [{ cel_lider: contatoSanitizado }]
+            : [{ cel_lider: contato }])
         ]
       }
     });
@@ -38,6 +48,11 @@ class CelulaPublicService {
 
     // Evita sobrescrever o ID
     const { id: _, createdAt, updatedAt, ...payload } = dados;
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'cel_lider')) {
+      payload.cel_lider = this._sanitizarCelular(payload.cel_lider);
+    }
+
     return await celula.update(payload);
   }
 }
