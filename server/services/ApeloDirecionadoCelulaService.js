@@ -3,8 +3,33 @@ const { ApeloDirecionadoCelula, ApeloDirecionadoHistorico, Celula, Sequelize } =
 const { Op } = require('sequelize');
 
 class ApeloDirecionadoCelulaService {
+  _normalizarCampos(dados = {}) {
+    const payload = { ...dados };
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'dias_semana')) {
+      const dias = payload.dias_semana;
+      if (Array.isArray(dias)) {
+        payload.dias_semana = dias.filter(Boolean);
+      } else if (typeof dias === 'string') {
+        payload.dias_semana = dias
+          .split(',')
+          .map((dia) => dia.trim())
+          .filter(Boolean);
+      } else {
+        payload.dias_semana = dias || null;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'observacao')) {
+      payload.observacao = payload.observacao || null;
+    }
+
+    return payload;
+  }
+
   async criar(dados) {
-    return await ApeloDirecionadoCelula.create(dados);
+    const dadosNormalizados = this._normalizarCampos(dados);
+    return await ApeloDirecionadoCelula.create(dadosNormalizados);
   }
 
   async listarTodos(filtro = {}) {
@@ -63,7 +88,7 @@ class ApeloDirecionadoCelulaService {
 
   async atualizar(id, dados = {}) {
     const item = await this.buscarPorId(id);
-    const { motivo_status, ...dadosAtualizar } = dados;
+    const { motivo_status, ...dadosAtualizar } = this._normalizarCampos(dados);
     const statusEnviado = Object.prototype.hasOwnProperty.call(dadosAtualizar, 'status');
     const statusAnterior = item.status;
     const statusNovo = dadosAtualizar.status;
@@ -116,6 +141,12 @@ class ApeloDirecionadoCelulaService {
 
   async moverApelo(apeloId, celulaDestinoId, motivo = '') {
     const apelo = await this.buscarPorId(apeloId);
+    const celulaDestino = await Celula.findByPk(celulaDestinoId);
+
+    if (!celulaDestino) {
+      throw new Error('Celula de destino nao encontrada.');
+    }
+
     const origem = apelo.celula_id;
     if (origem && celulaDestinoId && String(origem) === String(celulaDestinoId)) {
       throw new Error('Não é possível direcionar para a mesma célula.');
@@ -124,6 +155,12 @@ class ApeloDirecionadoCelulaService {
     const statusAnterior = apelo.status;
     apelo.status = novoStatus;
     apelo.celula_id = celulaDestinoId || null;
+    apelo.lider_direcionado = celulaDestino.lider || null;
+    apelo.cel_lider = celulaDestino.cel_lider || null;
+    apelo.bairro_direcionado = celulaDestino.bairro || null;
+    apelo.campus_iecg = celulaDestino.campus || null;
+    apelo.direcionado_celula = true;
+    apelo.data_direcionamento = new Date();
     await apelo.save();
 
     if (statusAnterior !== novoStatus) {
@@ -162,5 +199,4 @@ class ApeloDirecionadoCelulaService {
 }
 
 module.exports = new ApeloDirecionadoCelulaService();
-
 

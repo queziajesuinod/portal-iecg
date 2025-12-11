@@ -4,7 +4,10 @@ import {
   Grid,
   TextField,
   Button,
-  MenuItem
+  MenuItem,
+  FormGroup,
+  FormControlLabel,
+  Checkbox
 } from '@mui/material';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
@@ -31,6 +34,7 @@ const formInicial = {
   dia: '',
   lat: '',
   lon: '',
+  horario: ''
 };
 
 const REDE_OPTIONS = [
@@ -43,6 +47,16 @@ const REDE_OPTIONS = [
   'HOMENS IECG',
   'JUVENTUDE RELEVANTE MOÇAS',
   'RELEVANTE JUNIORS MOÇAS'
+];
+
+const DIAS_SEMANA = [
+  { value: 'Segunda', disabled: false },
+  { value: 'Terça', disabled: false },
+  { value: 'Quarta', disabled: true },
+  { value: 'Quinta', disabled: false },
+  { value: 'Sexta', disabled: false },
+  { value: 'Sábado', disabled: false },
+  { value: 'Domingo', disabled: true }
 ];
 
 const resolveApiUrl = () => {
@@ -60,6 +74,7 @@ const CadastrarCelula = () => {
   const [formData, setFormData] = useState(formInicial);
   const [notification, setNotification] = useState('');
   const [campi, setCampi] = useState([]);
+  const [diasSelecionados, setDiasSelecionados] = useState([]);
   const location = useLocation();
   const celulaEditando = location.state?.celula;
   const isEdit = Boolean(celulaEditando);
@@ -68,11 +83,17 @@ const CadastrarCelula = () => {
 
   useEffect(() => {
     if (isEdit && celulaEditando) {
-      setFormData({
+      setFormData((prev) => ({
+        ...prev,
         ...formInicial,
         ...celulaEditando,
         cel_lider: formatPhoneNumber(celulaEditando.cel_lider || '')
-      });
+      }));
+      const dias = (celulaEditando.dia || '')
+        .split(',')
+        .map((d) => d.trim())
+        .filter(Boolean);
+      setDiasSelecionados(dias);
     }
   }, [isEdit, celulaEditando]);
 
@@ -96,10 +117,32 @@ const CadastrarCelula = () => {
     carregarCampi();
   }, [API_URL]);
 
+  const formatHorarioInput = (valor = '') => {
+    const digits = valor.replace(/\\D/g, '').slice(0, 4);
+    const [hh, mm] = [digits.slice(0, 2), digits.slice(2, 4)];
+    if (digits.length <= 2) return hh;
+    return `${hh}:${mm}`;
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    const nextValue = name === 'cel_lider' ? formatPhoneNumber(value) : value;
+    let nextValue = value;
+    if (name === 'cel_lider') {
+      nextValue = formatPhoneNumber(value);
+    }
+    if (name === 'horario') {
+      nextValue = formatHorarioInput(value);
+    }
     setFormData({ ...formData, [name]: nextValue });
+  };
+
+  const handleDiaToggle = (dia) => {
+    setDiasSelecionados((prev) => {
+      if (prev.includes(dia)) {
+        return prev.filter((d) => d !== dia);
+      }
+      return [...prev, dia];
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -117,6 +160,7 @@ const CadastrarCelula = () => {
 
     const payload = {
       ...formData,
+      dia: diasSelecionados.join(', '),
       lat: formData.lat ? parseFloat(formData.lat) : null,
       lon: formData.lon ? parseFloat(formData.lon) : null
     };
@@ -138,7 +182,10 @@ const CadastrarCelula = () => {
 
       if (res.ok) {
         setNotification(isEdit ? 'Célula atualizada com sucesso!' : 'Célula cadastrada com sucesso!');
-        if (!isEdit) setFormData(formInicial);
+        if (!isEdit) {
+          setFormData(formInicial);
+          setDiasSelecionados([]);
+        }
       } else {
         setNotification(`Erro: ${data.message || 'Falha no processamento'}`);
       }
@@ -307,7 +354,33 @@ const CadastrarCelula = () => {
               <TextField fullWidth label="Pastor do Campus" name="pastor_campus" value={formData.pastor_campus} onChange={handleChange} />
             </Grid>
             <Grid item xs={12} md={6}>
-              <TextField fullWidth label="Dia da Semana" name="dia" value={formData.dia} onChange={handleChange} />
+              <div style={{ marginBottom: 8, fontWeight: 600 }}>Dia da semana</div>
+              <FormGroup row>
+                {DIAS_SEMANA.map((dia) => (
+                  <FormControlLabel
+                    key={dia.value}
+                    control={(
+                      <Checkbox
+                        checked={diasSelecionados.includes(dia.value)}
+                        onChange={() => !dia.disabled && handleDiaToggle(dia.value)}
+                        disabled={dia.disabled}
+                      />
+                    )}
+                    label={dia.value}
+                  />
+                ))}
+              </FormGroup>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Horário"
+                name="horario"
+                value={formData.horario}
+                onChange={handleChange}
+                placeholder="HH:MM"
+                inputProps={{ maxLength: 5 }}
+              />
             </Grid>
             <Grid item xs={6} md={3}>
               <TextField fullWidth label="Latitude" name="lat" value={formData.lat} onChange={handleChange} />
