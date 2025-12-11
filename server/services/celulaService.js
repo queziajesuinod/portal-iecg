@@ -50,6 +50,9 @@ class CelulaService {
     if (filtros.rede) {
       where.rede = { [Op.iLike]: `%${filtros.rede}%` };
     }
+    if (filtros.horario) {
+      where.horario = { [Op.iLike]: `%${filtros.horario}%` };
+    }
     if (filtros.bairro) {
       where.bairro = { [Op.iLike]: `%${filtros.bairro}%` };
     }

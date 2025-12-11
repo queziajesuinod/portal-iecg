@@ -60,6 +60,10 @@ module.exports = (sequelize) => {
       type: DataTypes.JSONB,
       allowNull: true
     },
+    dias_semana: {
+      type: DataTypes.JSONB,
+      allowNull: true
+    },
     lider_direcionado: {
       type: DataTypes.STRING,
       allowNull: true
@@ -70,6 +74,10 @@ module.exports = (sequelize) => {
     },
     bairro_direcionado: {
       type: DataTypes.STRING,
+      allowNull: true
+    },
+    observacao: {
+      type: DataTypes.TEXT,
       allowNull: true
     },
     data_direcionamento: {
