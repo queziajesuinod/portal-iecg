@@ -29,6 +29,7 @@ import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import HistoryIcon from '@mui/icons-material/History';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import { PapperBlock, Notification } from 'dan-components';
 import { sendWebhookEvent } from '../../../utils/webhookClient';
 
@@ -377,7 +378,16 @@ const ApelosDirecionadosPage = () => {
               )}
               {apelos.map((apelo) => (
                 <TableRow key={apelo.id}>
-                  <TableCell>{apelo.nome}</TableCell>
+                  <TableCell>
+                    <Box display="flex" alignItems="center" gap={0.5}>
+                      <span>{apelo.nome}</span>
+                      {apelo.observacao && apelo.observacao.trim() !== '' && (
+                        <Tooltip title={apelo.observacao}>
+                          <ArticleOutlinedIcon fontSize="small" color="action" />
+                        </Tooltip>
+                      )}
+                    </Box>
+                  </TableCell>
                   <TableCell>{renderDecisaoChip(apelo.decisao)}</TableCell>
                   <TableCell>{formatDate(apelo.data_direcionamento)}</TableCell>
                   <TableCell>

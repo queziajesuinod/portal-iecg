@@ -2,6 +2,11 @@ const { Celula, Campus } = require('../models');
 const { Op } = require('sequelize'); 
 
 class CelulaService {
+  _sanitizarCelular(valor) {
+    if (!valor) return valor;
+    return String(valor).replace(/\D/g, '');
+  }
+
   async criarCelula(dados) {
     console.log('Dados recebidos para criação:', dados);
 
@@ -19,6 +24,10 @@ class CelulaService {
     }
     if (typeof dados.ativo === 'undefined') {
       dados.ativo = true;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(dados, 'cel_lider')) {
+      dados.cel_lider = this._sanitizarCelular(dados.cel_lider);
     }
 
     const celula = await Celula.create(dados);
@@ -107,6 +116,10 @@ class CelulaService {
         dadosAtualizados.campusId = campus.id;
       }
     }
+    if (Object.prototype.hasOwnProperty.call(dadosAtualizados, 'cel_lider')) {
+      dadosAtualizados.cel_lider = this._sanitizarCelular(dadosAtualizados.cel_lider);
+    }
+
     return await celula.update(dadosAtualizados);
   }
 
