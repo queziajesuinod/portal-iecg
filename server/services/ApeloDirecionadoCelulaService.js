@@ -24,6 +24,11 @@ class ApeloDirecionadoCelulaService {
       payload.observacao = payload.observacao || null;
     }
 
+    if (Object.prototype.hasOwnProperty.call(payload, 'direcionar_celula')) {
+      payload.direcionado_celula = payload.direcionar_celula;
+      delete payload.direcionar_celula;
+    }
+
     return payload;
   }
 
