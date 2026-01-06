@@ -72,6 +72,11 @@ const ApelosDirecionadosPage = () => {
   const [motivoStatus, setMotivoStatus] = useState('');
   const [sugestoes, setSugestoes] = useState([]);
   const [loadingSugestoes, setLoadingSugestoes] = useState(false);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [detailApelo, setDetailApelo] = useState(null);
+  const [detailForm, setDetailForm] = useState({ bairro_apelo: '', bairro_proximo: [] });
+  const [detailBairroTemp, setDetailBairroTemp] = useState('');
+  const [detailSaving, setDetailSaving] = useState(false);
 
   const API_URL = resolveApiUrl();
 
@@ -246,6 +251,84 @@ const ApelosDirecionadosPage = () => {
     return <Chip size="small" label={cfg.label} color={cfg.color} sx={{ fontWeight: 600 }} />;
   };
 
+  const abrirDetalheApelo = (apelo) => {
+    if (!apelo) return;
+    const proximos = Array.isArray(apelo.bairro_proximo)
+      ? apelo.bairro_proximo
+      : apelo.bairro_proximo
+        ? [apelo.bairro_proximo]
+        : [];
+    setDetailForm({
+      bairro_apelo: apelo.bairro_apelo || '',
+      bairro_proximo: proximos
+    });
+    setDetailApelo(apelo);
+    setDetailBairroTemp('');
+    setDetailDialogOpen(true);
+  };
+
+  const handleDetailFormChange = (field, value) => {
+    setDetailForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const addDetailBairroProximo = () => {
+    const val = detailBairroTemp.trim();
+    if (!val) return;
+    setDetailForm((prev) => ({
+      ...prev,
+      bairro_proximo: prev.bairro_proximo.includes(val)
+        ? prev.bairro_proximo
+        : [...prev.bairro_proximo, val]
+    }));
+    setDetailBairroTemp('');
+  };
+
+  const removeDetailBairroProximo = (value) => {
+    setDetailForm((prev) => ({
+      ...prev,
+      bairro_proximo: prev.bairro_proximo.filter((b) => b !== value)
+    }));
+  };
+
+  const fecharDetalheDialog = () => {
+    setDetailDialogOpen(false);
+    setDetailApelo(null);
+    setDetailForm({ bairro_apelo: '', bairro_proximo: [] });
+    setDetailBairroTemp('');
+  };
+
+  const salvarDetalheApelo = async () => {
+    if (!detailApelo) return;
+    setDetailSaving(true);
+    try {
+      const token = localStorage.getItem('token');
+      const payload = {
+        bairro_apelo: detailForm.bairro_apelo || null,
+        bairro_proximo: detailForm.bairro_proximo.length ? detailForm.bairro_proximo : []
+      };
+      const res = await fetch(`${API_URL}/start/direcionamentos/${detailApelo.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.erro || 'Falha ao atualizar os bairros.');
+      }
+      setNotification('Bairros atualizados com sucesso.');
+      fetchApelos();
+      fecharDetalheDialog();
+    } catch (err) {
+      console.error(err);
+      setNotification(err.message || 'Erro ao salvar bairros.');
+    } finally {
+      setDetailSaving(false);
+    }
+  };
+
   const haversine = (lat1, lon1, lat2, lon2) => {
     const toRad = (v) => (v * Math.PI) / 180;
     const R = 6371; // km
@@ -377,13 +460,22 @@ const ApelosDirecionadosPage = () => {
                 </TableRow>
               )}
               {apelos.map((apelo) => (
-                <TableRow key={apelo.id}>
-                  <TableCell>
-                    <Box display="flex" alignItems="center" gap={0.5}>
-                      <span>{apelo.nome}</span>
-                      {apelo.observacao && apelo.observacao.trim() !== '' && (
-                        <Tooltip title={apelo.observacao}>
-                          <ArticleOutlinedIcon fontSize="small" color="action" />
+                  <TableRow key={apelo.id}>
+                    <TableCell>
+                      <Box display="flex" alignItems="center" gap={0.5}>
+                        <span>{apelo.nome}</span>
+                        <Tooltip title="Ver informações preenchidas">
+                          <IconButton
+                            size="small"
+                            onClick={() => abrirDetalheApelo(apelo)}
+                            sx={{ p: 0.3 }}
+                          >
+                            <InfoOutlinedIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        {apelo.observacao && apelo.observacao.trim() !== '' && (
+                          <Tooltip title={apelo.observacao}>
+                            <ArticleOutlinedIcon fontSize="small" color="action" />
                         </Tooltip>
                       )}
                     </Box>
@@ -494,6 +586,109 @@ const ApelosDirecionadosPage = () => {
         <DialogActions>
           <Button onClick={() => setMoveDialogOpen(false)}>Cancelar</Button>
           <Button variant="contained" onClick={moverApelo}>Mover</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={detailDialogOpen} onClose={fecharDetalheDialog} fullWidth maxWidth="sm">
+        <DialogTitle>Detalhes do apelo</DialogTitle>
+        <DialogContent dividers>
+          {detailApelo ? (
+            <>
+              <Grid container spacing={1}>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="caption" color="textSecondary">Nome</Typography>
+                  <Typography variant="body2">{detailApelo.nome}</Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="caption" color="textSecondary">Decisão</Typography>
+                  {renderDecisaoChip(detailApelo.decisao)}
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="caption" color="textSecondary">WhatsApp</Typography>
+                  <Typography variant="body2">{detailApelo.whatsapp || '-'}</Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="caption" color="textSecondary">Rede</Typography>
+                  <Typography variant="body2">{detailApelo.rede || '-'}</Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="caption" color="textSecondary">Status</Typography>
+                  {renderStatusChip(detailApelo.status)}
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="caption" color="textSecondary">Data de direcionamento</Typography>
+                  <Typography variant="body2">{formatDate(detailApelo.data_direcionamento)}</Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="caption" color="textSecondary">Cidade</Typography>
+                  <Typography variant="body2">{detailApelo.cidade_apelo || '-'}</Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="caption" color="textSecondary">Estado</Typography>
+                  <Typography variant="body2">{detailApelo.estado_apelo || '-'}</Typography>
+                </Grid>
+                <Grid item xs={12}>
+                  <Typography variant="caption" color="textSecondary">Observação</Typography>
+                  <Typography variant="body2">{detailApelo.observacao || '-'}</Typography>
+                </Grid>
+                <Grid item xs={12}>
+                  <Typography variant="caption" color="textSecondary">Célula atual</Typography>
+                  <Typography variant="body2">{detailApelo.celulaAtual?.celula || 'Sem célula'}</Typography>
+                </Grid>
+              </Grid>
+              <Box mt={3}>
+                <Typography variant="subtitle2" gutterBottom>Editar bairro</Typography>
+                <TextField
+                  fullWidth
+                  label="Bairro do apelo"
+                  value={detailForm.bairro_apelo}
+                  onChange={(e) => handleDetailFormChange('bairro_apelo', e.target.value)}
+                />
+              </Box>
+              <Box mt={2}>
+                <Typography variant="subtitle2" gutterBottom>Bairros próximos</Typography>
+                <Box display="flex" gap={1} flexWrap="wrap" alignItems="center">
+                  <TextField
+                    label="Adicionar bairro"
+                    value={detailBairroTemp}
+                    onChange={(e) => setDetailBairroTemp(e.target.value)}
+                    disabled={detailSaving}
+                    size="small"
+                    fullWidth
+                  />
+                  <Button
+                    variant="outlined"
+                    onClick={addDetailBairroProximo}
+                    disabled={!detailBairroTemp.trim() || detailSaving}
+                  >
+                    Adicionar
+                  </Button>
+                </Box>
+                <Box mt={1} display="flex" flexWrap="wrap" gap={1}>
+                  {detailForm.bairro_proximo.map((bairro, index) => (
+                    <Chip
+                      key={`${bairro}-${index}`}
+                      label={bairro}
+                      onDelete={() => removeDetailBairroProximo(bairro)}
+                    />
+                  ))}
+                  {detailForm.bairro_proximo.length === 0 && (
+                    <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
+                      Nenhum bairro próximo registrado.
+                    </Typography>
+                  )}
+                </Box>
+              </Box>
+            </>
+          ) : (
+            <Typography variant="body2" color="textSecondary">Dados não disponíveis.</Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={fecharDetalheDialog} disabled={detailSaving}>Cancelar</Button>
+          <Button variant="contained" onClick={salvarDetalheApelo} disabled={detailSaving}>
+            {detailSaving ? 'Salvando...' : 'Salvar'}
+          </Button>
         </DialogActions>
       </Dialog>
 
