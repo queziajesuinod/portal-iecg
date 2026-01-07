@@ -141,6 +141,7 @@ const ApelosDirecionadosPage = () => {
     setApeloSelecionado(apelo);
     setCelulaDestinoId('');
     setMotivo('');
+    setFiltroCelula('');
     setMoveDialogOpen(true);
     sugerirCelulasProximas(apelo);
   };
@@ -205,11 +206,11 @@ const ApelosDirecionadosPage = () => {
   const celulaAtualTexto = (apelo) => apelo?.celulaAtual?.celula || 'Sem célula';
 
   const celulasMesmaRede = (apelo) => {
-    if (!apelo?.rede) return celulas;
-    const filtradas = celulas.filter((c) => (c.rede || '').toLowerCase() === (apelo.rede || '').toLowerCase());
-    const base = filtradas.length ? filtradas : celulas;
-    const baseSemAtual = base.filter((c) => c.id !== apelo?.celulaAtual?.id);
-    if (!filtroCelula) return base;
+    if (!apelo?.rede) return [];
+    const rede = (apelo.rede || '').toLowerCase();
+    const filtradas = celulas.filter((c) => (c.rede || '').toLowerCase() === rede);
+    const baseSemAtual = filtradas.filter((c) => c.id !== apelo?.celulaAtual?.id);
+    if (!filtroCelula) return baseSemAtual;
     return baseSemAtual.filter((c) => (c.celula || '').toLowerCase().includes(filtroCelula.toLowerCase()));
   };
 
@@ -382,6 +383,11 @@ const ApelosDirecionadosPage = () => {
     setLoadingSugestoes(false);
   };
 
+  const celulasDisponiveis = celulasMesmaRede(apeloSelecionado);
+  const sugestoesFiltradas = filtroCelula
+    ? sugestoes.filter((c) => (c.celula || '').toLowerCase().includes(filtroCelula.toLowerCase()))
+    : sugestoes;
+
   return (
     <div>
       <Helmet>
@@ -535,6 +541,15 @@ const ApelosDirecionadosPage = () => {
             Rede: {apeloSelecionado?.rede || '-'} | Cidade: Campo Grande | Estado: Mato Grosso do Sul
           </Typography>
           <TextField
+            label="Buscar célula"
+            fullWidth
+            margin="normal"
+            size="small"
+            placeholder="Digite parte do nome para reduzir a lista"
+            value={filtroCelula}
+            onChange={(e) => setFiltroCelula(e.target.value)}
+          />
+          <TextField
             select
             label="Célula destino"
             fullWidth
@@ -542,12 +557,17 @@ const ApelosDirecionadosPage = () => {
             value={celulaDestinoId}
             onChange={(e) => setCelulaDestinoId(e.target.value)}
           >
-            {celulasMesmaRede(apeloSelecionado).map((c) => (
+            {celulasDisponiveis.map((c) => (
               <MenuItem key={c.id} value={c.id}>
                 {c.celula} {c.rede ? `- ${c.rede}` : ''}
               </MenuItem>
             ))}
           </TextField>
+          {celulasDisponiveis.length === 0 && (
+            <Typography variant="caption" color="textSecondary">
+              Nenhuma célula cadastrada na mesma rede do apelo. Verifique se existe alguma célula ativa para essa rede.
+            </Typography>
+          )}
           <TextField
             label="Motivo do direcionamento"
             fullWidth
@@ -564,11 +584,11 @@ const ApelosDirecionadosPage = () => {
             {loadingSugestoes && (
               <Typography variant="caption" color="textSecondary">Buscando sugestões...</Typography>
             )}
-            {!loadingSugestoes && sugestoes.length === 0 && (
+            {!loadingSugestoes && sugestoesFiltradas.length === 0 && (
               <Typography variant="caption" color="textSecondary">Nenhuma sugestão disponível.</Typography>
             )}
             <Grid container spacing={1}>
-              {sugestoes.map((c) => (
+              {sugestoesFiltradas.map((c) => (
                 <Grid item xs={12} sm={6} key={c.id}>
                   <Card variant="outlined" sx={{ cursor: 'pointer' }} onClick={() => setCelulaDestinoId(c.id)}>
                     <CardContent>
