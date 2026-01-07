@@ -32,7 +32,10 @@ class CelulaPublicController {
 
   async criar(req, res) {
     try {
-      const payload = req.body;
+      let payload = req.body || {};
+      if (!payload.celula && payload.json) {
+        payload = payload.json;
+      }
       const existente = await CelulaPublicService.buscarPorCampos(payload);
       if (existente) {
         return res.status(200).json(this._formatarResposta(existente));
