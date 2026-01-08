@@ -12,6 +12,7 @@ import {
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
 import { formatPhoneNumber } from '../../../utils/formatPhone';
+import { fetchGeocode } from '../../../utils/googleGeocode';
 
 const formInicial = {
   id: '',
@@ -199,58 +200,35 @@ const CadastrarCelula = () => {
     const { endereco, numero, bairro, cidade, estado, cep } = formData;
     const queryParts = [endereco, numero, bairro, cidade, estado, cep].filter(Boolean);
     if (!queryParts.length) {
-      setNotification('Informe endereÃ§o, nÃºmero, bairro, cidade, estado ou CEP para buscar coordenadas.');
+      setNotification('Informe endereço, número, bairro, cidade, estado ou CEP para buscar coordenadas.');
       return;
     }
 
     try {
-      const query = encodeURIComponent(queryParts.join(' '));
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&addressdetails=1`);
-      const data = await res.json();
-
-      if (data.length > 0) {
-        const { lat, lon, address = {} } = data[0];
-        const bairro =
-          address.suburb ||
-          address.neighbourhood ||
-          address.city_district ||
-          address.quarter ||
-          address.village ||
-          '';
-        const logradouro = address.road || address.pedestrian || address.cycleway || '';
-        const numeroEncontrado = address.house_number || '';
-        const cidade =
-          address.city ||
-          address.town ||
-          address.village ||
-          address.municipality ||
-          address.state_district ||
-          '';
-        const estado = address.state || address.region || address.state_district || '';
-        const cepEncontrado = address.postcode || '';
-
-        setFormData((prev) => ({
-          ...prev,
-          lat,
-          lon,
-          endereco: logradouro || prev.endereco,
-          numero: numeroEncontrado || prev.numero,
-          bairro: bairro || prev.bairro,
-          cidade: cidade || prev.cidade,
-          estado: estado || prev.estado,
-          cep: cepEncontrado || prev.cep
-        }));
-        setNotification('Coordenadas preenchidas com sucesso!');
-      } else {
-        setNotification('Nenhum resultado encontrado para esse endereÃ§o.');
+      const geocodeResult = await fetchGeocode(queryParts.join(' '));
+      if (!geocodeResult) {
+        setNotification('Nenhum resultado encontrado para esse endereço.');
+        return;
       }
+      setFormData((prev) => ({
+        ...prev,
+        lat: geocodeResult.lat,
+        lon: geocodeResult.lon,
+        endereco: geocodeResult.logradouro || prev.endereco,
+        numero: geocodeResult.numeroEncontrado || prev.numero,
+        bairro: geocodeResult.bairro || prev.bairro,
+        cidade: geocodeResult.cidade || prev.cidade,
+        estado: geocodeResult.estado || prev.estado,
+        cep: geocodeResult.cepEncontrado || prev.cep
+      }));
+      setNotification('Coordenadas preenchidas com sucesso!');
     } catch (error) {
       console.error('Erro ao buscar coordenadas:', error);
       setNotification('Erro ao buscar coordenadas.');
     }
   };
 
-  return (
+return (
     <div>
       <Helmet>
         <title>{isEdit ? 'Editar CÃ©lula' : 'Cadastrar CÃ©lula'}</title>

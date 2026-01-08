@@ -32,6 +32,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import { PapperBlock, Notification } from 'dan-components';
 import { sendWebhookEvent } from '../../../utils/webhookClient';
+import { fetchGeocode } from '../../../utils/googleGeocode';
 
 const resolveApiUrl = () => {
   if (process.env.REACT_APP_API_URL) {
@@ -343,26 +344,22 @@ const ApelosDirecionadosPage = () => {
   };
 
   const buscarCoordenadasApelo = async (apelo) => {
-    const bairro = apelo?.bairro_apelo || '';
-    const cidade = apelo?.cidade_apelo || 'Campo Grande';
-    const estado = apelo?.estado_apelo || 'Mato Grosso do Sul';
-    const queryParts = [bairro, cidade, estado, 'Brasil'].filter(Boolean);
-    if (!queryParts.length) return null;
-    try {
-      const query = encodeURIComponent(queryParts.join(' '));
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&addressdetails=1`);
-      if (!res.ok) return null;
-      const data = await res.json();
-      if (!Array.isArray(data) || !data.length) return null;
-      const { lat, lon } = data[0];
-      return { lat: parseFloat(lat), lon: parseFloat(lon) };
-    } catch (err) {
-      console.error('Erro ao buscar coordenadas do apelo:', err);
-      return null;
-    }
-  };
+  const bairro = apelo?.bairro_apelo || '';
+  const cidade = apelo?.cidade_apelo || 'Campo Grande';
+  const estado = apelo?.estado_apelo || 'Mato Grosso do Sul';
+  const queryParts = [bairro, cidade, estado, 'Brasil'].filter(Boolean);
+  if (!queryParts.length) return null;
+  try {
+    const geocodeResult = await fetchGeocode(queryParts.join(' '));
+    if (!geocodeResult) return null;
+    return { lat: geocodeResult.lat, lon: geocodeResult.lon };
+  } catch (err) {
+    console.error('Erro ao buscar coordenadas do apelo:', err);
+    return null;
+  }
+};
 
-  const sugerirCelulasProximas = async (apelo) => {
+const sugerirCelulasProximas = async (apelo) => {
     setLoadingSugestoes(true);
     setSugestoes([]);
     const coords = await buscarCoordenadasApelo(apelo);

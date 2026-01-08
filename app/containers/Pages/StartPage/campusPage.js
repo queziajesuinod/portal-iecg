@@ -8,6 +8,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import useStyles from 'dan-components/Tables/tableStyle-jss';
 import Notification from 'dan-components/Notification/Notification';
+import { fetchGeocode } from '../../../utils/googleGeocode';
 
 const resolveApiUrl = () => {
   if (process.env.REACT_APP_API_URL) {
@@ -110,25 +111,25 @@ const CampusPage = () => {
 
   const buscarCoordenadas = async () => {
     if (!form.endereco) {
-      setNotification('Preencha o endereÃ§o antes de buscar coordenadas.');
+      setNotification('Preencha o endereço antes de buscar coordenadas.');
       return;
     }
     try {
-      const query = encodeURIComponent(`${form.endereco} ${form.bairro || ''} ${form.cidade || ''}`);
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&addressdetails=1`);
-      const data = await res.json();
-      if (data.length > 0) {
-        setForm((prev) => ({ ...prev, lat: data[0].lat, lon: data[0].lon }));
+      const query = [form.endereco, form.bairro, form.cidade].filter(Boolean).join(' ');
+      const geocodeResult = await fetchGeocode(query);
+      if (geocodeResult) {
+        setForm((prev) => ({ ...prev, lat: geocodeResult.lat, lon: geocodeResult.lon }));
         setNotification('Coordenadas preenchidas com sucesso!');
       } else {
-        setNotification('Nenhum resultado encontrado para esse endereÃ§o.');
+        setNotification('Nenhum resultado encontrado para esse endereço.');
       }
     } catch (error) {
+      console.error('Erro ao buscar coordenadas:', error);
       setNotification('Erro ao buscar coordenadas.');
     }
   };
 
-  return (
+return (
     <div>
       <Helmet>
         <title>Campus</title>
