@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
 import { Box, Button, Typography, Paper, List, ListItem, ListItemText } from '@mui/material';
@@ -8,6 +8,7 @@ const FilaApelosPage = () => {
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState('');
   const [autoProcess, setAutoProcess] = useState(false);
+  const autoProcessRef = useRef(false);
 
   const API_URL = (
     process.env.REACT_APP_API_URL?.trim() || window.location.origin
@@ -43,25 +44,30 @@ const FilaApelosPage = () => {
   };
 
   const scheduleNext = async () => {
+    if (!autoProcessRef.current) return;
     try {
       const data = await processar();
-      if (autoProcess && data && data.mensagem && !/Nenhum apelo aguardando/i.test(data.mensagem)) {
+      if (autoProcessRef.current && data && data.mensagem && !/Nenhum apelo aguardando/i.test(data.mensagem)) {
         setTimeout(scheduleNext, 15000);
       } else {
+        autoProcessRef.current = false;
         setAutoProcess(false);
       }
     } catch (err) {
+      autoProcessRef.current = false;
       setAutoProcess(false);
     }
   };
 
   const startAuto = () => {
-    if (autoProcess) return;
+    if (autoProcessRef.current) return;
+    autoProcessRef.current = true;
     setAutoProcess(true);
     scheduleNext();
   };
 
   const stopAuto = () => {
+    autoProcessRef.current = false;
     setAutoProcess(false);
   };
 
