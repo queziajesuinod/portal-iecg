@@ -23,7 +23,6 @@ const pageTitles = {
   'app/start/campus': 'Campus',
   'app/start/direcionamentos': 'Apelos Direcionados',
   'app/start/fila-apelos': 'Fila de Apelos',
-  'app/start/chatwoot': 'Chat de Atendimento',
 
   // Administração
   'app/admin': 'Administração',
@@ -51,7 +50,6 @@ const pageTitles = {
   novo: 'Novo Usuário',
   profile: 'Meu Perfil',
   'listas-presenca': 'Listas de Presença',
-  chatwoot: 'Chat de Atendimento',
 };
 
 /**

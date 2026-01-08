@@ -67,13 +67,6 @@ module.exports = [
         icon: 'ion-ios-world-outline',
         permission: 'CELULA_LISTAR'
       },
-      {
-        key: 'chatwoot',
-        name: 'Chat Start',
-        link: '/app/start/chatwoot',
-        icon: 'ion-ios-chatbubbles',
-        permission: 'CELULA_LISTAR'
-      }
     ]
   },
   {

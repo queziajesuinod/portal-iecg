@@ -16,7 +16,7 @@ const CHATWOOT_SCRIPT_ID = 'chatwoot-sdk-js';
 const ChatwootPage = () => {
   const [notification, setNotification] = useState('');
   const [widgetReady, setWidgetReady] = useState(false);
-  const baseUrl = (process.env.REACT_APP_CHATWOOT_BASE_URL || 'https://app.chatwoot.com').replace(/\/$/, '');
+  const baseUrl = (process.env.REACT_APP_CHATWOOT_BASE_URL || 'https://chat.chatwoot.com').replace(/\/$/, '');
   const websiteToken = process.env.REACT_APP_CHATWOOT_WEBSITE_TOKEN || '';
   const locale = process.env.REACT_APP_CHATWOOT_LOCALE || 'pt-BR';
   const whatsappNumber = process.env.REACT_APP_CHATWOOT_WHATSAPP_NUMBER || '';
