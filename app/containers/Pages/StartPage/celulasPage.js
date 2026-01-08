@@ -15,6 +15,7 @@ import ListAltIcon from '@mui/icons-material/ListAlt';
 import { useHistory } from 'react-router-dom';
 import useStyles from 'dan-components/Tables/tableStyle-jss';
 import Notification from 'dan-components/Notification/Notification';
+import { fetchGeocode } from '../../../utils/googleGeocode';
 
 const REDE_OPTIONS = [
   'RELEVANTE JUNIORS RAPAZES',
@@ -131,39 +132,28 @@ const ListagemCelulasPage = () => {
 
   const geocodeAddressFromRow = async (row) => {
     if (!row.endereco) return {};
-    const queryParts = [row.endereco, row.numero, row.bairro, row.cidade, row.estado, row.cep].filter(Boolean).join(' ');
-    if (!queryParts) return {};
+    const queryParts = [row.endereco, row.numero, row.bairro, row.cidade, row.estado, row.cep].filter(Boolean);
+    if (!queryParts.length) return {};
     try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(queryParts)}&format=json&addressdetails=1`);
-      if (!res.ok) return {};
-      const data = await res.json();
-      if (!Array.isArray(data) || !data.length) return {};
-      const { lat, lon, address = {} } = data[0];
-      const bairro =
-        row.bairro ||
-        address.suburb ||
-        address.neighbourhood ||
-        address.city_district ||
-        address.quarter ||
-        address.village ||
-        '';
-      const cidade =
-        row.cidade ||
-        address.city ||
-        address.town ||
-        address.village ||
-        address.municipality ||
-        address.state_district ||
-        '';
-      const estado = row.estado || address.state || address.region || address.state_district || '';
-      return { lat, lon, bairro, cidade, estado };
+      const geocodeResult = await fetchGeocode(queryParts.join(' '));
+      if (!geocodeResult) return {};
+      const bairro = row.bairro || geocodeResult.bairro || '';
+      const cidade = row.cidade || geocodeResult.cidade || '';
+      const estado = row.estado || geocodeResult.estado || '';
+      return {
+        lat: geocodeResult.lat,
+        lon: geocodeResult.lon,
+        bairro,
+        cidade,
+        estado
+      };
     } catch (error) {
-      console.error('Erro ao buscar coordenadas durante importaÃ§Ã£o:', error);
+      console.error('Erro ao buscar coordenadas durante importação:', error);
       return {};
     }
   };
 
-  const resolveCampusFromRow = (row) => {
+const resolveCampusFromRow = (row) => {
     const campusIdValue = row.campusId || row.campus;
     if (!campusIdValue) {
       return { campusId: '', campusNome: '' };

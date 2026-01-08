@@ -6,6 +6,7 @@ const WebhookService = require('./WebhookService');
 
 const diasRecencia = 30;
 const maxPorCelulaRecente = 2;
+const GOOGLE_GEOCODE_KEY = process.env.GOOGLE_GEOCODE_KEY;
 
 const haversine = (lat1, lon1, lat2, lon2) => {
   const toRad = (x) => (x * Math.PI) / 180;
@@ -20,12 +21,31 @@ const haversine = (lat1, lon1, lat2, lon2) => {
 };
 
 const geocode = async (query) => {
+  if (!query || !GOOGLE_GEOCODE_KEY) {
+    if (!GOOGLE_GEOCODE_KEY) {
+      console.warn('GOOGLE_GEOCODE_KEY não configurada.');
+    }
+    return null;
+  }
+
   try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1`;
-    const res = await axios.get(url, { headers: { 'User-Agent': 'portal-iecg/1.0' }, timeout: 5000 });
-    const first = Array.isArray(res.data) ? res.data[0] : null;
-    if (!first || !first.lat || !first.lon) return null;
-    return { lat: parseFloat(first.lat), lon: parseFloat(first.lon) };
+    const params = new URLSearchParams({
+      address: query,
+      key: GOOGLE_GEOCODE_KEY,
+    });
+    const res = await axios.get(`https://maps.googleapis.com/maps/api/geocode/json?${params.toString()}`, {
+      headers: { 'User-Agent': 'portal-iecg/1.0' },
+      timeout: 5000,
+    });
+    const data = res.data;
+    if (!data || data.status !== 'OK' || !Array.isArray(data.results) || data.results.length === 0) {
+      return null;
+    }
+    const location = data.results[0].geometry?.location;
+    if (!location || location.lat == null || location.lng == null) {
+      return null;
+    }
+    return { lat: parseFloat(location.lat), lon: parseFloat(location.lng) };
   } catch (err) {
     return null;
   }
