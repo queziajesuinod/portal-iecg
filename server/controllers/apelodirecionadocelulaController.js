@@ -16,8 +16,8 @@ class ApeloDirecionadoCelulaController {
 
   async listarTodos(req, res) {
     try {
-      const { month, status, page, limit, nome, decisao } = req.query;
-      const lista = await ApeloDirecionadoCelulaService.listarTodos({ month, status, page, limit, nome, decisao });
+      const { month, status, page, limit, nome, decisao, year } = req.query;
+      const lista = await ApeloDirecionadoCelulaService.listarTodos({ month, status, page, limit, nome, decisao, year });
       return res.status(200).json(lista);
     } catch (error) {
       return res.status(500).json({ erro: 'Erro ao buscar registros' });

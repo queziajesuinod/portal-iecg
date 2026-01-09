@@ -4,7 +4,18 @@
 
 const path = require('path');
 const webpack = require('webpack');
+const dotenv = require('dotenv');
 // const ESLintPlugin = require('eslint-webpack-plugin');
+
+const envFile = path.resolve(process.cwd(), '.env');
+dotenv.config({ path: envFile });
+const reactAppEnvKeys = Object.keys(process.env).filter((key) =>
+  key.startsWith('REACT_APP_'),
+);
+const reactAppEnv = reactAppEnvKeys.reduce((acc, key) => {
+  acc[key] = process.env[key];
+  return acc;
+}, {});
 
 module.exports = options => ({
   mode: options.mode,
@@ -183,6 +194,7 @@ module.exports = options => ({
     // drop any unreachable code.
     new webpack.EnvironmentPlugin({
       NODE_ENV: 'development',
+      ...reactAppEnv,
     }),
     new webpack.ProvidePlugin({
       process: 'process/browser'

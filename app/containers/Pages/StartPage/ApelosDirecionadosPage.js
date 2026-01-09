@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
@@ -33,6 +33,7 @@ import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import { PapperBlock, Notification } from 'dan-components';
 import { sendWebhookEvent } from '../../../utils/webhookClient';
 import { fetchGeocode } from '../../../utils/googleGeocode';
+import { useHistory } from 'react-router-dom';
 
 const resolveApiUrl = () => {
   if (process.env.REACT_APP_API_URL) {
@@ -45,13 +46,17 @@ const resolveApiUrl = () => {
   return `${protocol}//${hostname}${port ? `:${port}` : ''}`;
 };
 
+const YEAR_OPTIONS = ['', '2026', '2025'];
+
 const ApelosDirecionadosPage = () => {
+  const history = useHistory();
   const [apelos, setApelos] = useState([]);
   const [celulas, setCelulas] = useState([]);
   const [monthFilter, setMonthFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [nomeFilter, setNomeFilter] = useState('');
   const [decisaoFilter, setDecisaoFilter] = useState('');
+  const [yearFilter, setYearFilter] = useState(YEAR_OPTIONS[0]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -75,11 +80,22 @@ const ApelosDirecionadosPage = () => {
   const [loadingSugestoes, setLoadingSugestoes] = useState(false);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [detailApelo, setDetailApelo] = useState(null);
-  const [detailForm, setDetailForm] = useState({ bairro_apelo: '', bairro_proximo: [] });
+  const [detailForm, setDetailForm] = useState({ bairro_apelo: '', bairro_proximo: [], rede: '' });
   const [detailBairroTemp, setDetailBairroTemp] = useState('');
   const [detailSaving, setDetailSaving] = useState(false);
 
   const API_URL = resolveApiUrl();
+  const redeOptions = useMemo(() => {
+    const set = new Set();
+    celulas.forEach((celula) => {
+      const rede = (celula.rede || '').trim();
+      if (rede) set.add(rede);
+    });
+    if (detailApelo?.rede) {
+      set.add(detailApelo.rede);
+    }
+    return Array.from(set);
+  }, [celulas, detailApelo?.rede]);
 
   const fetchApelos = async () => {
     setLoading(true);
@@ -90,6 +106,7 @@ const ApelosDirecionadosPage = () => {
       if (statusFilter) params.append('status', statusFilter);
       if (nomeFilter) params.append('nome', nomeFilter);
       if (decisaoFilter) params.append('decisao', decisaoFilter);
+      if (yearFilter) params.append('year', yearFilter);
       params.append('page', page);
       params.append('limit', 10);
       const res = await fetch(`${API_URL}/start/direcionamentos/?${params.toString()}`, {
@@ -136,7 +153,7 @@ const ApelosDirecionadosPage = () => {
   useEffect(() => {
     fetchApelos();
     fetchCelulas();
-  }, [monthFilter, statusFilter, nomeFilter, decisaoFilter, page]);
+  }, [monthFilter, statusFilter, nomeFilter, decisaoFilter, yearFilter, page]);
 
   const abrirMover = (apelo) => {
     setApeloSelecionado(apelo);
@@ -204,12 +221,16 @@ const ApelosDirecionadosPage = () => {
     }
   };
 
+  const normalizeRede = (value) => (value || '').toString().trim().toLowerCase();
+
   const celulaAtualTexto = (apelo) => apelo?.celulaAtual?.celula || 'Sem célula';
+  const apeloSemDirecionamento = (apelo) => apelo?.status === 'NAO_HAVERAR_DIRECIONAMENTO';
 
   const celulasMesmaRede = (apelo) => {
-    if (!apelo?.rede) return [];
-    const rede = (apelo.rede || '').toLowerCase();
-    const filtradas = celulas.filter((c) => (c.rede || '').toLowerCase() === rede);
+    if (!apelo) return [];
+    const redeApelo = normalizeRede(apelo?.rede);
+    if (!redeApelo) return [];
+    const filtradas = celulas.filter((c) => normalizeRede(c.rede) === redeApelo);
     const baseSemAtual = filtradas.filter((c) => c.id !== apelo?.celulaAtual?.id);
     if (!filtroCelula) return baseSemAtual;
     return baseSemAtual.filter((c) => (c.celula || '').toLowerCase().includes(filtroCelula.toLowerCase()));
@@ -224,6 +245,7 @@ const ApelosDirecionadosPage = () => {
 
   const statusConfig = {
     APELO_CADASTRADO: { label: 'Novo', color: 'default' },
+    NAO_HAVERAR_DIRECIONAMENTO: { label: 'Não direcionar para uma célula', color: 'error' },
     DIRECIONADO_COM_SUCESSO: { label: 'Direcionado', color: 'info' },
     ENVIO_LIDER_PENDENTE_WHATS_ERRADO: { label: 'Pendência de Envio para Líder', color: 'warning' },
     CONSOLIDADO_CELULA: { label: 'Consolidado na célula', color: 'success' },
@@ -231,7 +253,8 @@ const ApelosDirecionadosPage = () => {
     ENVIO_LIDER_PENDENTE: { label: 'Líder ainda não fez contato', color: 'secondary' },
     CONTATO_LIDER_SEM_RETORNO: { label: 'Líder enviou mensagem, sem retorno', color: 'secondary' },
     CONSOLIDACAO_INTERROMPIDA: { label: 'Não Consolidado', color: 'error' },
-    MOVIMENTACAO_CELULA: { label: 'Em movimentação de célula', color: 'primary' }
+    MOVIMENTACAO_CELULA: { label: 'Em movimentação de célula', color: 'primary' } ,
+    EM_CONSOLIDACAO: { label: 'Em Consolidação', color: 'purple' }
   };
 
   const statusLabel = (status) => statusConfig[status]?.label || status || '-';
@@ -262,7 +285,8 @@ const ApelosDirecionadosPage = () => {
         : [];
     setDetailForm({
       bairro_apelo: apelo.bairro_apelo || '',
-      bairro_proximo: proximos
+      bairro_proximo: proximos,
+      rede: apelo.rede || ''
     });
     setDetailApelo(apelo);
     setDetailBairroTemp('');
@@ -295,7 +319,7 @@ const ApelosDirecionadosPage = () => {
   const fecharDetalheDialog = () => {
     setDetailDialogOpen(false);
     setDetailApelo(null);
-    setDetailForm({ bairro_apelo: '', bairro_proximo: [] });
+    setDetailForm({ bairro_apelo: '', bairro_proximo: [], rede: '' });
     setDetailBairroTemp('');
   };
 
@@ -306,6 +330,7 @@ const ApelosDirecionadosPage = () => {
       const token = localStorage.getItem('token');
       const payload = {
         bairro_apelo: detailForm.bairro_apelo || null,
+        rede: detailForm.rede || null,
         bairro_proximo: detailForm.bairro_proximo.length ? detailForm.bairro_proximo : []
       };
       const res = await fetch(`${API_URL}/start/direcionamentos/${detailApelo.id}`, {
@@ -368,7 +393,7 @@ const sugerirCelulasProximas = async (apelo) => {
       return;
     }
     const celulasFiltradas = celulas.filter((c) => {
-      const mesmaRede = (c.rede || '').toLowerCase() === (apelo.rede || '').toLowerCase();
+      const mesmaRede = normalizeRede(c.rede) === normalizeRede(apelo.rede);
       return mesmaRede && c.lat && c.lon;
     });
     const calculadas = celulasFiltradas.map((c) => ({
@@ -380,7 +405,7 @@ const sugerirCelulasProximas = async (apelo) => {
     setLoadingSugestoes(false);
   };
 
-  const celulasDisponiveis = celulasMesmaRede(apeloSelecionado);
+  const celulasDisponiveis = apeloSelecionado ? celulasMesmaRede(apeloSelecionado) : [];
   const sugestoesFiltradas = filtroCelula
     ? sugestoes.filter((c) => (c.celula || '').toLowerCase().includes(filtroCelula.toLowerCase()))
     : sugestoes;
@@ -391,7 +416,8 @@ const sugerirCelulasProximas = async (apelo) => {
         <title>Apelos Direcionados</title>
       </Helmet>
       <PapperBlock title="Apelos Direcionados" desc="Gerencie apelos direcionados e movimentações">
-        <Box display="flex" gap={2} flexWrap="wrap" mb={2}>
+      <Box display="flex" justifyContent="space-between" gap={2} flexWrap="wrap" alignItems="center" mb={2}>
+        <Box display="flex" gap={2} flexWrap="wrap" alignItems="center">
           <TextField
             label="Nome do apelo"
             size="small"
@@ -409,6 +435,23 @@ const sugerirCelulasProximas = async (apelo) => {
             value={monthFilter}
             onChange={(e) => setMonthFilter(e.target.value)}
           />
+          <TextField
+            select
+            label="Ano"
+            size="small"
+            value={yearFilter}
+            sx={{ width: 140 }}
+            onChange={(e) => {
+              setYearFilter(e.target.value);
+              setPage(1);
+            }}
+          >
+            {YEAR_OPTIONS.map((year) => (
+              <MenuItem key={year} value={year}>
+                {year === '' ? 'Todos' : year}
+              </MenuItem>
+            ))}
+          </TextField>
           <TextField
             select
             label="Decisão"
@@ -438,10 +481,16 @@ const sugerirCelulasProximas = async (apelo) => {
               <MenuItem key={key} value={key}>{statusConfig[key].label}</MenuItem>
             ))}
           </TextField>
+        </Box>
+        <Box display="flex" gap={1}>
+          <Button variant="contained" color="secondary" onClick={() => history.push('/app/start/fila-apelos')}>
+            Fila de apelos
+          </Button>
           <Button variant="outlined" onClick={fetchApelos} disabled={loading}>
             Atualizar
           </Button>
         </Box>
+      </Box>
         <TableContainer component={Paper}>
           <Table size="small">
             <TableHead>
@@ -462,7 +511,9 @@ const sugerirCelulasProximas = async (apelo) => {
                   </TableCell>
                 </TableRow>
               )}
-              {apelos.map((apelo) => (
+              {apelos.map((apelo) => {
+                const actionsDisabled = apeloSemDirecionamento(apelo);
+                return (
                   <TableRow key={apelo.id}>
                     <TableCell>
                       <Box display="flex" alignItems="center" gap={0.5}>
@@ -479,47 +530,66 @@ const sugerirCelulasProximas = async (apelo) => {
                         {apelo.observacao && apelo.observacao.trim() !== '' && (
                           <Tooltip title={apelo.observacao}>
                             <ArticleOutlinedIcon fontSize="small" color="action" />
+                          </Tooltip>
+                        )}
+                      </Box>
+                    </TableCell>
+                    <TableCell>{renderDecisaoChip(apelo.decisao)}</TableCell>
+                    <TableCell>{formatDate(apelo.data_direcionamento)}</TableCell>
+                    <TableCell>
+                      <Box display="flex" alignItems="center" gap={1}>
+                        <span>{celulaAtualTexto(apelo)}</span>
+                        <Tooltip title="Detalhes da célula">
+                          <IconButton size="small" onClick={() => {
+                            setCelulaDetalhe(apelo.celulaAtual);
+                            setCelulaDialogOpen(true);
+                          }}>
+                            <InfoOutlinedIcon fontSize="small" />
+                          </IconButton>
                         </Tooltip>
-                      )}
-                    </Box>
-                  </TableCell>
-                  <TableCell>{renderDecisaoChip(apelo.decisao)}</TableCell>
-                  <TableCell>{formatDate(apelo.data_direcionamento)}</TableCell>
-                  <TableCell>
-                    <Box display="flex" alignItems="center" gap={1}>
-                      <span>{celulaAtualTexto(apelo)}</span>
-                      <Tooltip title="Detalhes da célula">
-                        <IconButton size="small" onClick={() => {
-                          setCelulaDetalhe(apelo.celulaAtual);
-                          setCelulaDialogOpen(true);
-                        }}>
-                          <InfoOutlinedIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                  </TableCell>
-                  <TableCell>{renderStatusChip(apelo.status)}</TableCell>
-                  <TableCell align="right">
-                    <Box display="flex" gap={1} justifyContent="flex-end">
-
-                      <Tooltip title="Histórico de movimentações">
-                        <HistoryIcon fontSize="small" style={{ cursor: 'pointer' }} onClick={() => abrirHistorico(apelo)} />
-                      </Tooltip>
-                      <Tooltip title="Alterar status">
-                        <AutorenewIcon fontSize="small" style={{ cursor: 'pointer' }} onClick={() => {
-                          setApeloSelecionado(apelo);
-                          setNovoStatus(apelo.status || '');
-                          setMotivoStatus('');
-                          setStatusDialogOpen(true);
-                        }} />
-                      </Tooltip>
-                      <Tooltip title="Mover para outra célula">
-                        <SwapHorizIcon fontSize="small" style={{ cursor: 'pointer' }} onClick={() => abrirMover(apelo)} />
-                      </Tooltip>
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              ))}
+                      </Box>
+                    </TableCell>
+                    <TableCell>{renderStatusChip(apelo.status)}</TableCell>
+                    <TableCell align="right">
+                      <Box display="flex" gap={1} justifyContent="flex-end">
+                        <Tooltip title="Histórico de movimentações">
+                          <IconButton
+                            size="small"
+                            disabled={actionsDisabled}
+                            onClick={() => !actionsDisabled && abrirHistorico(apelo)}
+                          >
+                            <HistoryIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Alterar status">
+                          <IconButton
+                            size="small"
+                            disabled={actionsDisabled}
+                            onClick={() => {
+                              if (actionsDisabled) return;
+                              setApeloSelecionado(apelo);
+                              setNovoStatus(apelo.status || '');
+                              setMotivoStatus('');
+                              setStatusDialogOpen(true);
+                            }}
+                          >
+                            <AutorenewIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Mover para outra célula">
+                          <IconButton
+                            size="small"
+                            disabled={actionsDisabled}
+                            onClick={() => !actionsDisabled && abrirMover(apelo)}
+                          >
+                            <SwapHorizIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </TableContainer>
@@ -606,7 +676,7 @@ const sugerirCelulasProximas = async (apelo) => {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={detailDialogOpen} onClose={fecharDetalheDialog} fullWidth maxWidth="sm">
+      <Dialog open={detailDialogOpen} onClose={fecharDetalheDialog} fullWidth maxWidth="md">
         <DialogTitle>Detalhes do apelo</DialogTitle>
         <DialogContent dividers>
           {detailApelo ? (
@@ -625,8 +695,21 @@ const sugerirCelulasProximas = async (apelo) => {
                   <Typography variant="body2">{detailApelo.whatsapp || '-'}</Typography>
                 </Grid>
                 <Grid item xs={12} sm={6}>
-                  <Typography variant="caption" color="textSecondary">Rede</Typography>
-                  <Typography variant="body2">{detailApelo.rede || '-'}</Typography>
+                  <TextField
+                    select
+                    label="Rede"
+                    fullWidth
+                    size="small"
+                    value={detailForm.rede}
+                    onChange={(e) => handleDetailFormChange('rede', e.target.value)}
+                    helperText="Selecione a rede desejada"
+                    disabled={detailSaving}
+                  >
+                    <MenuItem value="">Sem rede</MenuItem>
+                    {redeOptions.map((rede) => (
+                      <MenuItem key={rede} value={rede}>{rede}</MenuItem>
+                    ))}
+                  </TextField>
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <Typography variant="caption" color="textSecondary">Status</Typography>
@@ -870,7 +953,13 @@ const sugerirCelulasProximas = async (apelo) => {
                 <Typography variant="body2"><strong>Líder:</strong> {celulaDetalhe.lider || '-'}</Typography>
               </Grid>
               <Grid item xs={12}>
+                <Typography variant="body2"><strong>Tel. do líder:</strong> {celulaDetalhe.cel_lider || '-'}</Typography>
+              </Grid>
+              <Grid item xs={12}>
                 <Typography variant="body2"><strong>Dia:</strong> {celulaDetalhe.dia || '-'}</Typography>
+              </Grid>
+              <Grid item xs={12}>
+                <Typography variant="body2"><strong>Horário:</strong> {celulaDetalhe.horario || '-'}</Typography>
               </Grid>
               <Grid item xs={12}>
                 <Typography variant="body2"><strong>Bairro:</strong> {celulaDetalhe.bairro || '-'}</Typography>

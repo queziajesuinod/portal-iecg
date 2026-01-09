@@ -57,7 +57,14 @@ class CelulaService {
       where.campus = { [Op.iLike]: `%${filtros.campus}%` };
     }
     if (filtros.rede) {
-      where.rede = { [Op.iLike]: `%${filtros.rede}%` };
+      const redeValues = Array.isArray(filtros.rede) ? filtros.rede : [filtros.rede];
+      const redeConditions = redeValues
+        .map((redeValue) => redeValue && redeValue.trim())
+        .filter(Boolean)
+        .map((redeValue) => ({ [Op.iLike]: `%${redeValue}%` }));
+      if (redeConditions.length) {
+        where.rede = { [Op.or]: redeConditions };
+      }
     }
     if (filtros.horario) {
       where.horario = { [Op.iLike]: `%${filtros.horario}%` };
@@ -65,9 +72,16 @@ class CelulaService {
     if (filtros.bairro) {
       where.bairro = { [Op.iLike]: `%${filtros.bairro}%` };
     }
-    if (typeof filtros.ativo !== 'undefined' && filtros.ativo !== '') {
-      const ativoValor = String(filtros.ativo).toLowerCase();
-      where.ativo = !(ativoValor === 'false' || ativoValor === '0' || ativoValor === 'no' || ativoValor === 'off');
+    {
+      const ativoValorRaw = filtros.ativo;
+      const ativoValor = typeof ativoValorRaw !== 'undefined' && ativoValorRaw !== null
+        ? String(ativoValorRaw).toLowerCase().trim()
+        : '';
+      if (!ativoValor) {
+        where.ativo = true;
+      } else if (ativoValor !== 'all') {
+        where.ativo = !(ativoValor === 'false' || ativoValor === '0' || ativoValor === 'no' || ativoValor === 'off');
+      }
     }
 
     const { count, rows } = await Celula.findAndCountAll({

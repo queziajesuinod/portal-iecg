@@ -7,6 +7,21 @@ const WebhookService = require('./WebhookService');
 const diasRecencia = 30;
 const maxPorCelulaRecente = 2;
 const GOOGLE_GEOCODE_KEY = process.env.GOOGLE_GEOCODE_KEY;
+const STATUS_TRANSITION_DELAY_MS = 4 * 60 * 1000;
+
+const scheduleStatusTransition = (apeloId) => {
+  setTimeout(async () => {
+    try {
+      await ApeloDirecionadoCelulaService.atualizar(apeloId, { status: 'DIRECIONADO_COM_SUCESSO' });
+      WebhookService.sendEvent('apelo.status_changed', {
+        apeloId,
+        status: 'DIRECIONADO_COM_SUCESSO'
+      }).catch(() => {});
+    } catch (err) {
+      console.error('Erro ao atualizar status do apelo automaticamente:', err);
+    }
+  }, STATUS_TRANSITION_DELAY_MS);
+};
 
 const haversine = (lat1, lon1, lat2, lon2) => {
   const toRad = (x) => (x * Math.PI) / 180;
@@ -59,7 +74,7 @@ class ApeloFilaService {
         bairro_apelo: { [Op.and]: [{ [Op.not]: null }, { [Op.ne]: '' }] },
         [Op.or]: [
           { status: null },
-          { status: { [Op.ne]: 'DIRECIONADO_COM_SUCESSO' } }
+          { status: { [Op.notIn]: ['DIRECIONADO_COM_SUCESSO', 'NAO_HAVERAR_DIRECIONAMENTO'] } }
         ]
       },
       order: [['createdAt', 'ASC']]
@@ -148,7 +163,7 @@ class ApeloFilaService {
       bairro_direcionado: celula.bairro || null,
       direcionado_celula: true,
       data_direcionamento: new Date(),
-      status: 'DIRECIONADO_COM_SUCESSO'
+      status: 'MOVIMENTACAO_CELULA'
     };
 
     const atualizado = await ApeloDirecionadoCelulaService.atualizar(apelo.id, payloadAtualizar);
@@ -160,8 +175,9 @@ class ApeloFilaService {
     }).catch(() => {});
     WebhookService.sendEvent('apelo.status_changed', {
       apeloId: apelo.id,
-      status: 'DIRECIONADO_COM_SUCESSO'
+      status: 'MOVIMENTACAO_CELULA'
     }).catch(() => {});
+    scheduleStatusTransition(apelo.id);
 
     return {
       mensagem: 'Apelo direcionado com sucesso',

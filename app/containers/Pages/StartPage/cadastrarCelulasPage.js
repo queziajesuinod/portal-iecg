@@ -79,8 +79,14 @@ const CadastrarCelula = () => {
   const location = useLocation();
   const celulaEditando = location.state?.celula;
   const isEdit = Boolean(celulaEditando);
-
   const API_URL = resolveApiUrl();
+
+  const formatHorarioInput = (valor = '') => {
+    const digits = valor.replace(/\D/g, '').slice(0, 4);
+    const [hh, mm] = [digits.slice(0, 2), digits.slice(2, 4)];
+    if (digits.length <= 2) return hh;
+    return `${hh}:${mm}`;
+  };
 
   useEffect(() => {
     if (isEdit && celulaEditando) {
@@ -88,7 +94,8 @@ const CadastrarCelula = () => {
         ...prev,
         ...formInicial,
         ...celulaEditando,
-        cel_lider: formatPhoneNumber(celulaEditando.cel_lider || '')
+        cel_lider: formatPhoneNumber(celulaEditando.cel_lider || ''),
+        horario: formatHorarioInput(celulaEditando.horario || '')
       }));
       const dias = (celulaEditando.dia || '')
         .split(',')
@@ -118,13 +125,6 @@ const CadastrarCelula = () => {
     carregarCampi();
   }, [API_URL]);
 
-  const formatHorarioInput = (valor = '') => {
-    const digits = valor.replace(/\\D/g, '').slice(0, 4);
-    const [hh, mm] = [digits.slice(0, 2), digits.slice(2, 4)];
-    if (digits.length <= 2) return hh;
-    return `${hh}:${mm}`;
-  };
-
   const handleChange = (e) => {
     const { name, value } = e.target;
     let nextValue = value;
@@ -136,6 +136,7 @@ const CadastrarCelula = () => {
     }
     setFormData({ ...formData, [name]: nextValue });
   };
+
 
   const handleDiaToggle = (dia) => {
     setDiasSelecionados((prev) => {
@@ -200,14 +201,14 @@ const CadastrarCelula = () => {
     const { endereco, numero, bairro, cidade, estado, cep } = formData;
     const queryParts = [endereco, numero, bairro, cidade, estado, cep].filter(Boolean);
     if (!queryParts.length) {
-      setNotification('Informe endereço, número, bairro, cidade, estado ou CEP para buscar coordenadas.');
+      setNotification('Informe endereï¿½o, nï¿½mero, bairro, cidade, estado ou CEP para buscar coordenadas.');
       return;
     }
 
     try {
       const geocodeResult = await fetchGeocode(queryParts.join(' '));
       if (!geocodeResult) {
-        setNotification('Nenhum resultado encontrado para esse endereço.');
+        setNotification('Nenhum resultado encontrado para esse endereï¿½o.');
         return;
       }
       setFormData((prev) => ({
@@ -354,16 +355,17 @@ return (
                 fullWidth
                 label="HorÃ¡rio"
                 name="horario"
-                value={formData.horario}
+                type="time"
+                value={formData.horario || ''}
                 onChange={handleChange}
-                placeholder="HH:MM"
-                inputProps={{ maxLength: 5 }}
+                InputLabelProps={{ shrink: true }}
+                inputProps={{ step: 300 }}
               />
             </Grid>
-            <Grid item xs={6} md={3}>
+            <Grid item xs={6} md={3} sx={{ display: 'none' }}>
               <TextField fullWidth label="Latitude" name="lat" value={formData.lat} onChange={handleChange} />
             </Grid>
-            <Grid item xs={6} md={3}>
+            <Grid item xs={6} md={3} sx={{ display: 'none' }}>
               <TextField fullWidth label="Longitude" name="lon" value={formData.lon} onChange={handleChange} />
             </Grid>
             <Grid item xs={12}>
