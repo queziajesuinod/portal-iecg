@@ -6,21 +6,14 @@ module.exports = [
     child: [
       {
         key: 'listagemMia',
-        name: 'Listagem do MIA',
+        name: 'Listagem de MIA',
         link: '/app/mia',
         icon: 'ion-ios-list-box-outline',
         permission: 'MIA_LISTAR'
       },
       {
-        key: 'cadastroMia',
-        name: 'Cadastro do MIA',
-        link: '/app/mia/cadastrar',
-        icon: 'ion-ios-contacts-outline',
-        permission: 'MIA_CADASTRAR'
-      },
-      {
         key: 'listasPresencaMia',
-        name: 'Listas de presença',
+        name: 'Listas de Presença',
         link: '/app/mia/listas-presenca',
         icon: 'ion-ios-checkbox-outline',
         permission: 'MIA_LISTAR'
@@ -30,21 +23,14 @@ module.exports = [
   {
     key: 'start',
     name: 'Start',
-    icon: 'ion-ios-contacts-outline',
+    icon: 'ion-ios-play-outline',
     child: [
       {
         key: 'listagemCelulas',
-        name: 'Listagem de Células',
+        name: 'Células',
         link: '/app/start/celulas',
         icon: 'ion-ios-list-box-outline',
         permission: 'CELULA_LISTAR'
-      },
-      {
-        key: 'cadastroCelulas',
-        name: 'Cadastro de Células',
-        link: '/app/start/celulas/cadastrar',
-        icon: 'ion-ios-contacts-outline',
-        permission: 'CELULA_CADASTRAR'
       },
       {
         key: 'apelosDirecionados',
@@ -54,15 +40,8 @@ module.exports = [
         permission: 'APELOS_LISTAR'
       },
       {
-        key: 'filaApelos',
-        name: 'Fila de Apelos',
-        link: '/app/start/fila-apelos',
-        icon: 'ion-ios-timer',
-        permission: 'APELOS_LISTAR'
-      },
-      {
         key: 'listagemCampus',
-        name: 'Listagem de Campus',
+        name: 'Campus',
         link: '/app/start/campus',
         icon: 'ion-ios-world-outline',
         permission: 'CELULA_LISTAR'

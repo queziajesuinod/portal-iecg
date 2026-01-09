@@ -14,9 +14,10 @@ import {
   Box,
   IconButton,
   TextField,
-  Pagination
+  Pagination,
+  Button
 } from "@mui/material";
-import { Visibility, Delete, Edit } from "@mui/icons-material";
+import { Visibility, Delete, Edit, Add } from "@mui/icons-material";
 
 const MiaListPage = () => {
   const title = "Listagem Ministério MIA";
@@ -125,6 +126,14 @@ const MiaListPage = () => {
               }}
               style={{ width: 300 }}
             />
+            <Button
+              color="primary"
+              startIcon={<Add />}
+              onClick={() => history.push('/app/mia/cadastrar')}
+              sx={{ textTransform: 'none' }}
+            >
+              Cadastro
+            </Button>
           </Box>
 
           <List>

@@ -34,6 +34,11 @@ class ApeloDirecionadoCelulaService {
 
   async criar(dados) {
     const dadosNormalizados = this._normalizarCampos(dados);
+    const direcionarCelulaEmBranco = dadosNormalizados.direcionado_celula === null || dadosNormalizados.direcionado_celula === undefined;
+    const decisao = dadosNormalizados.decisao;
+    if (direcionarCelulaEmBranco && decisao !== 'encaminhamento_celula' && !dadosNormalizados.status) {
+      dadosNormalizados.status = 'NAO_HAVERAR_DIRECIONAMENTO';
+    }
     return await ApeloDirecionadoCelula.create(dadosNormalizados);
   }
 
@@ -45,6 +50,16 @@ class ApeloDirecionadoCelulaService {
         const start = new Date(Date.UTC(year, month - 1, 1));
         const end = new Date(Date.UTC(year, month, 1));
         where.data_direcionamento = { [Op.gte]: start, [Op.lt]: end };
+      }
+    }
+    if (filtro.year) {
+      const ano = parseInt(filtro.year, 10);
+      if (!Number.isNaN(ano)) {
+        const condition = Sequelize.where(
+          Sequelize.fn('date_part', 'year', Sequelize.col('data_direcionamento')),
+          ano
+        );
+        where[Op.and] = (where[Op.and] || []).concat(condition);
       }
     }
     if (filtro.status) {
@@ -70,7 +85,17 @@ class ApeloDirecionadoCelulaService {
         {
           model: Celula,
           as: 'celulaAtual',
-          attributes: ['id', 'celula', 'rede', 'lider', 'dia', 'bairro', 'campus']
+          attributes: [
+            'id',
+            'celula',
+            'rede',
+            'lider',
+            'cel_lider',
+            'dia',
+            'horario',
+            'bairro',
+            'campus'
+          ]
         }
       ]
     });

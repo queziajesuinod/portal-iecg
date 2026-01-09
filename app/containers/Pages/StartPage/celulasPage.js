@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableFooter,
   Paper, Toolbar, Typography, Pagination, IconButton, Tooltip, TextField, Box, MenuItem,
-  Button, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress, Badge, Divider, TableSortLabel, Chip
+  Button, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress, Badge, Divider, TableSortLabel, Chip,
+  FormControl, InputLabel, Select, Checkbox, ListItemText, OutlinedInput
 } from '@mui/material';
 import { Helmet } from 'react-helmet';
 import EditIcon from '@mui/icons-material/Edit';
@@ -16,6 +17,7 @@ import { useHistory } from 'react-router-dom';
 import useStyles from 'dan-components/Tables/tableStyle-jss';
 import Notification from 'dan-components/Notification/Notification';
 import { fetchGeocode } from '../../../utils/googleGeocode';
+import { GoogleMap, Marker, InfoWindow, useLoadScript } from '@react-google-maps/api';
 
 const REDE_OPTIONS = [
   'RELEVANTE JUNIORS RAPAZES',
@@ -27,6 +29,12 @@ const REDE_OPTIONS = [
   'HOMENS IECG',
   'JUVENTUDE RELEVANTE MOÇAS',
   'RELEVANTE JUNIORS MOÇAS'
+];
+
+const STATUS_OPTIONS = [
+  { value: 'true', label: 'Ativas' },
+  { value: 'false', label: 'Inativas' },
+  { value: 'all', label: 'Todas' }
 ];
 
 const resolveApiUrl = () => {
@@ -82,8 +90,11 @@ const ListagemCelulasPage = () => {
   const [notification, setNotification] = useState('');
   const [totalRecords, setTotalRecords] = useState(0);
   const [filterCampus, setFilterCampus] = useState('');
-  const [filterRede, setFilterRede] = useState('');
+  const [filterRede, setFilterRede] = useState([]);
   const [filterBairro, setFilterBairro] = useState('');
+  const [mapCelulas, setMapCelulas] = useState([]);
+  const [hoveredMarkerId, setHoveredMarkerId] = useState(null);
+  const [filterStatus, setFilterStatus] = useState('true');
   const [campi, setCampi] = useState([]);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importFile, setImportFile] = useState(null);
@@ -102,7 +113,101 @@ const ListagemCelulasPage = () => {
   const [apeloSelecionado, setApeloSelecionado] = useState(null);
   const [motivoStatus, setMotivoStatus] = useState('');
 
-  const API_URL = resolveApiUrl();
+    const API_URL = resolveApiUrl();
+    const mapKey = process.env.REACT_APP_GOOGLE_GEOCODE_KEY || '';
+    const { isLoaded: mapLoaded } = useLoadScript({
+      googleMapsApiKey: mapKey,
+      libraries: ['places']
+    });
+    const buildCelulaQueryParams = ({
+      page: overridePage,
+      limit: overrideLimit,
+      includeRede = true,
+      includeStatus = true
+    } = {}) => {
+      const params = new URLSearchParams({
+        celula: searchTerm || '',
+        campusId: filterCampus || '',
+        bairro: filterBairro || '',
+        page: overridePage ?? page,
+        limit: overrideLimit ?? rowsPerPage
+      });
+      if (includeRede && filterRede?.length) {
+        filterRede.filter(Boolean).forEach((rede) => params.append('rede', rede));
+      }
+      if (includeStatus && filterStatus && filterStatus !== 'all') {
+        params.append('ativo', filterStatus);
+      }
+      return params.toString();
+    };
+    const colorPalette = ['red', 'blue', 'green', 'orange', 'purple', 'yellow', 'pink'];
+    const networkColorMap = useMemo(() => {
+      const map = new Map();
+      let paletteIndex = 0;
+      (mapCelulas || [])
+        .map((cell) => (cell.rede || 'Sem rede').trim())
+        .filter(Boolean)
+        .forEach((rede) => {
+          const key = rede.toLowerCase();
+          if (!map.has(key)) {
+            map.set(
+              key,
+              colorPalette[paletteIndex % colorPalette.length]
+            );
+            paletteIndex += 1;
+          }
+        });
+      return map;
+    }, [mapCelulas]);
+    const normalizeValue = (value) => (value || '').trim().toLowerCase();
+    const matchesFilterRede = (redeValue) => {
+      if (!filterRede || !filterRede.length) return true;
+      const normalized = normalizeValue(redeValue);
+      const selectedSet = new Set(filterRede.map((rede) => normalizeValue(rede)));
+      return selectedSet.has(normalized);
+    };
+
+    const mapMarkers = useMemo(
+      () => mapCelulas
+        .filter((c) => c.lat && c.lon && matchesFilterRede(c.rede))
+        .map((c) => {
+          const networkKey = (c.rede || 'Sem rede').trim().toLowerCase();
+          const color = networkColorMap.get(networkKey) || 'red';
+          return {
+            id: c.id,
+            position: { lat: parseFloat(c.lat), lng: parseFloat(c.lon) },
+            celula: c.celula,
+            rede: c.rede,
+            lider: c.lider,
+            dia: c.dia,
+            horario: c.horario,
+            cel_lider: c.cel_lider,
+            color,
+            icon: `https://maps.google.com/mapfiles/ms/icons/${color}-dot.png`
+          };
+        }),
+      [mapCelulas, networkColorMap]
+    );
+    const hoveredMarker = useMemo(
+      () => mapMarkers.find((marker) => marker.id === hoveredMarkerId) || null,
+      [hoveredMarkerId, mapMarkers]
+    );
+    const legendItems = useMemo(() => {
+      const entries = Array.from(networkColorMap.entries()).map(([key, color]) => ({
+        key,
+        label: key === '' ? 'Sem rede' : key,
+        color
+      }));
+      if (!filterRede || !filterRede.length) {
+        return entries;
+      }
+      const selectedSet = new Set(filterRede.map((rede) => normalizeValue(rede)));
+      return entries.filter((entry) => selectedSet.has(entry.key));
+    }, [networkColorMap, filterRede]);
+  const mapCenter = useMemo(() => {
+    if (!mapMarkers.length) return { lat: -20.44225, lng: -54.646814 };
+    return mapMarkers[0].position;
+  }, [mapMarkers]);
 
   const parseCsvText = (text) => {
     const lines = text.split(/\r?\n/).filter((line) => line.trim());
@@ -148,7 +253,7 @@ const ListagemCelulasPage = () => {
         estado
       };
     } catch (error) {
-      console.error('Erro ao buscar coordenadas durante importa��o:', error);
+      console.error('Erro ao buscar coordenadas durante importa��o:', error);
       return {};
     }
   };
@@ -232,7 +337,7 @@ const resolveCampusFromRow = (row) => {
         const isDuplicate = await celulaJaCadastrada(record.data, token);
         if (isDuplicate) {
           failed += 1;
-          errors.push(`Linha ${record.lineNumber}: Celula ja cadastrada para esta rede e lider.`);
+          errors.push(`Linha ${record.lineNumber}: Célula já cadastrada para esta rede e lider.`);
           continue;
         }
 
@@ -489,36 +594,51 @@ const resolveCampusFromRow = (row) => {
     return 0;
   });
 
-  const fetchCelulas = async () => {
-    const token = localStorage.getItem('token');
-    try {
-      const queryParams = new URLSearchParams({
-        page,
-        limit: rowsPerPage,
-        celula: searchTerm || '',
-        campusId: filterCampus || '',
-        rede: filterRede || '',
-        bairro: filterBairro || ''
-      }).toString();
+    const fetchCelulas = async () => {
+      const token = localStorage.getItem('token');
+      try {
+        const queryParams = buildCelulaQueryParams();
 
-      const res = await fetch(`${API_URL}/start/celula?${queryParams}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+        const res = await fetch(`${API_URL}/start/celula?${queryParams}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
 
-      const data = await res.json();
-      const registros = data.registros || [];
-      setCelulas(registros);
-      setTotalPages(data.totalPaginas || 1);
-      setTotalRecords(data.totalRegistros || registros.length);
-      fetchApeloResumo();
-    } catch (err) {
-      console.error('Erro ao carregar células:', err);
-    }
-  };
+        const data = await res.json();
+        const registros = data.registros || [];
+        setCelulas(registros);
+        setTotalPages(data.totalPaginas || 1);
+        setTotalRecords(data.totalRegistros || registros.length);
+        fetchApeloResumo();
+      } catch (err) {
+        console.error('Erro ao carregar células:', err);
+      }
+    };
 
-  useEffect(() => {
-    fetchCelulas();
-  }, [page, searchTerm, filterCampus, filterRede, filterBairro]);
+    const fetchMapCelulas = async () => {
+      const token = localStorage.getItem('token');
+      try {
+        const queryParams = buildCelulaQueryParams({ page: 1, limit: 1000, includeRede: false });
+        const res = await fetch(`${API_URL}/start/celula?${queryParams}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) {
+          throw new Error('Falha ao carregar células para o mapa.');
+        }
+        const data = await res.json();
+        setMapCelulas(data.registros || []);
+      } catch (err) {
+        console.error('Erro ao carregar células para o mapa:', err);
+        setMapCelulas([]);
+      }
+    };
+
+    useEffect(() => {
+      fetchCelulas();
+    }, [page, searchTerm, filterCampus, filterRede, filterBairro, filterStatus, API_URL]);
+
+    useEffect(() => {
+      fetchMapCelulas();
+    }, [searchTerm, filterCampus, filterRede, filterBairro, filterStatus, API_URL]);
 
   useEffect(() => {
     const carregarCampi = async () => {
@@ -604,10 +724,17 @@ const resolveCampusFromRow = (row) => {
         <title>Listagem de Células</title>
       </Helmet>
 
-            <Toolbar className={classes.toolbar} sx={{ flexWrap: 'wrap', gap: 1 }}>
+      <Toolbar className={classes.toolbar} sx={{ flexWrap: "wrap", gap: 1 }}>
         <Box display="flex" flexWrap="wrap" gap={1} alignItems="center">
           <Button variant="contained" color="primary" onClick={() => setImportDialogOpen(true)}>
-            Importar células
+            Importar célula
+          </Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={() => history.push("/app/start/celulas/cadastrar")}
+          >
+            Cadastrar célula
           </Button>
           <Button
             variant="outlined"
@@ -617,60 +744,161 @@ const resolveCampusFromRow = (row) => {
           >
             Baixar modelo CSV
           </Button>
-         
         </Box>
-        <Box display="flex" flexWrap="wrap" gap={1} marginLeft="auto">
-          <TextField
-            label="Pesquisar por nome da célula"
-            variant="outlined"
-            size="small"
-            value={searchTerm}
+       </Toolbar>
+      <Box
+        mt={2}
+        display="flex"
+        flexWrap="wrap"
+        gap={1}
+        alignItems="center"
+        sx={{ width: "100%", justifyContent: "flex-start" }}
+      >
+        <TextField
+          label="Pesquisar por nome da célula"
+          variant="outlined"
+          size="small"
+          value={searchTerm}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setPage(1);
+          }}
+          sx={{ width: { xs: "100%", sm: 220 }, flex: { xs: "1 1 100%", sm: "0 1 220px" } }}
+        />
+        <TextField
+          select
+          label="Campus"
+          variant="outlined"
+          size="small"
+          value={filterCampus}
+          onChange={(e) => { setFilterCampus(e.target.value); setPage(1); }}
+          sx={{ minWidth: 160, flex: { xs: "1 1 100%", sm: "0 1 180px" } }}
+        >
+          <MenuItem value="">Todos</MenuItem>
+          {campi.map((c) => (
+            <MenuItem key={c.id} value={c.id}>
+              {c.nome}
+            </MenuItem>
+          ))}
+        </TextField>
+        <FormControl
+          variant="outlined"
+          size="small"
+          sx={{ minWidth: 200, flex: { xs: "1 1 100%", sm: "0 1 200px" } }}
+        >
+          <InputLabel id="filter-rede-label">Rede</InputLabel>
+          <Select
+            labelId="filter-rede-label"
+            multiple
+            value={filterRede}
             onChange={(e) => {
-              setSearchTerm(e.target.value);
+              const { value } = e.target;
+              setFilterRede(typeof value === "string" ? value.split(",") : value);
               setPage(1);
             }}
-            sx={{ width: 220 }}
-          />
-          <TextField
-            select
-            label="Campus"
-            variant="outlined"
-            size="small"
-            value={filterCampus}
-            onChange={(e) => { setFilterCampus(e.target.value); setPage(1); }}
-            sx={{ minWidth: 160 }}
+            input={<OutlinedInput label="Rede" />}
+            renderValue={(selected) => (selected.length ? selected.join(", ") : "Todas")}
           >
-            <MenuItem value="">Todos</MenuItem>
-            {campi.map((c) => (
-              <MenuItem key={c.id} value={c.id}>
-                {c.nome}
+            {REDE_OPTIONS.map((rede) => (
+              <MenuItem key={rede} value={rede}>
+                <Checkbox checked={filterRede.indexOf(rede) > -1} />
+                <ListItemText primary={rede} />
               </MenuItem>
             ))}
-          </TextField>
-          <TextField
-            select
-            label="Rede"
-            variant="outlined"
-            size="small"
-            value={filterRede}
-            onChange={(e) => { setFilterRede(e.target.value); setPage(1); }}
-            sx={{ minWidth: 140 }}
+          </Select>
+        </FormControl>
+        <FormControl
+          variant="outlined"
+          size="small"
+          sx={{ minWidth: 150, flex: { xs: "1 1 100%", sm: "0 1 150px" } }}
+        >
+          <InputLabel id="filter-status-label">Status</InputLabel>
+          <Select
+            labelId="filter-status-label"
+            value={filterStatus}
+            onChange={(e) => {
+              setFilterStatus(e.target.value);
+              setPage(1);
+            }}
+            label="Status"
           >
-            <MenuItem value="">Todas</MenuItem>
-            {REDE_OPTIONS.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
-          </TextField>
-          <TextField
-            label="Bairro"
-            variant="outlined"
-            size="small"
-            value={filterBairro}
-            onChange={(e) => { setFilterBairro(e.target.value); setPage(1); }}
-            sx={{ minWidth: 160 }}
-            placeholder="Digite o bairro"
-          />
-        </Box>
-      </Toolbar>
-
+            {STATUS_OPTIONS.map((status) => (
+              <MenuItem key={status.value} value={status.value}>
+                {status.label}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <TextField
+          label="Bairro"
+          variant="outlined"
+          size="small"
+          value={filterBairro}
+          onChange={(e) => { setFilterBairro(e.target.value); setPage(1); }}
+          sx={{ minWidth: 160, flex: { xs: "1 1 100%", sm: "0 1 200px" } }}
+          placeholder="Digite o bairro"
+        />
+      </Box>
+      <Box mt={2} mb={2} sx={{ borderRadius: 1, overflow: 'hidden' }}>
+        {mapLoaded && mapMarkers.length ? (
+          <GoogleMap
+            mapContainerStyle={{ width: '100%', height: 520 }}
+            center={mapCenter}
+            zoom={12}
+            options={{ streetViewControl: false, fullscreenControl: false }}
+          >
+            {mapMarkers.map((marker) => (
+              <Marker
+                key={marker.id}
+                position={marker.position}
+                title={`${marker.celula || 'célula'} ? ${marker.rede || 'sem rede'}`}
+                icon={marker.icon}
+                onMouseOver={() => setHoveredMarkerId(marker.id)}
+                onMouseOut={() => setHoveredMarkerId((prev) => (prev === marker.id ? null : prev))}
+              />
+            ))}
+            {hoveredMarker && (
+              <InfoWindow
+                position={hoveredMarker.position}
+                onCloseClick={() => setHoveredMarkerId(null)}
+                options={{ zIndex: 9999 }}
+              >
+                <div style={{ minWidth: 180 }}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    {hoveredMarker.celula || 'Célula'}
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    Líder: {hoveredMarker.lider || '-'}
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    Cel do líder: {hoveredMarker.cel_lider || '-'}
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    Rede: {hoveredMarker.rede || '-'}
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    Dia: {hoveredMarker.dia || '-'} • Horário: {hoveredMarker.horario || '-'}
+                  </Typography>
+                </div>
+              </InfoWindow>
+            )}
+          </GoogleMap>
+        ) : (
+          <Typography variant="caption" color="textSecondary">
+            Configure `REACT_APP_GOOGLE_GEOCODE_KEY` para visualizar o mapa.
+          </Typography>
+        )}
+        {legendItems.length > 0 && (
+          <Box display="flex" flexWrap="wrap" gap={2} alignItems="center" mt={1} px={1}>
+            {legendItems.map((item) => (
+              <Box key={item.label} display="flex" alignItems="center" gap={1}>
+                <Box width={16} height={16} borderRadius="50%" bgcolor={item.color} />
+                <Typography variant="caption">{item.label}</Typography>
+              </Box>
+            ))}
+          </Box>
+        )}
+      </Box>
       <TableContainer component={Paper} className={classes.rootTable}>
         <Table className={cx(classes.table, classes.stripped)}>
           <TableHead>
@@ -777,13 +1005,13 @@ const resolveCampusFromRow = (row) => {
               </TableRow>
             )}
           </TableBody>
-          <tableFooter>
+          <TableFooter>
             <TableRow>
               <TableCell colSpan={7} align="right">
                 Total de registros: {totalRecords}
               </TableCell>
             </TableRow>
-          </tableFooter>
+          </TableFooter>
         </Table>
       </TableContainer>
 
@@ -887,6 +1115,21 @@ const resolveCampusFromRow = (row) => {
           )}
           {!apelosLoading && (
             <>
+              <Box mb={1}>
+                <Typography variant="body2" gutterBottom>
+                  Célula: {apelosCelula?.celula || '-'}
+                </Typography>
+                <Typography variant="body2" gutterBottom>
+                  Rede: {apelosCelula?.rede || '-'} | Líder: {apelosCelula?.lider || '-'}
+                </Typography>
+                <Typography variant="body2" gutterBottom>
+                  Dia: {apelosCelula?.dia || '-'} | Horário: {apelosCelula?.horario || '-'}
+                </Typography>
+                <Typography variant="body2" gutterBottom>
+                  Cel do líder: {apelosCelula?.cel_lider || '-'}
+                </Typography>
+                <Divider sx={{ mb: 1 }} />
+              </Box>
               <Typography variant="body2" gutterBottom>
                 Total: {apelosList.length}
               </Typography>
