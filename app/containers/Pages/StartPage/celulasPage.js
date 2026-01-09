@@ -496,7 +496,13 @@ const resolveCampusFromRow = (row) => {
     ENVIO_LIDER_PENDENTE: { label: 'Líder ainda não fez contato', color: 'secondary' },
     CONTATO_LIDER_SEM_RETORNO: { label: 'Líder enviou mensagem, sem retorno', color: 'secondary' },
     CONSOLIDACAO_INTERROMPIDA: { label: 'Não Consolidado', color: 'error' },
-    MOVIMENTACAO_CELULA: { label: 'Em movimentação de célula', color: 'primary' }
+    MOVIMENTACAO_CELULA: { label: 'Em movimentação de célula',color: 'default',
+      sx: { bgcolor: '#053f81ff', color: '#ffffffff' } },
+    EM_CONSOLIDACAO: {
+      label: 'Em Consolidação',
+      color: 'default',
+      sx: { bgcolor: 'purple', color: '#fff' }
+    }
   };
 
   const renderStatusChip = (status) => {
