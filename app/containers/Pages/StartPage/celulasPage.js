@@ -126,7 +126,7 @@ const ListagemCelulasPage = () => {
       includeStatus = true
     } = {}) => {
       const params = new URLSearchParams({
-        celula: searchTerm || '',
+        celula: normalizeSearchValue(searchTerm) || '',
         campusId: filterCampus || '',
         bairro: filterBairro || '',
         page: overridePage ?? page,
@@ -160,6 +160,10 @@ const ListagemCelulasPage = () => {
       return map;
     }, [mapCelulas]);
     const normalizeValue = (value) => (value || '').trim().toLowerCase();
+    const normalizeSearchValue = (value) => {
+      const base = (value || '').normalize('NFD');
+      return base.replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    };
     const matchesFilterRede = (redeValue) => {
       if (!filterRede || !filterRede.length) return true;
       const normalized = normalizeValue(redeValue);
