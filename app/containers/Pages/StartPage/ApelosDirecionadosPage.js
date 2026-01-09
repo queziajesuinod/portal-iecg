@@ -243,6 +243,18 @@ const ApelosDirecionadosPage = () => {
     return d.toLocaleDateString('pt-BR');
   };
 
+  const CHIP_COLOR_OPTIONS = [
+    'default',
+    'primary',
+    'secondary',
+    'error',
+    'info',
+    'success',
+    'warning'
+  ];
+
+  const getChipColor = (value) => (CHIP_COLOR_OPTIONS.includes(value) ? value : 'default');
+
   const statusConfig = {
     APELO_CADASTRADO: { label: 'Novo', color: 'default' },
     NAO_HAVERAR_DIRECIONAMENTO: { label: 'Não direcionar para uma célula', color: 'error' },
@@ -253,8 +265,12 @@ const ApelosDirecionadosPage = () => {
     ENVIO_LIDER_PENDENTE: { label: 'Líder ainda não fez contato', color: 'secondary' },
     CONTATO_LIDER_SEM_RETORNO: { label: 'Líder enviou mensagem, sem retorno', color: 'secondary' },
     CONSOLIDACAO_INTERROMPIDA: { label: 'Não Consolidado', color: 'error' },
-    MOVIMENTACAO_CELULA: { label: 'Em movimentação de célula', color: 'primary' } ,
-    EM_CONSOLIDACAO: { label: 'Em Consolidação', color: 'purple' }
+    MOVIMENTACAO_CELULA: { label: 'Em movimentação de célula', color: 'primary' },
+    EM_CONSOLIDACAO: {
+      label: 'Em Consolidação',
+      color: 'default',
+      sx: { bgcolor: 'purple', color: '#fff' }
+    }
   };
 
   const statusLabel = (status) => statusConfig[status]?.label || status || '-';
@@ -268,12 +284,19 @@ const ApelosDirecionadosPage = () => {
   const renderDecisaoChip = (decisao) => {
     const opt = DECISAO_OPTIONS.find((o) => o.value === decisao);
     if (!opt) return decisao || '-';
-    return <Chip size="small" label={opt.label} color={opt.color} sx={{ fontWeight: 600 }} />;
+    return <Chip size="small" label={opt.label} color={getChipColor(opt.color)} sx={{ fontWeight: 600 }} />;
   };
 
   const renderStatusChip = (status) => {
     const cfg = statusConfig[status] || { label: statusLabel(status), color: 'default' };
-    return <Chip size="small" label={cfg.label} color={cfg.color} sx={{ fontWeight: 600 }} />;
+    return (
+      <Chip
+        size="small"
+        label={cfg.label}
+        color={getChipColor(cfg.color)}
+        sx={{ fontWeight: 600, ...(cfg.sx || {}) }}
+      />
+    );
   };
 
   const abrirDetalheApelo = (apelo) => {
