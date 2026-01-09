@@ -83,6 +83,7 @@ const ApelosDirecionadosPage = () => {
   const [detailForm, setDetailForm] = useState({ bairro_apelo: '', bairro_proximo: [], rede: '' });
   const [detailBairroTemp, setDetailBairroTemp] = useState('');
   const [detailSaving, setDetailSaving] = useState(false);
+  const [apeloCoords, setApeloCoords] = useState(null);
 
   const API_URL = resolveApiUrl();
   const redeOptions = useMemo(() => {
@@ -222,18 +223,23 @@ const ApelosDirecionadosPage = () => {
   };
 
   const normalizeRede = (value) => (value || '').toString().trim().toLowerCase();
+  const normalizeSearchValue = (value) => {
+    const base = (value || '').toString().normalize('NFD');
+    return base.replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  };
 
   const celulaAtualTexto = (apelo) => apelo?.celulaAtual?.celula || 'Sem célula';
   const apeloSemDirecionamento = (apelo) => apelo?.status === 'NAO_HAVERAR_DIRECIONAMENTO';
 
-  const celulasMesmaRede = (apelo) => {
+  const celulasMesmaRede = (apelo, filtro = filtroCelula) => {
     if (!apelo) return [];
     const redeApelo = normalizeRede(apelo?.rede);
     if (!redeApelo) return [];
     const filtradas = celulas.filter((c) => normalizeRede(c.rede) === redeApelo);
     const baseSemAtual = filtradas.filter((c) => c.id !== apelo?.celulaAtual?.id);
-    if (!filtroCelula) return baseSemAtual;
-    return baseSemAtual.filter((c) => (c.celula || '').toLowerCase().includes(filtroCelula.toLowerCase()));
+    if (!filtro) return baseSemAtual;
+    const termo = normalizeSearchValue(filtro);
+    return baseSemAtual.filter((c) => normalizeSearchValue(c.celula).includes(termo));
   };
 
   const formatDate = (value) => {
@@ -411,7 +417,9 @@ const ApelosDirecionadosPage = () => {
 const sugerirCelulasProximas = async (apelo) => {
     setLoadingSugestoes(true);
     setSugestoes([]);
+    setApeloCoords(null);
     const coords = await buscarCoordenadasApelo(apelo);
+    setApeloCoords(coords);
     if (!coords) {
       setLoadingSugestoes(false);
       return;
@@ -430,9 +438,37 @@ const sugerirCelulasProximas = async (apelo) => {
   };
 
   const celulasDisponiveis = apeloSelecionado ? celulasMesmaRede(apeloSelecionado) : [];
-  const sugestoesFiltradas = filtroCelula
-    ? sugestoes.filter((c) => (c.celula || '').toLowerCase().includes(filtroCelula.toLowerCase()))
-    : sugestoes;
+  const celulasRedeSemFiltro = useMemo(
+    () => (apeloSelecionado ? celulasMesmaRede(apeloSelecionado, '') : []),
+    [apeloSelecionado, celulas]
+  );
+  const celulasRedeOrdenadas = useMemo(() => {
+    if (!apeloSelecionado || celulasRedeSemFiltro.length === 0) return [];
+    const coords = apeloCoords;
+    const base = celulasRedeSemFiltro.map((c) => ({
+      ...c,
+      distancia: coords && c.lat && c.lon
+        ? haversine(
+          parseFloat(coords.lat),
+          parseFloat(coords.lon),
+          parseFloat(c.lat),
+          parseFloat(c.lon)
+        )
+        : null
+    }));
+    base.sort((a, b) => {
+      const da = a.distancia ?? Number.POSITIVE_INFINITY;
+      const db = b.distancia ?? Number.POSITIVE_INFINITY;
+      return da - db;
+    });
+    return base;
+  }, [apeloSelecionado, celulasRedeSemFiltro, apeloCoords]);
+  const sugestoesFiltradas = useMemo(() => {
+    if (!filtroCelula) return sugestoes;
+    const termo = normalizeSearchValue(filtroCelula);
+    return sugestoes.filter((c) => normalizeSearchValue(c.celula).includes(termo));
+  }, [sugestoes, filtroCelula]);
+  const mostrarFallbackCelulas = !loadingSugestoes && sugestoes.length === 0 && celulasRedeOrdenadas.length > 0;
 
   return (
     <div>
@@ -675,8 +711,13 @@ const sugerirCelulasProximas = async (apelo) => {
             {loadingSugestoes && (
               <Typography variant="caption" color="textSecondary">Buscando sugestões...</Typography>
             )}
-            {!loadingSugestoes && sugestoesFiltradas.length === 0 && (
+            {!loadingSugestoes && sugestoes.length === 0 && !mostrarFallbackCelulas && (
               <Typography variant="caption" color="textSecondary">Nenhuma sugestão disponível.</Typography>
+            )}
+            {!loadingSugestoes && mostrarFallbackCelulas && (
+              <Typography variant="caption" color="textSecondary">
+                Nenhuma sugestão automática gerada; a lista completa da rede aparece abaixo para ajudar a identificar a mais próxima.
+              </Typography>
             )}
             <Grid container spacing={1}>
               {sugestoesFiltradas.map((c) => (
@@ -692,6 +733,30 @@ const sugerirCelulasProximas = async (apelo) => {
                 </Grid>
               ))}
             </Grid>
+            {mostrarFallbackCelulas && (
+              <Box mt={2}>
+                <Typography variant="body2" gutterBottom>Lista completa da rede</Typography>
+                <Typography variant="caption" color="textSecondary" display="block" mb={1}>
+                  Como não há sugestões próximas, exibimos todas as células da rede (busca não altera esta lista) para que você veja qual está menos longe.
+                </Typography>
+                <Grid container spacing={1}>
+                  {celulasRedeOrdenadas.map((c) => (
+                    <Grid item xs={12} sm={6} key={`rede-${c.id}`}>
+                      <Card variant="outlined" sx={{ cursor: 'pointer' }} onClick={() => setCelulaDestinoId(c.id)}>
+                        <CardContent>
+                          <Typography variant="subtitle2">{c.celula}</Typography>
+                          <Typography variant="caption" display="block">Rede: {c.rede}</Typography>
+                          <Typography variant="caption" display="block">Bairro: {c.bairro || '-'}</Typography>
+                          <Typography variant="caption" display="block">
+                            Distância: {c.distancia ? `${c.distancia.toFixed(1)} km` : '-'}
+                          </Typography>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  ))}
+                </Grid>
+              </Box>
+            )}
           </Box>
         </DialogContent>
         <DialogActions>
