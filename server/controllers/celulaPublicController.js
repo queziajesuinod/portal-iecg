@@ -12,12 +12,9 @@ class CelulaPublicController {
   async buscarPorContato(req, res) {
     try {
       const { contato } = req.query;
-      const celula = await CelulaPublicService.buscarPorContato(contato);
-      const payload = celula.toJSON ? celula.toJSON() : celula;
-      if (payload.cel_lider) {
-        payload.cel_lider = String(payload.cel_lider).replace(/\D/g, '');
-      }
-      return res.status(200).json(payload);
+      const celulas = await CelulaPublicService.buscarPorContato(contato);
+      const resposta = celulas.map(formatarResposta);
+      return res.status(200).json(resposta);
     } catch (error) {
       const status = error.message.includes('encontrada') || error.message.includes('nao encontrada') ? 404 : 400;
       return res.status(status).json({ erro: error.message });

@@ -52,7 +52,7 @@ class CelulaPublicService {
     const contatoSanitizado = this._sanitizarCelular(contato);
     const isTelefone = contatoSanitizado.length >= 8;
 
-    const celula = await Celula.findOne({
+    const celulas = await Celula.findAll({
       where: {
         [Op.or]: [
           { email_lider: contato },
@@ -63,11 +63,11 @@ class CelulaPublicService {
       }
     });
 
-    if (!celula) {
+    if (!celulas.length) {
       throw new Error('Celula nao encontrada');
     }
 
-    return celula;
+    return celulas;
   }
 
   async atualizar(id, dados = {}) {
