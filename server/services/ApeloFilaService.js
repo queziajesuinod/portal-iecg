@@ -4,10 +4,10 @@ const { ApeloDirecionadoCelula, Celula } = require('../models');
 const ApeloDirecionadoCelulaService = require('./ApeloDirecionadoCelulaService');
 const WebhookService = require('./WebhookService');
 
-const diasRecencia = 30;
-const maxPorCelulaRecente = 2;
+const diasRecencia = 90;
+const maxPorCelulaRecente = 1;
 const GOOGLE_GEOCODE_KEY = process.env.GOOGLE_GEOCODE_KEY;
-const STATUS_TRANSITION_DELAY_MS = 4 * 60 * 1000;
+const STATUS_TRANSITION_DELAY_MS = 20 * 1000;
 
 const scheduleStatusTransition = (apeloId) => {
   setTimeout(async () => {
