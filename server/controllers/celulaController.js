@@ -35,9 +35,31 @@ class CelulaController {
 
   async listar(req, res) {
     try {
-      const { celula, campus, campusId, rede, bairro, horario, ativo, page = 1, limit = 10 } = req.query;
+      const {
+        celula,
+        campus,
+        campusId,
+        rede,
+        bairro,
+        horario,
+        ativo,
+        lider,
+        pastor_geracao,
+        page = 1,
+        limit = 10
+      } = req.query;
       const resultado = await CelulaService.buscaComFiltros(
-        { celula, campus, campusId, rede, bairro, horario, ativo },
+        {
+          celula,
+          campus,
+          campusId,
+          rede,
+          bairro,
+          horario,
+          ativo,
+          lider,
+          pastor_geracao
+        },
         parseInt(page, 10),
         parseInt(limit, 10)
       );

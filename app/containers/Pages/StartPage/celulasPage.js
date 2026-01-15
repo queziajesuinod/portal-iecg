@@ -92,6 +92,8 @@ const ListagemCelulasPage = () => {
   const [filterCampus, setFilterCampus] = useState('');
   const [filterRede, setFilterRede] = useState([]);
   const [filterBairro, setFilterBairro] = useState('');
+  const [filterLider, setFilterLider] = useState('');
+  const [filterPastorGeracao, setFilterPastorGeracao] = useState('');
   const [mapCelulas, setMapCelulas] = useState([]);
   const [hoveredMarkerId, setHoveredMarkerId] = useState(null);
   const [filterStatus, setFilterStatus] = useState('true');
@@ -101,6 +103,7 @@ const ListagemCelulasPage = () => {
   const [importing, setImporting] = useState(false);
   const [importSummary, setImportSummary] = useState(null);
   const [importProgress, setImportProgress] = useState(null);
+  const [exporting, setExporting] = useState(false);
   const [sortBy, setSortBy] = useState('celula');
   const [sortDirection, setSortDirection] = useState('asc');
   const [apeloCounts, setApeloCounts] = useState({});
@@ -129,6 +132,8 @@ const ListagemCelulasPage = () => {
         celula: normalizeSearchValue(searchTerm) || '',
         campusId: filterCampus || '',
         bairro: filterBairro || '',
+        lider: filterLider || '',
+        pastor_geracao: filterPastorGeracao || '',
         page: overridePage ?? page,
         limit: overrideLimit ?? rowsPerPage
       });
@@ -642,13 +647,90 @@ const resolveCampusFromRow = (row) => {
       }
     };
 
+    const exportCelulasToExcel = async () => {
+      setExporting(true);
+      const token = localStorage.getItem('token');
+      try {
+        const queryParams = buildCelulaQueryParams({ page: 1, limit: 1000 });
+        const res = await fetch(`${API_URL}/start/celula?${queryParams}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) {
+          throw new Error('Falha ao exportar células.');
+        }
+        const data = await res.json();
+        const registros = data.registros || [];
+        if (!registros.length) {
+          setNotification('Nenhuma célula encontrada para exportar.');
+          return;
+        }
+        const delimiter = ';';
+        const sanitize = (value) => `"${String(value ?? '').replace(/"/g, '""').replace(/[\r\n]+/g, ' ')}"`;
+        const headers = [
+          'Célula',
+          'Rede',
+          'Líder',
+          'Pastor de geração',
+          'Bairro',
+          'Campus',
+          'Status'
+        ];
+        const rows = [
+          headers.map(sanitize).join(delimiter),
+          ...registros.map((c) => [
+            c.celula,
+            c.rede,
+            c.lider,
+            c.pastor_geracao,
+            c.bairro,
+            c.campusRef?.nome || c.campus,
+            c.ativo === false ? 'Inativa' : 'Ativa'
+          ].map(sanitize).join(delimiter))
+        ];
+        const csv = `\uFEFF${rows.join('\r\n')}`;
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `celulas_${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        console.error(err);
+        setNotification(err.message || 'Erro ao exportar células.');
+      } finally {
+        setExporting(false);
+      }
+    };
+
     useEffect(() => {
       fetchCelulas();
-    }, [page, searchTerm, filterCampus, filterRede, filterBairro, filterStatus, API_URL]);
+    }, [
+      page,
+      searchTerm,
+      filterCampus,
+      filterRede,
+      filterBairro,
+      filterLider,
+      filterPastorGeracao,
+      filterStatus,
+      API_URL
+    ]);
 
     useEffect(() => {
       fetchMapCelulas();
-    }, [searchTerm, filterCampus, filterRede, filterBairro, filterStatus, API_URL]);
+    }, [
+      searchTerm,
+      filterCampus,
+      filterRede,
+      filterBairro,
+      filterLider,
+      filterPastorGeracao,
+      filterStatus,
+      API_URL
+    ]);
 
   useEffect(() => {
     const carregarCampi = async () => {
@@ -754,100 +836,130 @@ const resolveCampusFromRow = (row) => {
           >
             Baixar modelo CSV
           </Button>
+          <Button
+            variant="outlined"
+            color="info"
+            startIcon={<FileDownloadIcon />}
+            onClick={exportCelulasToExcel}
+            disabled={exporting}
+          >
+            {exporting ? 'Exportando...' : 'Exportar Excel'}
+          </Button>
         </Box>
        </Toolbar>
-      <Box
-        mt={2}
-        display="flex"
-        flexWrap="wrap"
-        gap={1}
-        alignItems="center"
-        sx={{ width: "100%", justifyContent: "flex-start" }}
-      >
-        <TextField
-          label="Pesquisar por nome da célula"
-          variant="outlined"
-          size="small"
-          value={searchTerm}
-          onChange={(e) => {
-            setSearchTerm(e.target.value);
-            setPage(1);
-          }}
-          sx={{ width: { xs: "100%", sm: 220 }, flex: { xs: "1 1 100%", sm: "0 1 220px" } }}
-        />
-        <TextField
-          select
-          label="Campus"
-          variant="outlined"
-          size="small"
-          value={filterCampus}
-          onChange={(e) => { setFilterCampus(e.target.value); setPage(1); }}
-          sx={{ minWidth: 160, flex: { xs: "1 1 100%", sm: "0 1 180px" } }}
-        >
-          <MenuItem value="">Todos</MenuItem>
-          {campi.map((c) => (
-            <MenuItem key={c.id} value={c.id}>
-              {c.nome}
-            </MenuItem>
-          ))}
-        </TextField>
-        <FormControl
-          variant="outlined"
-          size="small"
-          sx={{ minWidth: 200, flex: { xs: "1 1 100%", sm: "0 1 200px" } }}
-        >
-          <InputLabel id="filter-rede-label">Rede</InputLabel>
-          <Select
-            labelId="filter-rede-label"
-            multiple
-            value={filterRede}
-            onChange={(e) => {
-              const { value } = e.target;
-              setFilterRede(typeof value === "string" ? value.split(",") : value);
-              setPage(1);
-            }}
-            input={<OutlinedInput label="Rede" />}
-            renderValue={(selected) => (selected.length ? selected.join(", ") : "Todas")}
+      <Box mt={2}>
+        <Paper variant="outlined" sx={{ p: 2 }}>
+          <Box
+            display="flex"
+            flexWrap="wrap"
+            gap={1}
+            alignItems="center"
+            sx={{ width: "100%", justifyContent: "flex-start" }}
           >
-            {REDE_OPTIONS.map((rede) => (
-              <MenuItem key={rede} value={rede}>
-                <Checkbox checked={filterRede.indexOf(rede) > -1} />
-                <ListItemText primary={rede} />
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <FormControl
-          variant="outlined"
-          size="small"
-          sx={{ minWidth: 150, flex: { xs: "1 1 100%", sm: "0 1 150px" } }}
-        >
-          <InputLabel id="filter-status-label">Status</InputLabel>
-          <Select
-            labelId="filter-status-label"
-            value={filterStatus}
-            onChange={(e) => {
-              setFilterStatus(e.target.value);
-              setPage(1);
-            }}
-            label="Status"
-          >
-            {STATUS_OPTIONS.map((status) => (
-              <MenuItem key={status.value} value={status.value}>
-                {status.label}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <TextField
-          label="Bairro"
-          variant="outlined"
-          size="small"
-          value={filterBairro}
-          onChange={(e) => { setFilterBairro(e.target.value); setPage(1); }}
-          sx={{ minWidth: 160, flex: { xs: "1 1 100%", sm: "0 1 200px" } }}
-          placeholder="Digite o bairro"
-        />
+            <TextField
+              label="Pesquisar por nome da célula"
+              variant="outlined"
+              size="small"
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setPage(1);
+              }}
+              sx={{ width: { xs: "100%", sm: 220 }, flex: { xs: "1 1 100%", sm: "0 1 220px" } }}
+            />
+            <TextField
+              select
+              label="Campus"
+              variant="outlined"
+              size="small"
+              value={filterCampus}
+              onChange={(e) => { setFilterCampus(e.target.value); setPage(1); }}
+              sx={{ minWidth: 160, flex: { xs: "1 1 100%", sm: "0 1 180px" } }}
+            >
+              <MenuItem value="">Todos</MenuItem>
+              {campi.map((c) => (
+                <MenuItem key={c.id} value={c.id}>
+                  {c.nome}
+                </MenuItem>
+              ))}
+            </TextField>
+            <FormControl
+              variant="outlined"
+              size="small"
+              sx={{ minWidth: 200, flex: { xs: "1 1 100%", sm: "0 1 200px" } }}
+            >
+              <InputLabel id="filter-rede-label">Rede</InputLabel>
+              <Select
+                labelId="filter-rede-label"
+                multiple
+                value={filterRede}
+                onChange={(e) => {
+                  const { value } = e.target;
+                  setFilterRede(typeof value === "string" ? value.split(",") : value);
+                  setPage(1);
+                }}
+                input={<OutlinedInput label="Rede" />}
+                renderValue={(selected) => (selected.length ? selected.join(", ") : "Todas")}
+              >
+                {REDE_OPTIONS.map((rede) => (
+                  <MenuItem key={rede} value={rede}>
+                    <Checkbox checked={filterRede.indexOf(rede) > -1} />
+                    <ListItemText primary={rede} />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl
+              variant="outlined"
+              size="small"
+              sx={{ minWidth: 150, flex: { xs: "1 1 100%", sm: "0 1 150px" } }}
+            >
+              <InputLabel id="filter-status-label">Status</InputLabel>
+              <Select
+                labelId="filter-status-label"
+                value={filterStatus}
+                onChange={(e) => {
+                  setFilterStatus(e.target.value);
+                  setPage(1);
+                }}
+                label="Status"
+              >
+                {STATUS_OPTIONS.map((status) => (
+                  <MenuItem key={status.value} value={status.value}>
+                    {status.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              label="Bairro"
+              variant="outlined"
+              size="small"
+              value={filterBairro}
+              onChange={(e) => { setFilterBairro(e.target.value); setPage(1); }}
+              sx={{ minWidth: 160, flex: { xs: "1 1 100%", sm: "0 1 200px" } }}
+              placeholder="Digite o bairro"
+            />
+            <TextField
+              label="Líder"
+              variant="outlined"
+              size="small"
+              value={filterLider}
+              onChange={(e) => { setFilterLider(e.target.value); setPage(1); }}
+              sx={{ minWidth: 200, flex: { xs: "1 1 100%", sm: "0 1 220px" } }}
+              placeholder="Nome do líder"
+            />
+            <TextField
+              label="Pastor de geração"
+              variant="outlined"
+              size="small"
+              value={filterPastorGeracao}
+              onChange={(e) => { setFilterPastorGeracao(e.target.value); setPage(1); }}
+              sx={{ minWidth: 200, flex: { xs: "1 1 100%", sm: "0 1 220px" } }}
+              placeholder="Nome do pastor"
+            />
+          </Box>
+        </Paper>
       </Box>
       <Box mt={2} mb={2} sx={{ borderRadius: 1, overflow: 'hidden' }}>
         {mapLoaded && mapMarkers.length ? (
@@ -940,6 +1052,7 @@ const resolveCampusFromRow = (row) => {
                   Líder
                 </TableSortLabel>
               </TableCell>
+              <TableCell>Pastor de geração</TableCell>
               <TableCell sortDirection={sortBy === 'bairro' ? sortDirection : false}>
                 <TableSortLabel
                   active={sortBy === 'bairro'}
@@ -969,6 +1082,7 @@ const resolveCampusFromRow = (row) => {
                   <TableCell>{c.celula}</TableCell>
                   <TableCell>{c.rede}</TableCell>
                   <TableCell>{c.lider}</TableCell>
+                  <TableCell>{c.pastor_geracao || '-'}</TableCell>
                   <TableCell>{c.bairro}</TableCell>
                   <TableCell>{c.campusRef?.nome || c.campus}</TableCell>
                   <TableCell>{renderAtivoChip(c.ativo)}</TableCell>
@@ -1009,7 +1123,7 @@ const resolveCampusFromRow = (row) => {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={7} align="center">
+                <TableCell colSpan={8} align="center">
                   Nenhuma célula encontrada com esse filtro.
                 </TableCell>
               </TableRow>
@@ -1017,7 +1131,7 @@ const resolveCampusFromRow = (row) => {
           </TableBody>
           <TableFooter>
             <TableRow>
-              <TableCell colSpan={7} align="right">
+              <TableCell colSpan={8} align="right">
                 Total de registros: {totalRecords}
               </TableCell>
             </TableRow>

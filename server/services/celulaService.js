@@ -72,6 +72,12 @@ class CelulaService {
     if (filtros.bairro) {
       where.bairro = { [Op.iLike]: `%${filtros.bairro}%` };
     }
+    if (filtros.lider) {
+      where.lider = { [Op.iLike]: `%${filtros.lider}%` };
+    }
+    if (filtros.pastor_geracao) {
+      where.pastor_geracao = { [Op.iLike]: `%${filtros.pastor_geracao}%` };
+    }
     {
       const ativoValorRaw = filtros.ativo;
       const ativoValor = typeof ativoValorRaw !== 'undefined' && ativoValorRaw !== null
