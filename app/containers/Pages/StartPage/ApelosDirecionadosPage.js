@@ -727,6 +727,8 @@ const sugerirCelulasProximas = async (apelo) => {
                       <Typography variant="subtitle2">{c.celula}</Typography>
                       <Typography variant="caption" display="block">Rede: {c.rede}</Typography>
                       <Typography variant="caption" display="block">Bairro: {c.bairro || '-'}</Typography>
+                      <Typography variant="caption" display="block">Dia: {c.dia || '-'}</Typography>
+                      <Typography variant="caption" display="block">Horário: {c.horario || '-'}</Typography>
                       <Typography variant="caption" display="block">Distância: {c.distancia ? `${c.distancia.toFixed(1)} km` : '-'}</Typography>
                     </CardContent>
                   </Card>
@@ -744,12 +746,14 @@ const sugerirCelulasProximas = async (apelo) => {
                     <Grid item xs={12} sm={6} key={`rede-${c.id}`}>
                       <Card variant="outlined" sx={{ cursor: 'pointer' }} onClick={() => setCelulaDestinoId(c.id)}>
                         <CardContent>
-                          <Typography variant="subtitle2">{c.celula}</Typography>
-                          <Typography variant="caption" display="block">Rede: {c.rede}</Typography>
-                          <Typography variant="caption" display="block">Bairro: {c.bairro || '-'}</Typography>
-                          <Typography variant="caption" display="block">
-                            Distância: {c.distancia ? `${c.distancia.toFixed(1)} km` : '-'}
-                          </Typography>
+                      <Typography variant="subtitle2">{c.celula}</Typography>
+                      <Typography variant="caption" display="block">Rede: {c.rede}</Typography>
+                      <Typography variant="caption" display="block">Bairro: {c.bairro || '-'}</Typography>
+                      <Typography variant="caption" display="block">Dia: {c.dia || '-'}</Typography>
+                      <Typography variant="caption" display="block">Horário: {c.horario || '-'}</Typography>
+                      <Typography variant="caption" display="block">
+                        Distância: {c.distancia ? `${c.distancia.toFixed(1)} km` : '-'}
+                      </Typography>
                         </CardContent>
                       </Card>
                     </Grid>
