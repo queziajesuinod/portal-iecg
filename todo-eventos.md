@@ -47,7 +47,7 @@
 - [x] Formulário de criar/editar evento
 - [x] Gerenciamento de lotes por evento (dialog)
 - [x] Gerenciamento de cupons (página separada)
-- [ ] Criador visual de formulários dinâmicos
+- [x] Criador visual de formulários dinâmicos
 - [x] Visualização de inscrições por evento
 - [ ] Detalhes de inscrição individual
 - [ ] Filtros e busca de inscrições

@@ -376,7 +376,9 @@ function EventDetails() {
 
         {/* Tab Formulário */}
         <TabPanel value={tabAtiva} index={2}>
-          <Typography>Gerenciamento de formulário será implementado</Typography>
+          <Typography variant="body2" color="textSecondary" gutterBottom>
+            Configure os campos personalizados que serão preenchidos durante a inscrição.
+          </Typography>
           <Button
             variant="contained"
             color="primary"
