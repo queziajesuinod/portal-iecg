@@ -246,9 +246,8 @@ function EventForm() {
             </Grid>
           </Grid>
         </form>
-        </PapperBlock>
-        <Notification message={notification} close={() => setNotification('')} />
-      </div>
+      </PapperBlock>
+      <Notification message={notification} close={() => setNotification('')} />
     </div>
   );
 }

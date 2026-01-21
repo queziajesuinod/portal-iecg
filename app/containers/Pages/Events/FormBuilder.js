@@ -64,7 +64,7 @@ function FormBuilder() {
   const [evento, setEvento] = useState(null);
   const [campos, setCampos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [notification, setNotification] = useState(\'\');
+  const [notification, setNotification] = useState('');
   const [dialogAberto, setDialogAberto] = useState(false);
   const [campoAtual, setCampoAtual] = useState(null);
   const [formCampo, setFormCampo] = useState({
@@ -571,7 +571,7 @@ function FormBuilder() {
           </Button>
         </DialogActions>
       </Dialog>
-      <Notification message={notification} close={() => setNotification(\'\')} />
+      <Notification message={notification} close={() => setNotification('')} />
     </div>
   );
 }
