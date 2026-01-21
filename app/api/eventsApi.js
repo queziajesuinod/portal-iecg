@@ -1,80 +1,175 @@
-import axios from 'axios';
+// API helper para eventos - usa fetch seguindo o padrão do sistema
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3005';
-
-// Configurar interceptor para adicionar token JWT
-const api = axios.create({
-  baseURL: API_URL,
-});
-
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  console.log('[eventsApi] Token encontrado:', token ? 'Sim' : 'Não');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-    console.log('[eventsApi] Header Authorization:', config.headers.Authorization.substring(0, 20) + '...');
-  } else {
-    console.warn('[eventsApi] ATENÇÃO: Nenhum token encontrado no localStorage!');
+const resolveApiUrl = () => {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL.replace(/\/$/, '');
   }
-  return config;
-});
+  const { protocol, hostname, port } = window.location;
+  if (port === '3005') {
+    return `${protocol}//${hostname}:3005`;
+  }
+  return `${protocol}//${hostname}${port ? `:${port}` : ''}`;
+};
 
-// ============= EVENTOS =============
+const API_URL = resolveApiUrl();
 
-export const listarEventos = () => api.get('/api/admin/events');
+// Helper para fazer requisições autenticadas
+const fetchWithAuth = async (url, options = {}) => {
+  const token = localStorage.getItem('token');
+  
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
 
-export const buscarEvento = (id) => api.get(`/api/admin/events/${id}`);
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
 
-export const criarEvento = (dados) => api.post('/api/admin/events', dados);
+  const response = await fetch(url, {
+    ...options,
+    headers,
+  });
 
-export const atualizarEvento = (id, dados) => api.put(`/api/admin/events/${id}`, dados);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Erro desconhecido' }));
+    throw new Error(error.message || `Erro ${response.status}`);
+  }
 
-export const deletarEvento = (id) => api.delete(`/api/admin/events/${id}`);
+  return response.json();
+};
 
-// ============= LOTES =============
+// ===== EVENTOS =====
 
-export const listarLotesPorEvento = (eventId) => api.get(`/api/admin/events/${eventId}/batches`);
+export const listarEventos = () => {
+  return fetchWithAuth(`${API_URL}/api/admin/events`);
+};
 
-export const buscarLote = (id) => api.get(`/api/admin/events/batches/${id}`);
+export const buscarEvento = (id) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/${id}`);
+};
 
-export const criarLote = (dados) => api.post('/api/admin/events/batches', dados);
+export const criarEvento = (dados) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events`, {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });
+};
 
-export const atualizarLote = (id, dados) => api.put(`/api/admin/events/batches/${id}`, dados);
+export const atualizarEvento = (id, dados) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(dados),
+  });
+};
 
-export const deletarLote = (id) => api.delete(`/api/admin/events/batches/${id}`);
+export const deletarEvento = (id) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/${id}`, {
+    method: 'DELETE',
+  });
+};
 
-// ============= CUPONS =============
+// ===== LOTES =====
 
-export const listarCupons = () => api.get('/api/admin/events/coupons');
+export const listarLotesPorEvento = (eventId) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/batches`);
+};
 
-export const buscarCupom = (id) => api.get(`/api/admin/events/coupons/${id}`);
+export const criarLote = (dados) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/batches`, {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });
+};
 
-export const criarCupom = (dados) => api.post('/api/admin/events/coupons', dados);
+export const atualizarLote = (id, dados) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/batches/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(dados),
+  });
+};
 
-export const atualizarCupom = (id, dados) => api.put(`/api/admin/events/coupons/${id}`, dados);
+export const deletarLote = (id) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/batches/${id}`, {
+    method: 'DELETE',
+  });
+};
 
-export const deletarCupom = (id) => api.delete(`/api/admin/events/coupons/${id}`);
+// ===== CUPONS =====
 
-// ============= FORMULÁRIOS =============
+export const listarCupons = () => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/coupons`);
+};
 
-export const listarCamposPorEvento = (eventId) => api.get(`/api/admin/events/${eventId}/form-fields`);
+export const criarCupom = (dados) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/coupons`, {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });
+};
 
-export const criarCampo = (dados) => api.post('/api/admin/events/form-fields', dados);
+export const atualizarCupom = (id, dados) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/coupons/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(dados),
+  });
+};
 
-export const criarCamposEmLote = (dados) => api.post('/api/admin/events/form-fields/batch', dados);
+export const deletarCupom = (id) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/coupons/${id}`, {
+    method: 'DELETE',
+  });
+};
 
-export const atualizarCampo = (id, dados) => api.put(`/api/admin/events/form-fields/${id}`, dados);
+// ===== CAMPOS DE FORMULÁRIO =====
 
-export const deletarCampo = (id) => api.delete(`/api/admin/events/form-fields/${id}`);
+export const listarCamposPorEvento = (eventId) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/form-fields`);
+};
 
-// ============= INSCRIÇÕES =============
+export const criarCampo = (dados) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/form-fields`, {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });
+};
 
-export const listarInscricoes = () => api.get('/api/admin/events/registrations');
+export const criarCamposEmLote = (dados) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/form-fields/batch`, {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });
+};
 
-export const listarInscricoesPorEvento = (eventId) => api.get(`/api/admin/events/${eventId}/registrations`);
+export const atualizarCampo = (id, dados) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/form-fields/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(dados),
+  });
+};
 
-export const buscarInscricao = (id) => api.get(`/api/admin/events/registrations/${id}`);
+export const deletarCampo = (id) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/form-fields/${id}`, {
+    method: 'DELETE',
+  });
+};
 
-export const cancelarInscricao = (id) => api.post(`/api/admin/events/registrations/${id}/cancel`);
+// ===== INSCRIÇÕES =====
 
-export default api;
+export const listarInscricoes = () => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/registrations`);
+};
+
+export const listarInscricoesPorEvento = (eventId) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/registrations`);
+};
+
+export const buscarInscricao = (id) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}`);
+};
+
+export const cancelarInscricao = (id) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}`, {
+    method: 'POST',
+  });
+};

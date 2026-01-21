@@ -109,3 +109,5 @@
 - [x] Substituir alert() por componente Notification em todas as páginas de eventos
 
 - [x] Adicionar CORS para start-iecg-form (portas 3000 e 3007)
+
+- [x] Resolver erro 401 Unauthorized - token JWT não está sendo enviado/validado
