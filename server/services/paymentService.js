@@ -96,6 +96,8 @@ async function criarTransacao(dadosPagamento) {
   const {
     merchantOrderId,
     customerName,
+    customerEmail,
+    customerDocument,
     amount, // Valor em centavos (ex: R$ 100,00 = 10000)
     cardNumber,
     holder,
@@ -107,7 +109,10 @@ async function criarTransacao(dadosPagamento) {
   const payload = {
     MerchantOrderId: merchantOrderId,
     Customer: {
-      Name: customerName
+      Name: customerName,
+      Email: customerEmail || 'sem-email@exemplo.com',
+      Identity: customerDocument,
+      IdentityType: customerDocument && customerDocument.length === 11 ? 'CPF' : 'CNPJ'
     },
     Payment: {
       Type: 'CreditCard',
