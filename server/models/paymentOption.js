@@ -10,9 +10,9 @@ module.exports = (sequelize) => {
 
   PaymentOption.init({
     id: {
-      type: DataTypes.INTEGER,
-      primaryKey: true,
-      autoIncrement: true
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true
     },
     eventId: {
       type: DataTypes.UUID,
