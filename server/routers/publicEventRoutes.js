@@ -4,12 +4,14 @@ const eventController = require('../controllers/eventController');
 const couponController = require('../controllers/couponController');
 const registrationController = require('../controllers/registrationController');
 const batchController = require('../controllers/batchController');
+const paymentOptionController = require('../controllers/paymentOptionController');
 
 // ============= EVENTOS PÚBLICOS =============
 router.get('/', eventController.listarPublicos);
 router.get('/:id', eventController.buscarPublicoPorId);
 router.get('/:eventId/batches', batchController.listarPorEvento);
 router.get('/:eventId/form-fields', require('../controllers/formFieldController').listarPorEvento);
+router.get('/:eventId/payment-options', paymentOptionController.listarPorEvento);
 
 // ============= VALIDAR CUPOM =============
 router.post('/coupons/validate', couponController.validar);
