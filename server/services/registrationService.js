@@ -121,7 +121,7 @@ async function processarInscricao(dadosInscricao) {
       merchantOrderId: orderCode,
       customerName: buyerData.nome || buyerData.name || 'Cliente',
       customerEmail: buyerData.email || 'sem-email@exemplo.com',
-      customerDocument: buyerData.cpf || buyerData.documento || '00000000000',
+      customerDocument: (buyerData.cpf || buyerData.documento || '00000000000').replace(/\D/g, ''),
       amount: paymentService.converterParaCentavos(valorFinalComJuros)
     });
   } else if (paymentOption.paymentType === 'credit_card') {

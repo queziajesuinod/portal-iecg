@@ -1,6 +1,6 @@
 const axios = require('axios');
-const { PaymentTransaction } = require('../models');
 const uuid = require('uuid');
+const { PaymentTransaction } = require('../models');
 
 // Configurações Cielo (devem vir de variáveis de ambiente)
 const CIELO_MERCHANT_ID = process.env.CIELO_MERCHANT_ID || '';
@@ -48,8 +48,8 @@ async function criarTransacaoPix(dadosPagamento) {
       {
         headers: {
           'Content-Type': 'application/json',
-          'MerchantId': CIELO_MERCHANT_ID,
-          'MerchantKey': CIELO_MERCHANT_KEY
+          MerchantId: CIELO_MERCHANT_ID,
+          MerchantKey: CIELO_MERCHANT_KEY
         }
       }
     );
@@ -63,11 +63,26 @@ async function criarTransacaoPix(dadosPagamento) {
       dadosCompletos: response.data
     };
   } catch (error) {
-    console.error('Erro ao criar transação PIX:', error.response?.data || error.message);
-    
+    console.error('Erro ao criar transação PIX:');
+    console.error('Status:', error.response?.status);
+    console.error('Data:', JSON.stringify(error.response?.data, null, 2));
+    console.error('Message:', error.message);
+
+    // Extrair mensagem de erro mais específica
+    let mensagemErro = error.message;
+    if (error.response?.data) {
+      if (Array.isArray(error.response.data)) {
+        mensagemErro = error.response.data.map(e => `${e.Code}: ${e.Message}`).join(', ');
+      } else if (error.response.data.Payment?.ReturnMessage) {
+        mensagemErro = error.response.data.Payment.ReturnMessage;
+      } else if (error.response.data.message) {
+        mensagemErro = error.response.data.message;
+      }
+    }
+
     return {
       sucesso: false,
-      erro: error.response?.data?.Payment?.ReturnMessage || error.message,
+      erro: mensagemErro,
       returnCode: error.response?.data?.Payment?.ReturnCode,
       dadosCompletos: error.response?.data
     };
@@ -116,8 +131,8 @@ async function criarTransacao(dadosPagamento) {
       {
         headers: {
           'Content-Type': 'application/json',
-          'MerchantId': CIELO_MERCHANT_ID,
-          'MerchantKey': CIELO_MERCHANT_KEY
+          MerchantId: CIELO_MERCHANT_ID,
+          MerchantKey: CIELO_MERCHANT_KEY
         }
       }
     );
@@ -135,7 +150,7 @@ async function criarTransacao(dadosPagamento) {
     };
   } catch (error) {
     console.error('Erro ao criar transação Cielo:', error.response?.data || error.message);
-    
+
     return {
       sucesso: false,
       erro: error.response?.data?.Payment?.ReturnMessage || error.message,
@@ -156,8 +171,8 @@ async function capturarPagamento(paymentId, amount) {
       {
         headers: {
           'Content-Type': 'application/json',
-          'MerchantId': CIELO_MERCHANT_ID,
-          'MerchantKey': CIELO_MERCHANT_KEY
+          MerchantId: CIELO_MERCHANT_ID,
+          MerchantKey: CIELO_MERCHANT_KEY
         }
       }
     );
@@ -171,7 +186,7 @@ async function capturarPagamento(paymentId, amount) {
     };
   } catch (error) {
     console.error('Erro ao capturar pagamento Cielo:', error.response?.data || error.message);
-    
+
     return {
       sucesso: false,
       erro: error.response?.data?.ReturnMessage || error.message,
@@ -191,8 +206,8 @@ async function cancelarPagamento(paymentId, amount) {
       {
         headers: {
           'Content-Type': 'application/json',
-          'MerchantId': CIELO_MERCHANT_ID,
-          'MerchantKey': CIELO_MERCHANT_KEY
+          MerchantId: CIELO_MERCHANT_ID,
+          MerchantKey: CIELO_MERCHANT_KEY
         }
       }
     );
@@ -206,7 +221,7 @@ async function cancelarPagamento(paymentId, amount) {
     };
   } catch (error) {
     console.error('Erro ao cancelar pagamento Cielo:', error.response?.data || error.message);
-    
+
     return {
       sucesso: false,
       erro: error.response?.data?.ReturnMessage || error.message,
@@ -225,8 +240,8 @@ async function consultarPagamento(paymentId) {
       {
         headers: {
           'Content-Type': 'application/json',
-          'MerchantId': CIELO_MERCHANT_ID,
-          'MerchantKey': CIELO_MERCHANT_KEY
+          MerchantId: CIELO_MERCHANT_ID,
+          MerchantKey: CIELO_MERCHANT_KEY
         }
       }
     );
@@ -238,7 +253,7 @@ async function consultarPagamento(paymentId) {
     };
   } catch (error) {
     console.error('Erro ao consultar pagamento Cielo:', error.response?.data || error.message);
-    
+
     return {
       sucesso: false,
       erro: error.message,
@@ -268,16 +283,16 @@ async function registrarTransacao(registrationId, tipo, status, dados) {
  */
 function mapearStatusCielo(statusCielo) {
   const statusMap = {
-    0: 'pending',      // NotFinished
-    1: 'authorized',   // Authorized
-    2: 'confirmed',    // PaymentConfirmed
-    3: 'denied',       // Denied
-    10: 'cancelled',   // Voided
-    11: 'refunded',    // Refunded
-    12: 'pending',     // Pending
-    13: 'cancelled'    // Aborted
+    0: 'pending', // NotFinished
+    1: 'authorized', // Authorized
+    2: 'confirmed', // PaymentConfirmed
+    3: 'denied', // Denied
+    10: 'cancelled', // Voided
+    11: 'refunded', // Refunded
+    12: 'pending', // Pending
+    13: 'cancelled' // Aborted
   };
-  
+
   return statusMap[statusCielo] || 'pending';
 }
 
