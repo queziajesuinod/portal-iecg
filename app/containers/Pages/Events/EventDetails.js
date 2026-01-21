@@ -264,6 +264,7 @@ function EventDetails() {
           <Tab label="Lotes" />
           <Tab label="Inscrições" />
           <Tab label="Formulário" />
+          <Tab label="Formas de Pagamento" />
         </Tabs>
 
         {/* Tab Lotes */}
@@ -393,6 +394,29 @@ function EventDetails() {
           >
             Configurar Formulário
           </Button>
+        </TabPanel>
+
+        {/* Tab Formas de Pagamento */}
+        <TabPanel value={tabAtiva} index={3}>
+          <Typography variant="h6" gutterBottom>
+            Formas de Pagamento
+          </Typography>
+          <Typography variant="body2" color="textSecondary" gutterBottom>
+            Configure as opções de pagamento disponíveis para este evento.
+          </Typography>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<AddIcon />}
+            style={{ marginTop: 16, marginBottom: 16 }}
+            onClick={() => alert('Em desenvolvimento')}
+          >
+            Adicionar Forma de Pagamento
+          </Button>
+          
+          <Typography variant="body2" color="textSecondary">
+            Nenhuma forma de pagamento configurada ainda.
+          </Typography>
         </TabPanel>
       </Card>
 
