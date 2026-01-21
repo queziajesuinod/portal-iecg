@@ -54,7 +54,7 @@ async function buscarEventoPorId(id) {
 }
 
 async function criarEvento(body, userId) {
-  const { title, description, startDate, endDate, location, imageUrl, maxRegistrations } = body;
+  const { title, description, startDate, endDate, location, imageUrl, maxRegistrations, maxPerBuyer } = body;
   
   if (!title) {
     throw new Error('Título do evento é obrigatório');
@@ -69,6 +69,7 @@ async function criarEvento(body, userId) {
     location,
     imageUrl,
     maxRegistrations,
+    maxPerBuyer,
     currentRegistrations: 0,
     isActive: true,
     createdBy: userId
@@ -89,6 +90,7 @@ async function atualizarEvento(id, body) {
   event.location = body.location ?? event.location;
   event.imageUrl = body.imageUrl ?? event.imageUrl;
   event.maxRegistrations = body.maxRegistrations ?? event.maxRegistrations;
+  event.maxPerBuyer = body.maxPerBuyer ?? event.maxPerBuyer;
   event.isActive = body.isActive ?? event.isActive;
   
   await event.save();
