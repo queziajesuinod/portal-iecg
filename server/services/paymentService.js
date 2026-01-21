@@ -36,8 +36,7 @@ async function criarTransacaoPix(dadosPagamento) {
     },
     Payment: {
       Type: 'Pix',
-      Amount: amount,
-      Provider: 'Cielo30'
+      Amount: amount
     }
   };
 
