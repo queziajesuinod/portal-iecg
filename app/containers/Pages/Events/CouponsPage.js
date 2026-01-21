@@ -65,8 +65,8 @@ function CouponsPage() {
         listarCupons(),
         listarEventos()
       ]);
-      setCupons(cuponsRes.data);
-      setEventos(eventosRes.data);
+      setCupons(cuponsRes);
+      setEventos(eventosRes);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
       setNotification('Erro ao carregar dados');
@@ -138,7 +138,7 @@ function CouponsPage() {
       carregarDados();
     } catch (error) {
       console.error('Erro ao salvar cupom:', error);
-      setNotification(error.response?.data?.message || 'Erro ao salvar cupom');
+      setNotification(error.message || 'Erro ao salvar cupom');
     }
   };
 
@@ -150,7 +150,7 @@ function CouponsPage() {
         carregarDados();
       } catch (error) {
         console.error('Erro ao deletar cupom:', error);
-        setNotification(error.response?.data?.message || 'Erro ao deletar cupom');
+        setNotification(error.message || 'Erro ao deletar cupom');
       }
     }
   };
