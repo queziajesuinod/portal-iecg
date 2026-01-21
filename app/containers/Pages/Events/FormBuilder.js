@@ -89,8 +89,8 @@ function FormBuilder() {
         buscarEvento(id),
         listarCamposPorEvento(id)
       ]);
-      setEvento(eventoRes.data);
-      setCampos(camposRes.data);
+      setEvento(eventoRes);
+      setCampos(camposRes);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
       setNotification('Erro ao carregar dados');
@@ -271,7 +271,7 @@ function FormBuilder() {
       carregarDados();
     } catch (error) {
       console.error('Erro ao salvar formulário:', error);
-      setNotification(error.response?.data?.message || 'Erro ao salvar formulário');
+      setNotification(error.message || 'Erro ao salvar formulário');
     } finally {
       setLoading(false);
     }

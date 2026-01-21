@@ -64,11 +64,8 @@ function EventsDashboard() {
     try {
       setLoading(true);
       const response = await listarEventos();
-      // A API pode retornar response.data ou response diretamente
-      const eventosData = Array.isArray(response) ? response : (response.data || []);
-      
-      // Garantir que sempre seja um array
-      const eventosArray = Array.isArray(eventosData) ? eventosData : [];
+      // A API retorna diretamente o array
+      const eventosArray = Array.isArray(response) ? response : [];
       
       setEventos(eventosArray);
       setEventosFiltrados(eventosArray);
@@ -124,7 +121,7 @@ function EventsDashboard() {
         setNotification('Evento deletado com sucesso!');
         carregarEventos();
       } catch (error) {
-        const mensagem = error.response?.data?.message || 'Erro ao deletar evento';
+        const mensagem = error.message || 'Erro ao deletar evento';
         setNotification(mensagem);
         alert(mensagem);
       }

@@ -21,7 +21,7 @@ async function buscarPorId(req, res) {
 
 async function criar(req, res) {
   try {
-    const userId = req.user?.id;
+    const userId = req.user?.userId || req.user?.id;
     if (!userId) {
       return res.status(401).json({ message: 'Usuário não autenticado' });
     }

@@ -41,8 +41,7 @@ function EventForm() {
   const carregarEvento = async () => {
     try {
       setLoading(true);
-      const response = await buscarEvento(id);
-      const evento = response.data;
+      const evento = await buscarEvento(id);
       
       setFormData({
         title: evento.title || '',
@@ -97,7 +96,7 @@ function EventForm() {
       history.push('/app/events');
     } catch (error) {
       console.error('Erro ao salvar evento:', error);
-      setNotification(error.response?.data?.message || 'Erro ao salvar evento');
+      setNotification(error.message || 'Erro ao salvar evento');
     } finally {
       setLoading(false);
     }

@@ -86,9 +86,9 @@ function EventDetails() {
         listarInscricoesPorEvento(id)
       ]);
       
-      setEvento(eventoRes.data);
-      setLotes(lotesRes.data);
-      setInscricoes(inscricoesRes.data);
+      setEvento(eventoRes);
+      setLotes(lotesRes);
+      setInscricoes(inscricoesRes);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
       setNotification('Erro ao carregar dados do evento');
@@ -151,7 +151,7 @@ function EventDetails() {
       carregarDados();
     } catch (error) {
       console.error('Erro ao salvar lote:', error);
-      setNotification(error.response?.data?.message || 'Erro ao salvar lote');
+      setNotification(error.message || 'Erro ao salvar lote');
     }
   };
 
@@ -163,7 +163,7 @@ function EventDetails() {
         carregarDados();
       } catch (error) {
         console.error('Erro ao deletar lote:', error);
-        setNotification(error.response?.data?.message || 'Erro ao deletar lote');
+        setNotification(error.message || 'Erro ao deletar lote');
       }
     }
   };
