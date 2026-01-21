@@ -28,6 +28,7 @@ import EventForm from '../Pages/Events/EventForm';
 import EventDetails from '../Pages/Events/EventDetails';
 import CouponsPage from '../Pages/Events/CouponsPage';
 import FormBuilder from '../Pages/Events/FormBuilder';
+import RegistrationDetails from '../Pages/Events/RegistrationDetails';
 import dummyContents from 'dan-api/dummy/dummyContents';
 
 function Application({ history }) {
@@ -81,6 +82,7 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/events/:id/editar" component={EventForm} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/cupons" component={CouponsPage} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/:id/formulario" component={FormBuilder} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/events/registrations/:id" component={RegistrationDetails} isAuthenticated={isAuthenticated} />
           </Switch>
         </Dashboard>
       </Route>

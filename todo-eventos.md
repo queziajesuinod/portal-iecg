@@ -38,7 +38,7 @@
 - [x] /api/admin/events/registrations - rotas de inscrições (admin)
 - [x] /api/public/events/* - listar eventos públicos
 - [x] /api/public/events/register - processar inscrição pública
-- [ ] /api/webhooks/cielo - webhook para status de pagamento
+- [x] /api/webhooks/cielo - webhook para status de pagamento
 
 ## Frontend - Páginas Admin
 
@@ -49,8 +49,8 @@
 - [x] Gerenciamento de cupons (página separada)
 - [x] Criador visual de formulários dinâmicos
 - [x] Visualização de inscrições por evento
-- [ ] Detalhes de inscrição individual
-- [ ] Filtros e busca de inscrições
+- [x] Detalhes de inscrição individual
+- [x] Filtros e busca de inscrições
 
 ## Frontend - Componentes
 
