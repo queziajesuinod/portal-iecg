@@ -22,7 +22,6 @@ module.exports = (sequelize) => {
     orderCode: {
       type: DataTypes.STRING(20),
       allowNull: false,
-      unique: true,
       comment: 'Código único do pedido (ex: REG-20260121-A3B5C7)'
     },
     eventId: {
