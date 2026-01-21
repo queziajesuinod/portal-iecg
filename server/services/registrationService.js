@@ -140,6 +140,8 @@ async function processarInscricao(dadosInscricao) {
     resultadoPagamento = await paymentService.criarTransacao({
       merchantOrderId: orderCode,
       customerName: buyerData.nome || buyerData.name || 'Cliente',
+      customerEmail: buyerData.email || 'sem-email@exemplo.com',
+      customerDocument: (buyerData.cpf || buyerData.documento || '00000000000').replace(/\D/g, ''),
       amount: paymentService.converterParaCentavos(valorFinalComJuros),
       installments: parcelas,
       cardNumber,
