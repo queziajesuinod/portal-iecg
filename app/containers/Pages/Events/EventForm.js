@@ -29,6 +29,7 @@ function EventForm() {
     location: '',
     imageUrl: '',
     maxRegistrations: '',
+    maxPerBuyer: '',
     isActive: true
   });
 
@@ -51,6 +52,7 @@ function EventForm() {
         location: evento.location || '',
         imageUrl: evento.imageUrl || '',
         maxRegistrations: evento.maxRegistrations || '',
+        maxPerBuyer: evento.maxPerBuyer || '',
         isActive: evento.isActive
       });
     } catch (error) {
@@ -82,7 +84,8 @@ function EventForm() {
       
       const dados = {
         ...formData,
-        maxRegistrations: formData.maxRegistrations ? parseInt(formData.maxRegistrations) : null
+        maxRegistrations: formData.maxRegistrations ? parseInt(formData.maxRegistrations) : null,
+        maxPerBuyer: formData.maxPerBuyer ? parseInt(formData.maxPerBuyer) : null
       };
 
       if (isEdicao) {
@@ -189,6 +192,20 @@ function EventForm() {
                 onChange={handleChange}
                 disabled={loading}
                 helperText="Deixe em branco para ilimitado"
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                type="number"
+                label="Máximo por Comprador"
+                name="maxPerBuyer"
+                value={formData.maxPerBuyer}
+                onChange={handleChange}
+                disabled={loading}
+                helperText="Deixe em branco para sem limite"
+                inputProps={{ min: 1 }}
               />
             </Grid>
 

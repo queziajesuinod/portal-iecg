@@ -22,7 +22,12 @@ async function processarInscricao(dadosInscricao) {
   } = dadosInscricao;
 
   // 1. Validar evento
-  await eventService.buscarEventoPublicoPorId(eventId);
+  const evento = await eventService.buscarEventoPublicoPorId(eventId);
+  
+  // 1.1. Validar limite por comprador
+  if (evento.maxPerBuyer && quantity > evento.maxPerBuyer) {
+    throw new Error(`Este evento permite no máximo ${evento.maxPerBuyer} inscrição(ões) por comprador`);
+  }
   
   // 2. Verificar disponibilidade do lote
   const { batch } = await batchService.verificarDisponibilidade(batchId, quantity);
