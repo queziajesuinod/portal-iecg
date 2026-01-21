@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { PapperBlock } from 'dan-components';
 import {
@@ -24,8 +24,9 @@ import {
   Receipt as ReceiptIcon
 } from '@material-ui/icons';
 import { useHistory, useParams } from 'react-router-dom';
-import { buscarInscricao, cancelarInscricao } from '../../../api/eventsApi';
 import brand from 'dan-api/dummy/brand';
+import { buscarInscricao, cancelarInscricao } from '../../../api/eventsApi';
+import Notification from '../../../components/Notification/Notification';
 
 function RegistrationDetails() {
   const history = useHistory();
@@ -35,22 +36,22 @@ function RegistrationDetails() {
   const [notification, setNotification] = useState('');
   const [dialogCancelar, setDialogCancelar] = useState(false);
 
-  useEffect(() => {
-    carregarInscricao();
-  }, [id]);
-
-  const carregarInscricao = async () => {
+  const carregarInscricao = useCallback(async () => {
     try {
       setLoading(true);
       const response = await buscarInscricao(id);
-      setInscricao(response.data);
+      setInscricao(response);
     } catch (error) {
       console.error('Erro ao carregar inscrição:', error);
       setNotification('Erro ao carregar inscrição');
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    carregarInscricao();
+  }, [carregarInscricao]);
 
   const handleCancelar = async () => {
     try {
@@ -69,9 +70,7 @@ function RegistrationDetails() {
     return new Date(data).toLocaleString('pt-BR');
   };
 
-  const formatarPreco = (preco) => {
-    return `R$ ${parseFloat(preco).toFixed(2).replace('.', ',')}`;
-  };
+  const formatarPreco = (preco) => `R$ ${parseFloat(preco).toFixed(2).replace('.', ',')}`;
 
   const getStatusColor = (status) => {
     const colors = {
@@ -252,7 +251,7 @@ function RegistrationDetails() {
                 <Divider style={{ marginBottom: 16 }} />
                 {inscricao.attendees && inscricao.attendees.length > 0 ? (
                   <Grid container spacing={2}>
-                    {inscricao.attendees.map((attendee, index) => (
+                    {inscricao.attendees.map((attendee) => (
                       <Grid item xs={12} md={6} key={attendee.id}>
                         <Card variant="outlined">
                           <CardContent>
