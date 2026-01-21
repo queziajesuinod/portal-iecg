@@ -63,12 +63,12 @@ app.use('/permissoes', authMiddleware, require('./routers/permissao'));
 app.use('/mia', authMiddleware, require('./routers/aposentadoRoutes'));
 app.use('/start', authMiddleware, require('./routers/startRoutes'));
 app.use('/webhooks', authMiddleware, require('./routers/webhooks'));
-// Rota pública para apelos direcionados
-app.use('/public', require('./routers/publicStartRoutes'));
 
 // ============= MÓDULO DE EVENTOS =============
-// Rotas públicas de eventos e inscrições
+// Rotas públicas de eventos e inscrições (DEVE VIR ANTES DE /public genérico)
 app.use('/api/public/events', require('./routers/publicEventRoutes'));
+// Rota pública para apelos direcionados
+app.use('/public', require('./routers/publicStartRoutes'));
 // Rotas administrativas de eventos (protegidas)
 app.use('/api/admin/events', authMiddleware, require('./routers/eventRoutes'));
 // Webhook Cielo (pública - sem autenticação)
