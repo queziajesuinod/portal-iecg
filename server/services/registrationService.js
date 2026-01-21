@@ -131,6 +131,12 @@ async function processarInscricao(dadosInscricao) {
     const cardNumber = (paymentData.cardNumber || '').replace(/\D/g, '');
     const expirationDate = (paymentData.expirationDate || '').replace(/\D/g, ''); // Remove / e espaços
 
+    console.log('Debug pagamento cartão:');
+    console.log('- cardNumber original:', paymentData.cardNumber);
+    console.log('- cardNumber limpo:', cardNumber);
+    console.log('- expirationDate original:', paymentData.expirationDate);
+    console.log('- expirationDate limpo:', expirationDate);
+
     // Detectar bandeira do cartão se não foi fornecida
     let { brand } = paymentData;
     if (!brand && cardNumber) {
