@@ -1,4 +1,3 @@
-'use strict';
 const { Model, DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
@@ -34,7 +33,7 @@ module.exports = (sequelize) => {
     },
     batchId: {
       type: DataTypes.UUID,
-      allowNull: false,
+      allowNull: true, // Agora cada inscrito tem seu lote (RegistrationAttendees.batchId)
       references: {
         model: 'EventBatches',
         key: 'id'

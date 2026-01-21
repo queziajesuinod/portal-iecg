@@ -15,7 +15,6 @@ const eventService = require('./eventService');
 async function processarInscricao(dadosInscricao) {
   const {
     eventId,
-    batchId,
     couponCode,
     quantity,
     buyerData,
@@ -169,7 +168,7 @@ async function processarInscricao(dadosInscricao) {
     id: uuid.v4(),
     orderCode,
     eventId,
-    batchId,
+    batchId: null, // Cada inscrito tem seu lote em RegistrationAttendees
     couponId,
     quantity,
     buyerData,
