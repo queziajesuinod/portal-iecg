@@ -133,7 +133,7 @@ function EventForm() {
               <TextField
                 fullWidth
                 multiline
-                rows={4}
+                minRows={4}
                 label="Descrição"
                 name="description"
                 value={formData.description}

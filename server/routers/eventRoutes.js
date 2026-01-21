@@ -10,14 +10,14 @@ const registrationController = require('../controllers/registrationController');
 // const { authenticate } = require('../middlewares/auth');
 
 // ============= EVENTOS =============
-router.get('/events', eventController.listar);
-router.get('/events/:id', eventController.buscarPorId);
-router.post('/events', eventController.criar);
-router.put('/events/:id', eventController.atualizar);
-router.delete('/events/:id', eventController.remover);
+router.get('/', eventController.listar);
+router.get('/:id', eventController.buscarPorId);
+router.post('/', eventController.criar);
+router.put('/:id', eventController.atualizar);
+router.delete('/:id', eventController.remover);
 
 // ============= LOTES =============
-router.get('/events/:eventId/batches', batchController.listarPorEvento);
+router.get('/:eventId/batches', batchController.listarPorEvento);
 router.get('/batches/:id', batchController.buscarPorId);
 router.post('/batches', batchController.criar);
 router.put('/batches/:id', batchController.atualizar);
@@ -31,7 +31,7 @@ router.put('/coupons/:id', couponController.atualizar);
 router.delete('/coupons/:id', couponController.remover);
 
 // ============= CAMPOS DE FORMULÁRIO =============
-router.get('/events/:eventId/form-fields', formFieldController.listarPorEvento);
+router.get('/:eventId/form-fields', formFieldController.listarPorEvento);
 router.get('/form-fields/:id', formFieldController.buscarPorId);
 router.post('/form-fields', formFieldController.criar);
 router.post('/form-fields/batch', formFieldController.criarEmLote);
@@ -40,7 +40,7 @@ router.delete('/form-fields/:id', formFieldController.remover);
 
 // ============= INSCRIÇÕES (ADMIN) =============
 router.get('/registrations', registrationController.listar);
-router.get('/events/:eventId/registrations', registrationController.listarPorEvento);
+router.get('/:eventId/registrations', registrationController.listarPorEvento);
 router.get('/registrations/:id', registrationController.buscarPorId);
 router.post('/registrations/:id/cancel', registrationController.cancelar);
 
