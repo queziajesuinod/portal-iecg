@@ -126,16 +126,27 @@ async function processarInscricao(dadosInscricao) {
     });
   } else if (paymentOption.paymentType === 'credit_card') {
     // Pagamento via Cartão de Crédito
+
+    // Limpar e formatar dados do cartão
+    const cardNumber = (paymentData.cardNumber || '').replace(/\D/g, '');
+    const expirationDate = (paymentData.expirationDate || '').replace(/\D/g, ''); // Remove / e espaços
+
+    // Detectar bandeira do cartão se não foi fornecida
+    let { brand } = paymentData;
+    if (!brand && cardNumber) {
+      brand = paymentService.detectarBandeira(cardNumber);
+    }
+
     resultadoPagamento = await paymentService.criarTransacao({
       merchantOrderId: orderCode,
       customerName: buyerData.nome || buyerData.name || 'Cliente',
       amount: paymentService.converterParaCentavos(valorFinalComJuros),
       installments: parcelas,
-      cardNumber: paymentData.cardNumber,
-      holder: paymentData.holder,
-      expirationDate: paymentData.expirationDate,
+      cardNumber,
+      holder: paymentData.cardHolder || paymentData.holder,
+      expirationDate,
       securityCode: paymentData.securityCode,
-      brand: paymentData.brand
+      brand
     });
   } else {
     throw new Error(`Tipo de pagamento não suportado: ${paymentOption.paymentType}`);
