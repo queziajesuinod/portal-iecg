@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
-import { PapperBlock } from 'dan-components';
+import { PapperBlock, Notification } from 'dan-components';
 import {
   Grid,
   Card,
@@ -40,6 +40,7 @@ function EventsDashboard() {
   const [eventos, setEventos] = useState([]);
   const [eventosFiltrados, setEventosFiltrados] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [notification, setNotification] = useState('');
   const [stats, setStats] = useState({
     totalEventos: 0,
     eventosAtivos: 0,
@@ -83,7 +84,7 @@ function EventsDashboard() {
       setStats(stats);
     } catch (error) {
       console.error('Erro ao carregar eventos:', error);
-      alert('Erro ao carregar eventos');
+      setNotification('Erro ao carregar eventos');
     } finally {
       setLoading(false);
     }
@@ -119,12 +120,10 @@ function EventsDashboard() {
   const handleDeletar = async (id, titulo) => {
     if (window.confirm(`Tem certeza que deseja deletar o evento "${titulo}"?`)) {
       try {
-        await deletarEvento(id);
-        alert('Evento deletado com sucesso!');
+        await deletarEven        setNotification('Evento deletado com sucesso!');
         carregarEventos();
       } catch (error) {
-        console.error('Erro ao deletar evento:', error);
-        alert(error.response?.data?.message || 'Erro ao deletar evento');
+        setNotification(error.response?.data?.message || 'Erro ao deletar evento');alert(error.response?.data?.message || 'Erro ao deletar evento');
       }
     }
   };
@@ -334,9 +333,9 @@ function EventsDashboard() {
             </TableBody>
           </Table>
         )}
-      </PapperBlock>
+       </PapperBlock>
+      <Notification message={notification} close={() => setNotification('')} />
     </div>
   );
 }
-
 export default EventsDashboard;

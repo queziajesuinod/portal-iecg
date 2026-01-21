@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
-import { PapperBlock } from 'dan-components';
+import { PapperBlock, Notification } from 'dan-components';
 import {
   Button,
   Table,
@@ -41,6 +41,7 @@ function CouponsPage() {
   const [cupons, setCupons] = useState([]);
   const [eventos, setEventos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [notification, setNotification] = useState('');
   const [dialogAberto, setDialogAberto] = useState(false);
   const [cupomEdicao, setCupomEdicao] = useState(null);
   const [formData, setFormData] = useState({
@@ -68,7 +69,7 @@ function CouponsPage() {
       setEventos(eventosRes.data);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
-      alert('Erro ao carregar dados');
+      setNotification('Erro ao carregar dados');
     } finally {
       setLoading(false);
     }
@@ -113,7 +114,7 @@ function CouponsPage() {
 
   const handleSalvar = async () => {
     if (!formData.code || !formData.discountValue) {
-      alert('Código e valor do desconto são obrigatórios');
+      setNotification('Código e valor do desconto são obrigatórios');
       return;
     }
 
@@ -127,17 +128,17 @@ function CouponsPage() {
 
       if (cupomEdicao) {
         await atualizarCupom(cupomEdicao.id, dados);
-        alert('Cupom atualizado com sucesso!');
+        setNotification('Cupom atualizado com sucesso!');
       } else {
         await criarCupom(dados);
-        alert('Cupom criado com sucesso!');
+        setNotification('Cupom criado com sucesso!');
       }
 
       handleFecharDialog();
       carregarDados();
     } catch (error) {
       console.error('Erro ao salvar cupom:', error);
-      alert(error.response?.data?.message || 'Erro ao salvar cupom');
+      setNotification(error.response?.data?.message || 'Erro ao salvar cupom');
     }
   };
 
@@ -145,11 +146,11 @@ function CouponsPage() {
     if (window.confirm(`Tem certeza que deseja deletar o cupom "${code}"?`)) {
       try {
         await deletarCupom(id);
-        alert('Cupom deletado com sucesso!');
+        setNotification('Cupom deletado com sucesso!');
         carregarDados();
       } catch (error) {
         console.error('Erro ao deletar cupom:', error);
-        alert(error.response?.data?.message || 'Erro ao deletar cupom');
+        setNotification(error.response?.data?.message || 'Erro ao deletar cupom');
       }
     }
   };
@@ -357,6 +358,7 @@ function CouponsPage() {
           </Button>
         </DialogActions>
       </Dialog>
+      <Notification message={notification} close={() => setNotification('')} />
     </div>
   );
 }

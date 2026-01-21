@@ -106,3 +106,4 @@
 - [x] Corrigir erro 404 - rotas de eventos não registradas no servidor
 - [x] Corrigir warning TextField - substituir rows por minRows
 - [ ] Corrigir erro 401 - token JWT não está sendo enviado pelo eventsApi (adicionado debug)
+- [x] Substituir alert() por componente Notification em todas as páginas de eventos

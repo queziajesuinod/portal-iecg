@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
-import { PapperBlock } from 'dan-components';
+import { PapperBlock, Notification } from 'dan-components';
 import {
   Grid,
   Card,
@@ -58,6 +58,7 @@ function EventDetails() {
   const [lotes, setLotes] = useState([]);
   const [inscricoes, setInscricoes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [notification, setNotification] = useState('');
   
   // Dialog de lote
   const [dialogLoteAberto, setDialogLoteAberto] = useState(false);
@@ -90,7 +91,7 @@ function EventDetails() {
       setInscricoes(inscricoesRes.data);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
-      alert('Erro ao carregar dados do evento');
+      setNotification('Erro ao carregar dados do evento');
     } finally {
       setLoading(false);
     }
@@ -140,17 +141,17 @@ function EventDetails() {
 
       if (loteEdicao) {
         await atualizarLote(loteEdicao.id, dados);
-        alert('Lote atualizado com sucesso!');
+        setNotification('Lote atualizado com sucesso!');
       } else {
         await criarLote(dados);
-        alert('Lote criado com sucesso!');
+        setNotification('Lote criado com sucesso!');
       }
 
       handleFecharDialogLote();
       carregarDados();
     } catch (error) {
       console.error('Erro ao salvar lote:', error);
-      alert(error.response?.data?.message || 'Erro ao salvar lote');
+      setNotification(error.response?.data?.message || 'Erro ao salvar lote');
     }
   };
 
@@ -158,11 +159,11 @@ function EventDetails() {
     if (window.confirm(`Tem certeza que deseja deletar o lote "${nome}"?`)) {
       try {
         await deletarLote(loteId);
-        alert('Lote deletado com sucesso!');
+        setNotification('Lote deletado com sucesso!');
         carregarDados();
       } catch (error) {
         console.error('Erro ao deletar lote:', error);
-        alert(error.response?.data?.message || 'Erro ao deletar lote');
+        setNotification(error.response?.data?.message || 'Erro ao deletar lote');
       }
     }
   };
@@ -468,6 +469,7 @@ function EventDetails() {
           </Button>
         </DialogActions>
       </Dialog>
+      <Notification message={notification} close={() => setNotification('')} />
     </div>
   );
 }

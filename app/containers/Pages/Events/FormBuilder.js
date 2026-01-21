@@ -64,6 +64,7 @@ function FormBuilder() {
   const [evento, setEvento] = useState(null);
   const [campos, setCampos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [notification, setNotification] = useState(\'\');
   const [dialogAberto, setDialogAberto] = useState(false);
   const [campoAtual, setCampoAtual] = useState(null);
   const [formCampo, setFormCampo] = useState({
@@ -92,7 +93,7 @@ function FormBuilder() {
       setCampos(camposRes.data);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
-      alert('Erro ao carregar dados');
+      setNotification('Erro ao carregar dados');
     } finally {
       setLoading(false);
     }
@@ -170,13 +171,13 @@ function FormBuilder() {
 
   const handleSalvarCampo = () => {
     if (!formCampo.fieldLabel || !formCampo.fieldName) {
-      alert('Label e nome do campo são obrigatórios');
+      setNotification('Label e nome do campo são obrigatórios');
       return;
     }
 
     const tiposComOpcoes = ['select', 'radio', 'checkbox'];
     if (tiposComOpcoes.includes(formCampo.fieldType) && formCampo.options.length === 0) {
-      alert('Adicione pelo menos uma opção para este tipo de campo');
+      setNotification('Adicione pelo menos uma opção para este tipo de campo');
       return;
     }
 
@@ -210,10 +211,10 @@ function FormBuilder() {
         try {
           await deletarCampo(campo.id);
           setCampos(prev => prev.filter(c => c.id !== campo.id));
-          alert('Campo deletado com sucesso!');
+          setNotification('Campo deletado com sucesso!');
         } catch (error) {
           console.error('Erro ao deletar campo:', error);
-          alert('Erro ao deletar campo');
+          setNotification('Erro ao deletar campo');
         }
       }
     }
@@ -238,7 +239,7 @@ function FormBuilder() {
 
   const handleSalvarFormulario = async () => {
     if (campos.length === 0) {
-      alert('Adicione pelo menos um campo ao formulário');
+      setNotification('Adicione pelo menos um campo ao formulário');
       return;
     }
 
@@ -266,11 +267,11 @@ function FormBuilder() {
         });
       }
 
-      alert('Formulário salvo com sucesso!');
+      setNotification('Formulário salvo com sucesso!');
       carregarDados();
     } catch (error) {
       console.error('Erro ao salvar formulário:', error);
-      alert(error.response?.data?.message || 'Erro ao salvar formulário');
+      setNotification(error.response?.data?.message || 'Erro ao salvar formulário');
     } finally {
       setLoading(false);
     }
@@ -570,6 +571,7 @@ function FormBuilder() {
           </Button>
         </DialogActions>
       </Dialog>
+      <Notification message={notification} close={() => setNotification(\'\')} />
     </div>
   );
 }
