@@ -169,7 +169,7 @@ export const buscarInscricao = (id) => {
 };
 
 export const cancelarInscricao = (id) => {
-  return fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}`, {
+  return fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}/cancel`, {
     method: 'POST',
   });
 };

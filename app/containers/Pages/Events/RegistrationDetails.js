@@ -32,7 +32,7 @@ function RegistrationDetails() {
   const { id } = useParams();
   const [inscricao, setInscricao] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [notification, setNotification] = useState(\'\');
+  const [notification, setNotification] = useState('');
   const [dialogCancelar, setDialogCancelar] = useState(false);
 
   useEffect(() => {
@@ -370,7 +370,7 @@ function RegistrationDetails() {
           </Button>
         </DialogActions>
       </Dialog>
-      <Notification message={notification} close={() => setNotification(\'\')} />
+      <Notification message={notification} close={() => setNotification('')} />
     </div>
   );
 }
