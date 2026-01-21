@@ -25,4 +25,7 @@ router.post('/register', registrationController.processar);
 // ============= CONSULTAR INSCRIÇÃO POR CÓDIGO =============
 router.get('/registrations/:orderCode', registrationController.buscarPorCodigo);
 
+// ============= VERIFICAR STATUS DE PAGAMENTO =============
+router.get('/registrations/:orderCode/status', registrationController.verificarStatus);
+
 module.exports = router;

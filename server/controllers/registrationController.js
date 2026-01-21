@@ -43,10 +43,10 @@ async function cancelar(req, res) {
 async function processar(req, res) {
   try {
     const resultado = await registrationService.processarInscricao(req.body);
-    
+
     // Enviar notificação ao administrador (implementar depois)
     // await notificarAdmin(resultado);
-    
+
     res.status(201).json({
       sucesso: true,
       orderCode: resultado.orderCode,
@@ -61,9 +61,9 @@ async function processar(req, res) {
     });
   } catch (err) {
     console.error('Erro ao processar inscrição:', err);
-    res.status(400).json({ 
+    res.status(400).json({
       sucesso: false,
-      message: err.message 
+      message: err.message
     });
   }
 }
@@ -77,11 +77,28 @@ async function buscarPorCodigo(req, res) {
   }
 }
 
+async function verificarStatus(req, res) {
+  try {
+    const { orderCode } = req.params;
+    const inscricao = await registrationService.buscarInscricaoPorCodigo(orderCode);
+
+    res.status(200).json({
+      orderCode: inscricao.orderCode,
+      paymentStatus: inscricao.paymentStatus,
+      paymentMethod: inscricao.paymentMethod,
+      isPaid: inscricao.paymentStatus === 'confirmed' || inscricao.paymentStatus === 'paid'
+    });
+  } catch (err) {
+    res.status(404).json({ message: 'Inscrição não encontrada' });
+  }
+}
+
 module.exports = {
   listar,
   listarPorEvento,
   buscarPorId,
   cancelar,
   processar,
-  buscarPorCodigo
+  buscarPorCodigo,
+  verificarStatus
 };
