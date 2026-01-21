@@ -57,7 +57,8 @@ async function processar(req, res) {
         quantity: resultado.registration.quantity,
         finalPrice: resultado.registration.finalPrice,
         paymentStatus: resultado.registration.paymentStatus
-      }
+      },
+      pagamento: resultado.pagamento
     });
   } catch (err) {
     console.error('Erro ao processar inscrição:', err);
