@@ -2,7 +2,7 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('PaymentOptions', {
+    await queryInterface.createTable({ tableName: 'PaymentOptions', schema: 'dev_iecg' }, {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -13,7 +13,7 @@ module.exports = {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
-          model: 'Events',
+          model: { tableName: 'Events', schema: 'dev_iecg' },
           key: 'id'
         },
         onUpdate: 'CASCADE',
@@ -62,12 +62,12 @@ module.exports = {
     });
 
     // Adicionar índice para buscar formas de pagamento por evento
-    await queryInterface.addIndex('PaymentOptions', ['eventId'], {
+    await queryInterface.addIndex({ tableName: 'PaymentOptions', schema: 'dev_iecg' }, ['eventId'], {
       name: 'idx_payment_options_event_id'
     });
 
     // Adicionar índice composto para buscar formas ativas por evento
-    await queryInterface.addIndex('PaymentOptions', ['eventId', 'isActive'], {
+    await queryInterface.addIndex({ tableName: 'PaymentOptions', schema: 'dev_iecg' }, ['eventId', 'isActive'], {
       name: 'idx_payment_options_event_active'
     });
 
@@ -75,7 +75,7 @@ module.exports = {
   },
 
   down: async (queryInterface, Sequelize) => {
-    await queryInterface.dropTable('PaymentOptions');
+    await queryInterface.dropTable({ tableName: 'PaymentOptions', schema: 'dev_iecg' });
     
     // Remover ENUMs (PostgreSQL)
     await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_PaymentOptions_paymentType";');
