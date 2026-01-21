@@ -5,6 +5,7 @@ const batchController = require('../controllers/batchController');
 const couponController = require('../controllers/couponController');
 const formFieldController = require('../controllers/formFieldController');
 const registrationController = require('../controllers/registrationController');
+const paymentOptionController = require('../controllers/paymentOptionController');
 
 // Middleware de autenticação (assumindo que já existe)
 // const { authenticate } = require('../middlewares/auth');
@@ -37,6 +38,12 @@ router.post('/form-fields', formFieldController.criar);
 router.post('/form-fields/batch', formFieldController.criarEmLote);
 router.put('/form-fields/:id', formFieldController.atualizar);
 router.delete('/form-fields/:id', formFieldController.remover);
+
+// ============= FORMAS DE PAGAMENTO =============
+router.get('/:eventId/payment-options', paymentOptionController.listarPorEvento);
+router.post('/:eventId/payment-options', paymentOptionController.criar);
+router.put('/payment-options/:id', paymentOptionController.atualizar);
+router.delete('/payment-options/:id', paymentOptionController.deletar);
 
 // ============= INSCRIÇÕES (ADMIN) =============
 router.get('/registrations', registrationController.listar);
