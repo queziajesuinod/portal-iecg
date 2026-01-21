@@ -1,64 +1,73 @@
-const { FormField, Event } = require('../models');
 const uuid = require('uuid');
+const { FormField, Event } = require('../models');
 
 async function listarCamposPorEvento(eventId) {
-  return FormField.findAll({
+  const campos = await FormField.findAll({
     where: { eventId },
     order: [['section', 'ASC'], ['order', 'ASC']]
   });
+
+  // Mapear para formato esperado pelo frontend
+  return campos.map(campo => ({
+    ...campo.toJSON(),
+    label: campo.fieldLabel,
+    orderIndex: campo.order
+  }));
 }
 
 async function buscarCampoPorId(id) {
   const field = await FormField.findByPk(id);
-  
+
   if (!field) {
     throw new Error('Campo não encontrado');
   }
-  
+
   return field;
 }
 
 async function criarCampo(body) {
-  const { eventId, fieldType, fieldLabel, fieldName, placeholder, isRequired, options, order, section, validationRules } = body;
-  
+  const {
+    eventId, fieldType, fieldLabel, fieldName, placeholder, isRequired, options, order, section, validationRules
+  } = body;
+
   if (!eventId) {
     throw new Error('ID do evento é obrigatório');
   }
-  
+
   if (!fieldType) {
     throw new Error('Tipo do campo é obrigatório');
   }
-  
+
   if (!fieldLabel) {
     throw new Error('Label do campo é obrigatório');
   }
-  
+
   if (!fieldName) {
     throw new Error('Nome do campo é obrigatório');
   }
-  
+
   // Verificar se evento existe
   const event = await Event.findByPk(eventId);
   if (!event) {
     throw new Error('Evento não encontrado');
   }
-  
+
   // Verificar se fieldName já existe para este evento
   const existingField = await FormField.findOne({
     where: { eventId, fieldName }
   });
-  
+
   if (existingField) {
     throw new Error('Já existe um campo com este nome para este evento');
   }
-  
+
   // Validar options para campos select, radio, checkbox
   if (['select', 'radio', 'checkbox'].includes(fieldType)) {
     if (!options || !Array.isArray(options) || options.length === 0) {
       throw new Error(`Campo do tipo ${fieldType} requer opções`);
     }
   }
-  
+
   return FormField.create({
     id: uuid.v4(),
     eventId,
@@ -76,11 +85,11 @@ async function criarCampo(body) {
 
 async function atualizarCampo(id, body) {
   const field = await FormField.findByPk(id);
-  
+
   if (!field) {
     throw new Error('Campo não encontrado');
   }
-  
+
   field.fieldType = body.fieldType ?? field.fieldType;
   field.fieldLabel = body.fieldLabel ?? field.fieldLabel;
   field.fieldName = body.fieldName ?? field.fieldName;
@@ -90,18 +99,18 @@ async function atualizarCampo(id, body) {
   field.order = body.order ?? field.order;
   field.section = body.section ?? field.section;
   field.validationRules = body.validationRules ?? field.validationRules;
-  
+
   await field.save();
   return field;
 }
 
 async function deletarCampo(id) {
   const field = await FormField.findByPk(id);
-  
+
   if (!field) {
     throw new Error('Campo não encontrado');
   }
-  
+
   await field.destroy();
 }
 
@@ -110,13 +119,13 @@ async function criarCamposEmLote(eventId, campos) {
   if (!Array.isArray(campos) || campos.length === 0) {
     throw new Error('Lista de campos inválida');
   }
-  
+
   // Verificar se evento existe
   const event = await Event.findByPk(eventId);
   if (!event) {
     throw new Error('Evento não encontrado');
   }
-  
+
   const camposParaCriar = campos.map((campo, index) => ({
     id: uuid.v4(),
     eventId,
@@ -130,7 +139,7 @@ async function criarCamposEmLote(eventId, campos) {
     section: campo.section ?? 'attendee',
     validationRules: campo.validationRules
   }));
-  
+
   return FormField.bulkCreate(camposParaCriar);
 }
 
@@ -139,18 +148,18 @@ async function validarDadosFormulario(eventId, dados, section = 'attendee') {
   const campos = await FormField.findAll({
     where: { eventId, section }
   });
-  
+
   const erros = [];
-  
+
   campos.forEach((campo) => {
     const valor = dados[campo.fieldName];
-    
+
     // Verificar campos obrigatórios
     if (campo.isRequired && (!valor || valor === '')) {
       erros.push(`Campo "${campo.fieldLabel}" é obrigatório`);
       return;
     }
-    
+
     // Validar tipo de campo
     if (valor) {
       if (campo.fieldType === 'email') {
@@ -175,11 +184,11 @@ async function validarDadosFormulario(eventId, dados, section = 'attendee') {
       }
     }
   });
-  
+
   if (erros.length > 0) {
     throw new Error(erros.join('; '));
   }
-  
+
   return true;
 }
 
