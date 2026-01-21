@@ -99,3 +99,7 @@
 
 - [x] Adicionar item "Eventos" no menu lateral do dashboard
 - [x] Submenu com links para todas as páginas de eventos
+
+## Bugs
+
+- [x] Corrigir erro no EventsDashboard - API retorna objeto ao invés de array

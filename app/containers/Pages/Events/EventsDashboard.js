@@ -63,17 +63,21 @@ function EventsDashboard() {
     try {
       setLoading(true);
       const response = await listarEventos();
-      const eventosData = response.data;
+      // A API pode retornar response.data ou response diretamente
+      const eventosData = Array.isArray(response) ? response : (response.data || []);
       
-      setEventos(eventosData);
-      setEventosFiltrados(eventosData);
+      // Garantir que sempre seja um array
+      const eventosArray = Array.isArray(eventosData) ? eventosData : [];
+      
+      setEventos(eventosArray);
+      setEventosFiltrados(eventosArray);
 
       // Calcular estatísticas
       const stats = {
-        totalEventos: eventosData.length,
-        eventosAtivos: eventosData.filter(e => e.isActive).length,
-        totalInscricoes: eventosData.reduce((sum, e) => sum + (e.currentRegistrations || 0), 0),
-        receitaTotal: eventosData.reduce((sum, e) => sum + (parseFloat(e.totalRevenue) || 0), 0)
+        totalEventos: eventosArray.length,
+        eventosAtivos: eventosArray.filter(e => e.isActive).length,
+        totalInscricoes: eventosArray.reduce((sum, e) => sum + (e.currentRegistrations || 0), 0),
+        receitaTotal: eventosArray.reduce((sum, e) => sum + (parseFloat(e.totalRevenue) || 0), 0)
       };
       
       setStats(stats);
