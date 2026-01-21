@@ -120,10 +120,13 @@ function EventsDashboard() {
   const handleDeletar = async (id, titulo) => {
     if (window.confirm(`Tem certeza que deseja deletar o evento "${titulo}"?`)) {
       try {
-        await deletarEven        setNotification('Evento deletado com sucesso!');
+        await deletarEvento(id);
+        setNotification('Evento deletado com sucesso!');
         carregarEventos();
       } catch (error) {
-        setNotification(error.response?.data?.message || 'Erro ao deletar evento');alert(error.response?.data?.message || 'Erro ao deletar evento');
+        const mensagem = error.response?.data?.message || 'Erro ao deletar evento';
+        setNotification(mensagem);
+        alert(mensagem);
       }
     }
   };
