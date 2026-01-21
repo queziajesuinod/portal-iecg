@@ -94,3 +94,8 @@
 - [ ] Documentar endpoints da API
 - [ ] Documentar fluxo de integração Cielo
 - [ ] Guia de uso do módulo de eventos
+
+## Menu Lateral
+
+- [x] Adicionar item "Eventos" no menu lateral do dashboard
+- [x] Submenu com links para todas as páginas de eventos
