@@ -7,11 +7,37 @@ async function listarLotesPorEvento(eventId) {
     order: [['order', 'ASC']]
   });
 
-  // Converter price de string para número (Sequelize DECIMAL retorna string)
-  return lotes.map(lote => ({
-    ...lote.toJSON(),
-    price: Number(lote.price)
+  // Contar inscritos com status pending ou paid para cada lote
+  const { RegistrationAttendee, Registration } = require('../models');
+
+  const lotesComVagas = await Promise.all(lotes.map(async (lote) => {
+    let vagasDisponiveis = null;
+
+    if (lote.maxQuantity) {
+      const inscritosOcupados = await RegistrationAttendee.count({
+        where: { batchId: lote.id },
+        include: [{
+          model: Registration,
+          as: 'registration',
+          where: {
+            paymentStatus: ['pending', 'paid']
+          },
+          attributes: []
+        }]
+      });
+
+      vagasDisponiveis = lote.maxQuantity - inscritosOcupados;
+    }
+
+    return {
+      ...lote.toJSON(),
+      price: Number(lote.price),
+      vagasDisponiveis,
+      inscritosOcupados: vagasDisponiveis !== null ? lote.maxQuantity - vagasDisponiveis : 0
+    };
   }));
+
+  return lotesComVagas;
 }
 
 async function buscarLotePorId(id) {
@@ -130,16 +156,36 @@ async function verificarDisponibilidade(batchId, quantidade) {
 
   // Verificar quantidade disponível
   if (batch.maxQuantity) {
-    const disponiveis = batch.maxQuantity - batch.currentQuantity;
+    // Contar inscritos com status pending ou paid neste lote
+    const { RegistrationAttendee, Registration } = require('../models');
+    const inscritosOcupados = await RegistrationAttendee.count({
+      where: { batchId },
+      include: [{
+        model: Registration,
+        as: 'registration',
+        where: {
+          paymentStatus: ['pending', 'paid']
+        },
+        attributes: []
+      }]
+    });
+
+    const disponiveis = batch.maxQuantity - inscritosOcupados;
     if (disponiveis < quantidade) {
       throw new Error(`Apenas ${disponiveis} vagas disponíveis neste lote`);
     }
+
+    return {
+      disponivel: true,
+      batch,
+      vagasRestantes: disponiveis
+    };
   }
 
   return {
     disponivel: true,
     batch,
-    vagasRestantes: batch.maxQuantity ? batch.maxQuantity - batch.currentQuantity : null
+    vagasRestantes: null
   };
 }
 
