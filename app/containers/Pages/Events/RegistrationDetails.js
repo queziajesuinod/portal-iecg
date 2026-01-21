@@ -32,6 +32,7 @@ function RegistrationDetails() {
   const { id } = useParams();
   const [inscricao, setInscricao] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [notification, setNotification] = useState(\'\');
   const [dialogCancelar, setDialogCancelar] = useState(false);
 
   useEffect(() => {
@@ -45,7 +46,7 @@ function RegistrationDetails() {
       setInscricao(response.data);
     } catch (error) {
       console.error('Erro ao carregar inscrição:', error);
-      alert('Erro ao carregar inscrição');
+      setNotification('Erro ao carregar inscrição');
     } finally {
       setLoading(false);
     }
@@ -54,12 +55,12 @@ function RegistrationDetails() {
   const handleCancelar = async () => {
     try {
       await cancelarInscricao(id);
-      alert('Inscrição cancelada com sucesso!');
+      setNotification('Inscrição cancelada com sucesso!');
       setDialogCancelar(false);
       carregarInscricao();
     } catch (error) {
       console.error('Erro ao cancelar inscrição:', error);
-      alert(error.response?.data?.message || 'Erro ao cancelar inscrição');
+      setNotification(error.response?.data?.message || 'Erro ao cancelar inscrição');
     }
   };
 
@@ -369,6 +370,7 @@ function RegistrationDetails() {
           </Button>
         </DialogActions>
       </Dialog>
+      <Notification message={notification} close={() => setNotification(\'\')} />
     </div>
   );
 }

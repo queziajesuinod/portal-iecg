@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
-import { PapperBlock } from 'dan-components';
+import { PapperBlock, Notification } from 'dan-components';
 import {
   Grid,
   TextField,
@@ -20,6 +20,7 @@ function EventForm() {
   const isEdicao = !!id;
 
   const [loading, setLoading] = useState(false);
+  const [notification, setNotification] = useState('');
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -55,7 +56,7 @@ function EventForm() {
       });
     } catch (error) {
       console.error('Erro ao carregar evento:', error);
-      alert('Erro ao carregar evento');
+      setNotification('Erro ao carregar evento');
     } finally {
       setLoading(false);
     }
@@ -73,7 +74,7 @@ function EventForm() {
     e.preventDefault();
     
     if (!formData.title) {
-      alert('Título é obrigatório');
+      setNotification('Título é obrigatório');
       return;
     }
 
@@ -87,16 +88,16 @@ function EventForm() {
 
       if (isEdicao) {
         await atualizarEvento(id, dados);
-        alert('Evento atualizado com sucesso!');
+        setNotification('Evento atualizado com sucesso!');
       } else {
         await criarEvento(dados);
-        alert('Evento criado com sucesso!');
+        setNotification('Evento criado com sucesso!');
       }
       
       history.push('/app/events');
     } catch (error) {
       console.error('Erro ao salvar evento:', error);
-      alert(error.response?.data?.message || 'Erro ao salvar evento');
+      setNotification(error.response?.data?.message || 'Erro ao salvar evento');
     } finally {
       setLoading(false);
     }
@@ -245,7 +246,9 @@ function EventForm() {
             </Grid>
           </Grid>
         </form>
-      </PapperBlock>
+        </PapperBlock>
+        <Notification message={notification} close={() => setNotification('')} />
+      </div>
     </div>
   );
 }
