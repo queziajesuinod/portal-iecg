@@ -49,6 +49,27 @@ module.exports = [
     ]
   },
   {
+    key: 'eventos',
+    name: 'Eventos',
+    icon: 'ion-ios-calendar-outline',
+    child: [
+      {
+        key: 'listagemEventos',
+        name: 'Gerenciar Eventos',
+        link: '/app/events',
+        icon: 'ion-ios-list-box-outline',
+        permission: 'EVENTOS_LISTAR'
+      },
+      {
+        key: 'cuponsEventos',
+        name: 'Cupons de Desconto',
+        link: '/app/cupons',
+        icon: 'ion-ios-pricetag-outline',
+        permission: 'EVENTOS_LISTAR'
+      }
+    ]
+  },
+  {
     key: 'admin',
     name: 'Administração',
     icon: 'ion-ios-settings-outline',
