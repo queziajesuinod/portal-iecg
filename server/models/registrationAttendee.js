@@ -1,10 +1,10 @@
-'use strict';
 const { Model, DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
   class RegistrationAttendee extends Model {
     static associate(models) {
       RegistrationAttendee.belongsTo(models.Registration, { foreignKey: 'registrationId', as: 'registration' });
+      RegistrationAttendee.belongsTo(models.EventBatch, { foreignKey: 'batchId', as: 'batch' });
     }
   }
 
@@ -22,6 +22,15 @@ module.exports = (sequelize) => {
         model: 'Registrations',
         key: 'id'
       }
+    },
+    batchId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: 'EventBatches',
+        key: 'id'
+      },
+      comment: 'Lote específico deste inscrito'
     },
     attendeeData: {
       type: DataTypes.JSON,

@@ -1,5 +1,7 @@
-const { Registration, RegistrationAttendee, Event, EventBatch, Coupon } = require('../models');
 const uuid = require('uuid');
+const {
+  Registration, RegistrationAttendee, Event, EventBatch, Coupon
+} = require('../models');
 const orderCodeService = require('./orderCodeService');
 const batchService = require('./batchService');
 const couponService = require('./couponService');
@@ -24,22 +26,50 @@ async function processarInscricao(dadosInscricao) {
 
   // 1. Validar evento
   const evento = await eventService.buscarEventoPublicoPorId(eventId);
-  
+
   // 1.1. Validar limite por comprador
   if (evento.maxPerBuyer && quantity > evento.maxPerBuyer) {
     throw new Error(`Este evento permite no máximo ${evento.maxPerBuyer} inscrição(ões) por comprador`);
   }
-  
-  // 2. Verificar disponibilidade do lote
-  const { batch } = await batchService.verificarDisponibilidade(batchId, quantity);
-  
-  // 3. Calcular preço
-  const precoUnitario = parseFloat(batch.price);
-  const precoOriginal = precoUnitario * quantity;
+
+  // 2. Validar que cada inscrito tem um batchId
+  if (!Array.isArray(attendeesData) || attendeesData.length !== quantity) {
+    throw new Error(`Esperado ${quantity} inscrito(s), recebido ${attendeesData?.length || 0}`);
+  }
+
+  // Validar que cada inscrito tem batchId
+  const semLote = attendeesData.find(att => !att.batchId);
+  if (semLote) {
+    throw new Error('Cada inscrito deve ter um lote (batchId) associado');
+  }
+
+  // 2.1. Contar quantos inscritos por lote
+  const lotesCounts = {};
+  attendeesData.forEach(att => {
+    lotesCounts[att.batchId] = (lotesCounts[att.batchId] || 0) + 1;
+  });
+
+  // 2.2. Verificar disponibilidade de cada lote (paralelo)
+  const lotesData = {};
+  const loteIds = Object.keys(lotesCounts);
+  const verificacoes = loteIds.map(async (loteId) => {
+    const { batch } = await batchService.verificarDisponibilidade(loteId, lotesCounts[loteId]);
+    return { loteId, batch };
+  });
+  const resultados = await Promise.all(verificacoes);
+  resultados.forEach(({ loteId, batch }) => {
+    lotesData[loteId] = batch;
+  });
+
+  // 3. Calcular preço total somando preço de cada inscrito
+  const precoOriginal = attendeesData.reduce((sum, att) => {
+    const lote = lotesData[att.batchId];
+    return sum + parseFloat(lote.price);
+  }, 0);
   let precoFinal = precoOriginal;
   let desconto = 0;
   let couponId = null;
-  
+
   // 4. Aplicar cupom se fornecido
   if (couponCode) {
     const resultadoCupom = await couponService.validarCupom(couponCode, eventId, precoOriginal);
@@ -47,34 +77,30 @@ async function processarInscricao(dadosInscricao) {
     precoFinal = resultadoCupom.precoFinal;
     couponId = resultadoCupom.coupon.id;
   }
-  
+
   // 5. Validar dados do comprador
   await formFieldService.validarDadosFormulario(eventId, buyerData, 'buyer');
-  
-  // 6. Validar dados dos inscritos
-  if (!Array.isArray(attendeesData) || attendeesData.length !== quantity) {
-    throw new Error(`Esperado ${quantity} inscrito(s), recebido ${attendeesData?.length || 0}`);
-  }
-  
-  for (const attendeeData of attendeesData) {
-    await formFieldService.validarDadosFormulario(eventId, attendeeData, 'attendee');
-  }
-  
+
+  // 6. Validar dados dos inscritos (paralelo)
+  const validacoes = attendeesData.map(attendee => formFieldService.validarDadosFormulario(eventId, attendee.data || attendee, 'attendee')
+  );
+  await Promise.all(validacoes);
+
   // 7. Gerar código único de pedido
   const orderCode = await orderCodeService.gerarCodigoUnico();
-  
+
   // 8. Buscar configuração de pagamento
   const { PaymentOption } = require('../models');
   const paymentOption = await PaymentOption.findByPk(paymentOptionId);
-  
+
   if (!paymentOption || !paymentOption.isActive) {
     throw new Error('Forma de pagamento inválida ou inativa');
   }
-  
+
   // 8.1. Calcular valor final com juros (se houver parcelas)
   let valorFinalComJuros = precoFinal;
   const parcelas = paymentData.installments || 1;
-  
+
   if (paymentOption.paymentType === 'credit_card' && parcelas > 1 && paymentOption.interestRate > 0) {
     if (paymentOption.interestType === 'percentage') {
       // Juros percentual por parcela
@@ -84,11 +110,11 @@ async function processarInscricao(dadosInscricao) {
       valorFinalComJuros += paymentOption.interestRate * (parcelas - 1);
     }
   }
-  
+
   // 8.2. Processar pagamento conforme o tipo
   let resultadoPagamento;
-  let paymentMethod = paymentOption.paymentType;
-  
+  const paymentMethod = paymentOption.paymentType;
+
   if (paymentOption.paymentType === 'pix') {
     // Pagamento via PIX
     resultadoPagamento = await paymentService.criarTransacaoPix({
@@ -114,11 +140,11 @@ async function processarInscricao(dadosInscricao) {
   } else {
     throw new Error(`Tipo de pagamento não suportado: ${paymentOption.paymentType}`);
   }
-  
+
   if (!resultadoPagamento.sucesso) {
     throw new Error(`Erro no pagamento: ${resultadoPagamento.erro}`);
   }
-  
+
   // 9. Criar registro de inscrição
   const registration = await Registration.create({
     id: uuid.v4(),
@@ -139,18 +165,18 @@ async function processarInscricao(dadosInscricao) {
     pixQrCode: resultadoPagamento.qrCodeString || null,
     pixQrCodeBase64: resultadoPagamento.qrCodeBase64 || null
   });
-  
-  // 10. Criar registros dos inscritos
-  const attendeesPromises = attendeesData.map((attendeeData, index) => 
-    RegistrationAttendee.create({
-      id: uuid.v4(),
-      registrationId: registration.id,
-      attendeeData,
-      attendeeNumber: index + 1
-    })
+
+  // 10. Criar registros dos inscritos com seus respectivos lotes
+  const attendeesPromises = attendeesData.map((attendee, index) => RegistrationAttendee.create({
+    id: uuid.v4(),
+    registrationId: registration.id,
+    batchId: attendee.batchId,
+    attendeeData: attendee.data || attendee,
+    attendeeNumber: index + 1
+  })
   );
   const attendees = await Promise.all(attendeesPromises);
-  
+
   // 11. Registrar transação de pagamento
   await paymentService.registrarTransacao(
     registration.id,
@@ -158,31 +184,33 @@ async function processarInscricao(dadosInscricao) {
     resultadoPagamento.status.toString(),
     resultadoPagamento
   );
-  
-  // 12. Incrementar contadores
-  await batchService.incrementarQuantidade(batchId, quantity);
-  
+
+  // 12. Incrementar contadores de cada lote (paralelo)
+  const incrementos = Object.entries(lotesCounts).map(([loteId, count]) => batchService.incrementarQuantidade(loteId, count)
+  );
+  await Promise.all(incrementos);
+
   if (couponId) {
     await couponService.incrementarUso(couponId);
   }
-  
+
   // 13. Atualizar contador de inscrições do evento
   await Event.increment('currentRegistrations', {
     by: quantity,
     where: { id: eventId }
   });
-  
+
   // 14. Capturar pagamento (confirmar)
   if (resultadoPagamento.status === 1) { // Authorized
     const captura = await paymentService.capturarPagamento(
       resultadoPagamento.paymentId,
       paymentService.converterParaCentavos(precoFinal)
     );
-    
+
     if (captura.sucesso) {
       registration.paymentStatus = 'confirmed';
       await registration.save();
-      
+
       await paymentService.registrarTransacao(
         registration.id,
         'capture',
@@ -191,7 +219,7 @@ async function processarInscricao(dadosInscricao) {
       );
     }
   }
-  
+
   return {
     sucesso: true,
     orderCode,
@@ -224,7 +252,14 @@ async function listarInscricoes() {
       },
       {
         model: RegistrationAttendee,
-        as: 'attendees'
+        as: 'attendees',
+        include: [
+          {
+            model: EventBatch,
+            as: 'batch',
+            attributes: ['id', 'name', 'price']
+          }
+        ]
       }
     ],
     order: [['createdAt', 'DESC']]
@@ -250,7 +285,14 @@ async function listarInscricoesPorEvento(eventId) {
       },
       {
         model: RegistrationAttendee,
-        as: 'attendees'
+        as: 'attendees',
+        include: [
+          {
+            model: EventBatch,
+            as: 'batch',
+            attributes: ['id', 'name', 'price']
+          }
+        ]
       }
     ],
     order: [['createdAt', 'DESC']]
@@ -281,15 +323,22 @@ async function buscarInscricaoPorCodigo(orderCode) {
       },
       {
         model: RegistrationAttendee,
-        as: 'attendees'
+        as: 'attendees',
+        include: [
+          {
+            model: EventBatch,
+            as: 'batch',
+            attributes: ['id', 'name', 'price']
+          }
+        ]
       }
     ]
   });
-  
+
   if (!registration) {
     throw new Error('Inscrição não encontrada');
   }
-  
+
   return registration;
 }
 
@@ -313,15 +362,22 @@ async function buscarInscricaoPorId(id) {
       },
       {
         model: RegistrationAttendee,
-        as: 'attendees'
+        as: 'attendees',
+        include: [
+          {
+            model: EventBatch,
+            as: 'batch',
+            attributes: ['id', 'name', 'price']
+          }
+        ]
       }
     ]
   });
-  
+
   if (!registration) {
     throw new Error('Inscrição não encontrada');
   }
-  
+
   return registration;
 }
 
@@ -330,43 +386,42 @@ async function buscarInscricaoPorId(id) {
  */
 async function cancelarInscricao(id) {
   const registration = await buscarInscricaoPorId(id);
-  
+
   if (registration.paymentStatus === 'cancelled' || registration.paymentStatus === 'refunded') {
     throw new Error('Inscrição já foi cancelada');
   }
-  
+
   // Cancelar pagamento na Cielo
   if (registration.paymentId) {
     const cancelamento = await paymentService.cancelarPagamento(
       registration.paymentId,
       paymentService.converterParaCentavos(registration.finalPrice)
     );
-    
+
     if (cancelamento.sucesso) {
       registration.paymentStatus = 'cancelled';
       await registration.save();
-      
+
       await paymentService.registrarTransacao(
         registration.id,
         'cancellation',
         cancelamento.status.toString(),
         cancelamento
       );
-      
+
       // Decrementar contadores
       await batchService.incrementarQuantidade(registration.batchId, -registration.quantity);
-      
+
       await Event.decrement('currentRegistrations', {
         by: registration.quantity,
         where: { id: registration.eventId }
       });
-      
+
       return registration;
-    } else {
-      throw new Error(`Erro ao cancelar pagamento: ${cancelamento.erro}`);
     }
+    throw new Error(`Erro ao cancelar pagamento: ${cancelamento.erro}`);
   }
-  
+
   throw new Error('Inscrição não possui pagamento associado');
 }
 
