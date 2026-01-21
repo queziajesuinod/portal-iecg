@@ -215,6 +215,7 @@ module.exports = options => ({
     extensions: ['.js', '.jsx', '.react.js'],
     mainFields: ['browser', 'jsnext:main', 'main'],
     fallback: {
+      async_hooks: false,
       fs: false,
       domain: false,
       path: false,
@@ -230,9 +231,14 @@ module.exports = options => ({
       vm: false,
       console: false,
       tty: false,
+      querystring: require.resolve('querystring-es3'),
+      dns: false,
+      net: false,
+      tls: false,
       process: require.resolve('process/browser'),
     },
     alias: {
+      'pg-native': false,
       'dan-components': path.resolve(__dirname, '../../app/components/'),
       'dan-actions': path.resolve(__dirname, '../../app/actions/'),
       'dan-redux': path.resolve(__dirname, '../../app/redux/'),
