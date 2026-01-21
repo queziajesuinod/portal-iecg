@@ -105,3 +105,4 @@
 - [x] Corrigir erro no EventsDashboard - API retorna objeto ao invés de array
 - [x] Corrigir erro 404 - rotas de eventos não registradas no servidor
 - [x] Corrigir warning TextField - substituir rows por minRows
+- [ ] Corrigir erro 401 - token JWT não está sendo enviado pelo eventsApi (adicionado debug)

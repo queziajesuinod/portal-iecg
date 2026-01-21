@@ -9,8 +9,12 @@ const api = axios.create({
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
+  console.log('[eventsApi] Token encontrado:', token ? 'Sim' : 'Não');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+    console.log('[eventsApi] Header Authorization:', config.headers.Authorization.substring(0, 20) + '...');
+  } else {
+    console.warn('[eventsApi] ATENÇÃO: Nenhum token encontrado no localStorage!');
   }
   return config;
 });
