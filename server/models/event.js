@@ -54,6 +54,11 @@ module.exports = (sequelize) => {
       type: DataTypes.INTEGER,
       defaultValue: 0,
     },
+    maxPerBuyer: {
+      type: DataTypes.INTEGER,
+      allowNull: true, // null = sem limite
+      comment: 'Quantidade máxima de inscrições por comprador'
+    },
     createdBy: {
       type: DataTypes.UUID,
       allowNull: false,
