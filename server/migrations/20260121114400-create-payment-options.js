@@ -4,9 +4,9 @@ module.exports = {
   up: async (queryInterface, Sequelize) => {
     await queryInterface.createTable({ tableName: 'PaymentOptions', schema: 'dev_iecg' }, {
       id: {
-        type: Sequelize.INTEGER,
+        type: Sequelize.UUID,
+        defaultValue: Sequelize.literal('gen_random_uuid()'),
         primaryKey: true,
-        autoIncrement: true,
         allowNull: false
       },
       eventId: {
