@@ -310,6 +310,56 @@ function converterParaReais(valorCentavos) {
   return (parseInt(valorCentavos, 10) / 100).toFixed(2);
 }
 
+/**
+ * Detectar bandeira do cartão pelo número
+ */
+function detectarBandeira(cardNumber) {
+  const numero = cardNumber.replace(/\D/g, '');
+
+  // Visa: começa com 4
+  if (/^4/.test(numero)) {
+    return 'Visa';
+  }
+
+  // Mastercard: começa com 51-55 ou 2221-2720
+  if (/^5[1-5]/.test(numero) || /^2[2-7]/.test(numero)) {
+    return 'Master';
+  }
+
+  // Amex: começa com 34 ou 37
+  if (/^3[47]/.test(numero)) {
+    return 'Amex';
+  }
+
+  // Elo: começa com 636368, 438935, 504175, 451416, 636297, 5067, 4576, 4011
+  if (/^(636368|438935|504175|451416|636297|5067|4576|4011)/.test(numero)) {
+    return 'Elo';
+  }
+
+  // Diners: começa com 36 ou 38 ou 30[0-5]
+  if (/^3[068]/.test(numero) || /^30[0-5]/.test(numero)) {
+    return 'Diners';
+  }
+
+  // Discover: começa com 6011, 622126-622925, 644-649, 65
+  if (/^(6011|65|64[4-9]|622)/.test(numero)) {
+    return 'Discover';
+  }
+
+  // JCB: começa com 35
+  if (/^35/.test(numero)) {
+    return 'JCB';
+  }
+
+  // Hipercard: começa com 606282
+  if (/^606282/.test(numero)) {
+    return 'Hipercard';
+  }
+
+  // Padrão: Visa
+  return 'Visa';
+}
+
 module.exports = {
   criarTransacao,
   criarTransacaoPix,
@@ -319,5 +369,6 @@ module.exports = {
   registrarTransacao,
   mapearStatusCielo,
   converterParaCentavos,
-  converterParaReais
+  converterParaReais,
+  detectarBandeira
 };
