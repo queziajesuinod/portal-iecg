@@ -71,6 +71,8 @@ app.use('/public', require('./routers/publicStartRoutes'));
 app.use('/api/public/events', require('./routers/publicEventRoutes'));
 // Rotas administrativas de eventos (protegidas)
 app.use('/api/admin/events', authMiddleware, require('./routers/eventRoutes'));
+// Webhook Cielo (pública - sem autenticação)
+app.use('/api/webhooks', require('./routers/webhookRoutes'));
 
 // Assets utilitários
 app.use('/api/icons', (req, res) => {

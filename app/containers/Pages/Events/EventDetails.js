@@ -353,22 +353,27 @@ function EventDetails() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {inscricoes.map((inscricao) => (
-                  <TableRow key={inscricao.id}>
-                    <TableCell>{inscricao.orderCode}</TableCell>
-                    <TableCell>{inscricao.batch?.name || '-'}</TableCell>
-                    <TableCell>{inscricao.quantity}</TableCell>
-                    <TableCell>{formatarPreco(inscricao.finalPrice)}</TableCell>
-                    <TableCell>{formatarDataHora(inscricao.createdAt)}</TableCell>
-                    <TableCell align="center">
-                      <Chip
-                        label={inscricao.paymentStatus}
-                        color={inscricao.paymentStatus === 'confirmed' ? 'primary' : 'default'}
-                        size="small"
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
+              {inscricoes.map((inscricao) => (
+                <TableRow 
+                  key={inscricao.id}
+                  hover
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => history.push(`/app/events/registrations/${inscricao.id}`)}
+                >
+                  <TableCell>{inscricao.orderCode}</TableCell>
+                  <TableCell>{inscricao.batch?.name || '-'}</TableCell>
+                  <TableCell>{inscricao.quantity}</TableCell>
+                  <TableCell>{formatarPreco(inscricao.finalPrice)}</TableCell>
+                  <TableCell>{formatarDataHora(inscricao.createdAt)}</TableCell>
+                  <TableCell align="center">
+                    <Chip
+                      label={inscricao.paymentStatus}
+                      color={inscricao.paymentStatus === 'confirmed' ? 'primary' : 'default'}
+                      size="small"
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
               </TableBody>
             </Table>
           )}
