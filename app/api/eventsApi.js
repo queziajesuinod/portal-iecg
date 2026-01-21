@@ -172,3 +172,29 @@ export const cancelarInscricao = (id) => {
     method: 'POST',
   });
 };
+
+// ===== FORMAS DE PAGAMENTO =====
+
+export const listarFormasPagamento = (eventId) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/payment-options`);
+};
+
+export const criarFormaPagamento = (eventId, dados) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/payment-options`, {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });
+};
+
+export const atualizarFormaPagamento = (id, dados) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/payment-options/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(dados),
+  });
+};
+
+export const deletarFormaPagamento = (id) => {
+  return fetchWithAuth(`${API_URL}/api/admin/events/payment-options/${id}`, {
+    method: 'DELETE',
+  });
+};

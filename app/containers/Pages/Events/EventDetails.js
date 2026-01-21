@@ -38,7 +38,11 @@ import {
   criarLote,
   atualizarLote,
   deletarLote,
-  listarInscricoesPorEvento
+  listarInscricoesPorEvento,
+  listarFormasPagamento,
+  criarFormaPagamento,
+  atualizarFormaPagamento,
+  deletarFormaPagamento
 } from '../../../api/eventsApi';
 import brand from 'dan-api/dummy/brand';
 
@@ -57,6 +61,7 @@ function EventDetails() {
   const [evento, setEvento] = useState(null);
   const [lotes, setLotes] = useState([]);
   const [inscricoes, setInscricoes] = useState([]);
+  const [formasPagamento, setFormasPagamento] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notification, setNotification] = useState('');
   
@@ -72,6 +77,16 @@ function EventDetails() {
     order: '',
     isActive: true
   });
+  
+  // Dialog de forma de pagamento
+  const [dialogPagamentoAberto, setDialogPagamentoAberto] = useState(false);
+  const [pagamentoEdicao, setPagamentoEdicao] = useState(null);
+  const [formPagamento, setFormPagamento] = useState({
+    paymentType: 'credit_card',
+    maxInstallments: 1,
+    interestRate: 0,
+    interestType: 'percentage'
+  });
 
   useEffect(() => {
     carregarDados();
@@ -80,15 +95,17 @@ function EventDetails() {
   const carregarDados = async () => {
     try {
       setLoading(true);
-      const [eventoRes, lotesRes, inscricoesRes] = await Promise.all([
+      const [eventoRes, lotesRes, inscricoesRes, formasPagamentoRes] = await Promise.all([
         buscarEvento(id),
         listarLotesPorEvento(id),
-        listarInscricoesPorEvento(id)
+        listarInscricoesPorEvento(id),
+        listarFormasPagamento(id)
       ]);
       
       setEvento(eventoRes);
       setLotes(lotesRes);
       setInscricoes(inscricoesRes);
+      setFormasPagamento(formasPagamentoRes);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
       setNotification('Erro ao carregar dados do evento');
@@ -166,6 +183,79 @@ function EventDetails() {
         setNotification(error.message || 'Erro ao deletar lote');
       }
     }
+  };
+  
+  // Funções de Forma de Pagamento
+  const handleAbrirDialogPagamento = (pagamento = null) => {
+    if (pagamento) {
+      setPagamentoEdicao(pagamento);
+      setFormPagamento({
+        paymentType: pagamento.paymentType,
+        maxInstallments: pagamento.maxInstallments || 1,
+        interestRate: pagamento.interestRate || 0,
+        interestType: pagamento.interestType || 'percentage'
+      });
+    } else {
+      setPagamentoEdicao(null);
+      setFormPagamento({
+        paymentType: 'credit_card',
+        maxInstallments: 1,
+        interestRate: 0,
+        interestType: 'percentage'
+      });
+    }
+    setDialogPagamentoAberto(true);
+  };
+  
+  const handleFecharDialogPagamento = () => {
+    setDialogPagamentoAberto(false);
+    setPagamentoEdicao(null);
+  };
+  
+  const handleSalvarPagamento = async () => {
+    try {
+      const dados = {
+        ...formPagamento,
+        maxInstallments: parseInt(formPagamento.maxInstallments),
+        interestRate: parseFloat(formPagamento.interestRate)
+      };
+      
+      if (pagamentoEdicao) {
+        await atualizarFormaPagamento(pagamentoEdicao.id, dados);
+        setNotification('Forma de pagamento atualizada com sucesso!');
+      } else {
+        await criarFormaPagamento(id, dados);
+        setNotification('Forma de pagamento criada com sucesso!');
+      }
+      
+      handleFecharDialogPagamento();
+      carregarDados();
+    } catch (error) {
+      console.error('Erro ao salvar forma de pagamento:', error);
+      setNotification(error.message || 'Erro ao salvar forma de pagamento');
+    }
+  };
+  
+  const handleDeletarPagamento = async (pagamentoId, tipo) => {
+    if (window.confirm(`Tem certeza que deseja deletar a forma de pagamento "${tipo}"?`)) {
+      try {
+        await deletarFormaPagamento(pagamentoId);
+        setNotification('Forma de pagamento deletada com sucesso!');
+        carregarDados();
+      } catch (error) {
+        console.error('Erro ao deletar forma de pagamento:', error);
+        setNotification(error.message || 'Erro ao deletar forma de pagamento');
+      }
+    }
+  };
+  
+  const traduzirTipoPagamento = (tipo) => {
+    const traducoes = {
+      credit_card: 'Cartão de Crédito',
+      pix: 'PIX',
+      boleto: 'Boleto'
+    };
+    return traducoes[tipo] || tipo;
   };
 
   const formatarData = (data) => {
@@ -398,25 +488,76 @@ function EventDetails() {
 
         {/* Tab Formas de Pagamento */}
         <TabPanel value={tabAtiva} index={3}>
-          <Typography variant="h6" gutterBottom>
-            Formas de Pagamento
-          </Typography>
-          <Typography variant="body2" color="textSecondary" gutterBottom>
-            Configure as opções de pagamento disponíveis para este evento.
-          </Typography>
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<AddIcon />}
-            style={{ marginTop: 16, marginBottom: 16 }}
-            onClick={() => alert('Em desenvolvimento')}
-          >
-            Adicionar Forma de Pagamento
-          </Button>
+          <div style={{ marginBottom: 16 }}>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={() => handleAbrirDialogPagamento()}
+            >
+              Adicionar Forma de Pagamento
+            </Button>
+          </div>
           
-          <Typography variant="body2" color="textSecondary">
-            Nenhuma forma de pagamento configurada ainda.
-          </Typography>
+          {formasPagamento.length === 0 ? (
+            <Typography variant="body2" color="textSecondary">
+              Nenhuma forma de pagamento configurada ainda.
+            </Typography>
+          ) : (
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Tipo</TableCell>
+                  <TableCell>Parcelas</TableCell>
+                  <TableCell>Juros</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Ações</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {formasPagamento.map((pagamento) => (
+                  <TableRow key={pagamento.id}>
+                    <TableCell>{traduzirTipoPagamento(pagamento.paymentType)}</TableCell>
+                    <TableCell>
+                      {pagamento.paymentType === 'credit_card' 
+                        ? `Até ${pagamento.maxInstallments}x` 
+                        : 'À vista'}
+                    </TableCell>
+                    <TableCell>
+                      {pagamento.paymentType === 'credit_card' && pagamento.interestRate > 0
+                        ? `${pagamento.interestRate}% ${pagamento.interestType === 'percentage' ? 'a.m.' : 'fixo'}`
+                        : 'Sem juros'}
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={pagamento.isActive ? 'Ativo' : 'Inativo'}
+                        color={pagamento.isActive ? 'primary' : 'default'}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <Tooltip title="Editar">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleAbrirDialogPagamento(pagamento)}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Deletar">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDeletarPagamento(pagamento.id, traduzirTipoPagamento(pagamento.paymentType))}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </TabPanel>
       </Card>
 
@@ -493,6 +634,84 @@ function EventDetails() {
           </Button>
         </DialogActions>
       </Dialog>
+      
+      {/* Dialog de Forma de Pagamento */}
+      <Dialog open={dialogPagamentoAberto} onClose={handleFecharDialogPagamento} maxWidth="sm" fullWidth>
+        <DialogTitle>{pagamentoEdicao ? 'Editar Forma de Pagamento' : 'Nova Forma de Pagamento'}</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} style={{ marginTop: 8 }}>
+            <Grid item xs={12}>
+              <TextField
+                select
+                fullWidth
+                required
+                label="Tipo de Pagamento"
+                value={formPagamento.paymentType}
+                onChange={(e) => setFormPagamento({ ...formPagamento, paymentType: e.target.value })}
+                SelectProps={{ native: true }}
+                disabled={!!pagamentoEdicao}
+              >
+                <option value="credit_card">Cartão de Crédito</option>
+                <option value="pix">PIX</option>
+                <option value="boleto">Boleto</option>
+              </TextField>
+            </Grid>
+            
+            {formPagamento.paymentType === 'credit_card' && (
+              <>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    required
+                    type="number"
+                    label="Máximo de Parcelas"
+                    value={formPagamento.maxInstallments}
+                    onChange={(e) => setFormPagamento({ ...formPagamento, maxInstallments: e.target.value })}
+                    inputProps={{ min: 1, max: 12 }}
+                  />
+                </Grid>
+                
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Taxa de Juros (%)"
+                    value={formPagamento.interestRate}
+                    onChange={(e) => setFormPagamento({ ...formPagamento, interestRate: e.target.value })}
+                    inputProps={{ min: 0, step: 0.01 }}
+                    helperText="0 = sem juros"
+                  />
+                </Grid>
+                
+                <Grid item xs={12}>
+                  <TextField
+                    select
+                    fullWidth
+                    label="Tipo de Juros"
+                    value={formPagamento.interestType}
+                    onChange={(e) => setFormPagamento({ ...formPagamento, interestType: e.target.value })}
+                    SelectProps={{ native: true }}
+                  >
+                    <option value="percentage">Percentual (a.m.)</option>
+                    <option value="fixed">Fixo (R$)</option>
+                  </TextField>
+                </Grid>
+              </>
+            )}
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleFecharDialogPagamento}>Cancelar</Button>
+          <Button
+            onClick={handleSalvarPagamento}
+            variant="contained"
+            color="primary"
+          >
+            {pagamentoEdicao ? 'Atualizar' : 'Criar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
       <Notification message={notification} close={() => setNotification('')} />
     </div>
   );
