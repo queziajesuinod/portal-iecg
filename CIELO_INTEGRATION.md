@@ -91,11 +91,79 @@ Use estes cartões para testar no ambiente sandbox:
 
 ## 🔔 Webhook (Notificações)
 
-Para receber notificações de mudança de status (especialmente para PIX):
+### O que é?
 
-1. Configure a URL de notificação no painel Cielo
-2. Implemente o endpoint `/api/webhooks/cielo` no servidor
-3. Valide a autenticidade das notificações
+O webhook permite que a Cielo notifique automaticamente seu servidor quando o status de um pagamento mudar. Isso é **essencial para PIX**, pois o pagamento é confirmado após o cliente pagar.
+
+### Configuração
+
+#### 1. Endpoint já implementado
+
+O endpoint `POST /api/webhooks/cielo` já está implementado e pronto para uso.
+
+**URL do webhook:**
+```
+https://seu-dominio.com/api/webhooks/cielo
+```
+
+#### 2. Configurar no Painel Cielo
+
+1. Acesse o painel da Cielo (sandbox ou produção)
+2. Vá em **Configurações** → **Webhook/Notificações**
+3. Adicione a URL do webhook:
+   - **Sandbox**: `https://seu-dominio.com/api/webhooks/cielo`
+   - **Produção**: `https://seu-dominio.com/api/webhooks/cielo`
+4. Selecione os eventos:
+   - ☑️ Mudança de status de pagamento
+   - ☑️ Pagamento confirmado
+   - ☑️ Pagamento cancelado
+5. Salve as configurações
+
+#### 3. Testar Webhook
+
+Após configurar, teste fazendo um pagamento PIX:
+
+1. Crie uma inscrição com PIX
+2. Pague o PIX (em sandbox, simule o pagamento)
+3. Verifique os logs do servidor:
+   ```
+   🔔 [WEBHOOK CIELO] Notificação recebida
+   📝 [WEBHOOK CIELO] Inscrição encontrada: ABC123
+   ✅ [WEBHOOK CIELO] Status atualizado: pending → confirmed
+   ```
+4. O status da inscrição deve mudar automaticamente
+
+### Como Funciona
+
+1. **Cliente paga PIX** → Cielo detecta pagamento
+2. **Cielo envia webhook** → `POST /api/webhooks/cielo`
+3. **Servidor recebe** → Busca inscrição pelo `PaymentId`
+4. **Consulta Cielo** → Confirma status atual
+5. **Atualiza banco** → Muda `paymentStatus` para `confirmed`
+6. **Frontend atualiza** → Polling detecta mudança
+7. **Usuário é notificado** → "Pagamento confirmado!"
+
+### Logs do Webhook
+
+O webhook gera logs detalhados para facilitar debug:
+
+```
+🔔 [WEBHOOK CIELO] Notificação recebida: { PaymentId: "...", ChangeType: 1 }
+📝 [WEBHOOK CIELO] Inscrição encontrada: ABC123
+📊 [WEBHOOK CIELO] Status atual: pending
+🔄 [WEBHOOK CIELO] Tipo de mudança: 1
+✅ [WEBHOOK CIELO] Status na Cielo: 2
+🔄 [WEBHOOK CIELO] Novo status mapeado: confirmed
+✅ [WEBHOOK CIELO] Status atualizado: pending → confirmed
+📧 [WEBHOOK CIELO] Transação registrada
+```
+
+### Segurança
+
+- O webhook **NÃO requer autenticação** (Cielo não envia token)
+- Validação feita consultando a Cielo diretamente
+- Apenas atualiza status se confirmar com a API Cielo
+- Logs detalhados para auditoria
 
 ## 📖 Documentação Oficial
 
