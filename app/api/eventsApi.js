@@ -1,5 +1,4 @@
 // API helper para eventos - usa fetch seguindo o padrão do sistema
-
 const resolveApiUrl = () => {
   if (process.env.REACT_APP_API_URL) {
     return process.env.REACT_APP_API_URL.replace(/\/$/, '');
