@@ -24,7 +24,12 @@ module.exports = function addDevMiddlewares(app, webpackConfig) {
   // artifacts, we use it instead
   const fs = middleware.context.outputFileSystem;
 
-  app.get('*', (req, res) => {
+  app.get('*', (req, res, next) => {
+    // Não capturar rotas da API
+    if (req.path.startsWith('/api/')) {
+      return next();
+    }
+    
     fs.readFile(path.join(compiler.outputPath, 'index.html'), (err, file) => {
       if (err) {
         res.sendStatus(404);
