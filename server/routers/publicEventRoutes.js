@@ -6,8 +6,10 @@ const registrationController = require('../controllers/registrationController');
 const batchController = require('../controllers/batchController');
 
 // ============= EVENTOS PÚBLICOS =============
-router.get('/events', eventController.listarPublicos);
-router.get('/events/:id', eventController.buscarPublicoPorId);
+router.get('/', eventController.listarPublicos);
+router.get('/:id', eventController.buscarPublicoPorId);
+router.get('/:eventId/batches', batchController.listarPorEvento);
+router.get('/:eventId/form-fields', require('../controllers/formFieldController').listarPorEvento);
 
 // ============= VALIDAR CUPOM =============
 router.post('/coupons/validate', couponController.validar);
