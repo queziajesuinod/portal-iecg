@@ -101,6 +101,16 @@ module.exports = (sequelize) => {
       allowNull: true,
       comment: 'Resposta completa da API Cielo'
     },
+    pixQrCode: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Código PIX (copia e cola)'
+    },
+    pixQrCodeBase64: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'QR Code PIX em base64 para exibição'
+    },
   }, {
     sequelize,
     modelName: 'Registration',
