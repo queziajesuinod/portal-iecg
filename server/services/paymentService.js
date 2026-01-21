@@ -15,7 +15,67 @@ const CIELO_ENDPOINTS = {
 const BASE_URL = CIELO_ENDPOINTS[CIELO_ENVIRONMENT];
 
 /**
- * Criar transação de pagamento na Cielo
+ * Criar transação PIX na Cielo
+ */
+async function criarTransacaoPix(dadosPagamento) {
+  const {
+    merchantOrderId,
+    customerName,
+    customerEmail,
+    customerDocument,
+    amount // Valor em centavos
+  } = dadosPagamento;
+
+  const payload = {
+    MerchantOrderId: merchantOrderId,
+    Customer: {
+      Name: customerName,
+      Email: customerEmail,
+      Identity: customerDocument,
+      IdentityType: customerDocument.length === 11 ? 'CPF' : 'CNPJ'
+    },
+    Payment: {
+      Type: 'Pix',
+      Amount: amount,
+      Provider: 'Cielo30'
+    }
+  };
+
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/1/sales`,
+      payload,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'MerchantId': CIELO_MERCHANT_ID,
+          'MerchantKey': CIELO_MERCHANT_KEY
+        }
+      }
+    );
+
+    return {
+      sucesso: true,
+      paymentId: response.data.Payment.PaymentId,
+      status: response.data.Payment.Status,
+      qrCodeBase64: response.data.Payment.QrCodeBase64Image,
+      qrCodeString: response.data.Payment.QrCodeString,
+      dadosCompletos: response.data
+    };
+  } catch (error) {
+    console.error('Erro ao criar transação PIX:', error.response?.data || error.message);
+    
+    return {
+      sucesso: false,
+      erro: error.response?.data?.Payment?.ReturnMessage || error.message,
+      returnCode: error.response?.data?.Payment?.ReturnCode,
+      dadosCompletos: error.response?.data
+    };
+  }
+}
+
+/**
+ * Criar transação de pagamento com cartão na Cielo
  */
 async function criarTransacao(dadosPagamento) {
   const {
@@ -37,7 +97,7 @@ async function criarTransacao(dadosPagamento) {
     Payment: {
       Type: 'CreditCard',
       Amount: amount,
-      Installments: 1,
+      Installments: dadosPagamento.installments || 1,
       SoftDescriptor: 'IECG',
       CreditCard: {
         CardNumber: cardNumber,
@@ -237,6 +297,7 @@ function converterParaReais(valorCentavos) {
 
 module.exports = {
   criarTransacao,
+  criarTransacaoPix,
   capturarPagamento,
   cancelarPagamento,
   consultarPagamento,
