@@ -23,6 +23,10 @@ import ProtectedRoute from '../../routes/ProtectedRoute';
 import PerfilPermissaoPage from '../Pages/Admin/PerfilPermissaoPage';
 import UserCreatePage from '../Pages/Admin/UserCreatePage';
 import UsersListPage from '../Pages/Admin/UsersListPage';
+import EventsDashboard from '../Pages/Events/EventsDashboard';
+import EventForm from '../Pages/Events/EventForm';
+import EventDetails from '../Pages/Events/EventDetails';
+import CouponsPage from '../Pages/Events/CouponsPage';
 import dummyContents from 'dan-api/dummy/dummyContents';
 
 function Application({ history }) {
@@ -70,6 +74,11 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/admin/usuarios/novo" component={UserCreatePage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_USUARIOS" />
             <ProtectedRoute exact path="/app/admin/usuarios" component={UsersListPage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_USUARIOS" />
             <ProtectedRoute exact path="/app/admin/webhooks" component={WebhooksPage} isAuthenticated={isAuthenticated} requiredPermission="WEBHOOKS_VIEW" />
+            <ProtectedRoute exact path="/app/events" component={EventsDashboard} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/events/novo" component={EventForm} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/events/:id" component={EventDetails} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/events/:id/editar" component={EventForm} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/cupons" component={CouponsPage} isAuthenticated={isAuthenticated} />
           </Switch>
         </Dashboard>
       </Route>
