@@ -18,7 +18,8 @@ async function processarInscricao(dadosInscricao) {
     quantity,
     buyerData,
     attendeesData,
-    paymentData
+    paymentData,
+    paymentOptionId // ID da forma de pagamento selecionada
   } = dadosInscricao;
 
   // 1. Validar evento
@@ -62,17 +63,57 @@ async function processarInscricao(dadosInscricao) {
   // 7. Gerar código único de pedido
   const orderCode = await orderCodeService.gerarCodigoUnico();
   
-  // 8. Processar pagamento com Cielo
-  const resultadoPagamento = await paymentService.criarTransacao({
-    merchantOrderId: orderCode,
-    customerName: buyerData.nome || buyerData.name || 'Cliente',
-    amount: paymentService.converterParaCentavos(precoFinal),
-    cardNumber: paymentData.cardNumber,
-    holder: paymentData.holder,
-    expirationDate: paymentData.expirationDate,
-    securityCode: paymentData.securityCode,
-    brand: paymentData.brand
-  });
+  // 8. Buscar configuração de pagamento
+  const { PaymentOption } = require('../models');
+  const paymentOption = await PaymentOption.findByPk(paymentOptionId);
+  
+  if (!paymentOption || !paymentOption.isActive) {
+    throw new Error('Forma de pagamento inválida ou inativa');
+  }
+  
+  // 8.1. Calcular valor final com juros (se houver parcelas)
+  let valorFinalComJuros = precoFinal;
+  const parcelas = paymentData.installments || 1;
+  
+  if (paymentOption.paymentType === 'credit_card' && parcelas > 1 && paymentOption.interestRate > 0) {
+    if (paymentOption.interestType === 'percentage') {
+      // Juros percentual por parcela
+      valorFinalComJuros += precoFinal * (paymentOption.interestRate / 100) * (parcelas - 1);
+    } else {
+      // Juros fixo por parcela
+      valorFinalComJuros += paymentOption.interestRate * (parcelas - 1);
+    }
+  }
+  
+  // 8.2. Processar pagamento conforme o tipo
+  let resultadoPagamento;
+  let paymentMethod = paymentOption.paymentType;
+  
+  if (paymentOption.paymentType === 'pix') {
+    // Pagamento via PIX
+    resultadoPagamento = await paymentService.criarTransacaoPix({
+      merchantOrderId: orderCode,
+      customerName: buyerData.nome || buyerData.name || 'Cliente',
+      customerEmail: buyerData.email || 'sem-email@exemplo.com',
+      customerDocument: buyerData.cpf || buyerData.documento || '00000000000',
+      amount: paymentService.converterParaCentavos(valorFinalComJuros)
+    });
+  } else if (paymentOption.paymentType === 'credit_card') {
+    // Pagamento via Cartão de Crédito
+    resultadoPagamento = await paymentService.criarTransacao({
+      merchantOrderId: orderCode,
+      customerName: buyerData.nome || buyerData.name || 'Cliente',
+      amount: paymentService.converterParaCentavos(valorFinalComJuros),
+      installments: parcelas,
+      cardNumber: paymentData.cardNumber,
+      holder: paymentData.holder,
+      expirationDate: paymentData.expirationDate,
+      securityCode: paymentData.securityCode,
+      brand: paymentData.brand
+    });
+  } else {
+    throw new Error(`Tipo de pagamento não suportado: ${paymentOption.paymentType}`);
+  }
   
   if (!resultadoPagamento.sucesso) {
     throw new Error(`Erro no pagamento: ${resultadoPagamento.erro}`);
@@ -89,11 +130,14 @@ async function processarInscricao(dadosInscricao) {
     buyerData,
     originalPrice: precoOriginal,
     discountAmount: desconto,
-    finalPrice: precoFinal,
+    finalPrice: valorFinalComJuros,
     paymentStatus: paymentService.mapearStatusCielo(resultadoPagamento.status),
     paymentId: resultadoPagamento.paymentId,
-    paymentMethod: 'CreditCard',
-    cieloResponse: resultadoPagamento.dadosCompletos
+    paymentMethod,
+    cieloResponse: resultadoPagamento.dadosCompletos,
+    // Dados específicos do PIX
+    pixQrCode: resultadoPagamento.qrCodeString || null,
+    pixQrCodeBase64: resultadoPagamento.qrCodeBase64 || null
   });
   
   // 10. Criar registros dos inscritos
