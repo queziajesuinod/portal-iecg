@@ -7,12 +7,18 @@ import {
   Button,
   FormControlLabel,
   Switch,
-  Typography
+  Typography,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@material-ui/core';
 import { Save as SaveIcon, ArrowBack as BackIcon } from '@material-ui/icons';
 import { useHistory, useParams } from 'react-router-dom';
-import { criarEvento, atualizarEvento, buscarEvento } from '../../../api/eventsApi';
 import brand from 'dan-api/dummy/brand';
+import { criarEvento, atualizarEvento, buscarEvento } from '../../../api/eventsApi';
+import { fetchGeocode } from '../../../utils/googleGeocode';
+import { EVENT_TYPE_OPTIONS } from '../../../constants/eventTypes';
 
 function EventForm() {
   const history = useHistory();
@@ -21,6 +27,7 @@ function EventForm() {
 
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState('');
+  const [geoLoading, setGeoLoading] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -30,20 +37,21 @@ function EventForm() {
     imageUrl: '',
     maxRegistrations: '',
     maxPerBuyer: '',
-    isActive: true
+    isActive: true,
+    addressNumber: '',
+    neighborhood: '',
+    city: '',
+    cep: '',
+    latitude: '',
+    longitude: '',
+    eventType: 'ACAMP'
   });
 
-  useEffect(() => {
-    if (isEdicao) {
-      carregarEvento();
-    }
-  }, [id]);
-
-  const carregarEvento = async () => {
+  async function carregarEvento() {
     try {
       setLoading(true);
       const evento = await buscarEvento(id);
-      
+
       setFormData({
         title: evento.title || '',
         description: evento.description || '',
@@ -53,7 +61,14 @@ function EventForm() {
         imageUrl: evento.imageUrl || '',
         maxRegistrations: evento.maxRegistrations || '',
         maxPerBuyer: evento.maxPerBuyer || '',
-        isActive: evento.isActive
+        isActive: evento.isActive,
+        addressNumber: evento.addressNumber || '',
+        neighborhood: evento.neighborhood || '',
+        city: evento.city || '',
+        cep: evento.cep || '',
+        latitude: evento.latitude != null ? evento.latitude.toString() : '',
+        longitude: evento.longitude != null ? evento.longitude.toString() : '',
+        eventType: evento.eventType || 'ACAMP'
       });
     } catch (error) {
       console.error('Erro ao carregar evento:', error);
@@ -61,19 +76,69 @@ function EventForm() {
     } finally {
       setLoading(false);
     }
-  };
+  }
+
+  useEffect(() => {
+    if (isEdicao) {
+      carregarEvento();
+    }
+  }, [id]);
 
   const handleChange = (e) => {
-    const { name, value, checked, type } = e.target;
+    const {
+      name, value, checked, type
+    } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
   };
 
+  const handleBuscarCoordenadas = async () => {
+    const queryParts = [
+      formData.location,
+      formData.addressNumber,
+      formData.city,
+      formData.cep
+    ].filter(Boolean);
+
+    if (!queryParts.length) {
+      setNotification('Informe ao menos um campo do endereco para buscar coordenadas');
+      return;
+    }
+
+    try {
+      setGeoLoading(true);
+      const resultado = await fetchGeocode(queryParts.join(', '));
+      if (!resultado) {
+        setNotification('Nao foi possivel localizar o endereco informado');
+        return;
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        location: resultado.logradouro
+          ? `${resultado.logradouro}${resultado.numeroEncontrado ? `, ${resultado.numeroEncontrado}` : ''}`
+          : prev.location,
+        addressNumber: resultado.numeroEncontrado || prev.addressNumber,
+        neighborhood: resultado.bairro || prev.neighborhood,
+        city: resultado.cidade || prev.city,
+        cep: resultado.cepEncontrado || prev.cep,
+        latitude: resultado.lat != null ? resultado.lat.toString() : prev.latitude,
+        longitude: resultado.lon != null ? resultado.lon.toString() : prev.longitude
+      }));
+      setNotification('Coordenadas atualizadas via Google Maps');
+    } catch (error) {
+      console.error('Erro ao buscar coordenadas:', error);
+      setNotification(error.message || 'Erro ao buscar coordenadas');
+    } finally {
+      setGeoLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!formData.title) {
       setNotification('Título é obrigatório');
       return;
@@ -81,11 +146,13 @@ function EventForm() {
 
     try {
       setLoading(true);
-      
+
       const dados = {
         ...formData,
-        maxRegistrations: formData.maxRegistrations ? parseInt(formData.maxRegistrations) : null,
-        maxPerBuyer: formData.maxPerBuyer ? parseInt(formData.maxPerBuyer) : null
+        maxRegistrations: formData.maxRegistrations ? parseInt(formData.maxRegistrations, 10) : null,
+        maxPerBuyer: formData.maxPerBuyer ? parseInt(formData.maxPerBuyer, 10) : null,
+        latitude: formData.latitude ? parseFloat(formData.latitude) : null,
+        longitude: formData.longitude ? parseFloat(formData.longitude) : null,
       };
 
       if (isEdicao) {
@@ -95,7 +162,7 @@ function EventForm() {
         await criarEvento(dados);
         setNotification('Evento criado com sucesso!');
       }
-      
+
       history.push('/app/events');
     } catch (error) {
       console.error('Erro ao salvar evento:', error);
@@ -172,13 +239,110 @@ function EventForm() {
             </Grid>
 
             <Grid item xs={12} sm={6}>
+              <FormControl fullWidth disabled={loading}>
+                <InputLabel id="tipo-evento-label">Tipo de Evento</InputLabel>
+                <Select
+                  labelId="tipo-evento-label"
+                  label="Tipo de Evento"
+                  name="eventType"
+                  value={formData.eventType}
+                  onChange={handleChange}
+                >
+                  {EVENT_TYPE_OPTIONS.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+
+            <Grid item xs={12}>
               <TextField
                 fullWidth
-                label="Local"
+                label="Endereco (logradouro)"
                 name="location"
                 value={formData.location}
                 onChange={handleChange}
                 disabled={loading}
+                helperText="Utilize o botao abaixo para preencher coordenadas automaticamente"
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Numero"
+                name="addressNumber"
+                value={formData.addressNumber}
+                onChange={handleChange}
+                disabled={loading}
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Cidade"
+                name="city"
+                value={formData.city}
+                onChange={handleChange}
+                disabled={loading}
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Bairro"
+                name="neighborhood"
+                value={formData.neighborhood}
+                onChange={handleChange}
+                disabled={loading}
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="CEP"
+                name="cep"
+                value={formData.cep}
+                onChange={handleChange}
+                disabled={loading}
+              />
+            </Grid>
+
+            <Grid item xs={12}>
+              <Button
+                variant="outlined"
+                color="secondary"
+                onClick={handleBuscarCoordenadas}
+                disabled={loading || geoLoading}
+              >
+                {geoLoading ? 'Buscando coordenadas...' : 'Buscar coordenadas'}
+              </Button>
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Latitude"
+                name="latitude"
+                value={formData.latitude}
+                disabled
+                InputProps={{ readOnly: true }}
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Longitude"
+                name="longitude"
+                value={formData.longitude}
+                disabled
+                InputProps={{ readOnly: true }}
               />
             </Grid>
 

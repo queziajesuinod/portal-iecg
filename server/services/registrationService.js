@@ -9,6 +9,49 @@ const formFieldService = require('./formFieldService');
 const paymentService = require('./paymentService');
 const eventService = require('./eventService');
 
+async function contarInscritosPorLote(registrationId) {
+  const attendees = await RegistrationAttendee.findAll({
+    where: { registrationId },
+    attributes: ['batchId']
+  });
+
+  return attendees.reduce((acc, attendee) => {
+    const { batchId } = attendee;
+    if (!batchId) {
+      return acc;
+    }
+
+    acc[batchId] = (acc[batchId] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+async function atualizarContadoresAoConfirmarInscricao(registration, statusAnterior) {
+  if (!registration || registration.paymentStatus !== 'confirmed') {
+    return;
+  }
+
+  if (statusAnterior === 'confirmed') {
+    return;
+  }
+
+  const lotesCounts = await contarInscritosPorLote(registration.id);
+  const incrementos = Object.entries(lotesCounts)
+    .filter(([batchId, count]) => batchId && count > 0)
+    .map(([batchId, count]) => batchService.incrementarQuantidade(batchId, count));
+
+  if (incrementos.length) {
+    await Promise.all(incrementos);
+  }
+
+  if (registration.quantity > 0) {
+    await Event.increment('currentRegistrations', {
+      by: registration.quantity,
+      where: { id: registration.eventId }
+    });
+  }
+}
+
 /**
  * Processar inscrição pública completa
  */
@@ -36,7 +79,7 @@ async function processarInscricao(dadosInscricao) {
     throw new Error(`Esperado ${quantity} inscrito(s), recebido ${attendeesData?.length || 0}`);
   }
 
-  // Validar que cada inscrito tem batchId
+  // Validar que cada inscrito tem lote (batchId)
   const semLote = attendeesData.find(att => !att.batchId);
   if (semLote) {
     throw new Error('Cada inscrito deve ter um lote (batchId) associado');
@@ -179,6 +222,8 @@ async function processarInscricao(dadosInscricao) {
     pixQrCodeBase64: resultadoPagamento.qrCodeBase64 || null
   });
 
+  let contadoresAtualizados = false;
+
   // 10. Criar registros dos inscritos com seus respectivos lotes
   const attendeesPromises = attendeesData.map((attendee, index) => RegistrationAttendee.create({
     id: uuid.v4(),
@@ -186,9 +231,21 @@ async function processarInscricao(dadosInscricao) {
     batchId: attendee.batchId,
     attendeeData: attendee.data || attendee,
     attendeeNumber: index + 1
-  })
-  );
-  const attendees = await Promise.all(attendeesPromises);
+  }));
+
+  await Promise.all(attendeesPromises);
+
+  const attendees = await RegistrationAttendee.findAll({
+    where: { registrationId: registration.id },
+    include: [
+      {
+        model: EventBatch,
+        as: 'batch',
+        attributes: ['id', 'name', 'price']
+      }
+    ],
+    order: [['attendeeNumber', 'ASC']]
+  });
 
   // 11. Registrar transação de pagamento
   await paymentService.registrarTransacao(
@@ -198,20 +255,9 @@ async function processarInscricao(dadosInscricao) {
     resultadoPagamento
   );
 
-  // 12. Incrementar contadores de cada lote (paralelo)
-  const incrementos = Object.entries(lotesCounts).map(([loteId, count]) => batchService.incrementarQuantidade(loteId, count)
-  );
-  await Promise.all(incrementos);
-
   if (couponId) {
     await couponService.incrementarUso(couponId);
   }
-
-  // 13. Atualizar contador de inscrições do evento
-  await Event.increment('currentRegistrations', {
-    by: quantity,
-    where: { id: eventId }
-  });
 
   // 14. Capturar pagamento (confirmar)
   if (resultadoPagamento.status === 1) { // Authorized
@@ -221,8 +267,12 @@ async function processarInscricao(dadosInscricao) {
     );
 
     if (captura.sucesso) {
+      const statusAnteriorConfirmacao = registration.paymentStatus;
       registration.paymentStatus = 'confirmed';
       await registration.save();
+
+      await atualizarContadoresAoConfirmarInscricao(registration, statusAnteriorConfirmacao);
+      contadoresAtualizados = true;
 
       await paymentService.registrarTransacao(
         registration.id,
@@ -231,6 +281,11 @@ async function processarInscricao(dadosInscricao) {
         captura
       );
     }
+  }
+
+  if (!contadoresAtualizados && registration.paymentStatus === 'confirmed') {
+    await atualizarContadoresAoConfirmarInscricao(registration, 'pending');
+    contadoresAtualizados = true;
   }
 
   return {
@@ -444,5 +499,6 @@ module.exports = {
   listarInscricoesPorEvento,
   buscarInscricaoPorCodigo,
   buscarInscricaoPorId,
-  cancelarInscricao
+  cancelarInscricao,
+  atualizarContadoresAoConfirmarInscricao
 };

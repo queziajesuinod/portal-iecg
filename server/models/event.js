@@ -1,4 +1,3 @@
-'use strict';
 const { Model, DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
@@ -43,6 +42,22 @@ module.exports = (sequelize) => {
       type: DataTypes.STRING,
       allowNull: true,
     },
+    addressNumber: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    neighborhood: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    city: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    cep: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     imageUrl: {
       type: DataTypes.STRING,
       allowNull: true,
@@ -59,6 +74,19 @@ module.exports = (sequelize) => {
       type: DataTypes.INTEGER,
       allowNull: true, // null = sem limite
       comment: 'Quantidade máxima de inscrições por comprador'
+    },
+    latitude: {
+      type: DataTypes.DECIMAL(10, 7),
+      allowNull: true,
+    },
+    longitude: {
+      type: DataTypes.DECIMAL(10, 7),
+      allowNull: true,
+    },
+    eventType: {
+      type: DataTypes.ENUM('ACAMP', 'ENCONTRO', 'CONFERENCIA'),
+      allowNull: false,
+      defaultValue: 'ACAMP',
     },
     createdBy: {
       type: DataTypes.UUID,

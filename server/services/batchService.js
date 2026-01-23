@@ -20,7 +20,7 @@ async function listarLotesPorEvento(eventId) {
           model: Registration,
           as: 'registration',
           where: {
-            paymentStatus: ['pending', 'authorized', 'confirmed']
+            paymentStatus: ['confirmed']
           },
           attributes: []
         }]
@@ -164,7 +164,7 @@ async function verificarDisponibilidade(batchId, quantidade) {
         model: Registration,
         as: 'registration',
         where: {
-          paymentStatus: ['pending', 'authorized', 'confirmed']
+          paymentStatus: ['confirmed']
         },
         attributes: []
       }]

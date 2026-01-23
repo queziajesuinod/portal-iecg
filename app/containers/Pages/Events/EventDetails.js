@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
 import {
   Grid,
   Card,
-  CardContent,
   Typography,
   Button,
   Tabs,
@@ -29,9 +29,9 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   Add as AddIcon,
-  People as PeopleIcon
 } from '@material-ui/icons';
 import { useHistory, useParams } from 'react-router-dom';
+import brand from 'dan-api/dummy/brand';
 import {
   buscarEvento,
   listarLotesPorEvento,
@@ -44,7 +44,7 @@ import {
   atualizarFormaPagamento,
   deletarFormaPagamento
 } from '../../../api/eventsApi';
-import brand from 'dan-api/dummy/brand';
+import { EVENT_TYPE_LABELS } from '../../../constants/eventTypes';
 
 function TabPanel({ children, value, index }) {
   return (
@@ -53,6 +53,12 @@ function TabPanel({ children, value, index }) {
     </div>
   );
 }
+
+TabPanel.propTypes = {
+  children: PropTypes.node,
+  value: PropTypes.number.isRequired,
+  index: PropTypes.number.isRequired,
+};
 
 function EventDetails() {
   const history = useHistory();
@@ -64,7 +70,7 @@ function EventDetails() {
   const [formasPagamento, setFormasPagamento] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notification, setNotification] = useState('');
-  
+
   // Dialog de lote
   const [dialogLoteAberto, setDialogLoteAberto] = useState(false);
   const [loteEdicao, setLoteEdicao] = useState(null);
@@ -77,7 +83,7 @@ function EventDetails() {
     order: '',
     isActive: true
   });
-  
+
   // Dialog de forma de pagamento
   const [dialogPagamentoAberto, setDialogPagamentoAberto] = useState(false);
   const [pagamentoEdicao, setPagamentoEdicao] = useState(null);
@@ -88,11 +94,7 @@ function EventDetails() {
     interestType: 'percentage'
   });
 
-  useEffect(() => {
-    carregarDados();
-  }, [id]);
-
-  const carregarDados = async () => {
+  async function carregarDados() {
     try {
       setLoading(true);
       const [eventoRes, lotesRes, inscricoesRes, formasPagamentoRes] = await Promise.all([
@@ -101,7 +103,7 @@ function EventDetails() {
         listarInscricoesPorEvento(id),
         listarFormasPagamento(id)
       ]);
-      
+
       setEvento(eventoRes);
       setLotes(lotesRes);
       setInscricoes(inscricoesRes);
@@ -112,7 +114,11 @@ function EventDetails() {
     } finally {
       setLoading(false);
     }
-  };
+  }
+
+  useEffect(() => {
+    carregarDados();
+  }, [id]);
 
   const handleAbrirDialogLote = (lote = null) => {
     if (lote) {
@@ -152,8 +158,8 @@ function EventDetails() {
         ...formLote,
         eventId: id,
         price: parseFloat(formLote.price),
-        maxQuantity: formLote.maxQuantity ? parseInt(formLote.maxQuantity) : null,
-        order: formLote.order ? parseInt(formLote.order) : 0
+        maxQuantity: formLote.maxQuantity ? parseInt(formLote.maxQuantity, 10) : null,
+        order: formLote.order ? parseInt(formLote.order, 10) : 0
       };
 
       if (loteEdicao) {
@@ -184,7 +190,7 @@ function EventDetails() {
       }
     }
   };
-  
+
   // Funções de Forma de Pagamento
   const handleAbrirDialogPagamento = (pagamento = null) => {
     if (pagamento) {
@@ -206,20 +212,20 @@ function EventDetails() {
     }
     setDialogPagamentoAberto(true);
   };
-  
+
   const handleFecharDialogPagamento = () => {
     setDialogPagamentoAberto(false);
     setPagamentoEdicao(null);
   };
-  
+
   const handleSalvarPagamento = async () => {
     try {
       const dados = {
         ...formPagamento,
-        maxInstallments: parseInt(formPagamento.maxInstallments),
+        maxInstallments: parseInt(formPagamento.maxInstallments, 10),
         interestRate: parseFloat(formPagamento.interestRate)
       };
-      
+
       if (pagamentoEdicao) {
         await atualizarFormaPagamento(pagamentoEdicao.id, dados);
         setNotification('Forma de pagamento atualizada com sucesso!');
@@ -227,7 +233,7 @@ function EventDetails() {
         await criarFormaPagamento(id, dados);
         setNotification('Forma de pagamento criada com sucesso!');
       }
-      
+
       handleFecharDialogPagamento();
       carregarDados();
     } catch (error) {
@@ -235,7 +241,7 @@ function EventDetails() {
       setNotification(error.message || 'Erro ao salvar forma de pagamento');
     }
   };
-  
+
   const handleDeletarPagamento = async (pagamentoId, tipo) => {
     if (window.confirm(`Tem certeza que deseja deletar a forma de pagamento "${tipo}"?`)) {
       try {
@@ -248,7 +254,7 @@ function EventDetails() {
       }
     }
   };
-  
+
   const traduzirTipoPagamento = (tipo) => {
     const traducoes = {
       credit_card: 'Cartão de Crédito',
@@ -269,7 +275,8 @@ function EventDetails() {
   };
 
   const formatarPreco = (preco) => {
-    return `R$ ${parseFloat(preco).toFixed(2).replace('.', ',')}`;
+    const valor = Number(preco) || 0;
+    return `R$ ${valor.toFixed(2).replace('.', ',')}`;
   };
 
   if (loading) {
@@ -305,14 +312,49 @@ function EventDetails() {
               <strong>Data Término:</strong> {formatarDataHora(evento.endDate)}
             </Typography>
           </Grid>
-          <Grid item xs={12} sm={6}>
+          <Grid item xs={12}>
             <Typography variant="body2" color="textSecondary">
-              <strong>Local:</strong> {evento.location || '-'}
+              <strong>Endereco:</strong> {evento.location || '-'}
             </Typography>
           </Grid>
           <Grid item xs={12} sm={6}>
             <Typography variant="body2" color="textSecondary">
-              <strong>Inscrições:</strong> {evento.currentRegistrations || 0}
+              <strong>Numero:</strong> {evento.addressNumber || '-'}
+            </Typography>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <Typography variant="body2" color="textSecondary">
+              <strong>Bairro:</strong> {evento.neighborhood || '-'}
+            </Typography>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <Typography variant="body2" color="textSecondary">
+              <strong>Cidade:</strong> {evento.city || '-'}
+            </Typography>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <Typography variant="body2" color="textSecondary">
+              <strong>CEP:</strong> {evento.cep || '-'}
+            </Typography>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <Typography variant="body2" color="textSecondary">
+              <strong>Tipo de Evento:</strong> {EVENT_TYPE_LABELS[evento.eventType] || evento.eventType || '-'}
+            </Typography>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <Typography variant="body2" color="textSecondary">
+              <strong>Latitude:</strong> {evento.latitude != null ? evento.latitude : '-'}
+            </Typography>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <Typography variant="body2" color="textSecondary">
+              <strong>Longitude:</strong> {evento.longitude != null ? evento.longitude : '-'}
+            </Typography>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <Typography variant="body2" color="textSecondary">
+              <strong>Inscricoes:</strong> {evento.currentRegistrations || 0}
               {evento.maxRegistrations && ` / ${evento.maxRegistrations}`}
             </Typography>
           </Grid>
@@ -445,27 +487,27 @@ function EventDetails() {
                 </TableRow>
               </TableHead>
               <TableBody>
-              {inscricoes.map((inscricao) => (
-                <TableRow 
-                  key={inscricao.id}
-                  hover
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => history.push(`/app/events/registrations/${inscricao.id}`)}
-                >
-                  <TableCell>{inscricao.orderCode}</TableCell>
-                  <TableCell>{inscricao.batch?.name || '-'}</TableCell>
-                  <TableCell>{inscricao.quantity}</TableCell>
-                  <TableCell>{formatarPreco(inscricao.finalPrice)}</TableCell>
-                  <TableCell>{formatarDataHora(inscricao.createdAt)}</TableCell>
-                  <TableCell align="center">
-                    <Chip
-                      label={inscricao.paymentStatus}
-                      color={inscricao.paymentStatus === 'confirmed' ? 'primary' : 'default'}
-                      size="small"
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
+                {inscricoes.map((inscricao) => (
+                  <TableRow
+                    key={inscricao.id}
+                    hover
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => history.push(`/app/events/registrations/${inscricao.id}`)}
+                  >
+                    <TableCell>{inscricao.orderCode}</TableCell>
+                    <TableCell>{inscricao.batch?.name || '-'}</TableCell>
+                    <TableCell>{inscricao.quantity}</TableCell>
+                    <TableCell>{formatarPreco(inscricao.finalPrice)}</TableCell>
+                    <TableCell>{formatarDataHora(inscricao.createdAt)}</TableCell>
+                    <TableCell align="center">
+                      <Chip
+                        label={inscricao.paymentStatus}
+                        color={inscricao.paymentStatus === 'confirmed' ? 'primary' : 'default'}
+                        size="small"
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           )}
@@ -498,7 +540,7 @@ function EventDetails() {
               Adicionar Forma de Pagamento
             </Button>
           </div>
-          
+
           {formasPagamento.length === 0 ? (
             <Typography variant="body2" color="textSecondary">
               Nenhuma forma de pagamento configurada ainda.
@@ -519,8 +561,8 @@ function EventDetails() {
                   <TableRow key={pagamento.id}>
                     <TableCell>{traduzirTipoPagamento(pagamento.paymentType)}</TableCell>
                     <TableCell>
-                      {pagamento.paymentType === 'credit_card' 
-                        ? `Até ${pagamento.maxInstallments}x` 
+                      {pagamento.paymentType === 'credit_card'
+                        ? `Até ${pagamento.maxInstallments}x`
                         : 'À vista'}
                     </TableCell>
                     <TableCell>
@@ -634,7 +676,7 @@ function EventDetails() {
           </Button>
         </DialogActions>
       </Dialog>
-      
+
       {/* Dialog de Forma de Pagamento */}
       <Dialog open={dialogPagamentoAberto} onClose={handleFecharDialogPagamento} maxWidth="sm" fullWidth>
         <DialogTitle>{pagamentoEdicao ? 'Editar Forma de Pagamento' : 'Nova Forma de Pagamento'}</DialogTitle>
@@ -656,7 +698,7 @@ function EventDetails() {
                 <option value="boleto">Boleto</option>
               </TextField>
             </Grid>
-            
+
             {formPagamento.paymentType === 'credit_card' && (
               <>
                 <Grid item xs={12} sm={6}>
@@ -670,7 +712,7 @@ function EventDetails() {
                     inputProps={{ min: 1, max: 12 }}
                   />
                 </Grid>
-                
+
                 <Grid item xs={12} sm={6}>
                   <TextField
                     fullWidth
@@ -682,7 +724,7 @@ function EventDetails() {
                     helperText="0 = sem juros"
                   />
                 </Grid>
-                
+
                 <Grid item xs={12}>
                   <TextField
                     select
@@ -711,7 +753,7 @@ function EventDetails() {
           </Button>
         </DialogActions>
       </Dialog>
-      
+
       <Notification message={notification} close={() => setNotification('')} />
     </div>
   );

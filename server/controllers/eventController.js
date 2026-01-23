@@ -10,6 +10,16 @@ async function listar(req, res) {
   }
 }
 
+async function estatisticas(req, res) {
+  try {
+    const stats = await eventService.obterEstatisticasGerais();
+    res.status(200).json(stats);
+  } catch (err) {
+    console.error('Erro ao obter estatísticas:', err);
+    res.status(500).json({ message: 'Erro ao obter estatísticas' });
+  }
+}
+
 async function buscarPorId(req, res) {
   try {
     const evento = await eventService.buscarEventoPorId(req.params.id);
@@ -25,7 +35,7 @@ async function criar(req, res) {
     if (!userId) {
       return res.status(401).json({ message: 'Usuário não autenticado' });
     }
-    
+
     const evento = await eventService.criarEvento(req.body, userId);
     return res.status(201).json(evento);
   } catch (err) {
@@ -78,5 +88,6 @@ module.exports = {
   atualizar,
   remover,
   listarPublicos,
-  buscarPublicoPorId
+  buscarPublicoPorId,
+  estatisticas
 };
