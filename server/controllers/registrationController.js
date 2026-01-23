@@ -47,6 +47,18 @@ async function processar(req, res) {
     // Enviar notificação ao administrador (implementar depois)
     // await notificarAdmin(resultado);
 
+    const attendees = resultado.attendees?.map(attendee => ({
+      id: attendee.id,
+      attendeeNumber: attendee.attendeeNumber,
+      batchId: attendee.batchId,
+      batch: attendee.batch ? {
+        id: attendee.batch.id,
+        name: attendee.batch.name,
+        price: attendee.batch.price
+      } : null,
+      attendeeData: attendee.attendeeData
+    })) ?? [];
+
     res.status(201).json({
       sucesso: true,
       orderCode: resultado.orderCode,
@@ -56,7 +68,8 @@ async function processar(req, res) {
         orderCode: resultado.orderCode,
         quantity: resultado.registration.quantity,
         finalPrice: resultado.registration.finalPrice,
-        paymentStatus: resultado.registration.paymentStatus
+        paymentStatus: resultado.registration.paymentStatus,
+        attendees
       },
       pagamento: resultado.pagamento
     });

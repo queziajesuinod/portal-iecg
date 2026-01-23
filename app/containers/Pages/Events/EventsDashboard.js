@@ -32,8 +32,9 @@ import {
   TrendingUp as TrendingIcon
 } from '@material-ui/icons';
 import { useHistory } from 'react-router-dom';
-import { listarEventos, deletarEvento } from '../../../api/eventsApi';
 import brand from 'dan-api/dummy/brand';
+import { listarEventos, listarEstatisticas, deletarEvento } from '../../../api/eventsApi';
+import { EVENT_TYPE_LABELS } from '../../../constants/eventTypes';
 
 function EventsDashboard() {
   const history = useHistory();
@@ -52,6 +53,59 @@ function EventsDashboard() {
     status: 'todos'
   });
 
+  async function carregarEventos() {
+    try {
+      setLoading(true);
+      const [response, statsResponse] = await Promise.all([listarEventos(), listarEstatisticas()]);
+      const eventosArray = Array.isArray(response) ? response : [];
+
+      setEventos(eventosArray);
+      setEventosFiltrados(eventosArray);
+
+      setStats({
+        totalEventos: Number(statsResponse?.totalEventos ?? eventosArray.length),
+        eventosAtivos: Number(statsResponse?.eventosAtivos ?? eventosArray.filter(e => e.isActive).length),
+        totalInscricoes: Number(statsResponse?.totalInscricoes ?? eventosArray.reduce((sum, e) => sum + (e.currentRegistrations || 0), 0)),
+        receitaTotal: Number(statsResponse?.receitaTotal ?? 0)
+      });
+    } catch (error) {
+      console.error('Erro ao carregar eventos:', error);
+      setNotification('Erro ao carregar eventos');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function aplicarFiltros() {
+    let resultado = [...eventos];
+
+    // Filtro de busca
+    if (filtros.busca) {
+      const busca = filtros.busca.toLowerCase();
+      resultado = resultado.filter(evento => {
+        const valores = [
+          evento.title,
+          evento.description,
+          evento.location,
+          evento.city,
+          evento.neighborhood,
+          evento.cep,
+          EVENT_TYPE_LABELS[evento.eventType]
+        ];
+        return valores.some((valor) => valor && valor.toString().toLowerCase().includes(busca)
+        );
+      });
+    }
+
+    // Filtro de status
+    if (filtros.status !== 'todos') {
+      resultado = resultado.filter(evento => (filtros.status === 'ativos' ? evento.isActive : !evento.isActive)
+      );
+    }
+
+    setEventosFiltrados(resultado);
+  }
+
   useEffect(() => {
     carregarEventos();
   }, []);
@@ -59,56 +113,6 @@ function EventsDashboard() {
   useEffect(() => {
     aplicarFiltros();
   }, [filtros, eventos]);
-
-  const carregarEventos = async () => {
-    try {
-      setLoading(true);
-      const response = await listarEventos();
-      // A API retorna diretamente o array
-      const eventosArray = Array.isArray(response) ? response : [];
-      
-      setEventos(eventosArray);
-      setEventosFiltrados(eventosArray);
-
-      // Calcular estatísticas
-      const stats = {
-        totalEventos: eventosArray.length,
-        eventosAtivos: eventosArray.filter(e => e.isActive).length,
-        totalInscricoes: eventosArray.reduce((sum, e) => sum + (e.currentRegistrations || 0), 0),
-        receitaTotal: eventosArray.reduce((sum, e) => sum + (parseFloat(e.totalRevenue) || 0), 0)
-      };
-      
-      setStats(stats);
-    } catch (error) {
-      console.error('Erro ao carregar eventos:', error);
-      setNotification('Erro ao carregar eventos');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const aplicarFiltros = () => {
-    let resultado = [...eventos];
-
-    // Filtro de busca
-    if (filtros.busca) {
-      const busca = filtros.busca.toLowerCase();
-      resultado = resultado.filter(evento =>
-        evento.title.toLowerCase().includes(busca) ||
-        (evento.description && evento.description.toLowerCase().includes(busca)) ||
-        (evento.location && evento.location.toLowerCase().includes(busca))
-      );
-    }
-
-    // Filtro de status
-    if (filtros.status !== 'todos') {
-      resultado = resultado.filter(evento =>
-        filtros.status === 'ativos' ? evento.isActive : !evento.isActive
-      );
-    }
-
-    setEventosFiltrados(resultado);
-  };
 
   const handleChangeFiltro = (campo, valor) => {
     setFiltros(prev => ({ ...prev, [campo]: valor }));
@@ -133,9 +137,7 @@ function EventsDashboard() {
     return new Date(data).toLocaleDateString('pt-BR');
   };
 
-  const formatarPreco = (preco) => {
-    return `R$ ${parseFloat(preco || 0).toFixed(2).replace('.', ',')}`;
-  };
+  const formatarPreco = (preco) => `R$ ${parseFloat(preco || 0).toFixed(2).replace('.', ',')}`;
 
   const title = brand.name + ' - Eventos';
 
@@ -278,6 +280,7 @@ function EventsDashboard() {
                 <TableCell>Título</TableCell>
                 <TableCell>Data Início</TableCell>
                 <TableCell>Local</TableCell>
+                <TableCell>Tipo</TableCell>
                 <TableCell align="center">Inscrições</TableCell>
                 <TableCell align="center">Status</TableCell>
                 <TableCell align="center">Ações</TableCell>
@@ -291,6 +294,9 @@ function EventsDashboard() {
                   </TableCell>
                   <TableCell>{formatarData(evento.startDate)}</TableCell>
                   <TableCell>{evento.location || '-'}</TableCell>
+                  <TableCell>
+                    {EVENT_TYPE_LABELS[evento.eventType] || evento.eventType || '-'}
+                  </TableCell>
                   <TableCell align="center">
                     {evento.currentRegistrations || 0}
                     {evento.maxRegistrations && ` / ${evento.maxRegistrations}`}
@@ -333,7 +339,7 @@ function EventsDashboard() {
             </TableBody>
           </Table>
         )}
-       </PapperBlock>
+      </PapperBlock>
       <Notification message={notification} close={() => setNotification('')} />
     </div>
   );

@@ -39,6 +39,9 @@ router.get('/registrations', registrationController.listar);
 router.get('/registrations/:id', registrationController.buscarPorId);
 router.post('/registrations/:id/cancel', registrationController.cancelar);
 
+// ============= ESTATÍSTICAS =============
+router.get('/stats', eventController.estatisticas);
+
 // ============= EVENTOS (/:id DEVE VIR POR ÚLTIMO) =============
 router.get('/', eventController.listar);
 router.post('/', eventController.criar);
