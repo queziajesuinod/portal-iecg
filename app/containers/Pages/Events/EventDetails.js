@@ -275,7 +275,8 @@ function EventDetails() {
     const traducoes = {
       credit_card: 'Cartão de Crédito',
       pix: 'PIX',
-      boleto: 'Boleto'
+      boleto: 'Boleto',
+      offline: 'Presencial'
     };
     return traducoes[tipo] || tipo;
   };
@@ -579,7 +580,9 @@ function EventDetails() {
                     <TableCell>
                       {pagamento.paymentType === 'credit_card'
                         ? `Até ${pagamento.maxInstallments}x`
-                        : 'À vista'}
+                        : pagamento.paymentType === 'offline'
+                          ? 'Presencial'
+                          : 'À vista'}
                     </TableCell>
                     <TableCell>
                       {pagamento.paymentType === 'credit_card' && pagamento.interestRate > 0
@@ -712,6 +715,7 @@ function EventDetails() {
                 <option value="credit_card">Cartão de Crédito</option>
                 <option value="pix">PIX</option>
                 <option value="boleto">Boleto</option>
+                <option value="offline">Presencial</option>
               </TextField>
             </Grid>
 
