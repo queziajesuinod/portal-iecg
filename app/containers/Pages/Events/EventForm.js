@@ -44,7 +44,10 @@ function EventForm() {
     cep: '',
     latitude: '',
     longitude: '',
-    eventType: 'ACAMP'
+    eventType: 'ACAMP',
+    registrationPaymentMode: 'SINGLE',
+    minDepositAmount: '',
+    maxPaymentCount: ''
   });
 
   async function carregarEvento() {
@@ -68,7 +71,10 @@ function EventForm() {
         cep: evento.cep || '',
         latitude: evento.latitude != null ? evento.latitude.toString() : '',
         longitude: evento.longitude != null ? evento.longitude.toString() : '',
-        eventType: evento.eventType || 'ACAMP'
+        eventType: evento.eventType || 'ACAMP',
+        registrationPaymentMode: evento.registrationPaymentMode || 'SINGLE',
+        minDepositAmount: evento.minDepositAmount != null ? evento.minDepositAmount.toString() : '',
+        maxPaymentCount: evento.maxPaymentCount != null ? evento.maxPaymentCount.toString() : ''
       });
     } catch (error) {
       console.error('Erro ao carregar evento:', error);
@@ -153,6 +159,9 @@ function EventForm() {
         maxPerBuyer: formData.maxPerBuyer ? parseInt(formData.maxPerBuyer, 10) : null,
         latitude: formData.latitude ? parseFloat(formData.latitude) : null,
         longitude: formData.longitude ? parseFloat(formData.longitude) : null,
+        registrationPaymentMode: formData.registrationPaymentMode || 'SINGLE',
+        minDepositAmount: formData.minDepositAmount ? parseFloat(formData.minDepositAmount) : null,
+        maxPaymentCount: formData.maxPaymentCount ? parseInt(formData.maxPaymentCount, 10) : null,
       };
 
       if (isEdicao) {
@@ -256,6 +265,49 @@ function EventForm() {
                 </Select>
               </FormControl>
             </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth disabled={loading}>
+                <InputLabel id="modo-pagamento-label">Modo de Pagamento</InputLabel>
+                <Select
+                  labelId="modo-pagamento-label"
+                  label="Modo de Pagamento"
+                  name="registrationPaymentMode"
+                  value={formData.registrationPaymentMode}
+                  onChange={handleChange}
+                >
+                  <MenuItem value="SINGLE">Pagamento único</MenuItem>
+                  <MenuItem value="BALANCE_DUE">Pagamento parcial (sinal)</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+
+            {formData.registrationPaymentMode === 'BALANCE_DUE' && (
+              <>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Valor mínimo de sinal"
+                    name="minDepositAmount"
+                    value={formData.minDepositAmount}
+                    onChange={handleChange}
+                    disabled={loading}
+                    helperText="Deixe em branco para não exigir sinal mínimo"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Qtd. máxima de pagamentos"
+                    name="maxPaymentCount"
+                    value={formData.maxPaymentCount}
+                    onChange={handleChange}
+                    disabled={loading}
+                    helperText="Deixe em branco para não limitar"
+                  />
+                </Grid>
+              </>
+            )}
 
             <Grid item xs={12}>
               <TextField

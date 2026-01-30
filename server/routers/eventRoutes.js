@@ -38,6 +38,8 @@ router.delete('/payment-options/:id', paymentOptionController.deletar);
 router.get('/registrations', registrationController.listar);
 router.get('/registrations/:id', registrationController.buscarPorId);
 router.post('/registrations/:id/cancel', registrationController.cancelar);
+router.post('/registrations/:id/payments', registrationController.criarPagamento);
+router.post('/registrations/:id/payments/offline', registrationController.criarPagamentoOffline);
 
 // ============= ESTATÍSTICAS =============
 router.get('/stats', eventController.estatisticas);
