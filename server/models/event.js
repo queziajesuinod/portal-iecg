@@ -88,6 +88,22 @@ module.exports = (sequelize) => {
       allowNull: false,
       defaultValue: 'ACAMP',
     },
+    registrationPaymentMode: {
+      type: DataTypes.ENUM('SINGLE', 'BALANCE_DUE'),
+      allowNull: false,
+      defaultValue: 'SINGLE',
+      comment: 'Modo de pagamento das inscrições'
+    },
+    minDepositAmount: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      comment: 'Valor mínimo de sinal para pré-inscrição'
+    },
+    maxPaymentCount: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: 'Quantidade máxima de pagamentos permitidos'
+    },
     createdBy: {
       type: DataTypes.UUID,
       allowNull: false,

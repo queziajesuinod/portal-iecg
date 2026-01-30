@@ -25,6 +25,9 @@ router.post('/register', registrationController.processar);
 // ============= CONSULTAR INSCRIÇÃO POR CÓDIGO =============
 router.get('/registrations/:orderCode', registrationController.buscarPorCodigo);
 
+// ============= PAGAMENTOS PARCIAIS =============
+router.post('/registrations/:id/payments', registrationController.criarPagamento);
+
 // ============= VERIFICAR STATUS DE PAGAMENTO =============
 router.get('/registrations/:orderCode/status', registrationController.verificarStatus);
 
