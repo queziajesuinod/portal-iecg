@@ -2,7 +2,10 @@ const paymentOptionService = require('../services/paymentOptionService');
 
 async function listarPorEvento(req, res) {
   try {
-    const paymentOptions = await paymentOptionService.listarPorEvento(req.params.eventId);
+    const isPublic = req.baseUrl?.includes('/api/public');
+    const paymentOptions = await paymentOptionService.listarPorEvento(req.params.eventId, {
+      includeOffline: !isPublic
+    });
     res.status(200).json(paymentOptions);
   } catch (err) {
     console.error('Erro ao listar formas de pagamento:', err);
