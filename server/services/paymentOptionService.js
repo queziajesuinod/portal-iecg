@@ -1,8 +1,9 @@
 const { PaymentOption } = require('../models');
 
 async function listarPorEvento(eventId) {
+  const where = { eventId };
   return PaymentOption.findAll({
-    where: { eventId },
+    where,
     order: [['paymentType', 'ASC']]
   });
 }
