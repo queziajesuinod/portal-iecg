@@ -95,15 +95,35 @@ async function verificarStatus(req, res) {
   try {
     const { orderCode } = req.params;
     const inscricao = await registrationService.buscarInscricaoPorCodigo(orderCode);
+    const status = inscricao.paymentStatusDerived || inscricao.paymentStatus;
 
     res.status(200).json({
       orderCode: inscricao.orderCode,
-      paymentStatus: inscricao.paymentStatus,
+      paymentStatus: status,
       paymentMethod: inscricao.paymentMethod,
-      isPaid: inscricao.paymentStatus === 'confirmed' || inscricao.paymentStatus === 'paid'
+      isPaid: status === 'confirmed'
     });
   } catch (err) {
     res.status(404).json({ message: 'Inscrição não encontrada' });
+  }
+}
+
+async function criarPagamento(req, res) {
+  try {
+    const resultado = await registrationService.criarPagamentoOnline(req.params.id, req.body || {});
+    res.status(201).json(resultado);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+}
+
+async function criarPagamentoOffline(req, res) {
+  try {
+    const userId = req.user?.userId || req.user?.id;
+    const resultado = await registrationService.criarPagamentoOffline(req.params.id, req.body || {}, userId);
+    res.status(201).json(resultado);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
   }
 }
 
@@ -114,5 +134,7 @@ module.exports = {
   cancelar,
   processar,
   buscarPorCodigo,
-  verificarStatus
+  verificarStatus,
+  criarPagamento,
+  criarPagamentoOffline
 };
