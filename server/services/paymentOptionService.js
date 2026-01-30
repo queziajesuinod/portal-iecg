@@ -1,7 +1,12 @@
+const { Op } = require('sequelize');
 const { PaymentOption } = require('../models');
 
-async function listarPorEvento(eventId) {
+async function listarPorEvento(eventId, options = {}) {
+  const includeOffline = options.includeOffline ?? true;
   const where = { eventId };
+  if (!includeOffline) {
+    where.paymentType = { [Op.not]: 'offline' };
+  }
   return PaymentOption.findAll({
     where,
     order: [['paymentType', 'ASC']]
@@ -20,12 +25,14 @@ async function criar(eventId, dados) {
     throw new Error(`Forma de pagamento ${paymentType} já existe para este evento`);
   }
   
+  const isOffline = paymentType === 'offline';
+
   return PaymentOption.create({
     eventId,
     paymentType,
-    maxInstallments: maxInstallments || 1,
-    interestRate: interestRate || 0,
-    interestType: interestType || 'percentage',
+    maxInstallments: isOffline ? 1 : (maxInstallments || 1),
+    interestRate: isOffline ? 0 : (interestRate || 0),
+    interestType: isOffline ? 'percentage' : (interestType || 'percentage'),
     isActive: true
   });
 }
