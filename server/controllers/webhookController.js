@@ -1,6 +1,7 @@
 const WebhookService = require('../services/WebhookService');
 const registrationService = require('../services/registrationService');
 const paymentService = require('../services/paymentService');
+const { Registration, RegistrationPayment, Event, sequelize } = require('../models');
 
 const WebhookController = {
   async list(req, res) {
@@ -58,7 +59,15 @@ const WebhookController = {
       }
 
       let registration;
-      if (MerchantOrderId) {
+      let registrationPayment = await RegistrationPayment.findOne({
+        where: { providerPaymentId: PaymentId }
+      });
+
+      if (registrationPayment) {
+        registration = await Registration.findByPk(registrationPayment.registrationId, {
+          include: [{ model: Event, as: 'event' }]
+        });
+      } else if (MerchantOrderId) {
         try {
           registration = await registrationService.buscarInscricaoPorCodigo(MerchantOrderId);
         } catch (error) {
@@ -67,15 +76,15 @@ const WebhookController = {
       }
 
       if (!registration) {
-        const { Registration } = require('../models');
         registration = await Registration.findOne({
-          where: { paymentId: PaymentId }
+          where: { paymentId: PaymentId },
+          include: [{ model: Event, as: 'event' }]
         });
+      }
 
-        if (!registration) {
-          console.error('❌ [WEBHOOK CIELO] Inscrição não encontrada para PaymentId:', PaymentId);
-          return res.status(404).json({ message: 'Inscrição não encontrada' });
-        }
+      if (!registration) {
+        console.error('❌ [WEBHOOK CIELO] Inscrição não encontrada para PaymentId:', PaymentId);
+        return res.status(404).json({ message: 'Inscrição não encontrada' });
       }
 
       console.log(`🕵️ [WEBHOOK CIELO] Inscrição encontrada: ${registration.orderCode}`);
@@ -95,15 +104,51 @@ const WebhookController = {
 
       console.log(`🟢 [WEBHOOK CIELO] Novo status mapeado: ${novoStatus}`);
 
-      if (registration.paymentStatus !== novoStatus) {
-        const statusAnterior = registration.paymentStatus;
-        registration.paymentStatus = novoStatus;
-        registration.cieloResponse = statusCielo.dadosCompletos;
-        await registration.save();
+      if (registrationPayment && registrationPayment.status === novoStatus) {
+        console.log('⚠️ [WEBHOOK CIELO] Status não mudou, nenhuma ação necessária');
+        return res.status(200).json({
+          success: true,
+          message: 'Webhook processado com sucesso',
+          orderCode: registration.orderCode,
+          status: novoStatus
+        });
+      }
 
-        await registrationService.ajustarContadoresDeStatus(registration, statusAnterior);
+      await sequelize.transaction(async (transaction) => {
+        if (!registrationPayment) {
+          registrationPayment = await RegistrationPayment.create({
+            registrationId: registration.id,
+            channel: 'ONLINE',
+            method: registration.paymentMethod || 'pix',
+            amount: registration.finalPrice,
+            status: novoStatus,
+            provider: 'cielo',
+            providerPaymentId: PaymentId,
+            providerPayload: statusCielo.dadosCompletos,
+            pixQrCode: statusCielo.dadosCompletos?.Payment?.QrCodeString || null,
+            pixQrCodeBase64: statusCielo.dadosCompletos?.Payment?.QrCodeBase64Image || null
+          }, { transaction });
+        } else {
+          registrationPayment.status = novoStatus;
+          registrationPayment.providerPayload = statusCielo.dadosCompletos;
+          registrationPayment.pixQrCode = statusCielo.dadosCompletos?.Payment?.QrCodeString || registrationPayment.pixQrCode;
+          registrationPayment.pixQrCodeBase64 = statusCielo.dadosCompletos?.Payment?.QrCodeBase64Image || registrationPayment.pixQrCodeBase64;
+          await registrationPayment.save({ transaction });
+        }
 
-        console.log(`🔁 [WEBHOOK CIELO] Status atualizado: ${statusAnterior} → ${novoStatus}`);
+        const modoPagamento = registration.event?.registrationPaymentMode || 'SINGLE';
+        if (modoPagamento === 'SINGLE') {
+          if (registration.paymentStatus !== novoStatus) {
+            const statusAnterior = registration.paymentStatus;
+            registration.paymentStatus = novoStatus;
+            registration.cieloResponse = statusCielo.dadosCompletos;
+            await registration.save({ transaction });
+            await registrationService.ajustarContadoresDeStatus(registration, statusAnterior);
+            console.log(`🔁 [WEBHOOK CIELO] Status atualizado: ${statusAnterior} → ${novoStatus}`);
+          }
+        } else {
+          await registrationService.atualizarStatusPagamentoPorPagamentos(registration, { transaction });
+        }
 
         await paymentService.registrarTransacao(
           registration.id,
@@ -111,11 +156,7 @@ const WebhookController = {
           statusCielo.status.toString(),
           statusCielo.dadosCompletos
         );
-
-        console.log('📦 [WEBHOOK CIELO] Transação registrada');
-      } else {
-        console.log('⚠️ [WEBHOOK CIELO] Status não mudou, nenhuma ação necessária');
-      }
+      });
 
       return res.status(200).json({
         success: true,
