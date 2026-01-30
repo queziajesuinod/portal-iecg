@@ -50,7 +50,9 @@ async function remover(req, res) {
 async function validar(req, res) {
   try {
     const { code, eventId, preco } = req.body;
-    const resultado = await couponService.validarCupom(code, eventId, parseFloat(preco));
+    const quantityRaw = Number(req.body.quantity ?? req.body.attendees?.length ?? req.body.attendeesData?.length ?? 0);
+    const quantity = Number.isFinite(quantityRaw) ? quantityRaw : 0;
+    const resultado = await couponService.validarCupom(code, eventId, parseFloat(preco), quantity);
     res.status(200).json(resultado);
   } catch (err) {
     res.status(400).json({ message: err.message });

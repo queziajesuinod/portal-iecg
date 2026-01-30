@@ -3,6 +3,58 @@ const {
   Event, EventBatch, FormField, Registration, User
 } = require('../models');
 
+const camposPadraoComprador = [
+  {
+    fieldType: 'text',
+    fieldLabel: 'Nome do Comprador',
+    fieldName: 'buyer_name',
+    placeholder: 'Nome completo',
+    isRequired: true,
+    order: 0,
+    section: 'buyer'
+  },
+  {
+    fieldType: 'cpf',
+    fieldLabel: 'CPF ou CNPJ',
+    fieldName: 'buyer_document',
+    placeholder: 'CPF ou CNPJ',
+    isRequired: true,
+    order: 1,
+    section: 'buyer'
+  }
+];
+
+async function garantirCamposBasicosDoComprador(eventId) {
+  if (!eventId) return;
+  const fieldNames = camposPadraoComprador.map(campo => campo.fieldName);
+  const existentes = await FormField.findAll({
+    where: {
+      eventId,
+      fieldName: fieldNames
+    },
+    attributes: ['fieldName']
+  });
+  const existentesSet = new Set(existentes.map(campo => campo.fieldName));
+
+  const criacoes = camposPadraoComprador
+    .filter(campo => !existentesSet.has(campo.fieldName))
+    .map((campo) => ({
+      id: uuid.v4(),
+      eventId,
+      fieldType: campo.fieldType,
+      fieldLabel: campo.fieldLabel,
+      fieldName: campo.fieldName,
+      placeholder: campo.placeholder,
+      isRequired: campo.isRequired,
+      order: campo.order,
+      section: campo.section
+    }));
+
+  if (criacoes.length) {
+    await FormField.bulkCreate(criacoes);
+  }
+}
+
 // ============= EVENT CRUD =============
 
 async function listarEventos() {
@@ -97,7 +149,7 @@ async function criarEvento(body, userId) {
     throw new Error('Título do evento é obrigatório');
   }
 
-  return Event.create({
+  const event = await Event.create({
     id: uuid.v4(),
     title,
     description,
@@ -118,6 +170,10 @@ async function criarEvento(body, userId) {
     isActive: true,
     createdBy: userId
   });
+
+  await garantirCamposBasicosDoComprador(event.id);
+
+  return event;
 }
 
 async function atualizarEvento(id, body) {

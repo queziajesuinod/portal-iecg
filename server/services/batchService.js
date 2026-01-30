@@ -1,5 +1,6 @@
 const uuid = require('uuid');
 const { EventBatch, Event } = require('../models');
+const { COUNTABLE_PAYMENT_STATUSES } = require('../constants/registrationStatuses');
 
 async function listarLotesPorEvento(eventId) {
   const lotes = await EventBatch.findAll({
@@ -20,7 +21,7 @@ async function listarLotesPorEvento(eventId) {
           model: Registration,
           as: 'registration',
           where: {
-            paymentStatus: ['confirmed']
+            paymentStatus: COUNTABLE_PAYMENT_STATUSES
           },
           attributes: []
         }]
@@ -121,11 +122,12 @@ async function deletarLote(id) {
     throw new Error('Lote não encontrado');
   }
 
-  // Verificar se há inscrições neste lote
-  const { Registration } = require('../models');
+  // Verificar se há inscrições (attendees) neste lote
+  const { Registration, RegistrationAttendee } = require('../models');
   const registrationCount = await Registration.count({ where: { batchId: id } });
+  const attendeeCount = await RegistrationAttendee.count({ where: { batchId: id } });
 
-  if (registrationCount > 0) {
+  if (registrationCount > 0 || attendeeCount > 0) {
     throw new Error('Não é possível deletar lote com inscrições. Desative o lote ao invés de deletar.');
   }
 
@@ -164,7 +166,7 @@ async function verificarDisponibilidade(batchId, quantidade) {
         model: Registration,
         as: 'registration',
         where: {
-          paymentStatus: ['confirmed']
+          paymentStatus: COUNTABLE_PAYMENT_STATUSES
         },
         attributes: []
       }]

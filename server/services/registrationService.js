@@ -1,13 +1,101 @@
 const uuid = require('uuid');
 const {
-  Registration, RegistrationAttendee, Event, EventBatch, Coupon
+  Registration, RegistrationAttendee, Event, EventBatch, Coupon, FormField
 } = require('../models');
+const { isCountablePaymentStatus } = require('../constants/registrationStatuses');
 const orderCodeService = require('./orderCodeService');
 const batchService = require('./batchService');
 const couponService = require('./couponService');
 const formFieldService = require('./formFieldService');
 const paymentService = require('./paymentService');
 const eventService = require('./eventService');
+
+function extrairResumoLote(attendees = []) {
+  const batches = attendees
+    .map(att => att.batch)
+    .filter(Boolean);
+
+  const uniqueBatches = Array.from(
+    new Map(batches.map(batch => [batch.id, batch])).values()
+  );
+
+  if (!uniqueBatches.length) {
+    return null;
+  }
+
+  if (uniqueBatches.length === 1) {
+    const [batch] = uniqueBatches;
+    return {
+      name: batch.name,
+      price: Number(batch.price)
+    };
+  }
+
+  return {
+    name: uniqueBatches.map(batch => batch.name).join(' / '),
+    price: null
+  };
+}
+
+function aplicarResumoLote(registration) {
+  if (!registration) {
+    return;
+  }
+
+  const summary = extrairResumoLote(registration.attendees || []);
+  if (summary) {
+    registration.setDataValue('batchName', summary.name);
+    registration.setDataValue('batchPrice', summary.price);
+  }
+}
+
+function mapDataComLabel(data = {}, labelsMap = {}) {
+  return Object.entries(data).map(([fieldName, value]) => ({
+    fieldName,
+    label: labelsMap[fieldName] || fieldName,
+    value
+  }));
+}
+
+async function carregarMapeamentoCampos(eventId) {
+  if (!eventId) {
+    return { buyer: {}, attendee: {} };
+  }
+  const campos = await FormField.findAll({
+    where: { eventId }
+  });
+
+  return campos.reduce(
+    (acc, campo) => {
+      const section = campo.section || 'attendee';
+      acc[section][campo.fieldName] = campo.fieldLabel;
+      return acc;
+    },
+    { buyer: {}, attendee: {} }
+  );
+}
+
+function aplicarLabelsFormulario(registration, fieldMaps) {
+  if (!registration) return;
+  registration.setDataValue('buyerLabeledFields', mapDataComLabel(registration.buyerData, fieldMaps.buyer));
+  (registration.attendees || []).forEach(attendee => {
+    attendee.setDataValue('labeledData', mapDataComLabel(attendee.attendeeData || {}, fieldMaps.attendee));
+  });
+}
+
+async function prepararRegistroComCampos(registration) {
+  if (!registration) return registration;
+  const fieldMaps = await carregarMapeamentoCampos(registration.eventId);
+  aplicarLabelsFormulario(registration, fieldMaps);
+  aplicarResumoLote(registration);
+  return registration;
+}
+
+async function prepararListaComCampos(registrations) {
+  if (!Array.isArray(registrations)) return registrations;
+  await Promise.all(registrations.map(reg => prepararRegistroComCampos(reg)));
+  return registrations;
+}
 
 async function contarInscritosPorLote(registrationId) {
   const attendees = await RegistrationAttendee.findAll({
@@ -26,29 +114,40 @@ async function contarInscritosPorLote(registrationId) {
   }, {});
 }
 
-async function atualizarContadoresAoConfirmarInscricao(registration, statusAnterior) {
-  if (!registration || registration.paymentStatus !== 'confirmed') {
+async function ajustarContadoresDeStatus(registration, statusAnterior) {
+  if (!registration) {
     return;
   }
 
-  if (statusAnterior === 'confirmed') {
+  const novoStatusContabilizavel = isCountablePaymentStatus(registration.paymentStatus);
+  const statusAnteriorContabilizavel = isCountablePaymentStatus(statusAnterior);
+
+  if (novoStatusContabilizavel === statusAnteriorContabilizavel) {
     return;
+  }
+
+  const quantidadeInscritos = Math.max(0, Number(registration.quantity || 0));
+  if (quantidadeInscritos && registration.eventId) {
+    if (novoStatusContabilizavel) {
+      await Event.increment('currentRegistrations', {
+        by: quantidadeInscritos,
+        where: { id: registration.eventId }
+      });
+    } else {
+      await Event.decrement('currentRegistrations', {
+        by: quantidadeInscritos,
+        where: { id: registration.eventId }
+      });
+    }
   }
 
   const lotesCounts = await contarInscritosPorLote(registration.id);
-  const incrementos = Object.entries(lotesCounts)
+  const batchUpdates = Object.entries(lotesCounts)
     .filter(([batchId, count]) => batchId && count > 0)
-    .map(([batchId, count]) => batchService.incrementarQuantidade(batchId, count));
+    .map(([batchId, count]) => batchService.incrementarQuantidade(batchId, count * (novoStatusContabilizavel ? 1 : -1)));
 
-  if (incrementos.length) {
-    await Promise.all(incrementos);
-  }
-
-  if (registration.quantity > 0) {
-    await Event.increment('currentRegistrations', {
-      by: registration.quantity,
-      where: { id: registration.eventId }
-    });
+  if (batchUpdates.length) {
+    await Promise.all(batchUpdates);
   }
 }
 
@@ -114,7 +213,14 @@ async function processarInscricao(dadosInscricao) {
 
   // 4. Aplicar cupom se fornecido
   if (couponCode) {
-    const resultadoCupom = await couponService.validarCupom(couponCode, eventId, precoOriginal);
+    const quantidadeIngressos = Number(quantity);
+    const quantidadeParaValidacao = Number.isFinite(quantidadeIngressos) ? quantidadeIngressos : 0;
+    const resultadoCupom = await couponService.validarCupom(
+      couponCode,
+      eventId,
+      precoOriginal,
+      quantidadeParaValidacao
+    );
     desconto = resultadoCupom.desconto;
     precoFinal = resultadoCupom.precoFinal;
     couponId = resultadoCupom.coupon.id;
@@ -222,8 +328,6 @@ async function processarInscricao(dadosInscricao) {
     pixQrCodeBase64: resultadoPagamento.qrCodeBase64 || null
   });
 
-  let contadoresAtualizados = false;
-
   // 10. Criar registros dos inscritos com seus respectivos lotes
   const attendeesPromises = attendeesData.map((attendee, index) => RegistrationAttendee.create({
     id: uuid.v4(),
@@ -247,6 +351,9 @@ async function processarInscricao(dadosInscricao) {
     order: [['attendeeNumber', 'ASC']]
   });
 
+  registration.attendees = attendees;
+  await prepararRegistroComCampos(registration);
+
   // 11. Registrar transação de pagamento
   await paymentService.registrarTransacao(
     registration.id,
@@ -258,6 +365,8 @@ async function processarInscricao(dadosInscricao) {
   if (couponId) {
     await couponService.incrementarUso(couponId);
   }
+
+  await ajustarContadoresDeStatus(registration, null);
 
   // 14. Capturar pagamento (confirmar)
   if (resultadoPagamento.status === 1) { // Authorized
@@ -271,8 +380,7 @@ async function processarInscricao(dadosInscricao) {
       registration.paymentStatus = 'confirmed';
       await registration.save();
 
-      await atualizarContadoresAoConfirmarInscricao(registration, statusAnteriorConfirmacao);
-      contadoresAtualizados = true;
+      await ajustarContadoresDeStatus(registration, statusAnteriorConfirmacao);
 
       await paymentService.registrarTransacao(
         registration.id,
@@ -281,11 +389,6 @@ async function processarInscricao(dadosInscricao) {
         captura
       );
     }
-  }
-
-  if (!contadoresAtualizados && registration.paymentStatus === 'confirmed') {
-    await atualizarContadoresAoConfirmarInscricao(registration, 'pending');
-    contadoresAtualizados = true;
   }
 
   return {
@@ -331,7 +434,7 @@ async function listarInscricoes() {
       }
     ],
     order: [['createdAt', 'DESC']]
-  });
+  }).then(prepararListaComCampos);
 }
 
 /**
@@ -364,7 +467,7 @@ async function listarInscricoesPorEvento(eventId) {
       }
     ],
     order: [['createdAt', 'DESC']]
-  });
+  }).then(prepararListaComCampos);
 }
 
 /**
@@ -407,6 +510,8 @@ async function buscarInscricaoPorCodigo(orderCode) {
     throw new Error('Inscrição não encontrada');
   }
 
+  await prepararRegistroComCampos(registration);
+
   return registration;
 }
 
@@ -446,6 +551,8 @@ async function buscarInscricaoPorId(id) {
     throw new Error('Inscrição não encontrada');
   }
 
+  await prepararRegistroComCampos(registration);
+
   return registration;
 }
 
@@ -459,38 +566,78 @@ async function cancelarInscricao(id) {
     throw new Error('Inscrição já foi cancelada');
   }
 
-  // Cancelar pagamento na Cielo
-  if (registration.paymentId) {
-    const cancelamento = await paymentService.cancelarPagamento(
-      registration.paymentId,
-      paymentService.converterParaCentavos(registration.finalPrice)
+  const environment = process.env.CIELO_ENVIRONMENT || 'sandbox';
+  const isProductionEnvironment = environment === 'production';
+
+  const aplicarCancelamentoLocal = async (status, mensagem) => {
+    const statusAnterior = registration.paymentStatus;
+    registration.paymentStatus = status;
+    await registration.save();
+
+    await paymentService.registrarTransacao(
+      registration.id,
+      'cancellation',
+      'sandbox',
+      {
+        sucesso: true,
+        status: 'sandbox',
+        dadosCompletos: { message: mensagem }
+      }
     );
 
-    if (cancelamento.sucesso) {
-      registration.paymentStatus = 'cancelled';
-      await registration.save();
+    await ajustarContadoresDeStatus(registration, statusAnterior);
 
-      await paymentService.registrarTransacao(
-        registration.id,
-        'cancellation',
-        cancelamento.status.toString(),
-        cancelamento
-      );
+    return registration;
+  };
 
-      // Decrementar contadores
-      await batchService.incrementarQuantidade(registration.batchId, -registration.quantity);
-
-      await Event.decrement('currentRegistrations', {
-        by: registration.quantity,
-        where: { id: registration.eventId }
-      });
-
-      return registration;
-    }
-    throw new Error(`Erro ao cancelar pagamento: ${cancelamento.erro}`);
+  if (!registration.paymentId || !isProductionEnvironment) {
+    return aplicarCancelamentoLocal('cancelled', 'Ambiente sandbox: pagamento ignorado');
   }
 
-  throw new Error('Inscrição não possui pagamento associado');
+  // Cancelar pagamento na Cielo
+  const amountCentavos = paymentService.converterParaCentavos(registration.finalPrice);
+  const jaCapturado = ['confirmed', 'paid'].includes(registration.paymentStatus);
+  const fazerCancelamento = async () => {
+    const attemptVoid = async () => ({
+      ...await paymentService.cancelarPagamento(registration.paymentId, amountCentavos),
+      type: 'cancellation'
+    });
+    const attemptRefund = async () => ({
+      ...await paymentService.estornarPagamento(registration.paymentId, amountCentavos),
+      type: 'refund'
+    });
+
+    if (jaCapturado) {
+      const result = await attemptRefund();
+      if (result.sucesso) return result;
+      return attemptVoid();
+    }
+
+    const result = await attemptVoid();
+    if (result.sucesso) return result;
+    return attemptRefund();
+  };
+
+  const cancelamento = await fazerCancelamento();
+
+  if (cancelamento.sucesso) {
+    const statusAnterior = registration.paymentStatus;
+    registration.paymentStatus = cancelamento.type === 'refund' ? 'refunded' : 'cancelled';
+    await registration.save();
+
+    await paymentService.registrarTransacao(
+      registration.id,
+      cancelamento.type,
+      cancelamento.status.toString(),
+      cancelamento
+    );
+
+    await ajustarContadoresDeStatus(registration, statusAnterior);
+
+    return registration;
+  }
+
+  throw new Error(`Erro ao cancelar pagamento: ${cancelamento.erro}`);
 }
 
 module.exports = {
@@ -500,5 +647,5 @@ module.exports = {
   buscarInscricaoPorCodigo,
   buscarInscricaoPorId,
   cancelarInscricao,
-  atualizarContadoresAoConfirmarInscricao
+  ajustarContadoresDeStatus
 };

@@ -28,6 +28,7 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon
 } from '@material-ui/icons';
+import brand from 'dan-api/dummy/brand';
 import {
   listarCupons,
   criarCupom,
@@ -35,7 +36,6 @@ import {
   deletarCupom,
   listarEventos
 } from '../../../api/eventsApi';
-import brand from 'dan-api/dummy/brand';
 
 function CouponsPage() {
   const [cupons, setCupons] = useState([]);
@@ -50,13 +50,10 @@ function CouponsPage() {
     discountValue: '',
     eventId: '',
     maxUses: '',
+    minimumQuantity: '',
     validUntil: '',
     isActive: true
   });
-
-  useEffect(() => {
-    carregarDados();
-  }, []);
 
   const carregarDados = async () => {
     try {
@@ -75,6 +72,10 @@ function CouponsPage() {
     }
   };
 
+  useEffect(() => {
+    carregarDados();
+  }, []);
+
   const handleAbrirDialog = (cupom = null) => {
     if (cupom) {
       setCupomEdicao(cupom);
@@ -84,6 +85,7 @@ function CouponsPage() {
         discountValue: cupom.discountValue,
         eventId: cupom.eventId || '',
         maxUses: cupom.maxUses || '',
+        minimumQuantity: cupom.minimumQuantity ? cupom.minimumQuantity.toString() : '',
         validUntil: cupom.validUntil ? cupom.validUntil.substring(0, 16) : '',
         isActive: cupom.isActive
       });
@@ -95,6 +97,7 @@ function CouponsPage() {
         discountValue: '',
         eventId: '',
         maxUses: '',
+        minimumQuantity: '',
         validUntil: '',
         isActive: true
       });
@@ -122,7 +125,8 @@ function CouponsPage() {
       const dados = {
         ...formData,
         discountValue: parseFloat(formData.discountValue),
-        maxUses: formData.maxUses ? parseInt(formData.maxUses) : null,
+        maxUses: formData.maxUses ? parseInt(formData.maxUses, 10) : null,
+        minimumQuantity: formData.minimumQuantity ? parseInt(formData.minimumQuantity, 10) : null,
         eventId: formData.eventId || null
       };
 
@@ -208,6 +212,7 @@ function CouponsPage() {
               <TableRow>
                 <TableCell>Código</TableCell>
                 <TableCell>Desconto</TableCell>
+                <TableCell align="center">Mínimo ingressos</TableCell>
                 <TableCell>Evento</TableCell>
                 <TableCell align="center">Usos</TableCell>
                 <TableCell>Validade</TableCell>
@@ -222,6 +227,9 @@ function CouponsPage() {
                     <Typography variant="subtitle2">{cupom.code}</Typography>
                   </TableCell>
                   <TableCell>{formatarDesconto(cupom.discountType, cupom.discountValue)}</TableCell>
+                  <TableCell align="center">
+                    {cupom.minimumQuantity ? cupom.minimumQuantity : '-'}
+                  </TableCell>
                   <TableCell>{getNomeEvento(cupom.eventId)}</TableCell>
                   <TableCell align="center">
                     {cupom.currentUses || 0}
@@ -335,6 +343,19 @@ function CouponsPage() {
                 value={formData.maxUses}
                 onChange={handleChange}
                 helperText="Deixe vazio para ilimitado"
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                type="number"
+                label="Mínimo de ingressos"
+                name="minimumQuantity"
+                value={formData.minimumQuantity}
+                onChange={handleChange}
+                helperText="Deixe vazio para não exigir quantidade mínima"
+                inputProps={{ min: 1, step: 1 }}
               />
             </Grid>
 

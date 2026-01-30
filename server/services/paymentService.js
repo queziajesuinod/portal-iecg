@@ -235,6 +235,41 @@ async function cancelarPagamento(paymentId, amount) {
 }
 
 /**
+ * Estornar (reembolsar) pagamento já capturado
+ */
+async function estornarPagamento(paymentId, amount) {
+  try {
+    const response = await axios.put(
+      `${BASE_URL}/1/sales/${paymentId}/refund`,
+      { Amount: amount },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          MerchantId: CIELO_MERCHANT_ID,
+          MerchantKey: CIELO_MERCHANT_KEY
+        }
+      }
+    );
+
+    return {
+      sucesso: true,
+      status: response.data.Status,
+      returnCode: response.data.ReturnCode,
+      returnMessage: response.data.ReturnMessage,
+      dadosCompletos: response.data
+    };
+  } catch (error) {
+    console.error('Erro ao estornar pagamento Cielo:', error.response?.data || error.message);
+
+    return {
+      sucesso: false,
+      erro: error.response?.data?.ReturnMessage || error.message,
+      dadosCompletos: error.response?.data
+    };
+  }
+}
+
+/**
  * Consultar status de pagamento
  */
 async function consultarPagamento(paymentId) {
@@ -369,6 +404,7 @@ module.exports = {
   criarTransacaoPix,
   capturarPagamento,
   cancelarPagamento,
+  estornarPagamento,
   consultarPagamento,
   registrarTransacao,
   mapearStatusCielo,

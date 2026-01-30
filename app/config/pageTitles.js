@@ -13,7 +13,8 @@ const pageTitles = {
   'app/mia': 'Listagem Ministério MIA',
   'app/mia/cadastrar': 'Cadastro do MIA',
   'app/mia/detalhes': 'Detalhes do MIA',
-  'app/mia/listas-presenca': 'Listas de Presença',
+  'app/mia/listas-presenca/': 'Listas de Presença',
+  'app/mia/listas-presenca/<id>': 'Detalhes da Listas de Presença',
 
   // Start
   'app/start': 'Start',
@@ -30,12 +31,16 @@ const pageTitles = {
   'app/admin/usuarios': 'Usuários',
   'app/admin/usuarios/novo': 'Novo Usuário',
   'app/admin/webhooks': 'Webhooks',
+  'app/events': 'Detalhes do Evento',
+  'app/events/novo': 'Novo Evento',
+  'app/events/registrations': 'Detalhes da Inscrição',
 
   // Perfil
   'app/profile': 'Meu Perfil',
 
   // Fallback por segmento
   start: 'Start',
+  events: 'Eventos',
   admin: 'Administração',
   mia: 'Ministério MIA',
   celulas: 'Células',
@@ -65,8 +70,19 @@ export const getPageTitle = (routeName) => {
 
   const lastSegment = normalizedRoute.split('/').pop();
 
+  const resolveRouteTitle = (value) => {
+    let candidate = value;
+    while (candidate) {
+      if (pageTitles[candidate]) return pageTitles[candidate];
+      const slashIndex = candidate.lastIndexOf('/');
+      if (slashIndex === -1) break;
+      candidate = candidate.substring(0, slashIndex);
+    }
+    return null;
+  };
+
   return (
-    pageTitles[normalizedRoute]
+    resolveRouteTitle(normalizedRoute)
     || pageTitles[lastSegment]
     || lastSegment.replace(/-/g, ' ')
   );

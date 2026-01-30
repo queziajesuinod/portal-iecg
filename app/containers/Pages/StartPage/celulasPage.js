@@ -9,15 +9,15 @@ import { Helmet } from 'react-helmet';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PowerSettingsNewIcon from '@mui/icons-material/PowerSettingsNew';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
-import CloseIcon from '@mui/icons-material/Close';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import { useHistory } from 'react-router-dom';
 import useStyles from 'dan-components/Tables/tableStyle-jss';
 import Notification from 'dan-components/Notification/Notification';
+import {
+  GoogleMap, Marker, InfoWindow, useLoadScript
+} from '@react-google-maps/api';
 import { fetchGeocode } from '../../../utils/googleGeocode';
-import { GoogleMap, Marker, InfoWindow, useLoadScript } from '@react-google-maps/api';
 
 const REDE_OPTIONS = [
   'RELEVANTE JUNIORS RAPAZES',
@@ -116,103 +116,103 @@ const ListagemCelulasPage = () => {
   const [apeloSelecionado, setApeloSelecionado] = useState(null);
   const [motivoStatus, setMotivoStatus] = useState('');
 
-    const API_URL = resolveApiUrl();
-    const mapKey = process.env.REACT_APP_GOOGLE_GEOCODE_KEY || '';
-    const { isLoaded: mapLoaded } = useLoadScript({
-      googleMapsApiKey: mapKey,
-      libraries: ['places']
+  const API_URL = resolveApiUrl();
+  const mapKey = process.env.REACT_APP_GOOGLE_GEOCODE_KEY || '';
+  const { isLoaded: mapLoaded } = useLoadScript({
+    googleMapsApiKey: mapKey,
+    libraries: ['places']
+  });
+  const normalizeValue = (value) => (value || '').trim().toLowerCase();
+  const normalizeSearchValue = (value) => {
+    const base = (value || '').normalize('NFD');
+    return base.replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  };
+  const buildCelulaQueryParams = ({
+    page: overridePage,
+    limit: overrideLimit,
+    includeRede = true,
+    includeStatus = true
+  } = {}) => {
+    const params = new URLSearchParams({
+      celula: normalizeSearchValue(searchTerm) || '',
+      campusId: filterCampus || '',
+      bairro: filterBairro || '',
+      lider: filterLider || '',
+      pastor_geracao: filterPastorGeracao || '',
+      page: overridePage ?? page,
+      limit: overrideLimit ?? rowsPerPage
     });
-    const buildCelulaQueryParams = ({
-      page: overridePage,
-      limit: overrideLimit,
-      includeRede = true,
-      includeStatus = true
-    } = {}) => {
-      const params = new URLSearchParams({
-        celula: normalizeSearchValue(searchTerm) || '',
-        campusId: filterCampus || '',
-        bairro: filterBairro || '',
-        lider: filterLider || '',
-        pastor_geracao: filterPastorGeracao || '',
-        page: overridePage ?? page,
-        limit: overrideLimit ?? rowsPerPage
+    if (includeRede && filterRede?.length) {
+      filterRede.filter(Boolean).forEach((rede) => params.append('rede', rede));
+    }
+    if (includeStatus && filterStatus && filterStatus !== 'all') {
+      params.append('ativo', filterStatus);
+    }
+    return params.toString();
+  };
+  const colorPalette = ['red', 'blue', 'green', 'orange', 'purple', 'yellow', 'pink'];
+  const networkColorMap = useMemo(() => {
+    const map = new Map();
+    let paletteIndex = 0;
+    (mapCelulas || [])
+      .map((cell) => (cell.rede || 'Sem rede').trim())
+      .filter(Boolean)
+      .forEach((rede) => {
+        const key = rede.toLowerCase();
+        if (!map.has(key)) {
+          map.set(
+            key,
+            colorPalette[paletteIndex % colorPalette.length]
+          );
+          paletteIndex += 1;
+        }
       });
-      if (includeRede && filterRede?.length) {
-        filterRede.filter(Boolean).forEach((rede) => params.append('rede', rede));
-      }
-      if (includeStatus && filterStatus && filterStatus !== 'all') {
-        params.append('ativo', filterStatus);
-      }
-      return params.toString();
-    };
-    const colorPalette = ['red', 'blue', 'green', 'orange', 'purple', 'yellow', 'pink'];
-    const networkColorMap = useMemo(() => {
-      const map = new Map();
-      let paletteIndex = 0;
-      (mapCelulas || [])
-        .map((cell) => (cell.rede || 'Sem rede').trim())
-        .filter(Boolean)
-        .forEach((rede) => {
-          const key = rede.toLowerCase();
-          if (!map.has(key)) {
-            map.set(
-              key,
-              colorPalette[paletteIndex % colorPalette.length]
-            );
-            paletteIndex += 1;
-          }
-        });
-      return map;
-    }, [mapCelulas]);
-    const normalizeValue = (value) => (value || '').trim().toLowerCase();
-    const normalizeSearchValue = (value) => {
-      const base = (value || '').normalize('NFD');
-      return base.replace(/[\u0300-\u036f]/g, '').toLowerCase();
-    };
-    const matchesFilterRede = (redeValue) => {
-      if (!filterRede || !filterRede.length) return true;
-      const normalized = normalizeValue(redeValue);
-      const selectedSet = new Set(filterRede.map((rede) => normalizeValue(rede)));
-      return selectedSet.has(normalized);
-    };
+    return map;
+  }, [mapCelulas]);
+  const matchesFilterRede = (redeValue) => {
+    if (!filterRede || !filterRede.length) return true;
+    const normalized = normalizeValue(redeValue);
+    const selectedSet = new Set(filterRede.map((rede) => normalizeValue(rede)));
+    return selectedSet.has(normalized);
+  };
 
-    const mapMarkers = useMemo(
-      () => mapCelulas
-        .filter((c) => c.lat && c.lon && matchesFilterRede(c.rede))
-        .map((c) => {
-          const networkKey = (c.rede || 'Sem rede').trim().toLowerCase();
-          const color = networkColorMap.get(networkKey) || 'red';
-          return {
-            id: c.id,
-            position: { lat: parseFloat(c.lat), lng: parseFloat(c.lon) },
-            celula: c.celula,
-            rede: c.rede,
-            lider: c.lider,
-            dia: c.dia,
-            horario: c.horario,
-            cel_lider: c.cel_lider,
-            color,
-            icon: `https://maps.google.com/mapfiles/ms/icons/${color}-dot.png`
-          };
-        }),
-      [mapCelulas, networkColorMap]
-    );
-    const hoveredMarker = useMemo(
-      () => mapMarkers.find((marker) => marker.id === hoveredMarkerId) || null,
-      [hoveredMarkerId, mapMarkers]
-    );
-    const legendItems = useMemo(() => {
-      const entries = Array.from(networkColorMap.entries()).map(([key, color]) => ({
-        key,
-        label: key === '' ? 'Sem rede' : key,
-        color
-      }));
-      if (!filterRede || !filterRede.length) {
-        return entries;
-      }
-      const selectedSet = new Set(filterRede.map((rede) => normalizeValue(rede)));
-      return entries.filter((entry) => selectedSet.has(entry.key));
-    }, [networkColorMap, filterRede]);
+  const mapMarkers = useMemo(
+    () => mapCelulas
+      .filter((c) => c.lat && c.lon && matchesFilterRede(c.rede))
+      .map((c) => {
+        const networkKey = (c.rede || 'Sem rede').trim().toLowerCase();
+        const color = networkColorMap.get(networkKey) || 'red';
+        return {
+          id: c.id,
+          position: { lat: parseFloat(c.lat), lng: parseFloat(c.lon) },
+          celula: c.celula,
+          rede: c.rede,
+          lider: c.lider,
+          dia: c.dia,
+          horario: c.horario,
+          cel_lider: c.cel_lider,
+          color,
+          icon: `https://maps.google.com/mapfiles/ms/icons/${color}-dot.png`
+        };
+      }),
+    [mapCelulas, networkColorMap]
+  );
+  const hoveredMarker = useMemo(
+    () => mapMarkers.find((marker) => marker.id === hoveredMarkerId) || null,
+    [hoveredMarkerId, mapMarkers]
+  );
+  const legendItems = useMemo(() => {
+    const entries = Array.from(networkColorMap.entries()).map(([key, color]) => ({
+      key,
+      label: key === '' ? 'Sem rede' : key,
+      color
+    }));
+    if (!filterRede || !filterRede.length) {
+      return entries;
+    }
+    const selectedSet = new Set(filterRede.map((rede) => normalizeValue(rede)));
+    return entries.filter((entry) => selectedSet.has(entry.key));
+  }, [networkColorMap, filterRede]);
   const mapCenter = useMemo(() => {
     if (!mapMarkers.length) return { lat: -20.44225, lng: -54.646814 };
     return mapMarkers[0].position;
@@ -267,7 +267,7 @@ const ListagemCelulasPage = () => {
     }
   };
 
-const resolveCampusFromRow = (row) => {
+  const resolveCampusFromRow = (row) => {
     const campusIdValue = row.campusId || row.campus;
     if (!campusIdValue) {
       return { campusId: '', campusNome: '' };
@@ -320,16 +320,56 @@ const resolveCampusFromRow = (row) => {
       if (!res.ok) return false;
       const data = await res.json();
       const registros = data.registros || [];
-      return registros.some((item) =>
-        (item.celula || '').toLowerCase() === (row.celula || '').toLowerCase() &&
-        (item.rede || '').toLowerCase() === (row.rede || '').toLowerCase() &&
-        (item.lider || '').toLowerCase() === (row.lider || '').toLowerCase()
+      return registros.some((item) => (item.celula || '').toLowerCase() === (row.celula || '').toLowerCase()
+        && (item.rede || '').toLowerCase() === (row.rede || '').toLowerCase()
+        && (item.lider || '').toLowerCase() === (row.lider || '').toLowerCase()
       );
     } catch (error) {
       console.error('Falha ao verificar duplicidade da cǸlula:', error);
       return false;
     }
   };
+
+  const fetchApeloResumo = async () => {
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${API_URL}/start/direcionamentos/resumo-por-celula`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Falha ao buscar resumo de apelos.');
+      const data = await res.json();
+      const map = {};
+      (data || []).forEach((item) => {
+        if (item.celula_id) {
+          map[item.celula_id] = item.total || 0;
+        }
+      });
+      setApeloCounts(map);
+    } catch (err) {
+      console.error('Erro ao carregar resumo de apelos:', err);
+      setApeloCounts({});
+    }
+  };
+
+  async function fetchCelulas() {
+    const token = localStorage.getItem('token');
+    try {
+      const queryParams = buildCelulaQueryParams();
+
+      const res = await fetch(`${API_URL}/start/celula?${queryParams}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const data = await res.json();
+      const registros = data.registros || [];
+      setCelulas(registros);
+      setTotalPages(data.totalPaginas || 1);
+      setTotalRecords(data.totalRegistros || registros.length);
+      fetchApeloResumo();
+    } catch (err) {
+      console.error('Erro ao carregar células:', err);
+    }
+  }
 
   const importarCelulas = async (records) => {
     const token = localStorage.getItem('token');
@@ -339,38 +379,40 @@ const resolveCampusFromRow = (row) => {
     const errors = [];
     const total = validRecords.length;
 
-    setImportProgress({ total, processed: 0, success: 0, failed: 0 });
+    setImportProgress({
+      total, processed: 0, success: 0, failed: 0
+    });
 
-    for (const record of validRecords) {
+    await validRecords.reduce(async (previousPromise, record) => {
+      await previousPromise;
       try {
         const isDuplicate = await celulaJaCadastrada(record.data, token);
         if (isDuplicate) {
           failed += 1;
-          errors.push(`Linha ${record.lineNumber}: Célula já cadastrada para esta rede e lider.`);
-          continue;
-        }
-
-        const coords = await geocodeAddressFromRow(record.data);
-        const payload = buildPayloadFromRow(record.data, coords);
-        const response = await fetch(`${API_URL}/start/celula`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify(payload)
-        });
-        if (!response.ok) {
-          let message = 'Erro ao salvar célula.';
-          try {
-            const body = await response.json();
-            message = body?.erro || body?.message || message;
-          } catch (err) {
-            // ignore parse errors
+          errors.push(`Linha ${record.lineNumber}: Célula já cadastrada para esta rede e líder.`);
+        } else {
+          const coords = await geocodeAddressFromRow(record.data);
+          const payload = buildPayloadFromRow(record.data, coords);
+          const response = await fetch(`${API_URL}/start/celula`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+          });
+          if (!response.ok) {
+            let message = 'Erro ao salvar célula.';
+            try {
+              const body = await response.json();
+              message = body?.erro || body?.message || message;
+            } catch (err) {
+              // ignore parse errors
+            }
+            throw new Error(message);
           }
-          throw new Error(message);
+          success += 1;
         }
-        success += 1;
       } catch (error) {
         failed += 1;
         errors.push(`Linha ${record.lineNumber}: ${error.message}`);
@@ -382,9 +424,12 @@ const resolveCampusFromRow = (row) => {
           failed
         }));
       }
-    }
+      return Promise.resolve();
+    }, Promise.resolve());
 
-    return { success, processed: total, failed, errors };
+    return {
+      success, processed: total, failed, errors
+    };
   };
 
   const handleImportFileChange = (event) => {
@@ -445,27 +490,6 @@ const resolveCampusFromRow = (row) => {
     URL.revokeObjectURL(url);
   };
 
-  const fetchApeloResumo = async () => {
-    const token = localStorage.getItem('token');
-    try {
-      const res = await fetch(`${API_URL}/start/direcionamentos/resumo-por-celula`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error('Falha ao buscar resumo de apelos.');
-      const data = await res.json();
-      const map = {};
-      (data || []).forEach((item) => {
-        if (item.celula_id) {
-          map[item.celula_id] = item.total || 0;
-        }
-      });
-      setApeloCounts(map);
-    } catch (err) {
-      console.error('Erro ao carregar resumo de apelos:', err);
-      setApeloCounts({});
-    }
-  };
-
   const fetchApelosPorCelula = async (celula) => {
     if (!celula?.id) return;
     setApelosCelula(celula);
@@ -505,8 +529,11 @@ const resolveCampusFromRow = (row) => {
     ENVIO_LIDER_PENDENTE: { label: 'Líder ainda não fez contato', color: 'secondary' },
     CONTATO_LIDER_SEM_RETORNO: { label: 'Líder enviou mensagem, sem retorno', color: 'secondary' },
     CONSOLIDACAO_INTERROMPIDA: { label: 'Não Consolidado', color: 'error' },
-    MOVIMENTACAO_CELULA: { label: 'Em movimentação de célula',color: 'default',
-      sx: { bgcolor: '#053f81ff', color: '#ffffffff' } },
+    MOVIMENTACAO_CELULA: {
+      label: 'Em movimentação de célula',
+      color: 'default',
+      sx: { bgcolor: '#053f81ff', color: '#ffffffff' }
+    },
     EM_CONSOLIDACAO: {
       label: 'Em Consolidação',
       color: 'default',
@@ -569,8 +596,7 @@ const resolveCampusFromRow = (row) => {
       setNotification('Status atualizado com sucesso.');
       setStatusDialogOpen(false);
       setMotivoStatus('');
-      setApelosList((prev) =>
-        prev.map((item) => (item.id === apeloSelecionado.id ? { ...item, status: statusSelecionado } : item))
+      setApelosList((prev) => prev.map((item) => (item.id === apeloSelecionado.id ? { ...item, status: statusSelecionado } : item))
       );
       fetchApeloResumo();
     } catch (err) {
@@ -609,128 +635,145 @@ const resolveCampusFromRow = (row) => {
     return 0;
   });
 
-    const fetchCelulas = async () => {
-      const token = localStorage.getItem('token');
-      try {
-        const queryParams = buildCelulaQueryParams();
-
-        const res = await fetch(`${API_URL}/start/celula?${queryParams}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-
-        const data = await res.json();
-        const registros = data.registros || [];
-        setCelulas(registros);
-        setTotalPages(data.totalPaginas || 1);
-        setTotalRecords(data.totalRegistros || registros.length);
-        fetchApeloResumo();
-      } catch (err) {
-        console.error('Erro ao carregar células:', err);
+  const fetchMapCelulas = async () => {
+    const token = localStorage.getItem('token');
+    try {
+      const queryParams = buildCelulaQueryParams({ page: 1, limit: 1000, includeRede: false });
+      const res = await fetch(`${API_URL}/start/celula?${queryParams}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        throw new Error('Falha ao carregar células para o mapa.');
       }
-    };
+      const data = await res.json();
+      setMapCelulas(data.registros || []);
+    } catch (err) {
+      console.error('Erro ao carregar células para o mapa:', err);
+      setMapCelulas([]);
+    }
+  };
 
-    const fetchMapCelulas = async () => {
-      const token = localStorage.getItem('token');
-      try {
-        const queryParams = buildCelulaQueryParams({ page: 1, limit: 1000, includeRede: false });
-        const res = await fetch(`${API_URL}/start/celula?${queryParams}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (!res.ok) {
-          throw new Error('Falha ao carregar células para o mapa.');
-        }
-        const data = await res.json();
-        setMapCelulas(data.registros || []);
-      } catch (err) {
-        console.error('Erro ao carregar células para o mapa:', err);
-        setMapCelulas([]);
+  const exportCelulasToExcel = async () => {
+    setExporting(true);
+    const token = localStorage.getItem('token');
+    try {
+      const exportLimit = totalRecords || 1000;
+      const queryParams = buildCelulaQueryParams({ page: 1, limit: exportLimit });
+      const res = await fetch(`${API_URL}/start/celula?${queryParams}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        throw new Error('Falha ao exportar células.');
       }
-    };
-
-    const exportCelulasToExcel = async () => {
-      setExporting(true);
-      const token = localStorage.getItem('token');
-      try {
-        const queryParams = buildCelulaQueryParams({ page: 1, limit: 1000 });
-        const res = await fetch(`${API_URL}/start/celula?${queryParams}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (!res.ok) {
-          throw new Error('Falha ao exportar células.');
-        }
-        const data = await res.json();
-        const registros = data.registros || [];
-        if (!registros.length) {
-          setNotification('Nenhuma célula encontrada para exportar.');
-          return;
-        }
-        const delimiter = ';';
-        const sanitize = (value) => `"${String(value ?? '').replace(/"/g, '""').replace(/[\r\n]+/g, ' ')}"`;
-        const headers = [
-          'Célula',
-          'Rede',
-          'Líder',
-          'Pastor de geração',
-          'Bairro',
-          'Campus',
-          'Status'
-        ];
-        const rows = [
-          headers.map(sanitize).join(delimiter),
-          ...registros.map((c) => [
-            c.celula,
-            c.rede,
-            c.lider,
-            c.pastor_geracao,
-            c.bairro,
-            c.campusRef?.nome || c.campus,
-            c.ativo === false ? 'Inativa' : 'Ativa'
-          ].map(sanitize).join(delimiter))
-        ];
-        const csv = `\uFEFF${rows.join('\r\n')}`;
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `celulas_${new Date().toISOString().slice(0, 10)}.csv`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-      } catch (err) {
-        console.error(err);
-        setNotification(err.message || 'Erro ao exportar células.');
-      } finally {
-        setExporting(false);
+      const data = await res.json();
+      const registros = data.registros || [];
+      if (!registros.length) {
+        setNotification('Nenhuma célula encontrada para exportar.');
+        return;
       }
-    };
+      const delimiter = ';';
+      const sanitize = (value) => `"${String(value ?? '').replace(/"/g, '""').replace(/[\r\n]+/g, ' ')}"`;
+      const headers = [
+        'ID',
+        'Célula',
+        'Rede',
+        'Líder',
+        'E-mail do Líder',
+        'Celular do Líder',
+        'Anfitrião',
+        'Campus',
+        'Endereço',
+        'Número',
+        'CEP',
+        'Bairro',
+        'Cidade',
+        'Estado',
+        'Liderança',
+        'Pastor de geração',
+        'Pastor do campus',
+        'Dia',
+        'Horário',
+        'Latitude',
+        'Longitude',
+        'Criado em',
+        'Atualizado em',
+        'CampusId',
+        'Ativo'
+      ];
+      const rows = [
+        headers.map(sanitize).join(delimiter),
+        ...registros.map((c) => [
+          c.id,
+          c.celula,
+          c.rede,
+          c.lider,
+          c.email_lider,
+          c.cel_lider,
+          c.anfitriao,
+          c.campusRef?.nome || c.campus,
+          c.endereco,
+          c.numero,
+          c.cep,
+          c.bairro,
+          c.cidade,
+          c.estado,
+          c.lideranca,
+          c.pastor_geracao,
+          c.pastor_campus,
+          c.dia,
+          c.horario,
+          c.lat,
+          c.lon,
+          c.createdAt,
+          c.updatedAt,
+          c.campusId,
+          c.ativo === false ? 'Inativa' : 'Ativa'
+        ].map(sanitize).join(delimiter))
+      ];
+      const csv = `\uFEFF${rows.join('\r\n')}`;
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `celulas_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      setNotification(err.message || 'Erro ao exportar células.');
+    } finally {
+      setExporting(false);
+    }
+  };
 
-    useEffect(() => {
-      fetchCelulas();
-    }, [
-      page,
-      searchTerm,
-      filterCampus,
-      filterRede,
-      filterBairro,
-      filterLider,
-      filterPastorGeracao,
-      filterStatus,
-      API_URL
-    ]);
+  useEffect(() => {
+    fetchCelulas();
+  }, [
+    page,
+    searchTerm,
+    filterCampus,
+    filterRede,
+    filterBairro,
+    filterLider,
+    filterPastorGeracao,
+    filterStatus,
+    API_URL
+  ]);
 
-    useEffect(() => {
-      fetchMapCelulas();
-    }, [
-      searchTerm,
-      filterCampus,
-      filterRede,
-      filterBairro,
-      filterLider,
-      filterPastorGeracao,
-      filterStatus,
-      API_URL
-    ]);
+  useEffect(() => {
+    fetchMapCelulas();
+  }, [
+    searchTerm,
+    filterCampus,
+    filterRede,
+    filterBairro,
+    filterLider,
+    filterPastorGeracao,
+    filterStatus,
+    API_URL
+  ]);
 
   useEffect(() => {
     const carregarCampi = async () => {
@@ -755,7 +798,7 @@ const resolveCampusFromRow = (row) => {
   const pagedCelulas = sortedCelulas;
 
   const handleEdit = (celula) => {
-    history.push('/app/start/celulas/cadastrar', { celula , pageTitle: 'Edição de Célula'});
+    history.push('/app/start/celulas/cadastrar', { celula, pageTitle: 'Edição de Célula' });
   };
 
   const handleDelete = async (id) => {
@@ -816,7 +859,7 @@ const resolveCampusFromRow = (row) => {
         <title>Listagem de Células</title>
       </Helmet>
 
-      <Toolbar className={classes.toolbar} sx={{ flexWrap: "wrap", gap: 1 }}>
+      <Toolbar className={classes.toolbar} sx={{ flexWrap: 'wrap', gap: 1 }}>
         <Box display="flex" flexWrap="wrap" gap={1} alignItems="center">
           <Button variant="contained" color="primary" onClick={() => setImportDialogOpen(true)}>
             Importar célula
@@ -824,7 +867,7 @@ const resolveCampusFromRow = (row) => {
           <Button
             variant="contained"
             color="secondary"
-            onClick={() => history.push("/app/start/celulas/cadastrar")}
+            onClick={() => history.push('/app/start/celulas/cadastrar')}
           >
             Cadastrar célula
           </Button>
@@ -846,7 +889,7 @@ const resolveCampusFromRow = (row) => {
             {exporting ? 'Exportando...' : 'Exportar Excel'}
           </Button>
         </Box>
-       </Toolbar>
+      </Toolbar>
       <Box mt={2}>
         <Paper variant="outlined" sx={{ p: 2 }}>
           <Box
@@ -854,7 +897,7 @@ const resolveCampusFromRow = (row) => {
             flexWrap="wrap"
             gap={1}
             alignItems="center"
-            sx={{ width: "100%", justifyContent: "flex-start" }}
+            sx={{ width: '100%', justifyContent: 'flex-start' }}
           >
             <TextField
               label="Pesquisar por nome da célula"
@@ -865,7 +908,7 @@ const resolveCampusFromRow = (row) => {
                 setSearchTerm(e.target.value);
                 setPage(1);
               }}
-              sx={{ width: { xs: "100%", sm: 220 }, flex: { xs: "1 1 100%", sm: "0 1 220px" } }}
+              sx={{ width: { xs: '100%', sm: 220 }, flex: { xs: '1 1 100%', sm: '0 1 220px' } }}
             />
             <TextField
               select
@@ -874,7 +917,7 @@ const resolveCampusFromRow = (row) => {
               size="small"
               value={filterCampus}
               onChange={(e) => { setFilterCampus(e.target.value); setPage(1); }}
-              sx={{ minWidth: 160, flex: { xs: "1 1 100%", sm: "0 1 180px" } }}
+              sx={{ minWidth: 160, flex: { xs: '1 1 100%', sm: '0 1 180px' } }}
             >
               <MenuItem value="">Todos</MenuItem>
               {campi.map((c) => (
@@ -886,7 +929,7 @@ const resolveCampusFromRow = (row) => {
             <FormControl
               variant="outlined"
               size="small"
-              sx={{ minWidth: 200, flex: { xs: "1 1 100%", sm: "0 1 200px" } }}
+              sx={{ minWidth: 200, flex: { xs: '1 1 100%', sm: '0 1 200px' } }}
             >
               <InputLabel id="filter-rede-label">Rede</InputLabel>
               <Select
@@ -895,11 +938,11 @@ const resolveCampusFromRow = (row) => {
                 value={filterRede}
                 onChange={(e) => {
                   const { value } = e.target;
-                  setFilterRede(typeof value === "string" ? value.split(",") : value);
+                  setFilterRede(typeof value === 'string' ? value.split(',') : value);
                   setPage(1);
                 }}
                 input={<OutlinedInput label="Rede" />}
-                renderValue={(selected) => (selected.length ? selected.join(", ") : "Todas")}
+                renderValue={(selected) => (selected.length ? selected.join(', ') : 'Todas')}
               >
                 {REDE_OPTIONS.map((rede) => (
                   <MenuItem key={rede} value={rede}>
@@ -912,7 +955,7 @@ const resolveCampusFromRow = (row) => {
             <FormControl
               variant="outlined"
               size="small"
-              sx={{ minWidth: 150, flex: { xs: "1 1 100%", sm: "0 1 150px" } }}
+              sx={{ minWidth: 150, flex: { xs: '1 1 100%', sm: '0 1 150px' } }}
             >
               <InputLabel id="filter-status-label">Status</InputLabel>
               <Select
@@ -937,7 +980,7 @@ const resolveCampusFromRow = (row) => {
               size="small"
               value={filterBairro}
               onChange={(e) => { setFilterBairro(e.target.value); setPage(1); }}
-              sx={{ minWidth: 160, flex: { xs: "1 1 100%", sm: "0 1 200px" } }}
+              sx={{ minWidth: 160, flex: { xs: '1 1 100%', sm: '0 1 200px' } }}
               placeholder="Digite o bairro"
             />
             <TextField
@@ -946,7 +989,7 @@ const resolveCampusFromRow = (row) => {
               size="small"
               value={filterLider}
               onChange={(e) => { setFilterLider(e.target.value); setPage(1); }}
-              sx={{ minWidth: 200, flex: { xs: "1 1 100%", sm: "0 1 220px" } }}
+              sx={{ minWidth: 200, flex: { xs: '1 1 100%', sm: '0 1 220px' } }}
               placeholder="Nome do líder"
             />
             <TextField
@@ -955,7 +998,7 @@ const resolveCampusFromRow = (row) => {
               size="small"
               value={filterPastorGeracao}
               onChange={(e) => { setFilterPastorGeracao(e.target.value); setPage(1); }}
-              sx={{ minWidth: 200, flex: { xs: "1 1 100%", sm: "0 1 220px" } }}
+              sx={{ minWidth: 200, flex: { xs: '1 1 100%', sm: '0 1 220px' } }}
               placeholder="Nome do pastor"
             />
           </Box>
@@ -1262,31 +1305,31 @@ const resolveCampusFromRow = (row) => {
                 <Typography variant="body2" color="textSecondary">Nenhum apelo direcionado para esta célula.</Typography>
               ) : (
                 <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Nome</TableCell>
-                  <TableCell>Decisão</TableCell>
-                  <TableCell>Data direcionamento</TableCell>
-                  <TableCell>Campus IECG</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Ações</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {apelosList.map((apelo) => (
-                  <TableRow key={apelo.id}>
-                    <TableCell>{apelo.nome}</TableCell>
-                    <TableCell>{renderDecisaoChip(apelo.decisao)}</TableCell>
-                    <TableCell>{apelo.data_direcionamento || '-'}</TableCell>
-                    <TableCell>{apelo.campus_iecg}</TableCell>
-                    <TableCell>{renderStatusChip(apelo.status)}</TableCell>
-                    <TableCell>
-                      <Button size="small" variant="outlined" onClick={() => abrirStatusDialog(apelo)}>Alterar status</Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Nome</TableCell>
+                      <TableCell>Decisão</TableCell>
+                      <TableCell>Data direcionamento</TableCell>
+                      <TableCell>Campus IECG</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Ações</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {apelosList.map((apelo) => (
+                      <TableRow key={apelo.id}>
+                        <TableCell>{apelo.nome}</TableCell>
+                        <TableCell>{renderDecisaoChip(apelo.decisao)}</TableCell>
+                        <TableCell>{apelo.data_direcionamento || '-'}</TableCell>
+                        <TableCell>{apelo.campus_iecg}</TableCell>
+                        <TableCell>{renderStatusChip(apelo.status)}</TableCell>
+                        <TableCell>
+                          <Button size="small" variant="outlined" onClick={() => abrirStatusDialog(apelo)}>Alterar status</Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </>
           )}

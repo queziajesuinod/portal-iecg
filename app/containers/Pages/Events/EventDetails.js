@@ -27,8 +27,9 @@ import {
 import {
   ArrowBack as BackIcon,
   Edit as EditIcon,
-  Delete as DeleteIcon,
+  Block as BlockIcon,
   Add as AddIcon,
+  Delete as DeleteIcon,
 } from '@material-ui/icons';
 import { useHistory, useParams } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
@@ -37,7 +38,6 @@ import {
   listarLotesPorEvento,
   criarLote,
   atualizarLote,
-  deletarLote,
   listarInscricoesPorEvento,
   listarFormasPagamento,
   criarFormaPagamento,
@@ -178,16 +178,19 @@ function EventDetails() {
     }
   };
 
-  const handleDeletarLote = async (loteId, nome) => {
-    if (window.confirm(`Tem certeza que deseja deletar o lote "${nome}"?`)) {
-      try {
-        await deletarLote(loteId);
-        setNotification('Lote deletado com sucesso!');
-        carregarDados();
-      } catch (error) {
-        console.error('Erro ao deletar lote:', error);
-        setNotification(error.message || 'Erro ao deletar lote');
-      }
+  const handleAlternarStatusLote = async (lote) => {
+    const acao = lote.isActive ? 'inativar' : 'reativar';
+    if (!window.confirm(`Deseja ${acao} o lote "${lote.name}"?`)) {
+      return;
+    }
+
+    try {
+      await atualizarLote(lote.id, { isActive: !lote.isActive });
+      setNotification(`Lote ${acao}do com sucesso!`);
+      carregarDados();
+    } catch (error) {
+      console.error('Erro ao atualizar status do lote:', error);
+      setNotification(error.message || 'Erro ao atualizar o lote');
     }
   };
 
@@ -454,12 +457,12 @@ function EventDetails() {
                           <EditIcon />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Deletar">
+                      <Tooltip title={lote.isActive ? 'Inativar Lote' : 'Reativar Lote'}>
                         <IconButton
                           size="small"
-                          onClick={() => handleDeletarLote(lote.id, lote.name)}
+                          onClick={() => handleAlternarStatusLote(lote)}
                         >
-                          <DeleteIcon />
+                          <BlockIcon />
                         </IconButton>
                       </Tooltip>
                     </TableCell>
@@ -495,7 +498,7 @@ function EventDetails() {
                     onClick={() => history.push(`/app/events/registrations/${inscricao.id}`)}
                   >
                     <TableCell>{inscricao.orderCode}</TableCell>
-                    <TableCell>{inscricao.batch?.name || '-'}</TableCell>
+                    <TableCell>{inscricao.batchName || inscricao.batch?.name || '-'}</TableCell>
                     <TableCell>{inscricao.quantity}</TableCell>
                     <TableCell>{formatarPreco(inscricao.finalPrice)}</TableCell>
                     <TableCell>{formatarDataHora(inscricao.createdAt)}</TableCell>
