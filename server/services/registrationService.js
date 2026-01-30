@@ -1,6 +1,17 @@
 const uuid = require('uuid');
 const {
-  Registration, RegistrationAttendee, Event, EventBatch, Coupon, FormField
+  Registration,
+  RegistrationAttendee,
+  Event,
+  EventBatch,
+  Coupon,
+  FormField,
+  PaymentOption,
+  RegistrationPayment,
+  User,
+  Perfil,
+  Permissao,
+  sequelize
 } = require('../models');
 const { isCountablePaymentStatus } = require('../constants/registrationStatuses');
 const orderCodeService = require('./orderCodeService');
@@ -95,6 +106,78 @@ async function prepararListaComCampos(registrations) {
   if (!Array.isArray(registrations)) return registrations;
   await Promise.all(registrations.map(reg => prepararRegistroComCampos(reg)));
   return registrations;
+}
+
+function normalizarValor(valor) {
+  const numero = Number(valor);
+  if (Number.isNaN(numero)) return 0;
+  return Number(numero.toFixed(2));
+}
+
+function calcularResumoPagamentos(registration, payments = []) {
+  const paidTotal = payments.reduce((sum, payment) => (
+    payment.status === 'confirmed' ? sum + Number(payment.amount || 0) : sum
+  ), 0);
+  const totalPago = normalizarValor(paidTotal);
+  const precoFinal = normalizarValor(registration.finalPrice || 0);
+  const remaining = normalizarValor(Math.max(0, precoFinal - totalPago));
+  const derivedStatus = remaining <= 0 && precoFinal > 0
+    ? 'confirmed'
+    : totalPago > 0
+      ? 'partial'
+      : 'pending';
+
+  return {
+    paidTotal: totalPago,
+    remaining,
+    derivedStatus
+  };
+}
+
+async function anexarResumoPagamentos(registration, options = {}) {
+  if (!registration) return registration;
+  const payments = await RegistrationPayment.findAll({
+    where: { registrationId: registration.id },
+    order: [['createdAt', 'ASC']],
+    transaction: options.transaction
+  });
+
+  const resumo = calcularResumoPagamentos(registration, payments);
+  registration.setDataValue('payments', payments);
+  registration.setDataValue('paidTotal', resumo.paidTotal);
+  registration.setDataValue('remaining', resumo.remaining);
+  registration.setDataValue('paymentStatusDerived', resumo.derivedStatus);
+  return resumo;
+}
+
+async function atualizarStatusPagamentoPorPagamentos(registration, options = {}) {
+  if (!registration) return null;
+  if (['cancelled', 'refunded'].includes(registration.paymentStatus)) {
+    return null;
+  }
+  const resumo = await anexarResumoPagamentos(registration, options);
+  if (!resumo) return null;
+  if (registration.paymentStatus !== resumo.derivedStatus) {
+    const statusAnterior = registration.paymentStatus;
+    registration.paymentStatus = resumo.derivedStatus;
+    await registration.save({ transaction: options.transaction });
+    await ajustarContadoresDeStatus(registration, statusAnterior);
+  }
+  return resumo;
+}
+
+async function usuarioPodeRegistrarPagamentoOffline(userId) {
+  if (!userId) return false;
+  const usuario = await User.findByPk(userId, {
+    include: [{
+      model: Perfil,
+      include: [{ model: Permissao, as: 'permissoes', through: { attributes: [] } }]
+    }]
+  });
+  if (!usuario) return false;
+  const permissoes = usuario.Perfil?.permissoes?.map((perm) => perm.nome) || [];
+  if (permissoes.includes('ADMIN_FULL_ACCESS')) return true;
+  return (usuario.Perfil?.descricao || '').toLowerCase().includes('admin');
 }
 
 async function contarInscritosPorLote(registrationId) {
@@ -238,7 +321,6 @@ async function processarInscricao(dadosInscricao) {
   const orderCode = await orderCodeService.gerarCodigoUnico();
 
   // 8. Buscar configuração de pagamento
-  const { PaymentOption } = require('../models');
   const paymentOption = await PaymentOption.findByPk(paymentOptionId);
 
   if (!paymentOption || !paymentOption.isActive) {
@@ -246,13 +328,27 @@ async function processarInscricao(dadosInscricao) {
   }
 
   // 8.1. Calcular valor final com juros (se houver parcelas)
-  let valorFinalComJuros = precoFinal;
+  const paymentMode = evento.registrationPaymentMode || 'SINGLE';
+  const valorInformado = normalizarValor(paymentData.amount || paymentData.valor || 0);
+  if (paymentMode === 'BALANCE_DUE' && valorInformado > 0) {
+    if (valorInformado > precoFinal) {
+      throw new Error('Valor do pagamento não pode ser maior que o total da inscrição');
+    }
+    if (evento.minDepositAmount && valorInformado < Number(evento.minDepositAmount)) {
+      throw new Error(`Valor mínimo de sinal é R$ ${Number(evento.minDepositAmount).toFixed(2).replace('.', ',')}`);
+    }
+  }
+
+  const valorBasePagamento = paymentMode === 'BALANCE_DUE' && valorInformado > 0
+    ? valorInformado
+    : precoFinal;
+  let valorFinalComJuros = valorBasePagamento;
   const parcelas = paymentData.installments || 1;
 
   if (paymentOption.paymentType === 'credit_card' && parcelas > 1 && paymentOption.interestRate > 0) {
     if (paymentOption.interestType === 'percentage') {
       // Juros percentual por parcela
-      valorFinalComJuros += precoFinal * (paymentOption.interestRate / 100) * (parcelas - 1);
+      valorFinalComJuros += valorBasePagamento * (paymentOption.interestRate / 100) * (parcelas - 1);
     } else {
       // Juros fixo por parcela
       valorFinalComJuros += paymentOption.interestRate * (parcelas - 1);
@@ -318,7 +414,7 @@ async function processarInscricao(dadosInscricao) {
     buyerData,
     originalPrice: precoOriginal,
     discountAmount: desconto,
-    finalPrice: valorFinalComJuros,
+    finalPrice: paymentMode === 'BALANCE_DUE' ? precoFinal : valorFinalComJuros,
     paymentStatus: paymentService.mapearStatusCielo(resultadoPagamento.status),
     paymentId: resultadoPagamento.paymentId,
     paymentMethod,
@@ -354,6 +450,21 @@ async function processarInscricao(dadosInscricao) {
   registration.attendees = attendees;
   await prepararRegistroComCampos(registration);
 
+  await RegistrationPayment.create({
+    id: uuid.v4(),
+    registrationId: registration.id,
+    channel: 'ONLINE',
+    method: paymentMethod,
+    amount: valorFinalComJuros,
+    status: paymentService.mapearStatusCielo(resultadoPagamento.status),
+    provider: 'cielo',
+    providerPaymentId: resultadoPagamento.paymentId,
+    providerPayload: resultadoPagamento.dadosCompletos,
+    pixQrCode: resultadoPagamento.qrCodeString || null,
+    pixQrCodeBase64: resultadoPagamento.qrCodeBase64 || null,
+    installments: paymentOption.paymentType === 'credit_card' ? parcelas : null
+  });
+
   // 11. Registrar transação de pagamento
   await paymentService.registrarTransacao(
     registration.id,
@@ -372,7 +483,7 @@ async function processarInscricao(dadosInscricao) {
   if (resultadoPagamento.status === 1) { // Authorized
     const captura = await paymentService.capturarPagamento(
       resultadoPagamento.paymentId,
-      paymentService.converterParaCentavos(precoFinal)
+      paymentService.converterParaCentavos(valorFinalComJuros)
     );
 
     if (captura.sucesso) {
@@ -382,6 +493,14 @@ async function processarInscricao(dadosInscricao) {
 
       await ajustarContadoresDeStatus(registration, statusAnteriorConfirmacao);
 
+      await RegistrationPayment.update(
+        {
+          status: 'confirmed',
+          providerPayload: captura.dadosCompletos || null
+        },
+        { where: { providerPaymentId: resultadoPagamento.paymentId } }
+      );
+
       await paymentService.registrarTransacao(
         registration.id,
         'capture',
@@ -389,6 +508,10 @@ async function processarInscricao(dadosInscricao) {
         captura
       );
     }
+  }
+
+  if (paymentMode === 'BALANCE_DUE') {
+    await atualizarStatusPagamentoPorPagamentos(registration);
   }
 
   return {
@@ -480,7 +603,7 @@ async function buscarInscricaoPorCodigo(orderCode) {
       {
         model: Event,
         as: 'event',
-        attributes: ['id', 'title', 'startDate', 'location']
+        attributes: ['id', 'title', 'startDate', 'location', 'registrationPaymentMode', 'minDepositAmount', 'maxPaymentCount']
       },
       {
         model: EventBatch,
@@ -511,6 +634,7 @@ async function buscarInscricaoPorCodigo(orderCode) {
   }
 
   await prepararRegistroComCampos(registration);
+  await anexarResumoPagamentos(registration);
 
   return registration;
 }
@@ -552,8 +676,215 @@ async function buscarInscricaoPorId(id) {
   }
 
   await prepararRegistroComCampos(registration);
+  await anexarResumoPagamentos(registration);
 
   return registration;
+}
+
+async function criarPagamentoOnline(registrationId, payload = {}) {
+  const registration = await Registration.findByPk(registrationId, {
+    include: [
+      {
+        model: Event,
+        as: 'event'
+      }
+    ]
+  });
+
+  if (!registration) {
+    throw new Error('Inscrição não encontrada');
+  }
+
+  if (registration.event?.registrationPaymentMode !== 'BALANCE_DUE') {
+    throw new Error('Evento não permite pagamentos parciais');
+  }
+
+  const resumoAtual = await anexarResumoPagamentos(registration);
+  const pagamentosExistentes = registration.getDataValue('payments') || [];
+  const remaining = resumoAtual?.remaining ?? normalizarValor(registration.finalPrice || 0);
+
+  const amount = normalizarValor(payload.amount || 0);
+  if (amount <= 0) {
+    throw new Error('Valor do pagamento deve ser maior que zero');
+  }
+
+  if (amount > remaining) {
+    throw new Error('Valor do pagamento não pode ser maior que o saldo restante');
+  }
+
+  if (registration.event?.minDepositAmount && resumoAtual?.paidTotal === 0) {
+    if (amount < Number(registration.event.minDepositAmount)) {
+      throw new Error(`Valor mínimo de sinal é R$ ${Number(registration.event.minDepositAmount).toFixed(2).replace('.', ',')}`);
+    }
+  }
+
+  if (registration.event?.maxPaymentCount && pagamentosExistentes.length >= registration.event.maxPaymentCount) {
+    throw new Error('Quantidade máxima de pagamentos atingida');
+  }
+
+  const paymentOption = await PaymentOption.findByPk(payload.paymentOptionId);
+  if (!paymentOption || !paymentOption.isActive) {
+    throw new Error('Forma de pagamento inválida ou inativa');
+  }
+  if (paymentOption.eventId && paymentOption.eventId !== registration.eventId) {
+    throw new Error('Forma de pagamento não pertence ao evento da inscrição');
+  }
+
+  const paymentData = payload.paymentData || {};
+  const parcelas = paymentData.installments || 1;
+  let valorFinalComJuros = amount;
+  if (paymentOption.paymentType === 'credit_card' && parcelas > 1 && paymentOption.interestRate > 0) {
+    if (paymentOption.interestType === 'percentage') {
+      valorFinalComJuros += amount * (paymentOption.interestRate / 100) * (parcelas - 1);
+    } else {
+      valorFinalComJuros += paymentOption.interestRate * (parcelas - 1);
+    }
+  }
+
+  const merchantOrderId = `${registration.orderCode}-P${pagamentosExistentes.length + 1}`;
+  let resultadoPagamento;
+  if (paymentOption.paymentType === 'pix') {
+    resultadoPagamento = await paymentService.criarTransacaoPix({
+      merchantOrderId,
+      customerName: registration.buyerData?.nome || registration.buyerData?.name || 'Cliente',
+      customerEmail: registration.buyerData?.email || 'sem-email@exemplo.com',
+      customerDocument: (registration.buyerData?.cpf || registration.buyerData?.documento || '00000000000').replace(/\D/g, ''),
+      amount: paymentService.converterParaCentavos(valorFinalComJuros)
+    });
+  } else if (paymentOption.paymentType === 'credit_card') {
+    const cardNumber = (paymentData.cardNumber || '').replace(/\D/g, '');
+    const expirationDate = paymentData.expirationDate || '';
+    let { brand } = paymentData;
+    if (!brand && cardNumber) {
+      brand = paymentService.detectarBandeira(cardNumber);
+    }
+    resultadoPagamento = await paymentService.criarTransacao({
+      merchantOrderId,
+      customerName: registration.buyerData?.nome || registration.buyerData?.name || 'Cliente',
+      customerEmail: registration.buyerData?.email || 'sem-email@exemplo.com',
+      customerDocument: (registration.buyerData?.cpf || registration.buyerData?.documento || '00000000000').replace(/\D/g, ''),
+      amount: paymentService.converterParaCentavos(valorFinalComJuros),
+      installments: parcelas,
+      cardNumber,
+      holder: paymentData.cardHolder || paymentData.holder,
+      expirationDate,
+      securityCode: paymentData.securityCode,
+      brand
+    });
+  } else {
+    throw new Error(`Tipo de pagamento não suportado: ${paymentOption.paymentType}`);
+  }
+
+  if (!resultadoPagamento.sucesso) {
+    throw new Error(`Erro no pagamento: ${resultadoPagamento.erro}`);
+  }
+
+  const paymentRecord = await RegistrationPayment.create({
+    id: uuid.v4(),
+    registrationId: registration.id,
+    channel: 'ONLINE',
+    method: paymentOption.paymentType,
+    amount: valorFinalComJuros,
+    status: paymentService.mapearStatusCielo(resultadoPagamento.status),
+    provider: 'cielo',
+    providerPaymentId: resultadoPagamento.paymentId,
+    providerPayload: resultadoPagamento.dadosCompletos,
+    pixQrCode: resultadoPagamento.qrCodeString || null,
+    pixQrCodeBase64: resultadoPagamento.qrCodeBase64 || null,
+    installments: paymentOption.paymentType === 'credit_card' ? parcelas : null
+  });
+
+  await paymentService.registrarTransacao(
+    registration.id,
+    'authorization',
+    resultadoPagamento.status.toString(),
+    resultadoPagamento
+  );
+
+  if (resultadoPagamento.status === 1) { // Authorized
+    const captura = await paymentService.capturarPagamento(
+      resultadoPagamento.paymentId,
+      paymentService.converterParaCentavos(valorFinalComJuros)
+    );
+
+    if (captura.sucesso) {
+      paymentRecord.status = 'confirmed';
+      paymentRecord.providerPayload = captura.dadosCompletos || paymentRecord.providerPayload;
+      await paymentRecord.save();
+      await paymentService.registrarTransacao(
+        registration.id,
+        'capture',
+        captura.status.toString(),
+        captura
+      );
+    }
+  }
+
+  await atualizarStatusPagamentoPorPagamentos(registration);
+
+  return {
+    pagamento: resultadoPagamento,
+    payment: paymentRecord
+  };
+}
+
+async function criarPagamentoOffline(registrationId, payload = {}, userId) {
+  const permitido = await usuarioPodeRegistrarPagamentoOffline(userId);
+  if (!permitido) {
+    throw new Error('Usuário não autorizado a registrar pagamento offline');
+  }
+
+  const registration = await Registration.findByPk(registrationId, {
+    include: [
+      {
+        model: Event,
+        as: 'event'
+      }
+    ]
+  });
+
+  if (!registration) {
+    throw new Error('Inscrição não encontrada');
+  }
+
+  const resumoAtual = await anexarResumoPagamentos(registration);
+  const remaining = resumoAtual?.remaining ?? normalizarValor(registration.finalPrice || 0);
+  const amount = normalizarValor(payload.amount || 0);
+
+  if (amount <= 0) {
+    throw new Error('Valor do pagamento deve ser maior que zero');
+  }
+
+  if (amount > remaining) {
+    throw new Error('Valor do pagamento não pode ser maior que o saldo restante');
+  }
+
+  const metodo = payload.method || 'manual';
+  if (!['cash', 'pos', 'transfer', 'manual'].includes(metodo)) {
+    throw new Error('Método de pagamento offline inválido');
+  }
+
+  return sequelize.transaction(async (transaction) => {
+    const paymentRecord = await RegistrationPayment.create({
+      id: uuid.v4(),
+      registrationId: registration.id,
+      channel: 'OFFLINE',
+      method: metodo,
+      amount,
+      status: 'confirmed',
+      provider: 'offline',
+      createdBy: userId,
+      confirmedBy: userId,
+      confirmedAt: new Date(),
+      notes: payload.notes || null
+    }, { transaction });
+
+    await atualizarStatusPagamentoPorPagamentos(registration, { transaction });
+
+    return {
+      payment: paymentRecord
+    };
+  });
 }
 
 /**
@@ -646,6 +977,10 @@ module.exports = {
   listarInscricoesPorEvento,
   buscarInscricaoPorCodigo,
   buscarInscricaoPorId,
+  criarPagamentoOnline,
+  criarPagamentoOffline,
   cancelarInscricao,
-  ajustarContadoresDeStatus
+  ajustarContadoresDeStatus,
+  atualizarStatusPagamentoPorPagamentos,
+  anexarResumoPagamentos
 };

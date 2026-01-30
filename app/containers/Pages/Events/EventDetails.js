@@ -71,6 +71,19 @@ function EventDetails() {
   const [loading, setLoading] = useState(true);
   const [notification, setNotification] = useState('');
 
+  const getStatusLabel = (status) => {
+    const labels = {
+      pending: 'Pendente',
+      authorized: 'Autorizado',
+      partial: 'Parcial',
+      confirmed: 'Confirmado',
+      denied: 'Negado',
+      cancelled: 'Cancelado',
+      refunded: 'Reembolsado'
+    };
+    return labels[status] || status;
+  };
+
   // Dialog de lote
   const [dialogLoteAberto, setDialogLoteAberto] = useState(false);
   const [loteEdicao, setLoteEdicao] = useState(null);
@@ -504,7 +517,7 @@ function EventDetails() {
                     <TableCell>{formatarDataHora(inscricao.createdAt)}</TableCell>
                     <TableCell align="center">
                       <Chip
-                        label={inscricao.paymentStatus}
+                        label={getStatusLabel(inscricao.paymentStatus)}
                         color={inscricao.paymentStatus === 'confirmed' ? 'primary' : 'default'}
                         size="small"
                       />
