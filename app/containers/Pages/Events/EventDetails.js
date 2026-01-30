@@ -71,6 +71,19 @@ function EventDetails() {
   const [loading, setLoading] = useState(true);
   const [notification, setNotification] = useState('');
 
+  const getStatusLabel = (status) => {
+    const labels = {
+      pending: 'Pendente',
+      authorized: 'Autorizado',
+      partial: 'Parcial',
+      confirmed: 'Confirmado',
+      denied: 'Negado',
+      cancelled: 'Cancelado',
+      refunded: 'Reembolsado'
+    };
+    return labels[status] || status;
+  };
+
   // Dialog de lote
   const [dialogLoteAberto, setDialogLoteAberto] = useState(false);
   const [loteEdicao, setLoteEdicao] = useState(null);
@@ -262,7 +275,8 @@ function EventDetails() {
     const traducoes = {
       credit_card: 'Cartão de Crédito',
       pix: 'PIX',
-      boleto: 'Boleto'
+      boleto: 'Boleto',
+      offline: 'Presencial'
     };
     return traducoes[tipo] || tipo;
   };
@@ -504,7 +518,7 @@ function EventDetails() {
                     <TableCell>{formatarDataHora(inscricao.createdAt)}</TableCell>
                     <TableCell align="center">
                       <Chip
-                        label={inscricao.paymentStatus}
+                        label={getStatusLabel(inscricao.paymentStatus)}
                         color={inscricao.paymentStatus === 'confirmed' ? 'primary' : 'default'}
                         size="small"
                       />
@@ -566,7 +580,9 @@ function EventDetails() {
                     <TableCell>
                       {pagamento.paymentType === 'credit_card'
                         ? `Até ${pagamento.maxInstallments}x`
-                        : 'À vista'}
+                        : pagamento.paymentType === 'offline'
+                          ? 'Presencial'
+                          : 'À vista'}
                     </TableCell>
                     <TableCell>
                       {pagamento.paymentType === 'credit_card' && pagamento.interestRate > 0
@@ -699,6 +715,7 @@ function EventDetails() {
                 <option value="credit_card">Cartão de Crédito</option>
                 <option value="pix">PIX</option>
                 <option value="boleto">Boleto</option>
+                <option value="offline">Presencial</option>
               </TextField>
             </Grid>
 

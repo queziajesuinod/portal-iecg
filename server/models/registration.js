@@ -8,6 +8,7 @@ module.exports = (sequelize) => {
       Registration.belongsTo(models.Coupon, { foreignKey: 'couponId', as: 'coupon' });
       Registration.hasMany(models.RegistrationAttendee, { foreignKey: 'registrationId', as: 'attendees' });
       Registration.hasMany(models.PaymentTransaction, { foreignKey: 'registrationId', as: 'transactions' });
+      Registration.hasMany(models.RegistrationPayment, { foreignKey: 'registrationId', as: 'payments' });
     }
   }
 
@@ -77,6 +78,7 @@ module.exports = (sequelize) => {
       type: DataTypes.ENUM(
         'pending',
         'authorized',
+        'partial',
         'confirmed',
         'denied',
         'cancelled',

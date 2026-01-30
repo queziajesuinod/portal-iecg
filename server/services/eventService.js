@@ -142,7 +142,10 @@ async function criarEvento(body, userId) {
     cep,
     latitude,
     longitude,
-    eventType
+    eventType,
+    registrationPaymentMode,
+    minDepositAmount,
+    maxPaymentCount
   } = body;
 
   if (!title) {
@@ -166,6 +169,9 @@ async function criarEvento(body, userId) {
     latitude,
     longitude,
     eventType: eventType || 'ACAMP',
+    registrationPaymentMode: registrationPaymentMode || 'SINGLE',
+    minDepositAmount: minDepositAmount || null,
+    maxPaymentCount: maxPaymentCount || null,
     currentRegistrations: 0,
     isActive: true,
     createdBy: userId
@@ -198,6 +204,9 @@ async function atualizarEvento(id, body) {
   event.latitude = body.latitude ?? event.latitude;
   event.longitude = body.longitude ?? event.longitude;
   event.eventType = body.eventType ?? event.eventType;
+  event.registrationPaymentMode = body.registrationPaymentMode ?? event.registrationPaymentMode;
+  event.minDepositAmount = body.minDepositAmount ?? event.minDepositAmount;
+  event.maxPaymentCount = body.maxPaymentCount ?? event.maxPaymentCount;
   event.isActive = body.isActive ?? event.isActive;
 
   await event.save();

@@ -131,6 +131,16 @@ export const cancelarInscricao = (id) => fetchWithAuth(`${API_URL}/api/admin/eve
   method: 'POST',
 });
 
+export const criarPagamentoInscricao = (id, dados) => fetchWithAuth(`${API_URL}/api/public/events/registrations/${id}/payments`, {
+  method: 'POST',
+  body: JSON.stringify(dados),
+});
+
+export const criarPagamentoOfflineInscricao = (id, dados) => fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}/payments/offline`, {
+  method: 'POST',
+  body: JSON.stringify(dados),
+});
+
 // ===== FORMAS DE PAGAMENTO =====
 
 export const listarFormasPagamento = (eventId) => fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/payment-options`);

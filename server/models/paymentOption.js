@@ -23,7 +23,7 @@ module.exports = (sequelize) => {
       }
     },
     paymentType: {
-      type: DataTypes.ENUM('credit_card', 'pix', 'boleto'),
+      type: DataTypes.ENUM('credit_card', 'pix', 'boleto', 'offline'),
       allowNull: false,
       comment: 'Tipo de pagamento'
     },
