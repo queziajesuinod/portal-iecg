@@ -7,7 +7,13 @@ import dummy from 'dan-api/dummy/dummyContents';
 import useStyles from './sidebar-jss';
 import SidebarContent from './SidebarContent';
 
-function Sidebar(props) {
+function Sidebar({
+  open,
+  toggleDrawerOpen,
+  loadTransition,
+  leftSidebar = true,
+  dataMenu
+}) {
   const { classes, cx } = useStyles();
   const [status, setStatus] = useState(dummy.user.status);
   const [anchorEl, setAnchorEl] = useState(null);
@@ -45,14 +51,6 @@ function Sidebar(props) {
     setStatus(st);
     handleClose();
   };
-
-  const {
-    open,
-    toggleDrawerOpen,
-    loadTransition,
-    leftSidebar,
-    dataMenu
-  } = props;
 
   const lgDown = useMediaQuery(theme => theme.breakpoints.down('lg'));
   const lgUp = useMediaQuery(theme => theme.breakpoints.up('lg'));
@@ -112,16 +110,11 @@ function Sidebar(props) {
 }
 
 Sidebar.propTypes = {
-
   toggleDrawerOpen: PropTypes.func.isRequired,
   loadTransition: PropTypes.func.isRequired,
   open: PropTypes.bool.isRequired,
   leftSidebar: PropTypes.bool,
   dataMenu: PropTypes.array.isRequired,
-};
-
-Sidebar.defaultProps = {
-  leftSidebar: true
 };
 
 export default Sidebar;

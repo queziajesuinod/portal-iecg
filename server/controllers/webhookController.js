@@ -101,9 +101,7 @@ const WebhookController = {
         registration.cieloResponse = statusCielo.dadosCompletos;
         await registration.save();
 
-        if (novoStatus === 'confirmed') {
-          await registrationService.atualizarContadoresAoConfirmarInscricao(registration, statusAnterior);
-        }
+        await registrationService.ajustarContadoresDeStatus(registration, statusAnterior);
 
         console.log(`🔁 [WEBHOOK CIELO] Status atualizado: ${statusAnterior} → ${novoStatus}`);
 

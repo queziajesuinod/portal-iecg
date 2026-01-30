@@ -183,6 +183,7 @@ GET    /api/public/events/registrations/:orderCode  - Consultar inscrição
 - ✅ Desconto em porcentagem ou valor fixo
 - ✅ Limite de uso configurável
 - ✅ Validade temporal
+- ✅ Quantidade mínima de ingressos para ativar o cupom
 - ✅ Controle de uso
 - ✅ Validação completa
 

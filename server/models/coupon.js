@@ -1,4 +1,3 @@
-'use strict';
 const { Model, DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
@@ -38,6 +37,11 @@ module.exports = (sequelize) => {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
       comment: 'Se percentage: 0-100, se fixed: valor em reais'
+    },
+    minimumQuantity: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: 'Quantidade mínima de ingressos necessária para ativar o cupom'
     },
     maxUses: {
       type: DataTypes.INTEGER,

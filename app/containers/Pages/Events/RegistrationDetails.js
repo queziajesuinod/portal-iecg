@@ -36,6 +36,43 @@ function RegistrationDetails() {
   const [notification, setNotification] = useState('');
   const [dialogCancelar, setDialogCancelar] = useState(false);
 
+  const getFieldRows = (data, labeledFields, fallbackLabels = {}) => {
+    if (labeledFields && labeledFields.length) {
+      return labeledFields;
+    }
+
+    return Object.entries(data || {}).map(([key, value]) => ({
+      fieldName: key,
+      label: fallbackLabels[key] || key,
+      value
+    }));
+  };
+
+  const renderFieldTable = (fields) => {
+    if (!fields || fields.length === 0) {
+      return (
+        <Typography variant="body2" color="textSecondary">
+          Nenhum dado registrado
+        </Typography>
+      );
+    }
+
+    return (
+      <Table size="small">
+        <TableBody>
+          {fields.map((field) => (
+            <TableRow key={field.fieldName}>
+              <TableCell>
+                <strong>{field.label}:</strong>
+              </TableCell>
+              <TableCell>{field.value ?? '-'}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
+
   const carregarInscricao = useCallback(async () => {
     try {
       setLoading(true);
@@ -101,6 +138,13 @@ function RegistrationDetails() {
   }
 
   const title = brand.name + ' - Detalhes da Inscrição';
+  const loteNome = inscricao.batchName
+    || inscricao.attendees?.[0]?.batch?.name
+    || '-';
+  const lotePrecoRaw = inscricao.batchPrice ?? inscricao.attendees?.[0]?.batch?.price;
+  const lotePreco = lotePrecoRaw != null ? Number(lotePrecoRaw) : null;
+
+  const buyerFields = getFieldRows(inscricao.buyerData, inscricao.buyerLabeledFields);
 
   return (
     <div>
@@ -148,7 +192,7 @@ function RegistrationDetails() {
                     <Typography variant="body2" color="textSecondary">
                       <strong>Lote:</strong>
                     </Typography>
-                    <Typography variant="body1">{inscricao.batch?.name || '-'}</Typography>
+                    <Typography variant="body1">{loteNome}</Typography>
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <Typography variant="body2" color="textSecondary">
@@ -175,24 +219,7 @@ function RegistrationDetails() {
                   Dados do Comprador
                 </Typography>
                 <Divider style={{ marginBottom: 16 }} />
-                {inscricao.buyerData ? (
-                  <Table size="small">
-                    <TableBody>
-                      {Object.entries(inscricao.buyerData).map(([key, value]) => (
-                        <TableRow key={key}>
-                          <TableCell>
-                            <strong>{key}:</strong>
-                          </TableCell>
-                          <TableCell>{value}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  <Typography variant="body2" color="textSecondary">
-                    Nenhum dado registrado
-                  </Typography>
-                )}
+                {renderFieldTable(buyerFields)}
               </CardContent>
             </Card>
           </Grid>
@@ -209,13 +236,15 @@ function RegistrationDetails() {
                   <TableBody>
                     <TableRow>
                       <TableCell><strong>Valor do Lote:</strong></TableCell>
-                      <TableCell>{formatarPreco(inscricao.batchPrice)}</TableCell>
+                      <TableCell>
+                        {lotePreco != null ? formatarPreco(lotePreco) : '-'}
+                      </TableCell>
                     </TableRow>
-                    {inscricao.couponCode && (
+                    {inscricao.coupon?.code && (
                       <>
                         <TableRow>
-                          <TableCell><strong>Cupom:</strong></TableCell>
-                          <TableCell>{inscricao.couponCode}</TableCell>
+                          <TableCell><strong>Cupom utilizado:</strong></TableCell>
+                          <TableCell>{inscricao.coupon.code}</TableCell>
                         </TableRow>
                         <TableRow>
                           <TableCell><strong>Desconto:</strong></TableCell>
@@ -259,18 +288,7 @@ function RegistrationDetails() {
                               Inscrito #{attendee.attendeeNumber}
                             </Typography>
                             <Divider style={{ marginBottom: 8 }} />
-                            <Table size="small">
-                              <TableBody>
-                                {Object.entries(attendee.attendeeData || {}).map(([key, value]) => (
-                                  <TableRow key={key}>
-                                    <TableCell>
-                                      <strong>{key}:</strong>
-                                    </TableCell>
-                                    <TableCell>{value}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
+                            {renderFieldTable(getFieldRows(attendee.attendeeData, attendee.labeledData))}
                           </CardContent>
                         </Card>
                       </Grid>
