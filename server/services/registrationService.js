@@ -8,6 +8,7 @@ const {
   FormField,
   PaymentOption,
   RegistrationPayment,
+  PaymentTransaction,
   User,
   Perfil,
   Permissao,
@@ -155,6 +156,74 @@ async function anexarResumoPagamentos(registration, options = {}) {
   return resumo;
 }
 
+async function sincronizarPagamentosCielo(registration, options = {}) {
+  if (!registration || !registration.id) {
+    return;
+  }
+
+  const pagamentosCielo = await RegistrationPayment.findAll({
+    where: {
+      registrationId: registration.id,
+      provider: 'cielo',
+      method: 'pix',
+      providerPaymentId: { [Op.ne]: null },
+      status: { [Op.in]: ['pending', 'authorized'] }
+    },
+    transaction: options.transaction
+  });
+
+  if (!pagamentosCielo.length) {
+    return;
+  }
+
+  await Promise.all(pagamentosCielo.map(async (payment) => {
+    const consulta = await paymentService.consultarPagamento(payment.providerPaymentId);
+    if (!consulta.sucesso) {
+      console.warn(`[registrationService] Falha ao consultar pagamento PIX ${payment.providerPaymentId}: ${consulta.erro}`);
+      return;
+    }
+
+    const novoStatus = paymentService.mapearStatusCielo(consulta.status);
+    if (novoStatus === payment.status) {
+      return;
+    }
+
+    payment.status = novoStatus;
+    payment.providerPayload = consulta.dadosCompletos || payment.providerPayload;
+    if (novoStatus === 'confirmed' && !payment.confirmedAt) {
+      payment.confirmedAt = new Date();
+    }
+
+    await payment.save({ transaction: options.transaction });
+    await atualizarTransacoesCielo(payment.providerPaymentId, consulta, options);
+    console.info(`[registrationService] PIX ${payment.providerPaymentId} atualizado para ${novoStatus}`);
+  }));
+}
+
+async function atualizarTransacoesCielo(paymentId, consulta, options = {}) {
+  if (!paymentId || !consulta) {
+    return;
+  }
+
+  const payload = consulta.dadosCompletos || null;
+  const statusValue = consulta.status !== undefined && consulta.status !== null
+    ? consulta.status.toString()
+    : null;
+
+  await PaymentTransaction.update(
+    {
+      status: statusValue || undefined,
+      responseData: payload
+    },
+    {
+      where: { cieloPaymentId: paymentId },
+      transaction: options.transaction
+    }
+  );
+
+  console.info(`[registrationService] PaymentTransaction(s) para ${paymentId} atualizados`);
+}
+
 async function contarInscritosPorLote(registrationId) {
   const attendees = await RegistrationAttendee.findAll({
     where: { registrationId },
@@ -220,6 +289,7 @@ async function atualizarStatusPagamentoPorPagamentos(registration, options = {})
   if (['cancelled', 'refunded'].includes(registration.paymentStatus)) {
     return null;
   }
+  await sincronizarPagamentosCielo(registration, options);
   const resumo = await anexarResumoPagamentos(registration, options);
   if (!resumo) return null;
   if (resumo.derivedStatus === 'denied') {
