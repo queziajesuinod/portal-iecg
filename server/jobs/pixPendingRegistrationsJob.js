@@ -32,6 +32,17 @@ async function checkPixPendingRegistrations() {
   }
 
   await Promise.all(pending.map(async (registration) => {
+    try {
+      await registrationService.atualizarStatusPagamentoPorPagamentos(registration);
+    } catch (error) {
+      console.error(`[pixPendingJob] Falha ao validar pagamento PIX para ${registration.orderCode}`, error);
+    }
+
+    if (registration.paymentStatus !== 'pending') {
+      console.info(`[pixPendingJob] Inscrição ${registration.orderCode} já atualizada para ${registration.paymentStatus}`);
+      return;
+    }
+
     const statusAnterior = registration.paymentStatus;
     registration.set('paymentStatus', 'cancelled');
     await registration.save();
