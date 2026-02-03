@@ -58,14 +58,14 @@ module.exports = [
         name: 'Gerenciar Eventos',
         link: '/app/events',
         icon: 'ion-ios-list-box-outline',
-        permission: 'EVENTOS_LISTAR'
+        permission: 'EVENTS_ACESS'
       },
       {
         key: 'cuponsEventos',
         name: 'Cupons de Desconto',
         link: '/app/cupons',
         icon: 'ion-ios-pricetag-outline',
-        permission: 'EVENTOS_LISTAR'
+        permission: 'EVENTS_ACESS'
       }
     ]
   },

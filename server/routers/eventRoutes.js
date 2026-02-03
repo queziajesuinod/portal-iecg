@@ -6,9 +6,14 @@ const couponController = require('../controllers/couponController');
 const formFieldController = require('../controllers/formFieldController');
 const registrationController = require('../controllers/registrationController');
 const paymentOptionController = require('../controllers/paymentOptionController');
+const requirePermission = require('../middlewares/requirePermission');
+const requireEventAccess = requirePermission(['EVENTS_ACESS', 'EVENTS_ACCESS', 'EVENTOS_LISTAR']);
+
 
 // Middleware de autenticação (assumindo que já existe)
 // const { authenticate } = require('../middlewares/auth');
+
+router.use(requireEventAccess);
 
 // ============= CUPONS (ANTES DE /:id) =============
 router.get('/coupons', couponController.listar);
