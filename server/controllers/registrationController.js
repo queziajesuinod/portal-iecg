@@ -13,8 +13,27 @@ async function listar(req, res) {
 
 async function listarPorEvento(req, res) {
   try {
-    const inscricoes = await registrationService.listarInscricoesPorEvento(req.params.eventId);
-    res.status(200).json(inscricoes);
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const perPage = Math.min(Math.max(parseInt(req.query.perPage, 10) || 20, 1), 100);
+    const offset = (page - 1) * perPage;
+    const filters = {};
+    ['orderCode', 'buyerName', 'buyerDocument', 'paymentStatus', 'dateFrom', 'dateTo'].forEach((key) => {
+      const value = req.query[key];
+      if (value && value !== 'undefined') {
+        filters[key] = value;
+      }
+    });
+    const { rows, count } = await registrationService.listarInscricoesPorEvento(req.params.eventId, {
+      limit: perPage,
+      offset,
+      filters
+    });
+    res.status(200).json({
+      records: rows,
+      total: count,
+      page,
+      perPage
+    });
   } catch (err) {
     console.error('Erro ao listar inscrições do evento:', err);
     res.status(500).json({ message: 'Erro ao listar inscrições' });
@@ -108,6 +127,20 @@ async function verificarStatus(req, res) {
   }
 }
 
+async function recalcularStatus(req, res) {
+  try {
+    const registration = await registrationService.buscarInscricaoPorId(req.params.id);
+    await registrationService.atualizarStatusPagamentoPorPagamentos(registration);
+    res.status(200).json({
+      message: 'Status recalculado com sucesso',
+      paymentStatus: registration.paymentStatus
+    });
+  } catch (err) {
+    console.error('Erro ao recalcular status da inscrição:', err);
+    res.status(400).json({ message: err.message });
+  }
+}
+
 async function criarPagamento(req, res) {
   try {
     const resultado = await registrationService.criarPagamentoOnline(req.params.id, req.body || {});
@@ -120,9 +153,19 @@ async function criarPagamento(req, res) {
 async function criarPagamentoOffline(req, res) {
   try {
     const userId = req.user?.userId || req.user?.id;
-    const resultado = await registrationService.criarPagamentoOffline(req.params.id, req.body || {}, userId);
+    const resultado = await registrationService.criarPagamentoOffline(req.params.id, userId, req.body || {});
     res.status(201).json(resultado);
   } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+}
+
+async function obterInfoCancelamento(req, res) {
+  try {
+    const info = await registrationService.obterInfoCancelamento(req.params.id);
+    res.status(200).json(info);
+  } catch (err) {
+    console.error('Erro ao obter info de cancelamento:', err);
     res.status(400).json({ message: err.message });
   }
 }
@@ -135,6 +178,8 @@ module.exports = {
   processar,
   buscarPorCodigo,
   verificarStatus,
+  obterInfoCancelamento,
+  recalcularStatus,
   criarPagamento,
   criarPagamentoOffline
 };

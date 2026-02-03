@@ -27,7 +27,8 @@ import {
   ArrowBack as BackIcon,
   Cancel as CancelIcon,
   Receipt as ReceiptIcon,
-  Add as AddIcon
+  Add as AddIcon,
+  Replay as ReplayIcon
 } from '@material-ui/icons';
 import { useHistory, useParams } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
@@ -36,7 +37,8 @@ import {
   cancelarInscricao,
   listarFormasPagamento,
   criarPagamentoInscricao,
-  criarPagamentoOfflineInscricao
+  criarPagamentoOfflineInscricao,
+  recalcularStatusInscricao
 } from '../../../api/eventsApi';
 import { getStoredPermissions } from '../../../utils/permissions';
 import Notification from '../../../components/Notification/Notification';
@@ -51,6 +53,7 @@ function RegistrationDetails() {
   const [paymentOptions, setPaymentOptions] = useState([]);
   const [dialogNovoPagamento, setDialogNovoPagamento] = useState(false);
   const [dialogPagamentoOffline, setDialogPagamentoOffline] = useState(false);
+  const [recalculatingPayment, setRecalculatingPayment] = useState(false);
   const [formPagamento, setFormPagamento] = useState({
     amount: '',
     paymentOptionId: '',
@@ -201,6 +204,20 @@ function RegistrationDetails() {
     } catch (error) {
       console.error('Erro ao registrar pagamento presencial:', error);
       setNotification(error.response?.data?.message || error.message || 'Erro ao registrar pagamento presencial');
+    }
+  };
+  
+  const handleRecalcularStatus = async () => {
+    setRecalculatingPayment(true);
+    try {
+      await recalcularStatusInscricao(id);
+      setNotification('Status recalculado com sucesso');
+      carregarInscricao();
+    } catch (error) {
+      console.error('Erro ao recalcular status da inscrição:', error);
+      setNotification(error.message || 'Erro ao recalcular status da inscrição');
+    } finally {
+      setRecalculatingPayment(false);
     }
   };
 
@@ -575,6 +592,15 @@ function RegistrationDetails() {
                 onClick={() => history.goBack()}
               >
                 Voltar
+              </Button>
+              <Button
+                variant="outlined"
+                color="primary"
+                startIcon={<ReplayIcon />}
+                onClick={handleRecalcularStatus}
+                disabled={recalculatingPayment}
+              >
+                Recalcular status de pagamento
               </Button>
               {paymentStatusLabel === 'confirmed' && (
                 <Button

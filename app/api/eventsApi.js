@@ -25,7 +25,7 @@ const fetchWithAuth = async (url, options = {}) => {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(url, {
+const response = await fetch(url, {
     ...options,
     headers,
   });
@@ -35,6 +35,9 @@ const fetchWithAuth = async (url, options = {}) => {
     throw new Error(error.message || `Erro ${response.status}`);
   }
 
+  if (response.status === 204 || response.status === 205) {
+    return null;
+  }
   return response.json();
 };
 
@@ -58,6 +61,10 @@ export const atualizarEvento = (id, dados) => fetchWithAuth(`${API_URL}/api/admi
 
 export const deletarEvento = (id) => fetchWithAuth(`${API_URL}/api/admin/events/${id}`, {
   method: 'DELETE',
+});
+
+export const duplicarEvento = (id) => fetchWithAuth(`${API_URL}/api/admin/events/${id}/duplicate`, {
+  method: 'POST',
 });
 
 // ===== LOTES =====
@@ -123,13 +130,19 @@ export const deletarCampo = (id) => fetchWithAuth(`${API_URL}/api/admin/events/f
 
 export const listarInscricoes = () => fetchWithAuth(`${API_URL}/api/admin/events/registrations`);
 
-export const listarInscricoesPorEvento = (eventId) => fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/registrations`);
+export const listarInscricoesPorEvento = (eventId, params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  const url = `${API_URL}/api/admin/events/${eventId}/registrations${query ? `?${query}` : ''}`;
+  return fetchWithAuth(url);
+};
 
 export const buscarInscricao = (id) => fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}`);
 
 export const cancelarInscricao = (id) => fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}/cancel`, {
   method: 'POST',
 });
+
+export const obterInfoCancelamentoInscricao = (id) => fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}/cancel-info`);
 
 export const criarPagamentoInscricao = (id, dados) => fetchWithAuth(`${API_URL}/api/public/events/registrations/${id}/payments`, {
   method: 'POST',
@@ -139,6 +152,10 @@ export const criarPagamentoInscricao = (id, dados) => fetchWithAuth(`${API_URL}/
 export const criarPagamentoOfflineInscricao = (id, dados) => fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}/payments/offline`, {
   method: 'POST',
   body: JSON.stringify(dados),
+});
+
+export const recalcularStatusInscricao = (id) => fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}/recalculate-status`, {
+  method: 'POST'
 });
 
 // ===== FORMAS DE PAGAMENTO =====

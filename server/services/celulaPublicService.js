@@ -1,25 +1,26 @@
 const { Celula } = require('../models');
 const { Op } = require('sequelize');
+const webhookEmitter = require('./webhookEmitter');
 
-class CelulaPublicService {
-  _sanitizarCelular(valor) {
-    if (!valor) return '';
-    return String(valor).replace(/\D/g, '');
+const sanitizeCelular = (valor) => {
+  if (!valor) return '';
+  return String(valor).replace(/\D/g, '');
+};
+
+const preparePayload = (dados = {}) => {
+  const payload = { ...dados };
+  if (Object.prototype.hasOwnProperty.call(payload, 'cel_lider')) {
+    payload.cel_lider = sanitizeCelular(payload.cel_lider);
   }
-
-  _prepararPayload(dados = {}) {
-    const payload = { ...dados };
-    if (Object.prototype.hasOwnProperty.call(payload, 'cel_lider')) {
-      payload.cel_lider = this._sanitizarCelular(payload.cel_lider);
-    }
-    if (Object.prototype.hasOwnProperty.call(payload, 'celula') && payload.celula) {
-      payload.celula = String(payload.celula).trim();
-    }
-    return payload;
+  if (Object.prototype.hasOwnProperty.call(payload, 'celula') && payload.celula) {
+    payload.celula = String(payload.celula).trim();
   }
+  return payload;
+};
 
+const CelulaPublicService = {
   async buscarPorCampos(campos = {}) {
-    const payload = this._prepararPayload(campos);
+    const payload = preparePayload(campos);
     const where = {};
     Object.keys(payload).forEach((key) => {
       const value = payload[key];
@@ -33,23 +34,31 @@ class CelulaPublicService {
       throw new Error('Informe ao menos um campo para identificar a celula.');
     }
 
-    return await Celula.findOne({ where });
-  }
+    return Celula.findOne({ where });
+  },
 
   async criar(dados = {}) {
     if (!dados.celula) {
       throw new Error('Nome da celula (celula) e obrigatorio');
     }
-    const payload = this._prepararPayload(dados);
-    return await Celula.create(payload);
-  }
+    const payload = preparePayload(dados);
+    const created = await Celula.create(payload);
+    webhookEmitter.emit('celula.created', {
+      id: created.id,
+      nome: created.celula,
+      bairro: created.bairro,
+      rede: created.rede,
+      lider: created.lider
+    });
+    return created;
+  },
 
   async buscarPorContato(contato) {
     if (!contato) {
       throw new Error('Parametro de contato (email ou cel_lider) e obrigatorio');
     }
 
-    const contatoSanitizado = this._sanitizarCelular(contato);
+    const contatoSanitizado = sanitizeCelular(contato);
     const isTelefone = contatoSanitizado.length >= 8;
 
     const celulas = await Celula.findAll({
@@ -68,7 +77,7 @@ class CelulaPublicService {
     }
 
     return celulas;
-  }
+  },
 
   async atualizar(id, dados = {}) {
     if (!id) {
@@ -83,15 +92,19 @@ class CelulaPublicService {
       throw new Error('Celula nao encontrada');
     }
 
-    // Evita sobrescrever o ID
-    const { id: _, createdAt, updatedAt, ...payload } = dados;
+    const { id: _, createdAt, updatedAt, ...rest } = dados;
+    const payload = preparePayload(rest);
 
-    if (Object.prototype.hasOwnProperty.call(payload, 'cel_lider')) {
-      payload.cel_lider = this._sanitizarCelular(payload.cel_lider);
-    }
-
-    return await celula.update(payload);
+    const updated = await celula.update(payload);
+    webhookEmitter.emit('celula.updated', {
+      id: updated.id,
+      nome: updated.celula,
+      bairro: updated.bairro,
+      rede: updated.rede,
+      lider: updated.lider
+    });
+    return updated;
   }
-}
+};
 
-module.exports = new CelulaPublicService();
+module.exports = CelulaPublicService;

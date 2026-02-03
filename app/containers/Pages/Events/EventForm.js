@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
 import {
+  Box,
   Grid,
   TextField,
   Button,
@@ -20,6 +21,14 @@ import { criarEvento, atualizarEvento, buscarEvento } from '../../../api/eventsA
 import { fetchGeocode } from '../../../utils/googleGeocode';
 import { EVENT_TYPE_OPTIONS } from '../../../constants/eventTypes';
 
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+const toDataUrl = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(reader.result);
+  reader.onerror = (err) => reject(err);
+  reader.readAsDataURL(file);
+});
+
 function EventForm() {
   const history = useHistory();
   const { id } = useParams();
@@ -28,6 +37,7 @@ function EventForm() {
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState('');
   const [geoLoading, setGeoLoading] = useState(false);
+  const [coverPreview, setCoverPreview] = useState('');
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -49,6 +59,14 @@ function EventForm() {
     minDepositAmount: '',
     maxPaymentCount: ''
   });
+
+  useEffect(() => {
+    if (formData.imageUrl) {
+      setCoverPreview(formData.imageUrl);
+    } else {
+      setCoverPreview('');
+    }
+  }, [formData.imageUrl]);
 
   async function carregarEvento() {
     try {
@@ -98,6 +116,23 @@ function EventForm() {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+  };
+
+  const handleCoverFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_IMAGE_SIZE) {
+      setNotification('Imagem ultrapassa o limite de 10MB.');
+      return;
+    }
+    try {
+      const base64 = await toDataUrl(file);
+      setCoverPreview(base64);
+      setFormData(prev => ({ ...prev, imageUrl: base64 }));
+    } catch (error) {
+      console.error('Erro ao ler imagem:', error);
+      setNotification('Não foi possível ler a imagem selecionada.');
+    }
   };
 
   const handleBuscarCoordenadas = async () => {
@@ -426,15 +461,38 @@ function EventForm() {
             </Grid>
 
             <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="URL da Imagem"
-                name="imageUrl"
-                value={formData.imageUrl}
-                onChange={handleChange}
+              <Typography variant="subtitle2">Imagem de capa</Typography>
+              <Typography variant="body2" color="textSecondary" gutterBottom>
+                Selecionar imagem (obrigatório). Tam. máx. 10MB | Resolução recomendada 1280x720.
+              </Typography>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleCoverFileChange}
                 disabled={loading}
-                helperText="URL da imagem de capa do evento"
+                style={{ marginTop: 8 }}
               />
+              {coverPreview && (
+                <Box mt={2} display="flex" flexDirection="column" gap={1}>
+                  <Typography variant="caption">Prévia</Typography>
+                  <Box
+                    sx={{
+                      width: '100%',
+                      maxWidth: 480,
+                      height: 270,
+                      border: '1px solid rgba(0,0,0,0.2)',
+                      borderRadius: 4,
+                      overflow: 'hidden'
+                    }}
+                  >
+                    <img
+                      src={coverPreview}
+                      alt="Prévia da imagem"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  </Box>
+                </Box>
+              )}
             </Grid>
 
             <Grid item xs={12}>

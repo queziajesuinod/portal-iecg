@@ -61,6 +61,20 @@ async function remover(req, res) {
   }
 }
 
+async function duplicar(req, res) {
+  try {
+    const userId = req.user?.userId || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ message: 'Usuário não autenticado' });
+    }
+    const novoEvento = await eventService.duplicarEvento(req.params.id, userId);
+    return res.status(201).json(novoEvento);
+  } catch (err) {
+    console.error('Erro ao duplicar evento:', err);
+    return res.status(400).json({ message: err.message });
+  }
+}
+
 // Rotas públicas
 async function listarPublicos(req, res) {
   try {
@@ -89,5 +103,6 @@ module.exports = {
   remover,
   listarPublicos,
   buscarPublicoPorId,
-  estatisticas
+  estatisticas,
+  duplicar
 };

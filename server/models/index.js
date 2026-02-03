@@ -1,4 +1,5 @@
 'use strict';
+/* eslint-disable import/no-dynamic-require */
 
 const fs = require('fs'); // Declarado uma única vez
 const path = require('path');
@@ -8,9 +9,10 @@ dotenv.config();
 
 const basename = path.basename(__filename);
 const env = process.env.NODE_ENV || 'development';
-const config = require(__dirname + '/../config/config.js')[env];
+const config = require(path.join(__dirname, '..', 'config', 'config.js'))[env];
 const db = {};
 
+const enableSequelizeLogging = process.env.SEQUELIZE_LOGGING === 'true';
 const sequelize = new Sequelize(
   config.database,
   config.username,
@@ -20,6 +22,7 @@ const sequelize = new Sequelize(
     port: config.port,
     dialect: config.dialect,
     dialectOptions: config.dialectOptions,
+    logging: enableSequelizeLogging ? (msg) => console.debug(`[Sequelize] ${msg}`) : false,
     define: {
       schema: process.env.DB_SCHEMA || 'dev_iecg' // 👈 Isso aplica o schema para todos os models por padrão
     }
