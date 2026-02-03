@@ -10,6 +10,8 @@ const PERMISSOES = [
   { nome: 'MIA_CADASTRAR', descricao: 'Cadastrar registros do MIA' },
   { nome: 'CELULA_LISTAR', descricao: 'Listar celulas' },
   { nome: 'CELULA_CADASTRAR', descricao: 'Cadastrar celulas' },
+  { nome: 'EVENTOS_LISTAR', descricao: 'Acessar o módulo de eventos (listagem)' },
+  { nome: 'EVENTS_ACESS', descricao: 'Acessar o módulo de eventos (API)' },
   { nome: 'ADMIN_PERFIS', descricao: 'Gerenciar perfis e permissoes' },
   { nome: 'ADMIN_USUARIOS', descricao: 'Cadastrar usuarios' },
   { nome: 'ADMIN_FULL_ACCESS', descricao: 'Acesso total ao menu e rotas' },
