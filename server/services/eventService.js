@@ -9,6 +9,7 @@ const {
   User,
   sequelize,
 } = require("../models");
+const { Op } = require("sequelize");
 const webhookEmitter = require("./webhookEmitter");
 
 const camposPadraoComprador = [
@@ -75,7 +76,7 @@ async function garantirCamposBasicosDoComprador(eventId) {
 // ============= EVENT CRUD =============
 
 async function listarEventos() {
-  return Event.findAll({
+  const eventos = await Event.findAll({
     include: [
       {
         model: User,
@@ -90,6 +91,31 @@ async function listarEventos() {
     ],
     order: [["createdAt", "DESC"]],
   });
+
+  const countableStatuses = ['pending', 'confirmed'];
+  const registrationsTotal = await Registration.findAll({
+    where: {
+      paymentStatus: { [Op.in]: countableStatuses },
+    },
+    attributes: [
+      "eventId",
+      [sequelize.fn("SUM", sequelize.col("quantity")), "totalQuantity"],
+    ],
+    group: ["eventId"],
+    raw: true,
+  });
+
+  const totalsByEvent = registrationsTotal.reduce((acc, row) => {
+    acc[row.eventId] = Number(row.totalQuantity || 0);
+    return acc;
+  }, {});
+
+  eventos.forEach((event) => {
+    const countableRegistrations = totalsByEvent[event.id] || 0;
+    event.setDataValue("currentRegistrations", countableRegistrations);
+  });
+
+  return eventos;
 }
 
 async function obterResumoInscricoesPorEvento(eventId) {

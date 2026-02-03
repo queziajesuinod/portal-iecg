@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { Registration, RegistrationPayment } = require('../models');
+const { Registration, RegistrationPayment, Event } = require('../models');
 const registrationService = require('../services/registrationService');
 
 const parsedThreshold = Number(process.env.PIX_PENDING_TIMEOUT_MINUTES);
@@ -24,6 +24,13 @@ async function checkPixPendingRegistrations() {
       paymentStatus: 'pending',
       createdAt: { [Op.lt]: cutoff }
     },
+    include: [
+      {
+        model: Event,
+        as: 'event',
+        attributes: ['id', 'registrationPaymentMode']
+      }
+    ],
     order: [['createdAt', 'ASC']]
   });
 
@@ -43,11 +50,6 @@ async function checkPixPendingRegistrations() {
       return;
     }
 
-    const statusAnterior = registration.paymentStatus;
-    registration.set('paymentStatus', 'cancelled');
-    await registration.save();
-    await registrationService.ajustarContadoresDeStatus(registration, statusAnterior);
-
     await RegistrationPayment.update(
       {
         status: 'expired',
@@ -60,6 +62,19 @@ async function checkPixPendingRegistrations() {
         }
       }
     );
+
+    const paymentMode = (registration.event?.registrationPaymentMode || 'SINGLE').toUpperCase();
+    const isSinglePayment = paymentMode === 'SINGLE';
+
+    if (!isSinglePayment) {
+      console.info(`[pixPendingJob] Inscrição ${registration.orderCode} permanece ativa (modo ${paymentMode}); apenas expira o pagamento PIX pendente`);
+      return;
+    }
+
+    const statusAnterior = registration.paymentStatus;
+    registration.set('paymentStatus', 'cancelled');
+    await registration.save();
+    await registrationService.ajustarContadoresDeStatus(registration, statusAnterior);
 
     console.info(`[pixPendingJob] Inscrição ${registration.orderCode} cancelada automaticamente após ${PIX_PENDING_TIMEOUT_MINUTES} minutos pendente`);
   }));
