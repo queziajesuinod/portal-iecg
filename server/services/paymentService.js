@@ -14,25 +14,51 @@ const CIELO_ENDPOINTS = {
 
 const BASE_URL = CIELO_ENDPOINTS[CIELO_ENVIRONMENT];
 
+function logCielo(message, payload = {}) {
+  console.info(`[Cielo] ${message}`, JSON.stringify(payload));
+}
+
+function montarCustomer(dadosPagamento) {
+  const customerData = dadosPagamento.customer || {};
+  const documentValue = (
+    dadosPagamento.customerDocument ||
+    customerData.document ||
+    customerData.cpf ||
+    customerData.cnpj ||
+    customerData.documento ||
+    customerData.cnpjcpf ||
+    ''
+  ).toString();
+
+  const sanitizedDocument = documentValue.replace(/\D/g, '') || '00000000000';
+  return {
+    name: dadosPagamento.customerName || customerData.name || customerData.nome || 'Cliente',
+    email: dadosPagamento.customerEmail || customerData.email || customerData.usuarioEmail || 'sem-email@exemplo.com',
+    document: sanitizedDocument
+  };
+}
+
 /**
  * Criar transação PIX na Cielo
  */
 async function criarTransacaoPix(dadosPagamento) {
-  const {
+  const { merchantOrderId, amount } = dadosPagamento;
+  const customer = montarCustomer(dadosPagamento);
+  logCielo('PIX request', {
     merchantOrderId,
-    customerName,
-    customerEmail,
-    customerDocument,
-    amount // Valor em centavos
-  } = dadosPagamento;
+    customerName: customer.name,
+    customerEmail: customer.email,
+    customerDocument: customer.document,
+    amount
+  });
 
   const payload = {
     MerchantOrderId: merchantOrderId,
     Customer: {
-      Name: customerName,
-      Email: customerEmail,
-      Identity: customerDocument,
-      IdentityType: customerDocument.length === 11 ? 'CPF' : 'CNPJ'
+      Name: customer.name,
+      Email: customer.email,
+      Identity: customer.document,
+      IdentityType: customer.document.length === 11 ? 'CPF' : 'CNPJ'
     },
     Payment: {
       Type: 'Pix',
@@ -53,6 +79,13 @@ async function criarTransacaoPix(dadosPagamento) {
       }
     );
 
+    logCielo('PIX response', {
+      paymentId: response.data.Payment.PaymentId,
+      status: response.data.Payment.Status,
+      qrCodeString: response.data.Payment.QrCodeString,
+      qrCodeBase64: response.data.Payment.QrCodeBase64Image
+    });
+
     return {
       sucesso: true,
       paymentId: response.data.Payment.PaymentId,
@@ -62,6 +95,10 @@ async function criarTransacaoPix(dadosPagamento) {
       dadosCompletos: response.data
     };
   } catch (error) {
+    logCielo('PIX error', {
+      message: error.message,
+      payload: error.response?.data
+    });
     console.error('Erro ao criar transação PIX:');
     console.error('Status:', error.response?.status);
     console.error('Data:', JSON.stringify(error.response?.data, null, 2));
@@ -94,9 +131,6 @@ async function criarTransacaoPix(dadosPagamento) {
 async function criarTransacao(dadosPagamento) {
   const {
     merchantOrderId,
-    customerName,
-    customerEmail,
-    customerDocument,
     amount, // Valor em centavos (ex: R$ 100,00 = 10000)
     cardNumber,
     holder,
@@ -104,14 +138,22 @@ async function criarTransacao(dadosPagamento) {
     securityCode,
     brand
   } = dadosPagamento;
+  const customer = montarCustomer(dadosPagamento);
+  logCielo('CreditCard request', {
+    merchantOrderId,
+    customerName: customer.name,
+    amount,
+    installments: dadosPagamento.installments,
+    brand
+  });
 
   const payload = {
     MerchantOrderId: merchantOrderId,
     Customer: {
-      Name: customerName,
-      Email: customerEmail || 'sem-email@exemplo.com',
-      Identity: customerDocument,
-      IdentityType: customerDocument && customerDocument.length === 11 ? 'CPF' : 'CNPJ'
+      Name: customer.name,
+      Email: customer.email,
+      Identity: customer.document,
+      IdentityType: customer.document.length === 11 ? 'CPF' : 'CNPJ'
     },
     Payment: {
       Type: 'CreditCard',
@@ -153,6 +195,10 @@ async function criarTransacao(dadosPagamento) {
       dadosCompletos: response.data
     };
   } catch (error) {
+    logCielo('CreditCard error', {
+      message: error.message,
+      payload: error.response?.data
+    });
     console.error('Erro ao criar transação Cielo:', error.response?.data || error.message);
 
     return {
@@ -168,6 +214,7 @@ async function criarTransacao(dadosPagamento) {
  * Capturar pagamento autorizado
  */
 async function capturarPagamento(paymentId, amount) {
+  logCielo('Capture request', { paymentId, amount });
   try {
     const response = await axios.put(
       `${BASE_URL}/1/sales/${paymentId}/capture`,
@@ -189,6 +236,11 @@ async function capturarPagamento(paymentId, amount) {
       dadosCompletos: response.data
     };
   } catch (error) {
+    logCielo('Capture error', {
+      paymentId,
+      amount,
+      payload: error.response?.data
+    });
     console.error('Erro ao capturar pagamento Cielo:', error.response?.data || error.message);
 
     return {
@@ -203,6 +255,7 @@ async function capturarPagamento(paymentId, amount) {
  * Cancelar pagamento
  */
 async function cancelarPagamento(paymentId, amount) {
+  logCielo('Void request', { paymentId, amount });
   try {
     const response = await axios.put(
       `${BASE_URL}/1/sales/${paymentId}/void`,
@@ -224,6 +277,11 @@ async function cancelarPagamento(paymentId, amount) {
       dadosCompletos: response.data
     };
   } catch (error) {
+    logCielo('Void error', {
+      paymentId,
+      amount,
+      payload: error.response?.data
+    });
     console.error('Erro ao cancelar pagamento Cielo:', error.response?.data || error.message);
 
     return {
@@ -238,6 +296,7 @@ async function cancelarPagamento(paymentId, amount) {
  * Estornar (reembolsar) pagamento já capturado
  */
 async function estornarPagamento(paymentId, amount) {
+  logCielo('Refund request', { paymentId, amount });
   try {
     const response = await axios.put(
       `${BASE_URL}/1/sales/${paymentId}/refund`,
@@ -259,6 +318,11 @@ async function estornarPagamento(paymentId, amount) {
       dadosCompletos: response.data
     };
   } catch (error) {
+    logCielo('Refund error', {
+      paymentId,
+      amount,
+      payload: error.response?.data
+    });
     console.error('Erro ao estornar pagamento Cielo:', error.response?.data || error.message);
 
     return {
@@ -273,6 +337,7 @@ async function estornarPagamento(paymentId, amount) {
  * Consultar status de pagamento
  */
 async function consultarPagamento(paymentId) {
+  logCielo('Consult request', { paymentId });
   try {
     const response = await axios.get(
       `${BASE_URL}/1/sales/${paymentId}`,
@@ -291,6 +356,10 @@ async function consultarPagamento(paymentId) {
       dadosCompletos: response.data
     };
   } catch (error) {
+    logCielo('Consult error', {
+      paymentId,
+      payload: error.response?.data
+    });
     console.error('Erro ao consultar pagamento Cielo:', error.response?.data || error.message);
 
     return {

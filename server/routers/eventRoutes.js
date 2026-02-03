@@ -37,6 +37,8 @@ router.delete('/payment-options/:id', paymentOptionController.deletar);
 // ============= INSCRIÇÕES (ADMIN) (ANTES DE /:id) =============
 router.get('/registrations', registrationController.listar);
 router.get('/registrations/:id', registrationController.buscarPorId);
+router.get('/registrations/:id/cancel-info', registrationController.obterInfoCancelamento);
+router.post('/registrations/:id/recalculate-status', registrationController.recalcularStatus);
 router.post('/registrations/:id/cancel', registrationController.cancelar);
 router.post('/registrations/:id/payments', registrationController.criarPagamento);
 router.post('/registrations/:id/payments/offline', registrationController.criarPagamentoOffline);
@@ -47,6 +49,7 @@ router.get('/stats', eventController.estatisticas);
 // ============= EVENTOS (/:id DEVE VIR POR ÚLTIMO) =============
 router.get('/', eventController.listar);
 router.post('/', eventController.criar);
+router.post('/:id/duplicate', eventController.duplicar);
 router.get('/:id', eventController.buscarPorId);
 router.put('/:id', eventController.atualizar);
 router.delete('/:id', eventController.remover);

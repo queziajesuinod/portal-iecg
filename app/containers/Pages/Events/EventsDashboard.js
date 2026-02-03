@@ -12,7 +12,6 @@ import {
   TableCell,
   TableHead,
   TableRow,
-  Chip,
   IconButton,
   Tooltip,
   TextField,
@@ -29,11 +28,18 @@ import {
   Event as EventIcon,
   People as PeopleIcon,
   AttachMoney as MoneyIcon,
-  TrendingUp as TrendingIcon
+  TrendingUp as TrendingIcon,
+  FileCopy as DuplicateIcon
 } from '@material-ui/icons';
 import { useHistory } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
-import { listarEventos, listarEstatisticas, deletarEvento } from '../../../api/eventsApi';
+import {
+  listarEventos,
+  listarEstatisticas,
+  deletarEvento,
+  duplicarEvento,
+  atualizarEvento
+} from '../../../api/eventsApi';
 import { EVENT_TYPE_LABELS } from '../../../constants/eventTypes';
 
 function EventsDashboard() {
@@ -132,12 +138,37 @@ function EventsDashboard() {
     }
   };
 
+  const handleDuplicar = async (evento) => {
+    if (!window.confirm(`Deseja duplicar o evento "${evento.title}"?`)) {
+      return;
+    }
+    try {
+      await duplicarEvento(evento.id);
+      setNotification('Evento duplicado com sucesso!');
+      carregarEventos();
+    } catch (error) {
+      console.error('Erro ao duplicar evento:', error);
+      setNotification(error.message || 'Erro ao duplicar evento');
+    }
+  };
+
   const formatarData = (data) => {
     if (!data) return '-';
     return new Date(data).toLocaleDateString('pt-BR');
   };
 
   const formatarPreco = (preco) => `R$ ${parseFloat(preco || 0).toFixed(2).replace('.', ',')}`;
+ 
+  const handleToggleStatus = async (evento) => {
+    try {
+      await atualizarEvento(evento.id, { isActive: !evento.isActive });
+      setNotification(`Evento ${evento.isActive ? 'desativado' : 'ativado'} com sucesso!`);
+      carregarEventos();
+    } catch (error) {
+      console.error('Erro ao atualizar status do evento:', error);
+      setNotification(error.message || 'Erro ao atualizar status');
+    }
+  };
 
   const title = brand.name + ' - Eventos';
 
@@ -302,11 +333,14 @@ function EventsDashboard() {
                     {evento.maxRegistrations && ` / ${evento.maxRegistrations}`}
                   </TableCell>
                   <TableCell align="center">
-                    <Chip
-                      label={evento.isActive ? 'Ativo' : 'Inativo'}
-                      color={evento.isActive ? 'primary' : 'default'}
-                      size="small"
-                    />
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color={evento.isActive ? 'primary' : 'default'}
+                    onClick={() => handleToggleStatus(evento)}
+                  >
+                    {evento.isActive ? 'Ativo' : 'Inativo'}
+                  </Button>
                   </TableCell>
                   <TableCell align="center">
                     <Tooltip title="Ver Detalhes">
@@ -331,6 +365,14 @@ function EventsDashboard() {
                         onClick={() => handleDeletar(evento.id, evento.title)}
                       >
                         <DeleteIcon />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Duplicar">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDuplicar(evento)}
+                      >
+                        <DuplicateIcon />
                       </IconButton>
                     </Tooltip>
                   </TableCell>

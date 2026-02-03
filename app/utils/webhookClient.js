@@ -57,9 +57,36 @@ export const toggleWebhook = async (id, active) => {
   return res.json();
 };
 
-export const sendWebhookEvent = async (event, payload) => {
+export const fetchEventDefinitions = async () => {
+  const res = await fetch(`${API_URL}/webhooks/event-definitions`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders()
+    }
+  });
+  if (!res.ok) throw new Error('Falha ao carregar eventos para os webhooks');
+  return res.json();
+};
+
+export const createEventDefinition = async (definition) => {
+  const res = await fetch(`${API_URL}/webhooks/event-definitions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders()
+    },
+    body: JSON.stringify(definition)
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.message || 'Não foi possível criar o evento');
+  }
+  return res.json();
+};
+
+export const sendWebhookEvent = async (event, payload, options = {}) => {
   try {
-    await fetch(`${API_URL}/webhooks/events`, {
+    const res = await fetch(`${API_URL}/webhooks/events`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -71,14 +98,50 @@ export const sendWebhookEvent = async (event, payload) => {
         source: 'portal-iecg'
       })
     });
+
+    if (!res.ok) {
+      const err = new Error('Falha ao enviar evento de webhook');
+      if (options.throwOnError) {
+        throw err;
+      }
+      console.warn('Falha ao disparar webhook', err);
+      return { success: false };
+    }
+
+    const data = await res.json().catch(() => null);
+    return { success: true, data };
   } catch (err) {
     console.warn('Falha ao disparar webhook', err);
+    if (options.throwOnError) {
+      throw err;
+    }
+    return { success: false };
   }
+};
+
+export const updateWebhook = async (id, payload) => {
+  const res = await fetch(`${API_URL}/webhooks/${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders()
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.erro || 'Falha ao atualizar o webhook');
+  }
+  return res.json();
 };
 
 export default {
   fetchWebhooks,
   createWebhook,
   toggleWebhook,
-  sendWebhookEvent
+  sendWebhookEvent,
+  updateWebhook,
+  fetchEventDefinitions,
+  createEventDefinition
 };

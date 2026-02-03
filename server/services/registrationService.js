@@ -13,6 +13,7 @@ const {
   Permissao,
   sequelize
 } = require('../models');
+const { Op } = require('sequelize');
 const { isCountablePaymentStatus } = require('../constants/registrationStatuses');
 const orderCodeService = require('./orderCodeService');
 const batchService = require('./batchService');
@@ -20,6 +21,7 @@ const couponService = require('./couponService');
 const formFieldService = require('./formFieldService');
 const paymentService = require('./paymentService');
 const eventService = require('./eventService');
+const webhookEmitter = require('./webhookEmitter');
 
 function extrairResumoLote(attendees = []) {
   const batches = attendees
@@ -121,11 +123,14 @@ function calcularResumoPagamentos(registration, payments = []) {
   const totalPago = normalizarValor(paidTotal);
   const precoFinal = normalizarValor(registration.finalPrice || 0);
   const remaining = normalizarValor(Math.max(0, precoFinal - totalPago));
-  const derivedStatus = remaining <= 0 && precoFinal > 0
-    ? 'confirmed'
-    : totalPago > 0
-      ? 'partial'
-      : 'pending';
+  const hasDenied = payments.some(payment => payment.status === 'denied');
+  const derivedStatus = hasDenied
+    ? 'denied'
+    : remaining <= 0 && precoFinal > 0
+      ? 'confirmed'
+      : totalPago > 0
+        ? 'partial'
+        : 'pending';
 
   return {
     paidTotal: totalPago,
@@ -150,36 +155,6 @@ async function anexarResumoPagamentos(registration, options = {}) {
   return resumo;
 }
 
-async function atualizarStatusPagamentoPorPagamentos(registration, options = {}) {
-  if (!registration) return null;
-  if (['cancelled', 'refunded'].includes(registration.paymentStatus)) {
-    return null;
-  }
-  const resumo = await anexarResumoPagamentos(registration, options);
-  if (!resumo) return null;
-  if (registration.paymentStatus !== resumo.derivedStatus) {
-    const statusAnterior = registration.paymentStatus;
-    registration.paymentStatus = resumo.derivedStatus;
-    await registration.save({ transaction: options.transaction });
-    await ajustarContadoresDeStatus(registration, statusAnterior);
-  }
-  return resumo;
-}
-
-async function usuarioPodeRegistrarPagamentoOffline(userId) {
-  if (!userId) return false;
-  const usuario = await User.findByPk(userId, {
-    include: [{
-      model: Perfil,
-      include: [{ model: Permissao, as: 'permissoes', through: { attributes: [] } }]
-    }]
-  });
-  if (!usuario) return false;
-  const permissoes = usuario.Perfil?.permissoes?.map((perm) => perm.nome) || [];
-  if (permissoes.includes('ADMIN_FULL_ACCESS')) return true;
-  return (usuario.Perfil?.descricao || '').toLowerCase().includes('admin');
-}
-
 async function contarInscritosPorLote(registrationId) {
   const attendees = await RegistrationAttendee.findAll({
     where: { registrationId },
@@ -197,6 +172,11 @@ async function contarInscritosPorLote(registrationId) {
   }, {});
 }
 
+/**
+ * Processar inscrição pública completa
+ */
+
+/* eslint-disable no-param-reassign */
 async function ajustarContadoresDeStatus(registration, statusAnterior) {
   if (!registration) {
     return;
@@ -233,10 +213,44 @@ async function ajustarContadoresDeStatus(registration, statusAnterior) {
     await Promise.all(batchUpdates);
   }
 }
+/* eslint-enable no-param-reassign */
 
-/**
- * Processar inscrição pública completa
- */
+async function atualizarStatusPagamentoPorPagamentos(registration, options = {}) {
+  if (!registration) return null;
+  if (['cancelled', 'refunded'].includes(registration.paymentStatus)) {
+    return null;
+  }
+  const resumo = await anexarResumoPagamentos(registration, options);
+  if (!resumo) return null;
+  if (resumo.derivedStatus === 'denied') {
+    return resumo;
+  }
+
+  if (registration.paymentStatus !== resumo.derivedStatus) {
+    /* eslint-disable no-param-reassign */
+    const statusAnterior = registration.paymentStatus;
+    registration.paymentStatus = resumo.derivedStatus;
+    await registration.save({ transaction: options.transaction });
+    await ajustarContadoresDeStatus(registration, statusAnterior);
+    /* eslint-enable no-param-reassign */
+  }
+  return resumo;
+}
+
+async function usuarioPodeRegistrarPagamentoOffline(userId) {
+  if (!userId) return false;
+  const usuario = await User.findByPk(userId, {
+    include: [{
+      model: Perfil,
+      include: [{ model: Permissao, as: 'permissoes', through: { attributes: [] } }]
+    }]
+  });
+  if (!usuario) return false;
+  const permissoes = usuario.Perfil?.permissoes?.map((perm) => perm.nome) || [];
+  if (permissoes.includes('ADMIN_FULL_ACCESS')) return true;
+  return (usuario.Perfil?.descricao || '').toLowerCase().includes('admin');
+}
+
 async function processarInscricao(dadosInscricao) {
   const {
     eventId,
@@ -359,13 +373,17 @@ async function processarInscricao(dadosInscricao) {
   let resultadoPagamento;
   const paymentMethod = paymentOption.paymentType;
 
+  const buyerDocumentoRaw = buyerData.buyer_document || buyerData.documento || buyerData.cpf || buyerData.cnpj || buyerData.document || '';
+  const buyerNome = buyerData.buyer_name || buyerData.nome || buyerData.name || 'Cliente';
+  const buyerEmail = buyerData.buyer_email || buyerData.email || buyerData.usuarioEmail || 'sem-email@exemplo.com';
+
   if (paymentOption.paymentType === 'pix') {
     // Pagamento via PIX
     resultadoPagamento = await paymentService.criarTransacaoPix({
       merchantOrderId: orderCode,
-      customerName: buyerData.nome || buyerData.name || 'Cliente',
-      customerEmail: buyerData.email || 'sem-email@exemplo.com',
-      customerDocument: (buyerData.cpf || buyerData.documento || '00000000000').replace(/\D/g, ''),
+      customerName: buyerNome,
+      customerEmail: buyerEmail,
+      customerDocument: buyerDocumentoRaw,
       amount: paymentService.converterParaCentavos(valorFinalComJuros)
     });
   } else if (paymentOption.paymentType === 'credit_card') {
@@ -384,9 +402,9 @@ async function processarInscricao(dadosInscricao) {
 
     resultadoPagamento = await paymentService.criarTransacao({
       merchantOrderId: orderCode,
-      customerName: buyerData.nome || buyerData.name || 'Cliente',
-      customerEmail: buyerData.email || 'sem-email@exemplo.com',
-      customerDocument: (buyerData.cpf || buyerData.documento || '00000000000').replace(/\D/g, ''),
+      customerName: buyerNome,
+      customerEmail: buyerEmail,
+      customerDocument: buyerDocumentoRaw,
       amount: paymentService.converterParaCentavos(valorFinalComJuros),
       installments: parcelas,
       cardNumber,
@@ -514,6 +532,11 @@ async function processarInscricao(dadosInscricao) {
     await atualizarStatusPagamentoPorPagamentos(registration);
   }
 
+  webhookEmitter.emit('registration.created', {
+    registrationId: registration.id,
+    data: dadosInscricao
+  });
+
   return {
     sucesso: true,
     orderCode,
@@ -563,9 +586,65 @@ async function listarInscricoes() {
 /**
  * Listar inscrições por evento
  */
-async function listarInscricoesPorEvento(eventId) {
-  return Registration.findAll({
-    where: { eventId },
+function escapeLike(value = '') {
+  return value
+    .toLowerCase()
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_')
+    .replace(/'/g, "''");
+}
+
+function buildJsonCondition(value, keys) {
+  const sanitized = escapeLike(value);
+  if (!sanitized) return null;
+  const likePattern = `%${sanitized}%`;
+  const parts = keys.map((key) => `LOWER(COALESCE(buyerData->>'${key}', '')) LIKE '${likePattern}' ESCAPE '\\\\'`);
+  return sequelize.literal(`(${parts.join(' OR ')})`);
+}
+
+async function listarInscricoesPorEvento(eventId, options = {}) {
+  const filters = options.filters || {};
+  const limit = Number(options.limit) || 20;
+  const offset = Number(options.offset) || 0;
+
+  const where = { eventId };
+  if (filters.orderCode) {
+    where.orderCode = { [Op.iLike]: `%${filters.orderCode}%` };
+  }
+  if (filters.paymentStatus) {
+    where.paymentStatus = filters.paymentStatus;
+  }
+  const safeDate = (value) => {
+    if (!value) return null;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const dateConditions = [];
+  const fromDate = safeDate(filters.dateFrom);
+  if (fromDate) {
+    dateConditions.push({ createdAt: { [Op.gte]: fromDate } });
+  }
+  const toDate = safeDate(filters.dateTo);
+  if (toDate) {
+    toDate.setHours(23, 59, 59, 999);
+    dateConditions.push({ createdAt: { [Op.lte]: toDate } });
+  }
+  if (dateConditions.length) {
+    where[Op.and] = (where[Op.and] || []).concat(dateConditions);
+  }
+
+  const nameCondition = filters.buyerName ? buildJsonCondition(filters.buyerName, ['buyer_name', 'nome', 'name']) : null;
+  const documentCondition = filters.buyerDocument ? buildJsonCondition(filters.buyerDocument, ['buyer_document', 'cpf', 'documento', 'document']) : null;
+  const additionalConditions = [];
+  if (nameCondition) additionalConditions.push(nameCondition);
+  if (documentCondition) additionalConditions.push(documentCondition);
+  if (additionalConditions.length) {
+    where[Op.and] = (where[Op.and] || []).concat(additionalConditions);
+  }
+
+  const result = await Registration.findAndCountAll({
+    where,
     include: [
       {
         model: EventBatch,
@@ -589,8 +668,18 @@ async function listarInscricoesPorEvento(eventId) {
         ]
       }
     ],
-    order: [['createdAt', 'DESC']]
-  }).then(prepararListaComCampos);
+    order: [['createdAt', 'DESC']],
+    limit,
+    offset
+    ,
+    distinct: true
+  });
+
+  const rows = await prepararListaComCampos(result.rows);
+  return {
+    rows,
+    count: Number(result.count)
+  };
 }
 
 /**
@@ -828,7 +917,7 @@ async function criarPagamentoOnline(registrationId, payload = {}) {
   };
 }
 
-async function criarPagamentoOffline(registrationId, payload = {}, userId) {
+async function criarPagamentoOffline(registrationId, userId, payload = {}) {
   const permitido = await usuarioPodeRegistrarPagamentoOffline(userId);
   if (!permitido) {
     throw new Error('Usuário não autorizado a registrar pagamento offline');
@@ -971,6 +1060,20 @@ async function cancelarInscricao(id) {
   throw new Error(`Erro ao cancelar pagamento: ${cancelamento.erro}`);
 }
 
+async function obterInfoCancelamento(id) {
+  const registration = await buscarInscricaoPorId(id);
+  const needsRefund = Boolean(
+    registration.paymentId &&
+    ['confirmed', 'paid'].includes(registration.paymentStatus)
+  );
+  return {
+    paymentStatus: registration.paymentStatus,
+    needsRefund,
+    paymentId: registration.paymentId,
+    amount: Number(registration.finalPrice || 0)
+  };
+}
+
 module.exports = {
   processarInscricao,
   listarInscricoes,
@@ -980,6 +1083,7 @@ module.exports = {
   criarPagamentoOnline,
   criarPagamentoOffline,
   cancelarInscricao,
+  obterInfoCancelamento,
   ajustarContadoresDeStatus,
   atualizarStatusPagamentoPorPagamentos,
   anexarResumoPagamentos

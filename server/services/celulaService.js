@@ -1,48 +1,50 @@
 const { Celula, Campus } = require('../models');
-const { Op } = require('sequelize'); 
+const { Op } = require('sequelize');
+const webhookEmitter = require('./webhookEmitter');
 
-class CelulaService {
-  _sanitizarCelular(valor) {
-    if (!valor) return valor;
-    return String(valor).replace(/\D/g, '');
-  }
+const sanitizeCelular = (valor) => {
+  if (!valor) return '';
+  return String(valor).replace(/\D/g, '');
+};
 
-  async criarCelula(dados) {
-    console.log('Dados recebidos para criação:', dados);
-
-    if (dados.campus && !dados.campusId) {
+const CelulaService = {
+  async criarCelula(dados = {}) {
+    const payload = { ...dados };
+    if (payload.campus && !payload.campusId) {
       const campus = await Campus.findOne({
         where: {
           nome: {
-            [Op.iLike]: `%${dados.campus}%`
+            [Op.iLike]: `%${payload.campus}%`
           }
         }
       });
       if (campus) {
-        dados.campusId = campus.id;
+        payload.campusId = campus.id;
       }
     }
-    if (typeof dados.ativo === 'undefined') {
-      dados.ativo = true;
+    if (typeof payload.ativo === 'undefined') {
+      payload.ativo = true;
     }
 
-    if (Object.prototype.hasOwnProperty.call(dados, 'cel_lider')) {
-      dados.cel_lider = this._sanitizarCelular(dados.cel_lider);
+    if (Object.prototype.hasOwnProperty.call(payload, 'cel_lider')) {
+      payload.cel_lider = sanitizeCelular(payload.cel_lider);
     }
 
-    const celula = await Celula.create(dados);
-    console.log('Célula criada no banco de dados:', celula);
-
+    const celula = await Celula.create(payload);
+    webhookEmitter.emit('celula.created', {
+      id: celula.id,
+      data: payload
+    });
     return celula;
-  }
+  },
 
   async buscarTodasCelulas() {
-    return await Celula.findAll();
-  }
+    return Celula.findAll();
+  },
 
   async buscaPaginada(page, limit) {
-    return this.buscaComFiltros({}, page, limit);
-  }
+    return CelulaService.buscaComFiltros({}, page, limit);
+  },
 
   async buscaComFiltros(filtros = {}, page = 1, limit = 10) {
     const offset = (page - 1) * limit;
@@ -112,42 +114,54 @@ class CelulaService {
       paginaAtual: page,
       totalRegistros: count
     };
-  }
-  
+  },
+
   async buscarCelulaPorId(id) {
     const celula = await Celula.findByPk(id);
     if (!celula) {
       throw new Error('Célula não encontrada');
     }
     return celula;
-  }
+  },
 
-  async atualizarCelula(id, dadosAtualizados) {
-    const celula = await this.buscarCelulaPorId(id);
-    if (dadosAtualizados.campus && !dadosAtualizados.campusId) {
+  async atualizarCelula(id, dadosAtualizados = {}) {
+    const celula = await CelulaService.buscarCelulaPorId(id);
+    const payload = { ...dadosAtualizados };
+    if (payload.campus && !payload.campusId) {
       const campus = await Campus.findOne({
         where: {
           nome: {
-            [Op.iLike]: `%${dadosAtualizados.campus}%`
+            [Op.iLike]: `%${payload.campus}%`
           }
         }
       });
       if (campus) {
-        dadosAtualizados.campusId = campus.id;
+        payload.campusId = campus.id;
       }
     }
-    if (Object.prototype.hasOwnProperty.call(dadosAtualizados, 'cel_lider')) {
-      dadosAtualizados.cel_lider = this._sanitizarCelular(dadosAtualizados.cel_lider);
+    if (Object.prototype.hasOwnProperty.call(payload, 'cel_lider')) {
+      payload.cel_lider = sanitizeCelular(payload.cel_lider);
     }
 
-    return await celula.update(dadosAtualizados);
-  }
+    const updated = await celula.update(payload);
+    webhookEmitter.emit('celula.updated', {
+      id: updated.id,
+      data: payload
+    });
+    return updated;
+  },
 
   async deletarCelula(id) {
-    const celula = await this.buscarCelulaPorId(id);
+    const celula = await CelulaService.buscarCelulaPorId(id);
     await celula.destroy();
+    webhookEmitter.emit('celula.deleted', {
+      id: celula.id,
+      nome: celula.celula,
+      bairro: celula.bairro,
+      rede: celula.rede
+    });
     return { mensagem: 'Célula removida com sucesso' };
   }
-}
+};
 
-module.exports = new CelulaService();
+module.exports = CelulaService;

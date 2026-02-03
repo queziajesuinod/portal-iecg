@@ -22,7 +22,12 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  TablePagination
 } from '@material-ui/core';
 import {
   ArrowBack as BackIcon,
@@ -42,7 +47,9 @@ import {
   listarFormasPagamento,
   criarFormaPagamento,
   atualizarFormaPagamento,
-  deletarFormaPagamento
+  deletarFormaPagamento,
+  cancelarInscricao,
+  obterInfoCancelamentoInscricao
 } from '../../../api/eventsApi';
 import { EVENT_TYPE_LABELS } from '../../../constants/eventTypes';
 
@@ -67,9 +74,32 @@ function EventDetails() {
   const [evento, setEvento] = useState(null);
   const [lotes, setLotes] = useState([]);
   const [inscricoes, setInscricoes] = useState([]);
+  const [filters, setFilters] = useState({
+    orderCode: '',
+    buyerName: '',
+    buyerDocument: '',
+    paymentStatus: '',
+    dateFrom: '',
+    dateTo: ''
+  });
   const [formasPagamento, setFormasPagamento] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [registrationsLoading, setRegistrationsLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [totalInscricoes, setTotalInscricoes] = useState(0);
   const [notification, setNotification] = useState('');
+
+  const statusOptions = [
+    '',
+    'pending',
+    'authorized',
+    'partial',
+    'confirmed',
+    'denied',
+    'cancelled',
+    'refunded'
+  ];
 
   const getStatusLabel = (status) => {
     const labels = {
@@ -110,16 +140,14 @@ function EventDetails() {
   async function carregarDados() {
     try {
       setLoading(true);
-      const [eventoRes, lotesRes, inscricoesRes, formasPagamentoRes] = await Promise.all([
+      const [eventoRes, lotesRes, formasPagamentoRes] = await Promise.all([
         buscarEvento(id),
         listarLotesPorEvento(id),
-        listarInscricoesPorEvento(id),
         listarFormasPagamento(id)
       ]);
 
       setEvento(eventoRes);
       setLotes(lotesRes);
-      setInscricoes(inscricoesRes);
       setFormasPagamento(formasPagamentoRes);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
@@ -129,9 +157,46 @@ function EventDetails() {
     }
   }
 
+  async function carregarInscricoes(page = currentPage, perPage = rowsPerPage, currentFilters = filters) {
+    if (!id) return;
+    setRegistrationsLoading(true);
+    try {
+      const params = {
+        page: page + 1,
+        perPage,
+        orderCode: currentFilters.orderCode || undefined,
+        buyerName: currentFilters.buyerName || undefined,
+        buyerDocument: currentFilters.buyerDocument || undefined,
+        paymentStatus: currentFilters.paymentStatus || undefined,
+        dateFrom: currentFilters.dateFrom || undefined,
+        dateTo: currentFilters.dateTo || undefined
+      };
+      const response = await listarInscricoesPorEvento(id, params);
+      setInscricoes(response.records || []);
+      setTotalInscricoes(response.total || 0);
+    } catch (error) {
+      console.error('Erro ao carregar inscrições:', error);
+      setNotification('Erro ao carregar inscrições do evento');
+    } finally {
+      setRegistrationsLoading(false);
+    }
+  }
+
   useEffect(() => {
     carregarDados();
   }, [id]);
+
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [id]);
+
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [filters]);
+
+  useEffect(() => {
+    carregarInscricoes(currentPage, rowsPerPage, filters);
+  }, [id, currentPage, rowsPerPage, filters]);
 
   const handleAbrirDialogLote = (lote = null) => {
     if (lote) {
@@ -185,6 +250,7 @@ function EventDetails() {
 
       handleFecharDialogLote();
       carregarDados();
+      carregarInscricoes();
     } catch (error) {
       console.error('Erro ao salvar lote:', error);
       setNotification(error.message || 'Erro ao salvar lote');
@@ -201,6 +267,7 @@ function EventDetails() {
       await atualizarLote(lote.id, { isActive: !lote.isActive });
       setNotification(`Lote ${acao}do com sucesso!`);
       carregarDados();
+      carregarInscricoes();
     } catch (error) {
       console.error('Erro ao atualizar status do lote:', error);
       setNotification(error.message || 'Erro ao atualizar o lote');
@@ -252,6 +319,7 @@ function EventDetails() {
 
       handleFecharDialogPagamento();
       carregarDados();
+      carregarInscricoes();
     } catch (error) {
       console.error('Erro ao salvar forma de pagamento:', error);
       setNotification(error.message || 'Erro ao salvar forma de pagamento');
@@ -264,6 +332,7 @@ function EventDetails() {
         await deletarFormaPagamento(pagamentoId);
         setNotification('Forma de pagamento deletada com sucesso!');
         carregarDados();
+        carregarInscricoes();
       } catch (error) {
         console.error('Erro ao deletar forma de pagamento:', error);
         setNotification(error.message || 'Erro ao deletar forma de pagamento');
@@ -296,6 +365,56 @@ function EventDetails() {
     return `R$ ${valor.toFixed(2).replace('.', ',')}`;
   };
 
+  const formatarMoeda = (valor) => {
+    const numero = Number(valor) || 0;
+    return `R$ ${numero.toFixed(2).replace('.', ',')}`;
+  };
+
+  const handleFilterChange = (field, value) => {
+    setFilters(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleCancelarInscricao = async (inscricaoId, orderCode) => {
+    let info;
+    try {
+      info = await obterInfoCancelamentoInscricao(inscricaoId);
+    } catch (error) {
+      console.error('Erro ao obter info de cancelamento:', error);
+      setNotification('Não foi possível verificar o tipo de cancelamento');
+      return;
+    }
+
+    const refundMessage = info.needsRefund
+      ? `Esta inscrição será estornada no valor de ${formatarMoeda(info.amount)}.`
+      : 'Não será necessário estornar valor.';
+    const confirmMessage = `${refundMessage} Deseja cancelar a inscrição ${orderCode || inscricaoId}?`;
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      await cancelarInscricao(inscricaoId);
+      setNotification('Inscrição cancelada com sucesso.');
+      carregarDados();
+      carregarInscricoes();
+    } catch (error) {
+      console.error('Erro ao cancelar inscrição:', error);
+      setNotification(error.message || 'Erro ao cancelar a inscrição.');
+    }
+  };
+
+  const bannableStatuses = new Set(['denied', 'expired', 'refunded', 'cancelled']);
+
+  const handleChangePage = (event, newPage) => {
+    setCurrentPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setCurrentPage(0);
+  };
+
   if (loading) {
     return <Typography>Carregando...</Typography>;
   }
@@ -305,6 +424,29 @@ function EventDetails() {
   }
 
   const title = brand.name + ' - ' + evento.title;
+  const resumoInscricoes = evento.registrationStats || {};
+  const totalInscritos = resumoInscricoes.confirmedCount ?? 0;
+  const totalValorConfirmado = resumoInscricoes.confirmedTotalValue ?? 0;
+  const negadoCancelado = resumoInscricoes.deniedCancelled ?? 0;
+  const expirados = resumoInscricoes.expiredCount ?? 0;
+  const pendentes = resumoInscricoes.pendingCount ?? 0;
+  const locationSummary = [
+    evento.location,
+    evento.addressNumber,
+    evento.neighborhood,
+    evento.city,
+    evento.cep
+  ].filter(Boolean).join(', ');
+  const mapUrl = (evento.latitude != null && evento.longitude != null)
+    ? `https://maps.google.com/maps?q=${evento.latitude},${evento.longitude}&z=15&hl=pt-BR&output=embed`
+    : null;
+  const kpiItems = [
+    { label: 'Inscritos confirmados', value: totalInscritos },
+    { label: 'Valor Confirmados', value: formatarMoeda(totalValorConfirmado) },
+    { label: 'Negado/Cancelado', value: negadoCancelado },
+    { label: 'Expirados', value: expirados },
+    { label: 'Pendentes', value: pendentes }
+  ];
 
   return (
     <div>
@@ -319,69 +461,107 @@ function EventDetails() {
         desc={evento.description}
       >
         <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
-            <Typography variant="body2" color="textSecondary">
-              <strong>Data Início:</strong> {formatarDataHora(evento.startDate)}
-            </Typography>
+          <Grid item xs={12} md={6}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" color="textSecondary">
+                  <strong>Data Início:</strong> {formatarDataHora(evento.startDate)}
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" color="textSecondary">
+                  <strong>Data Término:</strong> {formatarDataHora(evento.endDate)}
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" color="textSecondary">
+                  <strong>Tipo de Evento:</strong> {EVENT_TYPE_LABELS[evento.eventType] || evento.eventType || '-'}
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" color="textSecondary">
+                  <strong>Total de Vagas:</strong> {evento.maxRegistrations || 'Não informado'}
+                </Typography>
+              </Grid>
+            </Grid>
+            <div style={{ marginTop: 16 }}>
+              <Chip
+                label={evento.isActive ? 'Ativo' : 'Inativo'}
+                color={evento.isActive ? 'primary' : 'default'}
+              />
+            </div>
           </Grid>
-          <Grid item xs={12} sm={6}>
-            <Typography variant="body2" color="textSecondary">
-              <strong>Data Término:</strong> {formatarDataHora(evento.endDate)}
+          <Grid item xs={12} md={6}>
+            <div
+              style={{
+                width: '100%',
+                height: 220,
+                borderRadius: 8,
+                overflow: 'hidden',
+                backgroundColor: '#f5f5f5'
+              }}
+            >
+              {mapUrl ? (
+                <iframe
+                  title="Mapa do Evento"
+                  src={mapUrl}
+                  width="100%"
+                  height="100%"
+                  frameBorder="0"
+                  style={{ border: 0 }}
+                  allowFullScreen
+                />
+              ) : (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '100%',
+                    padding: 16
+                  }}
+                >
+                  <Typography variant="body2" color="textSecondary">
+                    Localização não informada
+                  </Typography>
+                </div>
+              )}
+            </div>
+            <Typography variant="body2" color="textSecondary" style={{ marginTop: 8 }}>
+              <strong>Endereço:</strong> {locationSummary || 'Dados não informados'}
             </Typography>
-          </Grid>
-          <Grid item xs={12}>
-            <Typography variant="body2" color="textSecondary">
-              <strong>Endereco:</strong> {evento.location || '-'}
-            </Typography>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <Typography variant="body2" color="textSecondary">
-              <strong>Numero:</strong> {evento.addressNumber || '-'}
-            </Typography>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <Typography variant="body2" color="textSecondary">
-              <strong>Bairro:</strong> {evento.neighborhood || '-'}
-            </Typography>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <Typography variant="body2" color="textSecondary">
-              <strong>Cidade:</strong> {evento.city || '-'}
-            </Typography>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <Typography variant="body2" color="textSecondary">
-              <strong>CEP:</strong> {evento.cep || '-'}
-            </Typography>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <Typography variant="body2" color="textSecondary">
-              <strong>Tipo de Evento:</strong> {EVENT_TYPE_LABELS[evento.eventType] || evento.eventType || '-'}
-            </Typography>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <Typography variant="body2" color="textSecondary">
-              <strong>Latitude:</strong> {evento.latitude != null ? evento.latitude : '-'}
-            </Typography>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <Typography variant="body2" color="textSecondary">
-              <strong>Longitude:</strong> {evento.longitude != null ? evento.longitude : '-'}
-            </Typography>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <Typography variant="body2" color="textSecondary">
-              <strong>Inscricoes:</strong> {evento.currentRegistrations || 0}
-              {evento.maxRegistrations && ` / ${evento.maxRegistrations}`}
-            </Typography>
-          </Grid>
-          <Grid item xs={12}>
-            <Chip
-              label={evento.isActive ? 'Ativo' : 'Inativo'}
-              color={evento.isActive ? 'primary' : 'default'}
-            />
           </Grid>
         </Grid>
+
+        <Card style={{ marginTop: 16, padding: 16 }} variant="outlined">
+          
+          <Grid container spacing={1} alignItems="center" justifyContent="space-between">
+            {kpiItems.map((item) => (
+              <Grid item key={item.label} style={{ flexGrow: 1 }}>
+                <Card
+                  variant="outlined"
+                  style={{
+                    padding: 12,
+                    textAlign: 'center',
+                    marginRight: 4,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <Typography variant="h6">
+                    {typeof item.value === 'number'
+                      ? item.value.toLocaleString('pt-BR')
+                      : item.value}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    {item.label}
+                  </Typography>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </Card>
 
         <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
           <Button
@@ -489,44 +669,136 @@ function EventDetails() {
 
         {/* Tab Inscrições */}
         <TabPanel value={tabAtiva} index={1}>
-          {inscricoes.length === 0 ? (
+          <Grid container spacing={2} alignItems="flex-end" style={{ marginBottom: 8 }}>
+            <Grid item xs={12} sm={6} md={2}>
+              <TextField
+                label="Código do pedido"
+                fullWidth
+                value={filters.orderCode}
+                onChange={(event) => handleFilterChange('orderCode', event.target.value)}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={2}>
+              <TextField
+                label="Nome do comprador"
+                fullWidth
+                value={filters.buyerName}
+                onChange={(event) => handleFilterChange('buyerName', event.target.value)}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={2}>
+              <TextField
+                label="Documento"
+                fullWidth
+                value={filters.buyerDocument}
+                onChange={(event) => handleFilterChange('buyerDocument', event.target.value)}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={2}>
+              <FormControl fullWidth>
+                <InputLabel id="status-filter-label">Status</InputLabel>
+                <Select
+                  labelId="status-filter-label"
+                  value={filters.paymentStatus}
+                  label="Status"
+                  onChange={(event) => handleFilterChange('paymentStatus', event.target.value)}
+                >
+                  {statusOptions.map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {status ? getStatusLabel(status) : 'Todos'}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6} md={2}>
+              <TextField
+                label="Data de início"
+                type="date"
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+                value={filters.dateFrom}
+                onChange={(event) => handleFilterChange('dateFrom', event.target.value)}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={2}>
+              <TextField
+                label="Data final"
+                type="date"
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+                value={filters.dateTo}
+                onChange={(event) => handleFilterChange('dateTo', event.target.value)}
+              />
+            </Grid>
+          </Grid>
+          {registrationsLoading ? (
+            <Typography>Carregando inscrições...</Typography>
+          ) : inscricoes.length === 0 ? (
             <Typography>Nenhuma inscrição realizada</Typography>
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Código</TableCell>
-                  <TableCell>Lote</TableCell>
-                  <TableCell>Quantidade</TableCell>
-                  <TableCell>Valor</TableCell>
-                  <TableCell>Data</TableCell>
-                  <TableCell align="center">Status</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {inscricoes.map((inscricao) => (
-                  <TableRow
-                    key={inscricao.id}
-                    hover
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => history.push(`/app/events/registrations/${inscricao.id}`)}
-                  >
-                    <TableCell>{inscricao.orderCode}</TableCell>
-                    <TableCell>{inscricao.batchName || inscricao.batch?.name || '-'}</TableCell>
-                    <TableCell>{inscricao.quantity}</TableCell>
-                    <TableCell>{formatarPreco(inscricao.finalPrice)}</TableCell>
-                    <TableCell>{formatarDataHora(inscricao.createdAt)}</TableCell>
-                    <TableCell align="center">
-                      <Chip
-                        label={getStatusLabel(inscricao.paymentStatus)}
-                        color={inscricao.paymentStatus === 'confirmed' ? 'primary' : 'default'}
-                        size="small"
-                      />
-                    </TableCell>
+            <>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Código</TableCell>
+                    <TableCell>Lote</TableCell>
+                    <TableCell>Quantidade</TableCell>
+                    <TableCell>Valor</TableCell>
+                    <TableCell>Data</TableCell>
+                    <TableCell align="center">Status</TableCell>
+                    <TableCell align="center">Ações</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHead>
+                <TableBody>
+                  {inscricoes.map((inscricao) => (
+                    <TableRow
+                      key={inscricao.id}
+                      hover
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => history.push(`/app/events/registrations/${inscricao.id}`)}
+                    >
+                      <TableCell>{inscricao.orderCode}</TableCell>
+                      <TableCell>{inscricao.batchName || inscricao.batch?.name || '-'}</TableCell>
+                      <TableCell>{inscricao.quantity}</TableCell>
+                      <TableCell>{formatarPreco(inscricao.finalPrice)}</TableCell>
+                      <TableCell>{formatarDataHora(inscricao.createdAt)}</TableCell>
+                      <TableCell align="center">
+                        <Chip
+                          label={getStatusLabel(inscricao.paymentStatus)}
+                          color={inscricao.paymentStatus === 'confirmed' ? 'primary' : 'default'}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell align="center">
+                        {!bannableStatuses.has(inscricao.paymentStatus) && (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="secondary"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleCancelarInscricao(inscricao.id, inscricao.orderCode);
+                            }}
+                          >
+                            Cancelar
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <TablePagination
+                component="div"
+                count={totalInscricoes}
+                page={currentPage}
+                onPageChange={handleChangePage}
+                rowsPerPage={rowsPerPage}
+                onRowsPerPageChange={handleChangeRowsPerPage}
+                rowsPerPageOptions={[10, 20, 50]}
+              />
+            </>
           )}
         </TabPanel>
 
