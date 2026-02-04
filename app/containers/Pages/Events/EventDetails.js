@@ -52,6 +52,7 @@ import {
   obterInfoCancelamentoInscricao
 } from '../../../api/eventsApi';
 import { EVENT_TYPE_LABELS } from '../../../constants/eventTypes';
+import CancelRegistrationDialog from '../../../components/CancelRegistrationDialog';
 
 function TabPanel({ children, value, index }) {
   return (
@@ -89,6 +90,10 @@ function EventDetails() {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalInscricoes, setTotalInscricoes] = useState(0);
   const [notification, setNotification] = useState('');
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelDialogLoading, setCancelDialogLoading] = useState(false);
+  const [cancelDialogInfo, setCancelDialogInfo] = useState(null);
+  const [cancelTarget, setCancelTarget] = useState(null);
 
   const statusOptions = [
     '',
@@ -374,35 +379,54 @@ function EventDetails() {
     setFilters(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleCancelarInscricao = async (inscricaoId, orderCode) => {
-    let info;
+  const abrirDialogCancelamento = async (inscricaoId, orderCode) => {
     try {
-      info = await obterInfoCancelamentoInscricao(inscricaoId);
+      const info = await obterInfoCancelamentoInscricao(inscricaoId);
+      setCancelDialogInfo({
+        ...info,
+        orderCode
+      });
+      setCancelTarget({ id: inscricaoId, orderCode });
+      setCancelDialogOpen(true);
     } catch (error) {
       console.error('Erro ao obter info de cancelamento:', error);
       setNotification('Não foi possível verificar o tipo de cancelamento');
+    }
+  };
+
+  const fecharDialogCancelamento = () => {
+    if (cancelDialogLoading) {
       return;
     }
+    setCancelDialogOpen(false);
+    setCancelDialogInfo(null);
+    setCancelTarget(null);
+  };
 
-    const refundMessage = info.needsRefund
-      ? `Esta inscrição será estornada no valor de ${formatarMoeda(info.amount)}.`
-      : 'Não será necessário estornar valor.';
-    const confirmMessage = `${refundMessage} Deseja cancelar a inscrição ${orderCode || inscricaoId}?`;
-
-    if (!window.confirm(confirmMessage)) {
+  const confirmarCancelamento = async () => {
+    if (!cancelTarget?.id) {
       return;
     }
-
+    setCancelDialogLoading(true);
     try {
-      await cancelarInscricao(inscricaoId);
+      await cancelarInscricao(cancelTarget.id);
       setNotification('Inscrição cancelada com sucesso.');
+      fecharDialogCancelamento();
       carregarDados();
       carregarInscricoes();
     } catch (error) {
       console.error('Erro ao cancelar inscrição:', error);
       setNotification(error.message || 'Erro ao cancelar a inscrição.');
+    } finally {
+      setCancelDialogLoading(false);
     }
   };
+
+  const cancelDialogTargetLabel = cancelDialogInfo?.orderCode
+    ? `a inscrição ${cancelDialogInfo.orderCode}`
+    : cancelTarget?.orderCode
+      ? `a inscrição ${cancelTarget.orderCode}`
+      : null;
 
   const bannableStatuses = new Set(['denied', 'expired', 'refunded', 'cancelled']);
 
@@ -776,10 +800,10 @@ function EventDetails() {
                             size="small"
                             variant="outlined"
                             color="secondary"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleCancelarInscricao(inscricao.id, inscricao.orderCode);
-                            }}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            abrirDialogCancelamento(inscricao.id, inscricao.orderCode);
+                          }}
                           >
                             Cancelar
                           </Button>
@@ -893,6 +917,15 @@ function EventDetails() {
           )}
         </TabPanel>
       </Card>
+
+      <CancelRegistrationDialog
+        open={cancelDialogOpen && Boolean(cancelDialogInfo)}
+        onClose={fecharDialogCancelamento}
+        onConfirm={confirmarCancelamento}
+        loading={cancelDialogLoading}
+        info={cancelDialogInfo}
+        targetLabel={cancelDialogTargetLabel}
+      />
 
       {/* Dialog de Lote */}
       <Dialog open={dialogLoteAberto} onClose={handleFecharDialogLote} maxWidth="sm" fullWidth>
