@@ -12,7 +12,13 @@ const CIELO_ENDPOINTS = {
   production: 'https://api.cieloecommerce.cielo.com.br'
 };
 
+const CIELO_QUERY_ENDPOINTS = {
+  sandbox: 'https://apiquerysandbox.cieloecommerce.cielo.com.br',
+  production: 'https://apiquery.cieloecommerce.cielo.com.br'
+};
+
 const BASE_URL = CIELO_ENDPOINTS[CIELO_ENVIRONMENT];
+const QUERY_BASE_URL = CIELO_QUERY_ENDPOINTS[CIELO_ENVIRONMENT];
 
 function logCielo(message, payload = {}) {
   console.info(`[Cielo] ${message}`, JSON.stringify(payload));
@@ -340,7 +346,7 @@ async function consultarPagamento(paymentId) {
   logCielo('Consult request', { paymentId });
   try {
     const response = await axios.get(
-      `${BASE_URL}/1/sales/${paymentId}`,
+      `${QUERY_BASE_URL}/1/sales/${paymentId}`,
       {
         headers: {
           'Content-Type': 'application/json',

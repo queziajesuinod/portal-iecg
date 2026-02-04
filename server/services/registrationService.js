@@ -1084,16 +1084,25 @@ async function cancelarInscricao(id) {
     return aplicarCancelamentoLocal('cancelled', 'Ambiente sandbox: pagamento ignorado');
   }
 
-  // Cancelar pagamento na Cielo
-  const amountCentavos = paymentService.converterParaCentavos(registration.finalPrice);
-  const jaCapturado = ['confirmed', 'paid'].includes(registration.paymentStatus);
-  const fazerCancelamento = async () => {
+  const creditCardPayments = await RegistrationPayment.findAll({
+    where: {
+      registrationId: registration.id,
+      provider: 'cielo',
+      method: 'credit_card',
+      providerPaymentId: { [Op.ne]: null },
+      status: { [Op.notIn]: ['cancelled', 'refunded'] }
+    },
+    order: [['createdAt', 'ASC']]
+  });
+
+  const cancelarNoCielo = async (paymentId, amountCentavos, currentStatus) => {
+    const jaCapturado = ['confirmed', 'paid'].includes(currentStatus);
     const attemptVoid = async () => ({
-      ...await paymentService.cancelarPagamento(registration.paymentId, amountCentavos),
+      ...await paymentService.cancelarPagamento(paymentId, amountCentavos),
       type: 'cancellation'
     });
     const attemptRefund = async () => ({
-      ...await paymentService.estornarPagamento(registration.paymentId, amountCentavos),
+      ...await paymentService.estornarPagamento(paymentId, amountCentavos),
       type: 'refund'
     });
 
@@ -1108,26 +1117,67 @@ async function cancelarInscricao(id) {
     return attemptRefund();
   };
 
-  const cancelamento = await fazerCancelamento();
+  const pagamentosParaCancelar = creditCardPayments.length
+    ? creditCardPayments
+    : [{
+      id: null,
+      providerPaymentId: registration.paymentId,
+      amount: registration.finalPrice,
+      status: registration.paymentStatus
+    }];
 
-  if (cancelamento.sucesso) {
-    const statusAnterior = registration.paymentStatus;
-    registration.paymentStatus = cancelamento.type === 'refund' ? 'refunded' : 'cancelled';
-    await registration.save();
+  const cancelamentosConcluidos = [];
+
+  for (const payment of pagamentosParaCancelar) {
+    if (!payment.providerPaymentId) {
+      continue;
+    }
+
+    const amountCentavos = paymentService.converterParaCentavos(payment.amount);
+    const cancelamento = await cancelarNoCielo(payment.providerPaymentId, amountCentavos, payment.status);
+    if (!cancelamento.sucesso) {
+      throw new Error(`Erro ao cancelar pagamento ${payment.providerPaymentId || payment.id}: ${cancelamento.erro}`);
+    }
+
+    if (payment.id) {
+      const novoStatusPagamento = cancelamento.type === 'refund' ? 'refunded' : 'cancelled';
+      payment.status = novoStatusPagamento;
+      payment.providerPayload = cancelamento.dadosCompletos || payment.providerPayload;
+      if (!payment.confirmedAt && novoStatusPagamento === 'refunded') {
+        payment.confirmedAt = new Date();
+      }
+      await payment.save();
+    }
 
     await paymentService.registrarTransacao(
       registration.id,
       cancelamento.type,
-      cancelamento.status.toString(),
-      cancelamento
+      cancelamento.status !== undefined && cancelamento.status !== null
+        ? cancelamento.status.toString()
+        : undefined,
+      {
+        ...cancelamento,
+        paymentId: payment.providerPaymentId,
+        amount: payment.amount
+      }
     );
 
-    await ajustarContadoresDeStatus(registration, statusAnterior);
-
-    return registration;
+    await atualizarTransacoesCielo(payment.providerPaymentId, cancelamento);
+    cancelamentosConcluidos.push(cancelamento);
   }
 
-  throw new Error(`Erro ao cancelar pagamento: ${cancelamento.erro}`);
+  if (!cancelamentosConcluidos.length) {
+    throw new Error('Nenhum pagamento de cartão encontrado para cancelamento');
+  }
+
+  const statusAnterior = registration.paymentStatus;
+  const teveReembolso = cancelamentosConcluidos.some((item) => item.type === 'refund');
+  registration.paymentStatus = teveReembolso ? 'refunded' : 'cancelled';
+  await registration.save();
+
+  await ajustarContadoresDeStatus(registration, statusAnterior);
+
+  return registration;
 }
 
 async function obterInfoCancelamento(id) {
@@ -1136,11 +1186,38 @@ async function obterInfoCancelamento(id) {
     registration.paymentId &&
     ['confirmed', 'paid'].includes(registration.paymentStatus)
   );
+  const creditCardPayments = await RegistrationPayment.findAll({
+    where: {
+      registrationId: registration.id,
+      method: 'credit_card',
+      providerPaymentId: { [Op.ne]: null }
+    },
+    order: [['createdAt', 'ASC']]
+  });
+
+  const totalPaymentAmount = creditCardPayments.reduce(
+    (sum, payment) => sum + Number(payment.amount || 0),
+    0
+  );
+
   return {
     paymentStatus: registration.paymentStatus,
     needsRefund,
     paymentId: registration.paymentId,
-    amount: Number(registration.finalPrice || 0)
+    amount: totalPaymentAmount > 0
+      ? totalPaymentAmount
+      : Number(registration.finalPrice || 0),
+    creditCardPayments: creditCardPayments
+      .filter((payment) => payment.providerPaymentId)
+      .map((payment) => ({
+        id: payment.id,
+        providerPaymentId: payment.providerPaymentId,
+        amount: Number(payment.amount || 0),
+        status: payment.status,
+        createdAt: payment.createdAt,
+        installments: payment.installments,
+        channel: payment.channel
+      }))
   };
 }
 

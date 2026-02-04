@@ -38,10 +38,12 @@ import {
   listarFormasPagamento,
   criarPagamentoInscricao,
   criarPagamentoOfflineInscricao,
-  recalcularStatusInscricao
+  recalcularStatusInscricao,
+  obterInfoCancelamentoInscricao
 } from '../../../api/eventsApi';
 import { getStoredPermissions } from '../../../utils/permissions';
 import Notification from '../../../components/Notification/Notification';
+import CancelRegistrationDialog from '../../../components/CancelRegistrationDialog';
 
 function RegistrationDetails() {
   const history = useHistory();
@@ -49,7 +51,9 @@ function RegistrationDetails() {
   const [inscricao, setInscricao] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notification, setNotification] = useState('');
-  const [dialogCancelar, setDialogCancelar] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelDialogInfo, setCancelDialogInfo] = useState(null);
+  const [cancelDialogLoading, setCancelDialogLoading] = useState(false);
   const [paymentOptions, setPaymentOptions] = useState([]);
   const [dialogNovoPagamento, setDialogNovoPagamento] = useState(false);
   const [dialogPagamentoOffline, setDialogPagamentoOffline] = useState(false);
@@ -139,15 +143,37 @@ function RegistrationDetails() {
     carregarInscricao();
   }, [carregarInscricao]);
 
-  const handleCancelar = async () => {
+  const abrirDialogCancelamento = async () => {
+    try {
+      const info = await obterInfoCancelamentoInscricao(id);
+      setCancelDialogInfo(info);
+      setCancelDialogOpen(true);
+    } catch (error) {
+      console.error('Erro ao obter info de cancelamento:', error);
+      setNotification('Não foi possível verificar o tipo de cancelamento');
+    }
+  };
+
+  const fecharDialogCancelamento = () => {
+    if (cancelDialogLoading) {
+      return;
+    }
+    setCancelDialogOpen(false);
+    setCancelDialogInfo(null);
+  };
+
+  const confirmarCancelamento = async () => {
+    setCancelDialogLoading(true);
     try {
       await cancelarInscricao(id);
       setNotification('Inscrição cancelada com sucesso!');
-      setDialogCancelar(false);
+      fecharDialogCancelamento();
       carregarInscricao();
     } catch (error) {
       console.error('Erro ao cancelar inscrição:', error);
       setNotification(error.response?.data?.message || 'Erro ao cancelar inscrição');
+    } finally {
+      setCancelDialogLoading(false);
     }
   };
 
@@ -602,39 +628,29 @@ function RegistrationDetails() {
               >
                 Recalcular status de pagamento
               </Button>
-              {paymentStatusLabel === 'confirmed' && (
-                <Button
-                  variant="outlined"
-                  color="secondary"
-                  startIcon={<CancelIcon />}
-                  onClick={() => setDialogCancelar(true)}
-                >
-                  Cancelar Inscrição
-                </Button>
-              )}
+                {paymentStatusLabel === 'confirmed' && (
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    startIcon={<CancelIcon />}
+                    onClick={abrirDialogCancelamento}
+                  >
+                    Cancelar Inscrição
+                  </Button>
+                )}
             </div>
           </Grid>
         </Grid>
       </PapperBlock>
 
-      {/* Dialog de Confirmação de Cancelamento */}
-      <Dialog open={dialogCancelar} onClose={() => setDialogCancelar(false)}>
-        <DialogTitle>Cancelar Inscrição</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Tem certeza que deseja cancelar esta inscrição?
-            Esta ação irá processar o reembolso do pagamento.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDialogCancelar(false)}>
-            Não, manter inscrição
-          </Button>
-          <Button onClick={handleCancelar} color="secondary" variant="contained">
-            Sim, cancelar
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <CancelRegistrationDialog
+        open={cancelDialogOpen && Boolean(cancelDialogInfo)}
+        onClose={fecharDialogCancelamento}
+        onConfirm={confirmarCancelamento}
+        loading={cancelDialogLoading}
+        info={cancelDialogInfo}
+        targetLabel={inscricao?.orderCode ? `a inscrição ${inscricao.orderCode}` : null}
+      />
 
       <Dialog open={dialogNovoPagamento} onClose={handleFecharNovoPagamento} maxWidth="sm" fullWidth>
         <DialogTitle>Novo pagamento</DialogTitle>
