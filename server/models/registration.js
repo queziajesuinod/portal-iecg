@@ -81,6 +81,7 @@ module.exports = (sequelize) => {
         'partial',
         'confirmed',
         'denied',
+        'expired',
         'cancelled',
         'refunded'
       ),

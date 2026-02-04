@@ -18,6 +18,7 @@ const app = express();
 const bodyParser = require('body-parser');
 const WebhookController = require('./controllers/webhookController');
 const pixPendingJob = require('./jobs/pixPendingRegistrationsJob');
+const singlePaymentStatusJob = require('./jobs/singlePaymentStatusSyncJob');
 const customHost = argv.host || process.env.HOST;
 const host = customHost || null; // Permite IPv6/IPv4
 const prettyHost = customHost || 'localhost';
@@ -120,6 +121,7 @@ app.listen(port, host, async (err) => {
   }
 
   pixPendingJob.startPixPendingJob();
+  singlePaymentStatusJob.startSinglePaymentStatusJob();
 
   console.log(`Servidor rodando em: ${process.env.REACT_APP_API_URL}`);
 });
