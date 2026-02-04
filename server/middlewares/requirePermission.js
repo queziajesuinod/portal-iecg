@@ -10,7 +10,7 @@ function normalizePermissionList(requiredPermissions) {
   return [requiredPermissions];
 }
 
-async function requirePermission(requiredPermissions) {
+function requirePermission(requiredPermissions) {
   const permissionsToCheck = normalizePermissionList(requiredPermissions);
 
   return async (req, res, next) => {
