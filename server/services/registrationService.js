@@ -339,6 +339,12 @@ async function processarInscricao(dadosInscricao) {
   if (evento.maxPerBuyer && quantity > evento.maxPerBuyer) {
     throw new Error(`Este evento permite no máximo ${evento.maxPerBuyer} inscrição(ões) por comprador`);
   }
+  if (evento.maxRegistrations && Number.isFinite(Number(evento.maxRegistrations))) {
+    const current = Number(evento.currentRegistrations || 0);
+    if (current >= Number(evento.maxRegistrations)) {
+      throw new Error('Limite de vagas do evento atingido');
+    }
+  }
 
   // 2. Validar que cada inscrito tem um batchId
   if (!Array.isArray(attendeesData) || attendeesData.length !== quantity) {
@@ -1055,6 +1061,9 @@ async function cancelarInscricao(id) {
   if (registration.paymentStatus === 'cancelled' || registration.paymentStatus === 'refunded') {
     throw new Error('Inscrição já foi cancelada');
   }
+  if (registration.paymentStatus === 'pending') {
+    throw new Error('Não é possível cancelar uma inscrição com pagamento pendente');
+  }
 
   const environment = process.env.CIELO_ENVIRONMENT || 'sandbox';
   const isProductionEnvironment = environment === 'production';
@@ -1079,6 +1088,10 @@ async function cancelarInscricao(id) {
 
     return registration;
   };
+
+  if (['expired', 'denied'].includes(registration.paymentStatus)) {
+    return aplicarCancelamentoLocal('cancelled', 'Pagamento expirado/não autorizado: sem estorno necessário');
+  }
 
   if (!registration.paymentId || !isProductionEnvironment) {
     return aplicarCancelamentoLocal('cancelled', 'Ambiente sandbox: pagamento ignorado');

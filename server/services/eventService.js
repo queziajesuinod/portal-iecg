@@ -130,15 +130,21 @@ async function obterResumoInscricoesPorEvento(eventId) {
     };
   }
 
-  const totals = await Registration.findAll({
+  const totalRow = await Registration.findOne({
     where: { eventId },
     attributes: [
-      [sequelize.fn("COUNT", sequelize.col("id")), "totalRegistrations"],
+      [
+        sequelize.fn(
+          "COALESCE",
+          sequelize.fn("SUM", sequelize.col("quantity")),
+          0
+        ),
+        "totalRegistrations",
+      ],
     ],
     raw: true,
   });
-
-  const totalRow = (totals && totals[0]) || {};
+  const totalRowData = totalRow || {};
   const confirmedRow = await Registration.findOne({
     where: { eventId, paymentStatus: "confirmed" },
     attributes: [
@@ -157,7 +163,14 @@ async function obterResumoInscricoesPorEvento(eventId) {
     where: { eventId },
     attributes: [
       "paymentStatus",
-      [sequelize.fn("COUNT", sequelize.col("paymentStatus")), "count"],
+      [
+        sequelize.fn(
+          "COALESCE",
+          sequelize.fn("SUM", sequelize.col("quantity")),
+          0
+        ),
+        "count",
+      ],
     ],
     group: ["paymentStatus"],
     raw: true,
@@ -168,27 +181,16 @@ async function obterResumoInscricoesPorEvento(eventId) {
     return acc;
   }, {});
 
-  const expiredCount = await RegistrationPayment.count({
-    where: { status: "expired" },
-    include: [
-      {
-        model: Registration,
-        as: "registration",
-        where: { eventId },
-        attributes: [],
-      },
-    ],
-  });
-
   const pendingCount =
     (statusMap.pending || 0) +
     (statusMap.authorized || 0) +
     (statusMap.partial || 0);
   const deniedCancelled = (statusMap.denied || 0) + (statusMap.cancelled || 0);
   const confirmedCount = statusMap.confirmed || 0;
+  const expiredCount = statusMap.expired || 0;
 
   return {
-    totalRegistrations: Number(totalRow.totalRegistrations || 0),
+    totalRegistrations: Number(totalRowData.totalRegistrations || 0),
     confirmedCount,
     confirmedTotalValue: Number(confirmedRow ? confirmedRow.confirmedValue : 0),
     deniedCancelled,
