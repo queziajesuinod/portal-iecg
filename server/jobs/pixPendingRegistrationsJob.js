@@ -26,6 +26,10 @@ async function checkPixPendingRegistrations() {
     },
     include: [
       {
+        model: RegistrationPayment,
+        as: 'payments'
+      },
+      {
         model: Event,
         as: 'event',
         attributes: ['id', 'registrationPaymentMode']
@@ -45,26 +49,46 @@ async function checkPixPendingRegistrations() {
       console.error(`[pixPendingJob] Falha ao validar pagamento PIX para ${registration.orderCode}`, error);
     }
 
+    await registration.reload({ include: [{ model: RegistrationPayment, as: 'payments' }] });
     if (registration.paymentStatus !== 'pending') {
       console.info(`[pixPendingJob] Inscrição ${registration.orderCode} já atualizada para ${registration.paymentStatus}`);
       return;
     }
 
-    await RegistrationPayment.update(
-      {
-        status: 'expired',
-        notes: `Cancelado automaticamente após ${PIX_PENDING_TIMEOUT_MINUTES} minutos pendente`
-      },
-      {
-        where: {
-          registrationId: registration.id,
-          status: 'pending'
+    const pendingPayments = registration.payments.filter((payment) => payment.status === 'pending');
+    if (pendingPayments.length) {
+      await RegistrationPayment.update(
+        {
+          status: 'expired',
+          notes: `Cancelado automaticamente após ${PIX_PENDING_TIMEOUT_MINUTES} minutos pendente`
+        },
+        {
+          where: {
+            registrationId: registration.id,
+            status: 'pending'
+          }
         }
-      }
-    );
+      );
+    }
+
+    const updatedPayments = await RegistrationPayment.findAll({
+      where: { registrationId: registration.id }
+    });
+    const activeStatuses = new Set(['pending', 'authorized', 'confirmed', 'partial']);
+    const hasActivePayment = updatedPayments.some((payment) => activeStatuses.has(payment.status));
 
     const paymentMode = (registration.event?.registrationPaymentMode || 'SINGLE').toUpperCase();
     const isSinglePayment = paymentMode === 'SINGLE';
+
+    if (!hasActivePayment) {
+      const statusAnterior = registration.paymentStatus;
+      registration.set('paymentStatus', 'cancelled');
+      await registration.save();
+      await registrationService.ajustarContadoresDeStatus(registration, statusAnterior);
+
+      console.info(`[pixPendingJob] Inscrição ${registration.orderCode} cancelada automaticamente após ${PIX_PENDING_TIMEOUT_MINUTES} minutos pendente`);
+      return;
+    }
 
     if (!isSinglePayment) {
       console.info(`[pixPendingJob] Inscrição ${registration.orderCode} permanece ativa (modo ${paymentMode}); apenas expira o pagamento PIX pendente`);

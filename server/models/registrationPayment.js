@@ -90,6 +90,21 @@ module.exports = (sequelize) => {
       type: DataTypes.TEXT,
       allowNull: true
     },
+    efiCommissionAmount: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      comment: 'Valor da comissão enviada para Efí (1,5% do pagamento)'
+    },
+    efiCommissionSentAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'Momento em que a comissão Efí foi disparada'
+    },
+    efiCommissionResponse: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      comment: 'Resposta completa enviada pela API Efí'
+    },
   }, {
     sequelize,
     modelName: 'RegistrationPayment',
