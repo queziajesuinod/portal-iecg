@@ -7,14 +7,12 @@ import {
   CircularProgress,
   Box
 } from '@material-ui/core';
-import {
-  CheckCircle as CheckInIcon,
-  People as PeopleIcon,
-  TrendingUp as TrendingIcon,
-  QrCode as QRIcon,
-  Nfc as NFCIcon,
-  TouchApp as ManualIcon
-} from '@material-ui/icons';
+import CheckInIcon from '@material-ui/icons/CheckCircle';
+import PeopleIcon from '@material-ui/icons/People';
+import TrendingIcon from '@material-ui/icons/TrendingUp';
+import QRIcon from '@material-ui/icons/CropFree';
+import NFCIcon from '@material-ui/icons/Nfc';
+import ManualIcon from '@material-ui/icons/TouchApp';
 import { obterEstatisticasCheckIn } from '../../../../api/checkInApi';
 
 function StatCard({ title, value, icon: Icon, color = 'primary', subtitle }) {
@@ -49,10 +47,16 @@ function CheckInStats({ eventId, compact = false }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!eventId) {
+      setLoading(false);
+      setStats(null);
+      return;
+    }
     carregarEstatisticas();
   }, [eventId]);
 
   const carregarEstatisticas = async () => {
+    if (!eventId) return;
     try {
       setLoading(true);
       const data = await obterEstatisticasCheckIn(eventId);

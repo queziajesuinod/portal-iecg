@@ -38,7 +38,8 @@ function TabPanel({ children, value, index, ...other }) {
 }
 
 function NotificationsManagement() {
-  const { eventId } = useParams();
+  const { id } = useParams();
+  const eventId = id;
   const [tabAtual, setTabAtual] = useState(0);
   const [notification, setNotification] = useState('');
 
@@ -60,7 +61,7 @@ function NotificationsManagement() {
         <meta property="twitter:description" content={description} />
       </Helmet>
 
-      <Notification message={notification} />
+      <Notification message={notification} close={() => setNotification('')} />
 
       <PapperBlock
         title="Gerenciamento de Notificações"

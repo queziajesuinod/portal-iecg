@@ -1,1 +1,1 @@
-NotificationComponents.js
+export { NotificationStats as default } from './NotificationComponents';

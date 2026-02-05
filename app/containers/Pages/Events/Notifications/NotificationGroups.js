@@ -1,1 +1,1 @@
-NotificationComponents.js
+export { NotificationGroups as default } from './NotificationComponents';

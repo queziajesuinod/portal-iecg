@@ -526,7 +526,7 @@ class CheckInService {
       where: { eventId },
       attributes: [
         'checkInMethod',
-        [sequelize.fn('COUNT', sequelize.col('id')), 'total']
+        [sequelize.fn('COUNT', sequelize.col('EventCheckIn.id')), 'total']
       ],
       group: ['checkInMethod'],
       raw: true
@@ -536,7 +536,7 @@ class CheckInService {
       where: { eventId },
       attributes: [
         'scheduleId',
-        [sequelize.fn('COUNT', sequelize.col('id')), 'total']
+        [sequelize.fn('COUNT', sequelize.col('EventCheckIn.id')), 'total']
       ],
       include: [
         {

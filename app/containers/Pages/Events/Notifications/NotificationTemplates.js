@@ -1,1 +1,1 @@
-NotificationComponents.js
+export { NotificationTemplates as default } from './NotificationComponents';

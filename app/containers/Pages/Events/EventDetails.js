@@ -35,6 +35,8 @@ import {
   Block as BlockIcon,
   Add as AddIcon,
   Delete as DeleteIcon,
+  CheckCircle as CheckInIcon,
+  Notifications as NotificationsIcon
 } from '@material-ui/icons';
 import { useHistory, useParams } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
@@ -200,8 +202,9 @@ function EventDetails() {
   }, [filters]);
 
   useEffect(() => {
+    if (tabAtiva !== 1) return;
     carregarInscricoes(currentPage, rowsPerPage, filters);
-  }, [id, currentPage, rowsPerPage, filters]);
+  }, [tabAtiva, id, currentPage, rowsPerPage, filters]);
 
   const handleAbrirDialogLote = (lote = null) => {
     if (lote) {
@@ -440,7 +443,9 @@ function EventDetails() {
   };
 
   if (loading) {
-    return <Typography>Carregando...</Typography>;
+    return (
+      <Typography>Carregando...</Typography>
+    );
   }
 
   if (!evento) {
@@ -602,6 +607,22 @@ function EventDetails() {
             onClick={() => history.push(`/app/events/${id}/editar`)}
           >
             Editar Evento
+          </Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            startIcon={<CheckInIcon />}
+            onClick={() => history.push(`/app/events/${id}/checkin`)}
+          >
+            Check-in
+          </Button>
+          <Button
+            variant="contained"
+            color="default"
+            startIcon={<NotificationsIcon />}
+            onClick={() => history.push(`/app/events/${id}/notificacoes`)}
+          >
+            Notificações
           </Button>
         </div>
       </PapperBlock>

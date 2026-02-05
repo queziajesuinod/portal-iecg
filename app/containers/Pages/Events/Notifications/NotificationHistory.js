@@ -1,1 +1,1 @@
-NotificationComponents.js
+export { NotificationHistory as default } from './NotificationComponents';

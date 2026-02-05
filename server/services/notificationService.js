@@ -17,6 +17,23 @@ const evolutionApiService = require('./evolutionApiService');
 
 const TIMEZONE = 'America/Campo_Grande';
 
+const normalizeWhatsappDigits = (value) => {
+  if (!value) return null;
+  const digits = String(value).replace(/\D/g, '');
+  if (!digits) return null;
+  return digits.startsWith('55') ? digits : `55${digits}`;
+};
+
+const isWhatsappValid = (validation) => {
+  if (!validation) return true;
+  if (typeof validation.valid === 'boolean') return validation.valid;
+  if (typeof validation.status === 'string') {
+    const status = validation.status.toLowerCase();
+    return ['connected', 'valid', 'ready', 'ok'].includes(status);
+  }
+  return true;
+};
+
 class NotificationService {
   // ========== GRUPOS DE NOTIFICAÇÃO ==========
 
@@ -312,13 +329,23 @@ class NotificationService {
       message = this.substituirVariaveis(customMessage, dadosSubstituicao);
     }
 
-    // Obter destinatário
+    // Obter destinatário e validar WhatsApp
     let recipient = '';
     if (channel === 'whatsapp' || channel === 'sms') {
-      recipient = registration.buyerData?.phone || registration.buyerData?.whatsapp;
-      if (!recipient) {
+      const rawPhone = registration.buyerData?.whatsapp || registration.buyerData?.phone;
+      const normalizedPhone = normalizeWhatsappDigits(rawPhone);
+      if (!normalizedPhone) {
         throw new Error('Telefone não encontrado na inscrição');
       }
+
+      if (channel === 'whatsapp') {
+        const validation = await evolutionApiService.validarNumeroWhatsapp(normalizedPhone);
+        if (!isWhatsappValid(validation)) {
+          throw new Error(validation?.message || 'Número de WhatsApp inválido ou desconectado');
+        }
+      }
+
+      recipient = normalizedPhone;
     } else if (channel === 'email') {
       recipient = registration.buyerData?.email;
       if (!recipient) {

@@ -11,10 +11,10 @@ import {
   MenuItem,
   Typography,
   Box,
-  Alert,
   CircularProgress,
   Chip
 } from '@material-ui/core';
+import { Alert } from '@material-ui/lab';
 import {
   Send as SendIcon,
   Image as ImageIcon
@@ -212,16 +212,16 @@ function NotificationSender({ eventId }) {
             {!formData.templateId && (
               <>
                 <Box mt={2}>
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={4}
-                    label="Mensagem Personalizada"
-                    value={formData.customMessage}
-                    onChange={(e) => setFormData({ ...formData, customMessage: e.target.value })}
-                    placeholder="Digite a mensagem..."
-                    helperText="Variáveis: {{nome}}, {{evento}}, {{data}}, {{codigo}}"
-                  />
+                <TextField
+                  fullWidth
+                  multiline
+                  minRows={4}
+                  label="Mensagem Personalizada"
+                  value={formData.customMessage}
+                  onChange={(e) => setFormData({ ...formData, customMessage: e.target.value })}
+                  placeholder="Digite a mensagem..."
+                  helperText="Variáveis: {{nome}}, {{evento}}, {{data}}, {{codigo}}"
+                />
                 </Box>
 
                 <Box mt={2}>
