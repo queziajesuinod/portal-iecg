@@ -69,12 +69,20 @@ app.use('/webhooks', authMiddleware, require('./routers/webhooks'));
 // ============= MÓDULO DE EVENTOS =============
 // Rotas públicas de eventos e inscrições (DEVE VIR ANTES DE /public genérico)
 app.use('/api/public/events', require('./routers/publicEventRoutes'));
+// Rotas públicas de check-in
+app.use('/api/public/checkin', require('./routers/publicCheckInRoutes'));
 // Rota pública para apelos direcionados
 app.use('/public', require('./routers/publicStartRoutes'));
 // Rotas administrativas de eventos (protegidas)
 app.use('/api/admin/events', authMiddleware, require('./routers/eventRoutes'));
+// Rotas administrativas de check-in (protegidas)
+app.use('/api/admin/checkin', authMiddleware, require('./routers/checkInRoutes'));
+// Rotas administrativas de notificações (protegidas)
+app.use('/api/admin/notifications', authMiddleware, require('./routers/notificationRoutes'));
 // Webhook Cielo (pública - sem autenticação)
 app.use('/api/webhooks', require('./routers/webhookRoutes'));
+// Webhook Evolution API (pública - sem autenticação)
+app.use('/api/webhooks/notifications', require('./routers/evolutionWebhookRoutes'));
 
 // Assets utilitários
 app.use('/api/icons', (req, res) => {
