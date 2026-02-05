@@ -21,6 +21,7 @@ const batchService = require('./batchService');
 const couponService = require('./couponService');
 const formFieldService = require('./formFieldService');
 const paymentService = require('./paymentService');
+const efiService = require('./efiService');
 const eventService = require('./eventService');
 const webhookEmitter = require('./webhookEmitter');
 
@@ -87,6 +88,52 @@ async function carregarMapeamentoCampos(eventId) {
     },
     { buyer: {}, attendee: {} }
   );
+}
+
+async function registrarComissaoEfipay(paymentRecord, registration, context = {}) {
+  if (!paymentRecord || !registration) {
+    return;
+  }
+
+  if (paymentRecord.efiCommissionSentAt || !efiService.isCommissionEnabled()) {
+    return;
+  }
+
+  const amountCentavos = paymentService.converterParaCentavos(paymentRecord.amount || 0);
+  if (amountCentavos <= 0) {
+    return;
+  }
+
+  try {
+    const result = await efiService.enviarComissaoEfi(amountCentavos, {
+      orderCode: registration.orderCode,
+      registrationId: registration.id,
+      infoPagador: context.infoPagador || `Comissão Efí - ${registration.orderCode}`
+    });
+
+    const amountReal = Number.isFinite(result.amountCentavos)
+      ? (result.amountCentavos / 100).toFixed(2)
+      : null;
+
+    paymentRecord.efiCommissionAmount = amountReal;
+    paymentRecord.efiCommissionResponse = result.dadosCompletos || (result.erro ? { erro: result.erro } : null);
+    if (result.sucesso) {
+      paymentRecord.efiCommissionSentAt = new Date();
+    }
+
+    await paymentRecord.save();
+
+    if (!result.sucesso) {
+      console.error(
+        `[registrationService] Falha ao distribuir comissão Efí para inscricao ${registration.orderCode}: ${result.erro}`
+      );
+    }
+  } catch (error) {
+    console.error(
+      `[registrationService] Erro inesperado ao enviar comissão Efí para inscricao ${registration.orderCode}:`,
+      error
+    );
+  }
 }
 
 function aplicarLabelsFormulario(registration, fieldMaps) {
@@ -544,7 +591,7 @@ async function processarInscricao(dadosInscricao) {
   registration.attendees = attendees;
   await prepararRegistroComCampos(registration);
 
-  await RegistrationPayment.create({
+  const paymentRecord = await RegistrationPayment.create({
     id: uuid.v4(),
     registrationId: registration.id,
     channel: 'ONLINE',
@@ -595,12 +642,18 @@ async function processarInscricao(dadosInscricao) {
         { where: { providerPaymentId: resultadoPagamento.paymentId } }
       );
 
+      await paymentRecord.reload();
+
       await paymentService.registrarTransacao(
         registration.id,
         'capture',
         captura.status.toString(),
         captura
       );
+
+      await registrarComissaoEfipay(paymentRecord, registration, {
+        infoPagador: `Comissão ${registration.orderCode}`
+      });
     }
   }
 
@@ -982,6 +1035,9 @@ async function criarPagamentoOnline(registrationId, payload = {}) {
         captura.status.toString(),
         captura
       );
+      await registrarComissaoEfipay(paymentRecord, registration, {
+        infoPagador: `Comissão ${registration.orderCode}`
+      });
     }
   }
 

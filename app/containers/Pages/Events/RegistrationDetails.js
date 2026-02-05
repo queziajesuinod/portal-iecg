@@ -55,7 +55,6 @@ function RegistrationDetails() {
   const [cancelDialogInfo, setCancelDialogInfo] = useState(null);
   const [cancelDialogLoading, setCancelDialogLoading] = useState(false);
   const [paymentOptions, setPaymentOptions] = useState([]);
-  const [dialogNovoPagamento, setDialogNovoPagamento] = useState(false);
   const [dialogPagamentoOffline, setDialogPagamentoOffline] = useState(false);
   const [recalculatingPayment, setRecalculatingPayment] = useState(false);
   const [formPagamento, setFormPagamento] = useState({
@@ -177,13 +176,7 @@ function RegistrationDetails() {
     }
   };
 
-  const handleAbrirNovoPagamento = () => {
-    setDialogNovoPagamento(true);
-  };
 
-  const handleFecharNovoPagamento = () => {
-    setDialogNovoPagamento(false);
-  };
 
   const handleAbrirPagamentoOffline = () => {
     setDialogPagamentoOffline(true);
@@ -193,27 +186,7 @@ function RegistrationDetails() {
     setDialogPagamentoOffline(false);
   };
 
-  const handleSalvarPagamento = async () => {
-    try {
-      if (!formPagamento.paymentOptionId) {
-        setNotification('Selecione uma forma de pagamento');
-        return;
-      }
-      const payload = {
-        amount: parseFloat(formPagamento.amount),
-        paymentOptionId: formPagamento.paymentOptionId,
-        paymentData: formPagamento.paymentData
-      };
-      await criarPagamentoInscricao(id, payload);
-      setNotification('Pagamento criado com sucesso!');
-      handleFecharNovoPagamento();
-      setFormPagamento(prev => ({ ...prev, amount: '' }));
-      carregarInscricao();
-    } catch (error) {
-      console.error('Erro ao criar pagamento:', error);
-      setNotification(error.response?.data?.message || error.message || 'Erro ao criar pagamento');
-    }
-  };
+
 
   const handleSalvarPagamentoOffline = async () => {
     try {
@@ -258,10 +231,7 @@ function RegistrationDetails() {
     const labels = {
       pix: 'PIX',
       credit_card: 'Cartão de Crédito',
-      boleto: 'Boleto',
       cash: 'Dinheiro',
-      pos: 'POS',
-      transfer: 'Transferência',
       manual: 'Manual'
     };
     return labels[metodo] || metodo;
@@ -313,9 +283,7 @@ function RegistrationDetails() {
   const remaining = Number(inscricao.remaining || 0);
   const paymentStatusLabel = inscricao.paymentStatusDerived || inscricao.paymentStatus;
   const payments = inscricao.payments || [];
-  const pixQrCodeBase64 = payments.find((payment) => payment.pixQrCodeBase64)?.pixQrCodeBase64
-    || inscricao.pixQrCodeBase64;
-  const selectedPaymentOption = paymentOptions.find((option) => option.id === formPagamento.paymentOptionId);
+
 
   return (
     <div>
@@ -466,16 +434,7 @@ function RegistrationDetails() {
                     </Typography>
                   </Grid>
                   <Grid item>
-                    {remaining > 0 && inscricao.event?.registrationPaymentMode === 'BALANCE_DUE' && (
-                      <Button
-                        variant="contained"
-                        color="primary"
-                        startIcon={<AddIcon />}
-                        onClick={handleAbrirNovoPagamento}
-                      >
-                        Fazer novo pagamento
-                      </Button>
-                    )}
+                    
                     {canRegisterOffline && remaining > 0 && (
                       <Button
                         variant="outlined"
@@ -522,13 +481,6 @@ function RegistrationDetails() {
                     <Typography variant="body2" color="primary">
                       Quitado: pagamento total confirmado.
                     </Typography>
-                    {pixQrCodeBase64 && (
-                      <img
-                        src={`data:image/png;base64,${pixQrCodeBase64}`}
-                        alt="QRCode PIX"
-                        style={{ marginTop: 12, maxWidth: 200 }}
-                      />
-                    )}
                   </div>
                 )}
               </CardContent>
@@ -652,107 +604,7 @@ function RegistrationDetails() {
         targetLabel={inscricao?.orderCode ? `a inscrição ${inscricao.orderCode}` : null}
       />
 
-      <Dialog open={dialogNovoPagamento} onClose={handleFecharNovoPagamento} maxWidth="sm" fullWidth>
-        <DialogTitle>Novo pagamento</DialogTitle>
-        <DialogContent>
-          <TextField
-            fullWidth
-            label="Valor do pagamento"
-            type="number"
-            value={formPagamento.amount}
-            onChange={(event) => setFormPagamento(prev => ({ ...prev, amount: event.target.value }))}
-            style={{ marginBottom: 16 }}
-          />
-          <FormControl fullWidth style={{ marginBottom: 16 }}>
-            <InputLabel id="forma-pagamento-label">Forma de pagamento</InputLabel>
-            <Select
-              labelId="forma-pagamento-label"
-              value={formPagamento.paymentOptionId}
-              onChange={(event) => setFormPagamento(prev => ({ ...prev, paymentOptionId: event.target.value }))}
-            >
-              {paymentOptions.map((option) => (
-                <MenuItem key={option.id} value={option.id}>
-                  {option.paymentType === 'pix' ? 'PIX' : 'Cartão de Crédito'}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          {selectedPaymentOption?.paymentType === 'credit_card' && (
-            <>
-              <TextField
-                fullWidth
-                label="Número do cartão"
-                value={formPagamento.paymentData.cardNumber}
-                onChange={(event) => setFormPagamento(prev => ({
-                  ...prev,
-                  paymentData: { ...prev.paymentData, cardNumber: event.target.value }
-                }))}
-                style={{ marginBottom: 16 }}
-              />
-              <TextField
-                fullWidth
-                label="Nome impresso no cartão"
-                value={formPagamento.paymentData.cardHolder}
-                onChange={(event) => setFormPagamento(prev => ({
-                  ...prev,
-                  paymentData: { ...prev.paymentData, cardHolder: event.target.value }
-                }))}
-                style={{ marginBottom: 16 }}
-              />
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
-                  <TextField
-                    fullWidth
-                    label="Validade (MM/AAAA)"
-                    value={formPagamento.paymentData.expirationDate}
-                    onChange={(event) => setFormPagamento(prev => ({
-                      ...prev,
-                      paymentData: { ...prev.paymentData, expirationDate: event.target.value }
-                    }))}
-                  />
-                </Grid>
-                <Grid item xs={6}>
-                  <TextField
-                    fullWidth
-                    label="CVV"
-                    value={formPagamento.paymentData.securityCode}
-                    onChange={(event) => setFormPagamento(prev => ({
-                      ...prev,
-                      paymentData: { ...prev.paymentData, securityCode: event.target.value }
-                    }))}
-                  />
-                </Grid>
-              </Grid>
-              <FormControl fullWidth style={{ marginTop: 16 }}>
-                <InputLabel id="parcelas-label">Parcelas</InputLabel>
-                <Select
-                  labelId="parcelas-label"
-                  value={formPagamento.paymentData.installments}
-                  onChange={(event) => setFormPagamento(prev => ({
-                    ...prev,
-                    paymentData: { ...prev.paymentData, installments: Number(event.target.value) }
-                  }))}
-                >
-                  {Array.from({ length: selectedPaymentOption?.maxInstallments || 1 }, (_, idx) => idx + 1).map((parcel) => (
-                    <MenuItem key={parcel} value={parcel}>
-                      {parcel}x
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleFecharNovoPagamento}>
-            Cancelar
-          </Button>
-          <Button onClick={handleSalvarPagamento} color="primary" variant="contained">
-            Confirmar pagamento
-          </Button>
-        </DialogActions>
-      </Dialog>
+      
 
       <Dialog open={dialogPagamentoOffline} onClose={handleFecharPagamentoOffline} maxWidth="sm" fullWidth>
         <DialogTitle>Registrar pagamento presencial</DialogTitle>
@@ -773,9 +625,9 @@ function RegistrationDetails() {
               onChange={(event) => setFormPagamentoOffline(prev => ({ ...prev, method: event.target.value }))}
             >
               <MenuItem value="cash">Dinheiro</MenuItem>
-              <MenuItem value="pos">POS</MenuItem>
-              <MenuItem value="transfer">Transferência</MenuItem>
-              <MenuItem value="manual">Manual</MenuItem>
+              <MenuItem value="pix">Pix</MenuItem>
+              <MenuItem value="credit_card">Cartão de Crédito</MenuItem>
+              <MenuItem value="debit_card">Cartão de Débito</MenuItem>
             </Select>
           </FormControl>
           <TextField
