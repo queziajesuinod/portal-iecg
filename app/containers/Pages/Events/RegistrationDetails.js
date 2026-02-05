@@ -264,7 +264,30 @@ function RegistrationDetails() {
   };
 
   if (loading) {
-    return <Typography>Carregando...</Typography>;
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(255,255,255,0.95)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 16,
+          zIndex: 1400
+        }}
+      >
+        <img
+          src="/spinner.gif"
+          alt="Carregando inscrição"
+          style={{ width: 96, height: 96 }}
+        />
+        <Typography variant="h6" color="textSecondary">
+          Carregando inscrição...
+        </Typography>
+      </div>
+    );
   }
 
   if (!inscricao) {

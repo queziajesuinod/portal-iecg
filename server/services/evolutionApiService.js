@@ -26,15 +26,41 @@ class EvolutionApiService {
    * @param {string} phone - Telefone no formato (XX) XXXXX-XXXX ou similar
    * @returns {string} - Telefone no formato 5511999999999@s.whatsapp.net
    */
+  normalizeDigits(phone) {
+    if (!phone) return null;
+
+    const cleaned = String(phone).replace(/\D/g, '');
+    if (!cleaned) return null;
+
+    return cleaned.startsWith('55') ? cleaned : `55${cleaned}`;
+  }
+
   formatPhoneNumber(phone) {
-    // Remove todos os caracteres não numéricos
-    const cleaned = phone.replace(/\D/g, '');
-    
-    // Adiciona código do país se não tiver
-    const withCountryCode = cleaned.startsWith('55') ? cleaned : `55${cleaned}`;
-    
-    // Formato WhatsApp
-    return `${withCountryCode}@s.whatsapp.net`;
+    const normalized = this.normalizeDigits(phone);
+    if (!normalized) {
+      throw new Error('Telefone inválido para envio via WhatsApp');
+    }
+    return `${normalized}@s.whatsapp.net`;
+  }
+
+  async validarNumeroWhatsapp(phone) {
+    const normalized = this.normalizeDigits(phone);
+    if (!normalized) {
+      throw new Error('Telefone inválido ao validar WhatsApp');
+    }
+
+    try {
+      const client = this.getClient();
+      const response = await client.post(`/chat/whatsappNumbers/${this.instanceName}`, {
+        number: normalized
+      });
+
+      return response.data;
+    } catch (error) {
+      const message = error.response?.data?.message || error.message;
+      console.error('Erro ao validar número de WhatsApp:', message);
+      throw new Error(message);
+    }
   }
 
   /**

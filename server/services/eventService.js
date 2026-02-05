@@ -40,6 +40,15 @@ const camposPadraoComprador = [
     order: 2,
     section: "buyer",
   },
+  {
+    fieldType: "phone",
+    fieldLabel: "WhatsApp do Comprador",
+    fieldName: "buyer_whatsapp",
+    placeholder: "WhatsApp com DDD",
+    isRequired: true,
+    order: 3,
+    section: "buyer",
+  },
 ];
 
 async function garantirCamposBasicosDoComprador(eventId) {

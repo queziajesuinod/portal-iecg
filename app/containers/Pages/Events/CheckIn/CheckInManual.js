@@ -7,10 +7,10 @@ import {
   Grid,
   Typography,
   CircularProgress,
-  Alert,
   Box,
   Chip
 } from '@material-ui/core';
+import { Alert } from '@material-ui/lab';
 import {
   CheckCircle as CheckIcon,
   Search as SearchIcon,

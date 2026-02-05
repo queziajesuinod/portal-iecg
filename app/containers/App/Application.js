@@ -26,6 +26,8 @@ import UsersListPage from '../Pages/Admin/UsersListPage';
 import EventsDashboard from '../Pages/Events/EventsDashboard';
 import EventForm from '../Pages/Events/EventForm';
 import EventDetails from '../Pages/Events/EventDetails';
+import CheckInManagement from '../Pages/Events/CheckInManagement';
+import NotificationsManagement from '../Pages/Events/NotificationsManagement';
 import CouponsPage from '../Pages/Events/CouponsPage';
 import FormBuilder from '../Pages/Events/FormBuilder';
 import RegistrationDetails from '../Pages/Events/RegistrationDetails';
@@ -80,6 +82,8 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/events/novo" component={EventForm} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/:id" component={EventDetails} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/:id/editar" component={EventForm} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/events/:id/checkin" component={CheckInManagement} isAuthenticated={isAuthenticated} requiredPermission="EVENTS_ACESS" />
+            <ProtectedRoute exact path="/app/events/:id/notificacoes" component={NotificationsManagement} isAuthenticated={isAuthenticated} requiredPermission="EVENTS_ACESS" />
             <ProtectedRoute exact path="/app/cupons" component={CouponsPage} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/:id/formulario" component={FormBuilder} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/registrations/:id" component={RegistrationDetails} isAuthenticated={isAuthenticated} />
