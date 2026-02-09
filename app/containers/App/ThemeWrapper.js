@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PropTypes } from 'prop-types';
 import { makeStyles } from 'tss-react/mui';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeProvider } from '@mui/material/styles';
 import { CacheProvider } from '@emotion/react';
 import createCache from '@emotion/cache';
 import rtlPlugin from 'stylis-plugin-rtl';
@@ -91,7 +91,7 @@ function ThemeWrapper(props) {
     changeMode(mode);
   };
 
-  const muiTheme = createTheme(theme);
+  const muiTheme = theme;
   const { children } = props;
 
   return (

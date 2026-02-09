@@ -18,13 +18,11 @@ import {
   Chip,
   Typography,
   Box
-} from '@material-ui/core';
-import {
-  Add as AddIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  LocationOn as LocationIcon
-} from '@material-ui/icons';
+} from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import LocationIcon from '@mui/icons-material/LocationOn';
 import {
   listarEstacoes,
   criarEstacao,

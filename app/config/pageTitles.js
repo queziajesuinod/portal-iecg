@@ -31,8 +31,10 @@ const pageTitles = {
   'app/admin/usuarios': 'Usuários',
   'app/admin/usuarios/novo': 'Novo Usuário',
   'app/admin/webhooks': 'Webhooks',
-  'app/events': 'Detalhes do Evento',
+  'app/events': 'Eventos',
   'app/events/novo': 'Novo Evento',
+  'app/events/formulario': 'Configurar Formulário do Evento',
+  'app/events/<id>/lotes': 'Configurar Lotes do Evento',
   'app/events/registrations': 'Detalhes da Inscrição',
 
   // Perfil
@@ -70,13 +72,37 @@ export const getPageTitle = (routeName) => {
 
   const lastSegment = normalizedRoute.split('/').pop();
 
+  const buildCandidates = (value) => {
+    const segments = value.split('/');
+    const candidates = [];
+    const seen = new Set();
+    for (let len = segments.length; len > 0; len -= 1) {
+      const prefix = segments.slice(0, len);
+      const prefixPath = prefix.join('/');
+      if (!seen.has(prefixPath)) {
+        candidates.push(prefixPath);
+        seen.add(prefixPath);
+      }
+
+      for (let i = 0; i < len; i += 1) {
+        const dynamic = [...prefix];
+        dynamic[i] = '<id>';
+        const dynamicPath = dynamic.join('/');
+        if (!seen.has(dynamicPath)) {
+          candidates.push(dynamicPath);
+          seen.add(dynamicPath);
+        }
+      }
+    }
+
+    return candidates;
+  };
+
   const resolveRouteTitle = (value) => {
-    let candidate = value;
-    while (candidate) {
+    const candidates = buildCandidates(value);
+    for (let i = 0; i < candidates.length; i += 1) {
+      const candidate = candidates[i];
       if (pageTitles[candidate]) return pageTitles[candidate];
-      const slashIndex = candidate.lastIndexOf('/');
-      if (slashIndex === -1) break;
-      candidate = candidate.substring(0, slashIndex);
     }
     return null;
   };

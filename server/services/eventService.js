@@ -9,7 +9,7 @@ const {
   User,
   sequelize,
 } = require("../models");
-const { Op } = require("sequelize");
+const { Op, QueryTypes } = require("sequelize");
 const webhookEmitter = require("./webhookEmitter");
 
 const camposPadraoComprador = [
@@ -85,34 +85,52 @@ async function garantirCamposBasicosDoComprador(eventId) {
 // ============= EVENT CRUD =============
 
 async function listarEventos() {
-  const eventos = await Event.findAll({
-    include: [
-      {
-        model: User,
-        as: "creator",
-        attributes: ["id", "name", "email"],
+  const [eventos, registrationsTotal] = await Promise.all([
+    Event.findAll({
+      attributes: [
+        "id",
+        "title",
+        "startDate",
+        "isActive",
+        "maxRegistrations",
+        "createdAt",
+      ],
+      include: [
+        {
+          model: User,
+          as: "creator",
+          attributes: ["id", "name", "email"],
+        },
+        {
+          model: EventBatch,
+          as: "batches",
+          attributes: [
+            "id",
+            "name",
+            "price",
+            "maxQuantity",
+            "startDate",
+            "endDate",
+            "isActive",
+            "order",
+          ],
+          order: [["order", "ASC"]],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    }),
+    Registration.findAll({
+      where: {
+        paymentStatus: { [Op.in]: ["pending", "confirmed"] },
       },
-      {
-        model: EventBatch,
-        as: "batches",
-        order: [["order", "ASC"]],
-      },
-    ],
-    order: [["createdAt", "DESC"]],
-  });
-
-  const countableStatuses = ['pending', 'confirmed'];
-  const registrationsTotal = await Registration.findAll({
-    where: {
-      paymentStatus: { [Op.in]: countableStatuses },
-    },
-    attributes: [
-      "eventId",
-      [sequelize.fn("SUM", sequelize.col("quantity")), "totalQuantity"],
-    ],
-    group: ["eventId"],
-    raw: true,
-  });
+      attributes: [
+        "eventId",
+        [sequelize.fn("SUM", sequelize.col("quantity")), "totalQuantity"],
+      ],
+      group: ["eventId"],
+      raw: true,
+    }),
+  ]);
 
   const totalsByEvent = registrationsTotal.reduce((acc, row) => {
     acc[row.eventId] = Number(row.totalQuantity || 0);
@@ -139,72 +157,36 @@ async function obterResumoInscricoesPorEvento(eventId) {
     };
   }
 
-  const totalRow = await Registration.findOne({
-    where: { eventId },
-    attributes: [
-      [
-        sequelize.fn(
-          "COALESCE",
-          sequelize.fn("SUM", sequelize.col("quantity")),
-          0
-        ),
-        "totalRegistrations",
-      ],
-    ],
-    raw: true,
-  });
-  const totalRowData = totalRow || {};
-  const confirmedRow = await Registration.findOne({
-    where: { eventId, paymentStatus: "confirmed" },
-    attributes: [
-      [
-        sequelize.fn(
-          "COALESCE",
-          sequelize.fn("SUM", sequelize.col("finalPrice")),
-          0
-        ),
-        "confirmedValue",
-      ],
-    ],
-    raw: true,
-  });
-  const statusCounts = await Registration.findAll({
-    where: { eventId },
-    attributes: [
-      "paymentStatus",
-      [
-        sequelize.fn(
-          "COALESCE",
-          sequelize.fn("SUM", sequelize.col("quantity")),
-          0
-        ),
-        "count",
-      ],
-    ],
-    group: ["paymentStatus"],
-    raw: true,
-  });
+  const registrationTable = Registration.getTableName();
+  const quotedTable = typeof registrationTable === 'object'
+    ? `"${registrationTable.schema}"."${registrationTable.tableName}"`
+    : `"${registrationTable}"`;
 
-  const statusMap = statusCounts.reduce((acc, row) => {
-    acc[row.paymentStatus] = Number(row.count || 0);
-    return acc;
-  }, {});
-
-  const pendingCount =
-    (statusMap.pending || 0) +
-    (statusMap.authorized || 0) +
-    (statusMap.partial || 0);
-  const deniedCancelled = (statusMap.denied || 0) + (statusMap.cancelled || 0);
-  const confirmedCount = statusMap.confirmed || 0;
-  const expiredCount = statusMap.expired || 0;
+  const [summary] = await sequelize.query(
+    `
+    SELECT
+      COALESCE(SUM("quantity"), 0) AS "totalRegistrations",
+      COALESCE(SUM("finalPrice") FILTER (WHERE "paymentStatus" = 'confirmed'), 0) AS "confirmedTotalValue",
+      COALESCE(SUM("quantity") FILTER (WHERE "paymentStatus" IN ('pending', 'authorized', 'partial')), 0) AS "pendingCount",
+      COALESCE(SUM("quantity") FILTER (WHERE "paymentStatus" IN ('denied', 'cancelled')), 0) AS "deniedCancelled",
+      COALESCE(SUM("quantity") FILTER (WHERE "paymentStatus" = 'confirmed'), 0) AS "confirmedCount",
+      COALESCE(SUM("quantity") FILTER (WHERE "paymentStatus" = 'expired'), 0) AS "expiredCount"
+    FROM ${quotedTable}
+    WHERE "eventId" = :eventId
+    `,
+    {
+      replacements: { eventId },
+      type: QueryTypes.SELECT,
+    }
+  );
 
   return {
-    totalRegistrations: Number(totalRowData.totalRegistrations || 0),
-    confirmedCount,
-    confirmedTotalValue: Number(confirmedRow ? confirmedRow.confirmedValue : 0),
-    deniedCancelled,
-    expiredCount,
-    pendingCount,
+    totalRegistrations: Number(summary.totalRegistrations || 0),
+    confirmedCount: Number(summary.confirmedCount || 0),
+    confirmedTotalValue: Number(summary.confirmedTotalValue || 0),
+    deniedCancelled: Number(summary.deniedCancelled || 0),
+    expiredCount: Number(summary.expiredCount || 0),
+    pendingCount: Number(summary.pendingCount || 0),
   };
 }
 
@@ -219,20 +201,35 @@ async function buscarEventoPorId(id) {
       {
         model: EventBatch,
         as: "batches",
+        attributes: [
+          "id",
+          "name",
+          "price",
+          "maxQuantity",
+          "startDate",
+          "endDate",
+          "isActive",
+          "order",
+        ],
         order: [["order", "ASC"]],
+        required: false,
       },
       {
         model: FormField,
         as: "formFields",
+        attributes: [
+          "id",
+          "fieldType",
+          "fieldLabel",
+          "fieldName",
+          "placeholder",
+          "isRequired",
+          "options",
+          "order",
+          "section",
+        ],
         order: [["order", "ASC"]],
-      },
-      {
-        model: Registration,
-        as: "registrations",
-      },
-      {
-        model: PaymentOption,
-        as: "paymentOptions",
+        required: false,
       },
     ],
   });
@@ -290,16 +287,13 @@ async function buscarEventoPublicoPorId(id) {
 }
 
 async function obterEstatisticasGerais() {
-  const totalEventos = await Event.count();
-  const eventosAtivos = await Event.count({ where: { isActive: true } });
-  const totalInscricoes =
-    (await Registration.sum("quantity", {
-      where: { paymentStatus: "confirmed" },
-    })) || 0;
-  const receitaTotalRaw =
-    (await Registration.sum("finalPrice", {
-      where: { paymentStatus: "confirmed" },
-    })) || 0;
+  const [totalEventos, eventosAtivos, totalInscricoes, receitaTotalRaw] =
+    await Promise.all([
+      Event.count(),
+      Event.count({ where: { isActive: true } }),
+      Registration.sum("quantity", { where: { paymentStatus: "confirmed" } }),
+      Registration.sum("finalPrice", { where: { paymentStatus: "confirmed" } }),
+    ]);
   const receitaTotal = Number(parseFloat(receitaTotalRaw || 0).toFixed(2));
 
   return {

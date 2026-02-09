@@ -6,13 +6,13 @@ import {
   Typography,
   CircularProgress,
   Box
-} from '@material-ui/core';
-import CheckInIcon from '@material-ui/icons/CheckCircle';
-import PeopleIcon from '@material-ui/icons/People';
-import TrendingIcon from '@material-ui/icons/TrendingUp';
-import QRIcon from '@material-ui/icons/CropFree';
-import NFCIcon from '@material-ui/icons/Nfc';
-import ManualIcon from '@material-ui/icons/TouchApp';
+} from '@mui/material';
+import CheckInIcon from '@mui/icons-material/CheckCircle';
+import PeopleIcon from '@mui/icons-material/People';
+import TrendingIcon from '@mui/icons-material/TrendingUp';
+import QRIcon from '@mui/icons-material/CropFree';
+import NFCIcon from '@mui/icons-material/Nfc';
+import ManualIcon from '@mui/icons-material/TouchApp';
 import { obterEstatisticasCheckIn } from '../../../../api/checkInApi';
 
 function StatCard({ title, value, icon: Icon, color = 'primary', subtitle }) {

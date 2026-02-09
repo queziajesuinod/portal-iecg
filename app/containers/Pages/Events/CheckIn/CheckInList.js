@@ -17,11 +17,9 @@ import {
   Select,
   MenuItem,
   Button
-} from '@material-ui/core';
-import {
-  Refresh as RefreshIcon,
-  GetApp as ExportIcon
-} from '@material-ui/icons';
+} from '@mui/material';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import ExportIcon from '@mui/icons-material/GetApp';
 import { listarCheckIns } from '../../../../api/checkInApi';
 
 function CheckInList({ eventId }) {

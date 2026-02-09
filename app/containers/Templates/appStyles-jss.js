@@ -217,6 +217,16 @@ const useStyles = makeStyles()((theme, _params, classes) => ({
       }
     },
   },
+  pageTitleHeader: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: theme.spacing(1)
+  },
+  pageTitleActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: theme.spacing(1)
+  },
   darkTitle: {
     color: theme.palette.mode === 'dark' ? theme.palette.primary.main : theme.palette.primary.dark,
   },

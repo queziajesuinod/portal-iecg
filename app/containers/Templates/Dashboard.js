@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PropTypes } from 'prop-types';
 
 import { bindActionCreators } from 'redux';
@@ -19,6 +19,24 @@ function Dashboard(props) {
   // Initial header style
   const [openGuide, setOpenGuide] = useState(false);
   const [appHeight, setAppHeight] = useState(0);
+  const [previousRoute, setPreviousRoute] = useState(null);
+  const [historyStack, setHistoryStack] = useState([]);
+  const previousLocationRef = useRef(props.history.location);
+  const maxHistoryEntries = 5;
+  const getLocationPath = (location) => (
+    location ? `${location.pathname}${location.search || ''}${location.hash || ''}` : ''
+  );
+  const getRouteKeyFromPath = (path) => {
+    if (!path) return 'app';
+    const [route] = path.split('?');
+    const [base] = route.split('#');
+    return base.replace(/^\/+/, '').replace(/\/+$/, '') || 'app';
+  };
+  const historyStackItems = historyStack.map(({ path, timestamp }) => ({
+    path,
+    timestamp,
+    label: getPageTitle(getRouteKeyFromPath(path))
+  }));
 
   useEffect(() => {
     const { history, loadTransition } = props;
@@ -33,11 +51,22 @@ function Dashboard(props) {
     loadTransition(true);
 
     // Execute all arguments when page changes
-    const unlisten = history.listen(() => {
+    const unlisten = history.listen((location) => {
       window.scrollTo(0, 0);
       setTimeout(() => {
         loadTransition(true);
       }, 500);
+      const latestPath = getLocationPath(location);
+      const previousPath = getLocationPath(previousLocationRef.current);
+      if (previousPath && previousPath !== latestPath) {
+        setPreviousRoute(previousPath);
+        setHistoryStack((prev) => {
+          const withoutCurrent = prev.filter((entry) => entry.path !== previousPath);
+          const newEntry = { path: previousPath, timestamp: Date.now() };
+          return [newEntry, ...withoutCurrent].slice(0, maxHistoryEntries);
+        });
+      }
+      previousLocationRef.current = location;
     });
 
     return () => {
@@ -101,6 +130,8 @@ function Dashboard(props) {
             bgPosition={bgPosition}
             place={pageTitle}
             titleException={titleException}
+            backRoute={previousRoute}
+            historyStack={historyStackItems}
             handleOpenGuide={handleOpenGuide}
           >
             {children}
@@ -109,7 +140,7 @@ function Dashboard(props) {
       }
       { /* Left Big-Sidebar Layout */
         layout === 'big-sidebar' && (
-          <LeftSidebarBigLayout
+         <LeftSidebarBigLayout
             history={history}
             toggleDrawer={toggleDrawer}
             loadTransition={loadTransition}
@@ -122,6 +153,8 @@ function Dashboard(props) {
             mode={mode}
             place={pageTitle}
             titleException={titleException}
+            backRoute={previousRoute}
+            historyStack={historyStackItems}
             handleOpenGuide={handleOpenGuide}
           >
             {children}
@@ -130,7 +163,7 @@ function Dashboard(props) {
       }
       { /* Right Sidebar Layout */
         layout === 'right-sidebar' && (
-          <RightSidebarLayout
+         <RightSidebarLayout
             history={history}
             toggleDrawer={toggleDrawer}
             loadTransition={loadTransition}
@@ -143,6 +176,8 @@ function Dashboard(props) {
             bgPosition={bgPosition}
             place={pageTitle}
             titleException={titleException}
+            backRoute={previousRoute}
+            historyStack={historyStackItems}
             handleOpenGuide={handleOpenGuide}
           >
             {children}
@@ -151,7 +186,7 @@ function Dashboard(props) {
       }
       { /* Top Bar with Dropdown Menu */
         layout === 'top-navigation' && (
-          <DropMenuLayout
+         <DropMenuLayout
             history={history}
             toggleDrawer={toggleDrawer}
             loadTransition={loadTransition}
@@ -164,6 +199,8 @@ function Dashboard(props) {
             bgPosition={bgPosition}
             place={pageTitle}
             titleException={titleException}
+            backRoute={previousRoute}
+            historyStack={historyStackItems}
             handleOpenGuide={handleOpenGuide}
           >
             {children}
@@ -172,7 +209,7 @@ function Dashboard(props) {
       }
       { /* Top Bar with Mega Menu */
         layout === 'mega-menu' && (
-          <MegaMenuLayout
+         <MegaMenuLayout
             history={history}
             toggleDrawer={toggleDrawer}
             loadTransition={loadTransition}
@@ -185,6 +222,8 @@ function Dashboard(props) {
             bgPosition={bgPosition}
             place={pageTitle}
             titleException={titleException}
+            backRoute={previousRoute}
+            historyStack={historyStackItems}
             handleOpenGuide={handleOpenGuide}
           >
             {children}

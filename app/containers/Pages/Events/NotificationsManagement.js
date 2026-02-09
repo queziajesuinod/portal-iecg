@@ -7,14 +7,12 @@ import {
   Tabs,
   Tab,
   Box
-} from '@material-ui/core';
-import {
-  Send as SendIcon,
-  Group as GroupIcon,
-  Description as TemplateIcon,
-  History as HistoryIcon,
-  Assessment as StatsIcon
-} from '@material-ui/icons';
+} from '@mui/material';
+import SendIcon from '@mui/icons-material/Send';
+import GroupIcon from '@mui/icons-material/Group';
+import TemplateIcon from '@mui/icons-material/Description';
+import HistoryIcon from '@mui/icons-material/History';
+import StatsIcon from '@mui/icons-material/Assessment';
 import { useParams } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
 import NotificationSender from './Notifications/NotificationSender';

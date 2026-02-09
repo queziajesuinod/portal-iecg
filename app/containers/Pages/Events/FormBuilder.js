@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
 import {
@@ -24,17 +24,17 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
-} from '@material-ui/core';
-import {
-  Add as AddIcon,
-  Delete as DeleteIcon,
-  Edit as EditIcon,
-  ArrowUpward as ArrowUpIcon,
-  ArrowDownward as ArrowDownIcon,
-  Save as SaveIcon,
-  ArrowBack as BackIcon
-} from '@material-ui/icons';
+  DialogActions,
+  Backdrop,
+  Skeleton
+} from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import ArrowUpIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownIcon from '@mui/icons-material/ArrowDownward';
+import SaveIcon from '@mui/icons-material/Save';
+import BackIcon from '@mui/icons-material/ArrowBack';
 import { useHistory, useParams } from 'react-router-dom';
 import {
   listarCamposPorEvento,
@@ -322,9 +322,22 @@ function FormBuilder() {
     </ListItem>
   );
 
-  if (loading && !evento) {
-    return <Typography>Carregando...</Typography>;
+  const skeletonListItems = Array.from({ length: 3 }).map((_, idx) => (
+    <ListItem key={`field-skeleton-${idx}`}>
+      <ListItemContentSkeleton />
+    </ListItem>
+  ));
+
+  function ListItemContentSkeleton() {
+    return (
+      <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <Skeleton width="60%" />
+        <Skeleton width="40%" />
+      </div>
+    );
   }
+
+  const headerSkeleton = loading && !evento;
 
   const title = brand.name + ' - Configurar Formulário';
 
@@ -333,6 +346,9 @@ function FormBuilder() {
       <Helmet>
         <title>{title}</title>
       </Helmet>
+      <Backdrop open={loading} style={{ zIndex: 1300, color: '#fff' }}>
+        <img src="/images/spinner.gif" alt="Carregando" style={{ width: 64, height: 64 }} />
+      </Backdrop>
 
       <PapperBlock
         title={`Formulário de Inscrição - ${evento?.title}`}
@@ -351,6 +367,7 @@ function FormBuilder() {
                   <Button
                     size="small"
                     startIcon={<AddIcon />}
+                    disabled={headerSkeleton}
                     onClick={() => {
                       setFormCampo(prev => ({ ...prev, section: 'buyer' }));
                       handleAbrirDialog();
@@ -363,7 +380,11 @@ function FormBuilder() {
                   Preenchido 1 vez por inscrição
                 </Typography>
                 <Divider style={{ margin: '16px 0' }} />
-                {camposComprador.length === 0 ? (
+                {headerSkeleton ? (
+                  <List>
+                    {skeletonListItems}
+                  </List>
+                ) : camposComprador.length === 0 ? (
                   <Typography variant="body2" color="textSecondary">
                     Nenhum campo adicionado
                   </Typography>
@@ -387,6 +408,7 @@ function FormBuilder() {
                   <Button
                     size="small"
                     startIcon={<AddIcon />}
+                    disabled={headerSkeleton}
                     onClick={() => {
                       setFormCampo(prev => ({ ...prev, section: 'attendee' }));
                       handleAbrirDialog();
@@ -399,7 +421,11 @@ function FormBuilder() {
                   Repetido para cada inscrito
                 </Typography>
                 <Divider style={{ margin: '16px 0' }} />
-                {camposInscritos.length === 0 ? (
+                {headerSkeleton ? (
+                  <List>
+                    {skeletonListItems}
+                  </List>
+                ) : camposInscritos.length === 0 ? (
                   <Typography variant="body2" color="textSecondary">
                     Nenhum campo adicionado
                   </Typography>

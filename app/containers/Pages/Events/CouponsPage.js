@@ -22,12 +22,10 @@ import {
   Select,
   MenuItem,
   Typography
-} from '@material-ui/core';
-import {
-  Add as AddIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon
-} from '@material-ui/icons';
+} from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
 import brand from 'dan-api/dummy/brand';
 import {
   listarCupons,

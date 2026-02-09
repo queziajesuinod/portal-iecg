@@ -246,6 +246,9 @@ module.exports = options => ({
       'dan-api': path.resolve(__dirname, '../../app/api/'),
       'dan-images': path.resolve(__dirname, '../../public/images/'),
       'dan-vendor': path.resolve(__dirname, '../../node_modules/'),
+      '@emotion/react': path.resolve(__dirname, '../../node_modules/@emotion/react'),
+      '@emotion/styled': path.resolve(__dirname, '../../node_modules/@emotion/styled'),
+      '@emotion/cache': path.resolve(__dirname, '../../node_modules/@emotion/cache'),
       'process/browser': require.resolve('process/browser.js'),
       process: require.resolve('process/browser.js'),
     }

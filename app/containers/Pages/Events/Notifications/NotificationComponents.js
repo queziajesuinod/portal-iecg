@@ -17,13 +17,11 @@ import {
   Box,
   Grid,
   CircularProgress
-} from '@material-ui/core';
-import {
-  Add as AddIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  Group as GroupIcon
-} from '@material-ui/icons';
+} from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import GroupIcon from '@mui/icons-material/Group';
 import {
   listarGrupos,
   listarTemplates,

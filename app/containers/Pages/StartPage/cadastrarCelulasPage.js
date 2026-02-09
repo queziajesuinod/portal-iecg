@@ -1,14 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
+  Box,
   Grid,
   TextField,
   Button,
   MenuItem,
   FormGroup,
   FormControlLabel,
-  Checkbox
+  Checkbox,
+  Paper,
+  Typography,
+  Divider,
+  Chip,
+  LinearProgress,
+  useTheme
 } from '@mui/material';
+import PropTypes from 'prop-types';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
 import { formatPhoneNumber } from '../../../utils/formatPhone';
@@ -60,6 +68,53 @@ const DIAS_SEMANA = [
   { value: 'Domingo', disabled: true }
 ];
 
+const SummaryPane = ({ formData, diasSelecionados, loading }) => (
+  <Paper
+    elevation={3}
+    sx={{
+      p: 3,
+      borderRadius: 3,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 2,
+      minHeight: 320
+    }}
+  >
+    <Typography variant="subtitle1" fontWeight={600}>
+      Resumo da Célula
+    </Typography>
+    <Divider />
+    <Typography variant="body2">
+      <strong>Líder:</strong> {formData.lider || '---'}
+    </Typography>
+    <Typography variant="body2">
+      <strong>Rede:</strong> {formData.rede || '---'}
+    </Typography>
+    <Typography variant="body2">
+      <strong>Campus:</strong> {formData.campus || '---'}
+    </Typography>
+    <Typography variant="body2" color="textSecondary">
+      <strong>Endereço:</strong> {formData.endereco || '---'} {formData.numero && `, ${formData.numero}`}
+    </Typography>
+    <Box display="flex" gap={1} flexWrap="wrap">
+      {diasSelecionados.length ? diasSelecionados.map((dia) => (
+        <Chip key={dia} label={dia} size="small" />
+      )) : <Typography variant="caption">Selecione ao menos um dia</Typography>}
+    </Box>
+    <Box>
+      <Typography variant="body2">Lat: {formData.lat || '---'}</Typography>
+      <Typography variant="body2">Lon: {formData.lon || '---'}</Typography>
+    </Box>
+    {loading && <Typography variant="caption" color="textSecondary">Salvando...</Typography>}
+  </Paper>
+);
+
+SummaryPane.propTypes = {
+  formData: PropTypes.object.isRequired,
+  diasSelecionados: PropTypes.array.isRequired,
+  loading: PropTypes.bool.isRequired
+};
+
 const resolveApiUrl = () => {
   if (process.env.REACT_APP_API_URL) {
     return process.env.REACT_APP_API_URL.replace(/\/$/, '');
@@ -76,9 +131,12 @@ const CadastrarCelula = () => {
   const [notification, setNotification] = useState('');
   const [campi, setCampi] = useState([]);
   const [diasSelecionados, setDiasSelecionados] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [geoLoading, setGeoLoading] = useState(false);
   const location = useLocation();
   const celulaEditando = location.state?.celula;
   const isEdit = Boolean(celulaEditando);
+  const theme = useTheme();
   const API_URL = resolveApiUrl();
 
   const formatHorarioInput = (valor = '') => {
@@ -150,12 +208,12 @@ const CadastrarCelula = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Validação básica para campos obrigatórios
     if (!formData.celula || !formData.lider || !formData.email_lider) {
       setNotification('Preencha os campos obrigatórios: Nome da Célula, Líder e Email do Líder.');
       return;
     }
 
+    setLoading(true);
     const token = localStorage.getItem('token');
     const method = isEdit ? 'PUT' : 'POST';
     const endpoint = isEdit ? `${API_URL}/start/celula/${formData.id}` : `${API_URL}/start/celula`;
@@ -167,7 +225,7 @@ const CadastrarCelula = () => {
       lon: formData.lon ? parseFloat(formData.lon) : null
     };
     if (!isEdit) {
-      delete payload.id; // Remove o campo 'id' ao criar uma nova célula
+      delete payload.id;
     }
 
     try {
@@ -194,6 +252,8 @@ const CadastrarCelula = () => {
     } catch (error) {
       console.error('Erro ao salvar célula:', error);
       setNotification('Erro na conexão com o servidor.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -235,143 +295,169 @@ return (
         <title>{isEdit ? 'Editar Célula' : 'Cadastrar Célula'}</title>
       </Helmet>
       <PapperBlock title={isEdit ? 'Editar Célula' : 'Cadastro de Célula'} desc="Preencha os dados abaixo">
+        {loading && <LinearProgress sx={{ mb: 2 }} />}
         <form onSubmit={handleSubmit}>
-          <Grid container spacing={2}>
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth label="Nome da Célula" name="celula" value={formData.celula} onChange={handleChange} required />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                select
-                fullWidth
-                label="Rede"
-                name="rede"
-                value={formData.rede}
-                onChange={handleChange}
-              >
-                {REDE_OPTIONS.map((opt) => (
-                  <MenuItem key={opt} value={opt}>{opt}</MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth label="Líder" name="lider" value={formData.lider} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth label="Email do Líder" name="email_lider" value={formData.email_lider} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth label="Celular do Líder" name="cel_lider" value={formData.cel_lider} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth label="Anfitrião" name="anfitriao" value={formData.anfitriao} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                select
-                fullWidth
-                label="Campus"
-                name="campus"
-                value={formData.campus}
-                onChange={handleChange}
-              >
-                {campi.map((campus) => (
-                  <MenuItem key={campus.id} value={campus.nome}>
-                    {campus.nome}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-
-            {/* Campo de endereço com botão */}
-            <Grid item xs={12} container spacing={1}>
-              <Grid item xs={9}>
-                <TextField
-                  fullWidth
-                  label="Endereço"
-                  name="endereco"
-                  value={formData.endereco}
-                  onChange={handleChange}
-                />
-              </Grid>
-              <Grid item xs={3}>
-                <Button
-                  variant="outlined"
-                  color="primary"
-                  fullWidth
-                  onClick={buscarCoordenadas}
-                  style={{ height: '100%' }}
-                >
-                  Buscar coordenadas
-                </Button>
-              </Grid>
-            </Grid>
-
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth label="Número da casa" name="numero" value={formData.numero} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth label="CEP" name="cep" value={formData.cep} onChange={handleChange} />
-            </Grid>
-
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth label="Bairro" name="bairro" value={formData.bairro} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth label="Cidade" name="cidade" value={formData.cidade} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth label="Estado" name="estado" value={formData.estado} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth label="Liderança" name="lideranca" value={formData.lideranca} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth label="Pastor de Geração" name="pastor_geracao" value={formData.pastor_geracao} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth label="Pastor do Campus" name="pastor_campus" value={formData.pastor_campus} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <div style={{ marginBottom: 8, fontWeight: 600 }}>Dia da semana</div>
-              <FormGroup row>
-                {DIAS_SEMANA.map((dia) => (
-                  <FormControlLabel
-                    key={dia.value}
-                    control={(
-                      <Checkbox
-                        checked={diasSelecionados.includes(dia.value)}
-                        onChange={() => !dia.disabled && handleDiaToggle(dia.value)}
-                        disabled={dia.disabled}
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={8}>
+              <Paper elevation={3} sx={{ p: 3, borderRadius: 3, background: theme.palette.background.paper }}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <Typography variant="h6" gutterBottom>
+                      Identidade & Liderança
+                    </Typography>
+                    <Divider sx={{ mb: 2 }} />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField fullWidth label="Nome da Célula" name="celula" value={formData.celula} onChange={handleChange} required />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      select
+                      fullWidth
+                      label="Rede"
+                      name="rede"
+                      value={formData.rede}
+                      onChange={handleChange}
+                    >
+                      {REDE_OPTIONS.map((opt) => (
+                        <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField fullWidth label="Líder" name="lider" value={formData.lider} onChange={handleChange} />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField fullWidth label="Email do Líder" name="email_lider" value={formData.email_lider} onChange={handleChange} />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField fullWidth label="Celular do Líder" name="cel_lider" value={formData.cel_lider} onChange={handleChange} />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField fullWidth label="Anfitrião" name="anfitriao" value={formData.anfitriao} onChange={handleChange} />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      select
+                      fullWidth
+                      label="Campus"
+                      name="campus"
+                      value={formData.campus}
+                      onChange={handleChange}
+                    >
+                      {campi.map((campus) => (
+                        <MenuItem key={campus.id} value={campus.nome}>
+                          {campus.nome}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Typography variant="h6" gutterBottom>
+                      Localização
+                    </Typography>
+                    <Divider sx={{ mb: 2 }} />
+                  </Grid>
+                  <Grid item xs={12} container spacing={1}>
+                    <Grid item xs={9}>
+                      <TextField
+                        fullWidth
+                        label="Endereço"
+                        name="endereco"
+                        value={formData.endereco}
+                        onChange={handleChange}
                       />
-                    )}
-                    label={dia.value}
-                  />
-                ))}
-              </FormGroup>
+                    </Grid>
+                    <Grid item xs={3}>
+                      <Button
+                        variant="outlined"
+                        color="primary"
+                        fullWidth
+                        onClick={buscarCoordenadas}
+                        style={{ height: '100%' }}
+                      >
+                        Buscar coordenadas
+                      </Button>
+                    </Grid>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField fullWidth label="Número da casa" name="numero" value={formData.numero} onChange={handleChange} />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField fullWidth label="CEP" name="cep" value={formData.cep} onChange={handleChange} />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField fullWidth label="Bairro" name="bairro" value={formData.bairro} onChange={handleChange} />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField fullWidth label="Cidade" name="cidade" value={formData.cidade} onChange={handleChange} />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField fullWidth label="Estado" name="estado" value={formData.estado} onChange={handleChange} />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Typography variant="h6" gutterBottom>
+                      Liderança & horários
+                    </Typography>
+                    <Divider sx={{ mb: 2 }} />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField fullWidth label="Liderança" name="lideranca" value={formData.lideranca} onChange={handleChange} />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField fullWidth label="Pastor de Geração" name="pastor_geracao" value={formData.pastor_geracao} onChange={handleChange} />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField fullWidth label="Pastor do Campus" name="pastor_campus" value={formData.pastor_campus} onChange={handleChange} />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle2" fontWeight={600} mb={1}>
+                      Dias da semana
+                    </Typography>
+                    <FormGroup row>
+                      {DIAS_SEMANA.map((dia) => (
+                        <FormControlLabel
+                          key={dia.value}
+                          control={(
+                            <Checkbox
+                              checked={diasSelecionados.includes(dia.value)}
+                              onChange={() => !dia.disabled && handleDiaToggle(dia.value)}
+                              disabled={dia.disabled}
+                            />
+                          )}
+                          label={dia.value}
+                        />
+                      ))}
+                    </FormGroup>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth
+                      label="Horário"
+                      name="horario"
+                      type="time"
+                      value={formData.horario || ''}
+                      onChange={handleChange}
+                      InputLabelProps={{ shrink: true }}
+                      inputProps={{ step: 300 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <FormControlLabel
+                      control={<Checkbox checked={diasSelecionados.length > 0} disabled />}
+                      label="Dias selecionados"
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Button type="submit" variant="contained" color="primary" fullWidth>
+                      {isEdit ? 'Atualizar Célula' : 'Cadastrar Célula'}
+                    </Button>
+                  </Grid>
+                </Grid>
+              </Paper>
             </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Horário"
-                name="horario"
-                type="time"
-                value={formData.horario || ''}
-                onChange={handleChange}
-                InputLabelProps={{ shrink: true }}
-                inputProps={{ step: 300 }}
-              />
-            </Grid>
-            <Grid item xs={6} md={3} sx={{ display: 'none' }}>
-              <TextField fullWidth label="Latitude" name="lat" value={formData.lat} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={6} md={3} sx={{ display: 'none' }}>
-              <TextField fullWidth label="Longitude" name="lon" value={formData.lon} onChange={handleChange} />
-            </Grid>
-            <Grid item xs={12}>
-              <Button type="submit" variant="contained" color="primary" fullWidth>
-                {isEdit ? 'Atualizar Célula' : 'Cadastrar Célula'}
-              </Button>
+            <Grid item xs={12} md={4}>
+              <SummaryPane formData={formData} diasSelecionados={diasSelecionados} loading={loading || geoLoading} />
             </Grid>
           </Grid>
         </form>

@@ -1,5 +1,7 @@
+import { createTheme } from '@mui/material/styles';
 import themePalette from 'dan-api/palette/themePaletteMode';
-const applicationTheme = (color, mode, direction) => ({
+const applicationTheme = (color, mode, direction) => {
+  const themeConfig = {
   direction,
   palette: {
     mode,
@@ -587,6 +589,13 @@ const applicationTheme = (color, mode, direction) => ({
       }
     }
   }
-});
+};
+
+  const theme = createTheme(themeConfig);
+  theme.shade = themeConfig.shade;
+  theme.glow = themeConfig.glow;
+  theme.rounded = themeConfig.rounded;
+  return theme;
+};
 
 export default applicationTheme;
