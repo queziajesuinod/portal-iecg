@@ -15,11 +15,13 @@ import HistoryIcon from '@mui/icons-material/History';
 import StatsIcon from '@mui/icons-material/Assessment';
 import { useParams } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
-import NotificationSender from './Notifications/NotificationSender';
-import NotificationGroups from './Notifications/NotificationGroups';
-import NotificationTemplates from './Notifications/NotificationTemplates';
-import NotificationHistory from './Notifications/NotificationHistory';
-import NotificationStats from './Notifications/NotificationStats';
+import {
+  NotificationSender,
+  NotificationGroups,
+  NotificationTemplates,
+  NotificationHistory,
+  NotificationStats
+} from './Notifications';
 
 function TabPanel({ children, value, index, ...other }) {
   return (
