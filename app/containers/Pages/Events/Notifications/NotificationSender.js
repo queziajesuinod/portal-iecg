@@ -6,6 +6,7 @@ import {
   TextField,
   Button,
   FormControl,
+  FormHelperText,
   InputLabel,
   Select,
   MenuItem,
@@ -23,11 +24,33 @@ import {
   enviarNotificacaoParaGrupo,
   listarGrupos
 } from '../../../../api/notificationsApi';
+import { listarInscricoesPorEvento } from '../../../../api/eventsApi';
+
+const normalizeBuyerPhone = (buyerData) => {
+  if (!buyerData) return null;
+  const rawPhone = buyerData.whatsapp || buyerData.phone;
+  if (!rawPhone) return null;
+  const digits = String(rawPhone).replace(/\D/g, '');
+  if (!digits) return null;
+  return digits.startsWith('55') ? digits : `55${digits}`;
+};
+
+const getBuyerDisplayName = (buyerData) => {
+  return (
+    buyerData?.buyer_name ||
+    buyerData?.name ||
+    buyerData?.nome ||
+    buyerData?.nome_completo ||
+    'Comprador'
+  );
+};
 
 function NotificationSender({ eventId }) {
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState([]);
   const [grupos, setGrupos] = useState([]);
+  const [registrations, setRegistrations] = useState([]);
+  const [registrationsLoading, setRegistrationsLoading] = useState(false);
   const [sucesso, setSucesso] = useState('');
   const [erro, setErro] = useState('');
 
@@ -46,7 +69,13 @@ function NotificationSender({ eventId }) {
     carregarDados();
   }, [eventId]);
 
+  const registrationsWithPhone = registrations.filter((registration) =>
+    Boolean(normalizeBuyerPhone(registration.buyerData))
+  );
+
   const carregarDados = async () => {
+    setRegistrationsLoading(true);
+    setRegistrations([]);
     try {
       const [templatesData, gruposData] = await Promise.all([
         listarTemplates(eventId),
@@ -57,9 +86,29 @@ function NotificationSender({ eventId }) {
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     }
+
+    try {
+      const registrationsResponse = await listarInscricoesPorEvento(eventId, {
+        paymentStatus: 'confirmed',
+        perPage: 100,
+        page: 1
+      });
+      const fetchedRegistrations = registrationsResponse?.records ?? registrationsResponse ?? [];
+      setRegistrations(fetchedRegistrations);
+    } catch (error) {
+      console.error('Erro ao carregar inscrições confirmadas:', error);
+    } finally {
+      setRegistrationsLoading(false);
+    }
   };
 
   const handleEnviar = async () => {
+    if (formData.tipoEnvio === 'individual' && !formData.registrationId) {
+      setErro('Selecione uma inscrição confirmada com telefone válido');
+      setSucesso('');
+      return;
+    }
+
     try {
       setLoading(true);
       setErro('');
@@ -149,13 +198,46 @@ function NotificationSender({ eventId }) {
 
             {formData.tipoEnvio === 'individual' ? (
               <Box mt={2}>
-                <TextField
-                  fullWidth
-                  label="ID da Inscrição"
-                  value={formData.registrationId}
-                  onChange={(e) => setFormData({ ...formData, registrationId: e.target.value })}
-                  placeholder="UUID da inscrição"
-                />
+                <FormControl fullWidth disabled={registrationsLoading}>
+                  <InputLabel id="registration-select-label">Inscrição confirmada</InputLabel>
+                  <Select
+                    labelId="registration-select-label"
+                    value={formData.registrationId}
+                    label="Inscrição confirmada"
+                    onChange={(event) =>
+                      setFormData({ ...formData, registrationId: event.target.value })
+                    }
+                  >
+                    <MenuItem value="">
+                      <em>Selecione uma inscrição</em>
+                    </MenuItem>
+                    {registrationsWithPhone.map((registration) => (
+                      <MenuItem key={registration.id} value={registration.id}>
+                        <Box>
+                          <Typography variant="body2">
+                            {registration.orderCode} — {getBuyerDisplayName(registration.buyerData)}
+                            </Typography>
+                            <Typography variant="caption" color="textSecondary">
+                            WhatsApp +{normalizeBuyerPhone(registration.buyerData)}
+                          </Typography>
+                        </Box>
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  {registrationsLoading && (
+                    <FormHelperText>Carregando inscrições confirmadas...</FormHelperText>
+                  )}
+                  {!registrationsLoading && registrationsWithPhone.length === 0 && (
+                    <FormHelperText>
+                      Nenhuma inscrição confirmada com WhatsApp disponivel para este evento.
+                    </FormHelperText>
+                  )}
+                </FormControl>
+                {!registrationsLoading && (
+                  <Typography variant="caption" color="textSecondary">
+                    Somente inscritos confirmados com número de WhatsApp são listados aqui.
+                  </Typography>
+                )}
               </Box>
             ) : (
               <Box mt={2}>
@@ -241,7 +323,10 @@ function NotificationSender({ eventId }) {
                 color="primary"
                 size="large"
                 onClick={handleEnviar}
-                disabled={loading}
+                disabled={
+                  loading ||
+                  (formData.tipoEnvio === 'individual' && !formData.registrationId)
+                }
                 startIcon={loading ? <CircularProgress size={20} /> : <SendIcon />}
               >
                 {loading ? 'Enviando...' : 'Enviar Notificação'}
