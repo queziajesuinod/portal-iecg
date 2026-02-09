@@ -1,22 +1,41 @@
 const uuid = require('uuid');
 const { FormField, Event } = require('../models');
 
+const FIELD_ATTRIBUTES = [
+  'id',
+  'eventId',
+  'fieldType',
+  'fieldLabel',
+  'fieldName',
+  'placeholder',
+  'isRequired',
+  'options',
+  'order',
+  'section',
+  'validationRules',
+];
+
 async function listarCamposPorEvento(eventId) {
   const campos = await FormField.findAll({
     where: { eventId },
-    order: [['section', 'ASC'], ['order', 'ASC']]
+    order: [
+      ['section', 'ASC'],
+      ['order', 'ASC'],
+    ],
+    attributes: FIELD_ATTRIBUTES,
+    raw: true,
   });
 
   // Mapear para formato esperado pelo frontend
-  return campos.map(campo => ({
-    ...campo.toJSON(),
+  return campos.map((campo) => ({
+    ...campo,
     label: campo.fieldLabel,
-    orderIndex: campo.order
+    orderIndex: campo.order,
   }));
 }
 
 async function buscarCampoPorId(id) {
-  const field = await FormField.findByPk(id);
+  const field = await FormField.findByPk(id, { attributes: FIELD_ATTRIBUTES });
 
   if (!field) {
     throw new Error('Campo não encontrado');
@@ -54,7 +73,8 @@ async function criarCampo(body) {
 
   // Verificar se fieldName já existe para este evento
   const existingField = await FormField.findOne({
-    where: { eventId, fieldName }
+    where: { eventId, fieldName },
+    attributes: ['id'],
   });
 
   if (existingField) {
@@ -146,7 +166,9 @@ async function criarCamposEmLote(eventId, campos) {
 // Validar dados do formulário
 async function validarDadosFormulario(eventId, dados, section = 'attendee') {
   const campos = await FormField.findAll({
-    where: { eventId, section }
+    where: { eventId, section },
+    attributes: ['fieldLabel', 'fieldName', 'fieldType', 'isRequired'],
+    raw: true,
   });
 
   const erros = [];

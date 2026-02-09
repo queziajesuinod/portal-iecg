@@ -22,14 +22,12 @@ import {
   InputLabel,
   Select,
   MenuItem
-} from '@material-ui/core';
-import {
-  ArrowBack as BackIcon,
-  Cancel as CancelIcon,
-  Receipt as ReceiptIcon,
-  Add as AddIcon,
-  Replay as ReplayIcon
-} from '@material-ui/icons';
+} from '@mui/material';
+import BackIcon from '@mui/icons-material/ArrowBack';
+import CancelIcon from '@mui/icons-material/Cancel';
+import ReceiptIcon from '@mui/icons-material/Receipt';
+import AddIcon from '@mui/icons-material/Add';
+import ReplayIcon from '@mui/icons-material/Replay';
 import { useHistory, useParams } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
 import {

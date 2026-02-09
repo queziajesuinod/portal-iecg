@@ -37,6 +37,8 @@ const STATUS_OPTIONS = [
   { value: 'all', label: 'Todas' }
 ];
 
+const GOOGLE_MAP_LIBRARIES = ['places'];
+
 const resolveApiUrl = () => {
   if (process.env.REACT_APP_API_URL) {
     return process.env.REACT_APP_API_URL.replace(/\/$/, '');
@@ -120,7 +122,7 @@ const ListagemCelulasPage = () => {
   const mapKey = process.env.REACT_APP_GOOGLE_GEOCODE_KEY || '';
   const { isLoaded: mapLoaded } = useLoadScript({
     googleMapsApiKey: mapKey,
-    libraries: ['places']
+    libraries: GOOGLE_MAP_LIBRARIES
   });
   const normalizeValue = (value) => (value || '').trim().toLowerCase();
   const normalizeSearchValue = (value) => {

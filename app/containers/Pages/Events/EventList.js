@@ -19,18 +19,16 @@ import {
   InputLabel,
   Select,
   MenuItem
-} from '@material-ui/core';
-import {
-  Add as AddIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  Visibility as ViewIcon,
-  Event as EventIcon,
-  People as PeopleIcon,
-  AttachMoney as MoneyIcon,
-  TrendingUp as TrendingIcon,
-  FileCopy as DuplicateIcon
-} from '@material-ui/icons';
+} from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import ViewIcon from '@mui/icons-material/Visibility';
+import EventIcon from '@mui/icons-material/Event';
+import PeopleIcon from '@mui/icons-material/People';
+import MoneyIcon from '@mui/icons-material/AttachMoney';
+import TrendingIcon from '@mui/icons-material/TrendingUp';
+import DuplicateIcon from '@mui/icons-material/FileCopy';
 import { useHistory } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
 import {
@@ -42,7 +40,7 @@ import {
 } from '../../../api/eventsApi';
 import { EVENT_TYPE_LABELS } from '../../../constants/eventTypes';
 
-function EventsDashboard() {
+function EventList() {
   const history = useHistory();
   const [eventos, setEventos] = useState([]);
   const [eventosFiltrados, setEventosFiltrados] = useState([]);
@@ -336,7 +334,7 @@ function EventsDashboard() {
                   <Button
                     size="small"
                     variant="outlined"
-                    color={evento.isActive ? 'primary' : 'default'}
+                    color={evento.isActive ? 'primary' : 'inherit'}
                     onClick={() => handleToggleStatus(evento)}
                   >
                     {evento.isActive ? 'Ativo' : 'Inativo'}
@@ -386,4 +384,4 @@ function EventsDashboard() {
     </div>
   );
 }
-export default EventsDashboard;
+export default EventList;

@@ -8,14 +8,12 @@ import {
   Typography,
   CircularProgress,
   Box,
-  Chip
-} from '@material-ui/core';
-import { Alert } from '@material-ui/lab';
-import {
-  CheckCircle as CheckIcon,
-  Search as SearchIcon,
-  Person as PersonIcon
-} from '@material-ui/icons';
+  Chip,
+  Alert
+} from '@mui/material';
+import CheckIcon from '@mui/icons-material/CheckCircle';
+import SearchIcon from '@mui/icons-material/Search';
+import PersonIcon from '@mui/icons-material/Person';
 import { validarCodigo, realizarCheckInManual } from '../../../../api/checkInApi';
 
 function CheckInManual({ eventId }) {

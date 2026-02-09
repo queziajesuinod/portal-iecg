@@ -12,13 +12,11 @@ import {
   Typography,
   Box,
   CircularProgress,
-  Chip
-} from '@material-ui/core';
-import { Alert } from '@material-ui/lab';
-import {
-  Send as SendIcon,
-  Image as ImageIcon
-} from '@material-ui/icons';
+  Chip,
+  Alert
+} from '@mui/material';
+import SendIcon from '@mui/icons-material/Send';
+import ImageIcon from '@mui/icons-material/Image';
 import {
   listarTemplates,
   enviarNotificacao,

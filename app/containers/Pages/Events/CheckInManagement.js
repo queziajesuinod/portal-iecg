@@ -4,19 +4,16 @@ import { PapperBlock, Notification } from 'dan-components';
 import {
   Grid,
   Card,
-  CardContent,
   Typography,
   Button,
   Tabs,
   Tab,
   Box
-} from '@material-ui/core';
-import {
-  CheckCircle as CheckInIcon,
-  Schedule as ScheduleIcon,
-  LocationOn as StationIcon,
-  Assessment as StatsIcon
-} from '@material-ui/icons';
+} from '@mui/material';
+import CheckInIcon from '@mui/icons-material/CheckCircle';
+import ScheduleIcon from '@mui/icons-material/Schedule';
+import StationIcon from '@mui/icons-material/LocationOn';
+import StatsIcon from '@mui/icons-material/Assessment';
 import { useParams } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
 import CheckInSchedules from './CheckIn/CheckInSchedules';

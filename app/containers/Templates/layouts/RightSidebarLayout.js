@@ -3,6 +3,8 @@ import { PropTypes } from 'prop-types';
 
 import Fade from '@mui/material/Fade';
 import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 
 import {
   Header,
@@ -13,6 +15,7 @@ import dataMenu from 'dan-api/ui/menu';
 import { filterMenuByPermissions, getStoredPermissions } from '../../../utils/permissions.js';
 import Decoration from '../Decoration';
 import useStyles from '../appStyles-jss';
+import HistoryStackButton from './HistoryStackButton';
 
 function RightSidebarLayout(props) {
   const { classes, cx } = useStyles();
@@ -30,6 +33,8 @@ function RightSidebarLayout(props) {
     changeMode,
     place,
     titleException,
+    backRoute,
+    historyStack,
     handleOpenGuide
   } = props;
   const permissions = getStoredPermissions();
@@ -58,7 +63,22 @@ function RightSidebarLayout(props) {
         <section className={cx(classes.mainWrap, classes.sidebarLayout)}>
           {titleException.indexOf(history.location.pathname) < 0 && (
             <div className={classes.pageTitle}>
-              <Typography component="h4" className={bgPosition === 'header' ? classes.darkTitle : classes.lightTitle} variant="h4">{place}</Typography>
+              <div className={classes.pageTitleHeader}>
+                <div className={classes.pageTitleActions}>
+                  {backRoute && (
+                    <Button
+                      size="small"
+                      variant="text"
+                      startIcon={<ArrowBackIosIcon />}
+                      onClick={() => history.goBack()}
+                    >
+                      Voltar
+                    </Button>
+                  )}
+                  <HistoryStackButton historyStack={historyStack} history={history} />
+                </div>
+                <Typography component="h4" className={bgPosition === 'header' ? classes.darkTitle : classes.lightTitle} variant="h4">{place}</Typography>
+              </div>
               <BreadCrumb separator=" / " theme={bgPosition === 'header' ? 'dark' : 'light'} location={history.location} />
             </div>
           )}
@@ -100,7 +120,12 @@ RightSidebarLayout.propTypes = {
   bgPosition: PropTypes.string.isRequired,
   place: PropTypes.string.isRequired,
   titleException: PropTypes.array.isRequired,
-  handleOpenGuide: PropTypes.func.isRequired
+  handleOpenGuide: PropTypes.func.isRequired,
+  backRoute: PropTypes.string,
+  historyStack: PropTypes.arrayOf(PropTypes.shape({
+    path: PropTypes.string.isRequired,
+    label: PropTypes.string
+  }))
 };
 
 export default RightSidebarLayout;

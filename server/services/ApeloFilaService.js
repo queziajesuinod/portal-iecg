@@ -74,7 +74,7 @@ class ApeloFilaService {
         bairro_apelo: { [Op.and]: [{ [Op.not]: null }, { [Op.ne]: '' }] },
         [Op.or]: [
           { status: null },
-          { status: { [Op.notIn]: ['DIRECIONADO_COM_SUCESSO', 'NAO_HAVERAR_DIRECIONAMENTO'] } }
+          { status: { [Op.notIn]: ['DIRECIONADO_COM_SUCESSO', 'NAO_HAVERAR_DIRECIONAMENTO', 'CONSOLIDADO_CELULA'] } }
         ]
       },
       order: [['createdAt', 'ASC']]
