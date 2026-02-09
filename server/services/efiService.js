@@ -6,8 +6,12 @@ const IS_SANDBOX = ENVIRONMENT !== 'production';
 const COMMISSION_PERCENT = Number.parseFloat(process.env.EFI_COMMISSION_PERCENT || '1.5');
 const FAVORECIDO_CHAVE = process.env.EFI_PIX_FAVORECIDO_CHAVE;
 const PAGADOR_CHAVE = process.env.EFI_PIX_PAGADOR_CHAVE;
-const INFO_PAGADOR_DEFAULT = process.env.EFI_PIX_INFO_PAGADOR || 'Comissão Efí';
+const INFO_PAGADOR_DEFAULT = process.env.EFI_PIX_INFO_PAGADOR || 'ComissÃ£o Efipay';
 const ID_PREFIX = process.env.EFI_PIX_ID_PREFIX || 'efi-commission';
+const PIX_API_BASE_URL = IS_SANDBOX
+  ? 'https://pix-h.api.efipay.com.br'
+  : 'https://pix.api.efipay.com.br';
+const LOG_PIX_URL = process.env.DEBUG_EFI_PIX_URL === 'true';
 
 const efiOptions = {
   sandbox: IS_SANDBOX,
@@ -89,19 +93,23 @@ function buildPixPayload(amountCentavos, context = {}) {
 
 async function enviarComissaoEfi(valorCentavos, context = {}) {
   if (!isCommissionEnabled()) {
-    return { sucesso: false, erro: 'Efí não está configurado para envio de comissões' };
+    return { sucesso: false, erro: 'Efï¿½ nï¿½o estï¿½ configurado para envio de comissï¿½es' };
   }
 
   if (!Number.isFinite(valorCentavos) || valorCentavos <= 0) {
-    return { sucesso: false, erro: 'Valor inválido para comissão' };
+    return { sucesso: false, erro: 'Valor invï¿½lido para comissï¿½o' };
   }
 
   const comissaoCentavos = calcularComissaoCentavos(valorCentavos);
   if (comissaoCentavos < 1) {
-    return { sucesso: false, erro: 'Comissão menor que R$0,01 não será enviada', amountCentavos: comissaoCentavos };
+    return { sucesso: false, erro: 'Comissï¿½o menor que R$0,01 nï¿½o serï¿½ enviada', amountCentavos: comissaoCentavos };
   }
 
   const { params, body } = buildPixPayload(comissaoCentavos, context);
+  const pixUrl = `${PIX_API_BASE_URL}/v3/gn/pix/${params.idEnvio}`;
+  if (LOG_PIX_URL) {
+    console.info('[efiService] Pix endpoint', pixUrl);
+  }
 
   try {
     const resposta = await getEfiClient().pixSend(params, body);
@@ -112,7 +120,7 @@ async function enviarComissaoEfi(valorCentavos, context = {}) {
     };
   } catch (error) {
     const mensagem = normalizeError(error) || 'Erro desconhecido ao enviar Pix';
-    console.error('[efiService] Falha ao enviar comissão Efí', { mensagem, params, body, context, error });
+    console.error('[efiService] Falha ao enviar comissÃ£o Efi', { mensagem, params, body, context, error });
     return {
       sucesso: false,
       amountCentavos: comissaoCentavos,
