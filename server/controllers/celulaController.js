@@ -44,7 +44,11 @@ class CelulaController {
         email: leader.conjuge.email,
         telefone: leader.conjuge.telefone,
         username: leader.conjuge.username,
-        image: leader.conjuge.image
+        image: leader.conjuge.image,
+        endereco: leader.conjuge.endereco,
+        bairro: leader.conjuge.bairro,
+        numero: leader.conjuge.numero,
+        cep: leader.conjuge.cep
       } : null;
 
       return res.status(200).json({
@@ -64,9 +68,13 @@ class CelulaController {
           escolas: leader.escolas,
           image: leader.image,
           conjuge_id: leader.conjuge_id,
-          spouse,
           perfilId: leader.perfilId,
-          active: leader.active
+          active: leader.active,
+          endereco: leader.endereco,
+          bairro: leader.bairro,
+          numero: leader.numero,
+          cep: leader.cep,
+          spouse
         },
         celulas
       });

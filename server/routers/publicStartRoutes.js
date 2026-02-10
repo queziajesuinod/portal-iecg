@@ -22,5 +22,6 @@ router.post('/celulas/leader/spouse', CelulaLeaderPublicController.linkSpouse);
 router.get('/celulas/leader/contact', CelulaController.buscarPorLeaderContact);
 const PublicUserController = require('../controllers/publicUserController');
 router.get('/users/:id', PublicUserController.getLeaderById);
+router.post('/users/:id', PublicUserController.updateLeaderById);
 
 module.exports = router;
