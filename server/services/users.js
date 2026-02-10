@@ -1,4 +1,5 @@
 const { User, Perfil, Permissao } = require('../models');
+const { Op } = require('sequelize');
 const crypto = require('crypto');
 const uuid = require('uuid');
 
@@ -23,6 +24,11 @@ async function syncUserPerfis(user, perfilIds = []) {
   }
 }
 
+const sanitizePhone = (value) => {
+  if (!value) return '';
+  return String(value).replace(/\D/g, '');
+};
+
 function serializeUserWithSpouse(user) {
   if (!user) return null;
   const plainUser = typeof user.get === 'function' ? user.get({ plain: true }) : { ...user };
@@ -31,6 +37,14 @@ function serializeUserWithSpouse(user) {
     plainUser.nome_esposo = spouse.name;
   }
   return plainUser;
+}
+
+function buildUserWithSpouse(user) {
+  if (!user) return { user: null, spouse: null };
+  const serialized = serializeUserWithSpouse(user);
+  const spouse = serialized.conjuge || null;
+  delete serialized.conjuge;
+  return { user: serialized, spouse };
 }
 
 async function getTodosUsers() {
@@ -142,7 +156,12 @@ async function getUserById(id) {
     ]
   });
 
-  return serializeUserWithSpouse(user);
+  if (!user) return null;
+  const serialized = serializeUserWithSpouse(user);
+  if (serialized) {
+    delete serialized.conjuge;
+  }
+  return serialized;
 }
 
 async function getUserWithSpouse(id) {
@@ -184,10 +203,64 @@ async function getUserWithSpouse(id) {
     return null;
   }
 
-  const plainUser = serializeUserWithSpouse(user);
-  const spouse = plainUser.conjuge || null;
-  delete plainUser.conjuge;
-  return { user: plainUser, spouse };
+  return buildUserWithSpouse(user);
+}
+
+async function findUserWithSpouseByContact({ email, telefone }) {
+  const clauses = [];
+  if (email) {
+    clauses.push({ email: { [Op.iLike]: email } });
+  }
+  if (telefone) {
+    const digits = sanitizePhone(telefone);
+    if (digits) {
+      clauses.push({ telefone: digits });
+    }
+  }
+
+  if (!clauses.length) {
+    return null;
+  }
+
+  const user = await User.findOne({
+    where: {
+      [Op.or]: clauses
+    },
+    include: [
+      {
+        model: Perfil,
+        required: false,
+        include: [{ model: Permissao, as: 'permissoes', through: { attributes: [] } }]
+      },
+      {
+        model: Perfil,
+        as: 'perfis',
+        through: { attributes: [] }
+      },
+      {
+        model: User,
+        as: 'conjuge',
+        attributes: [
+          'id',
+          'name',
+          'email',
+          'telefone',
+          'username',
+          'cpf',
+          'estado_civil',
+          'profissao',
+          'endereco',
+          'bairro',
+          'numero',
+          'cep',
+          'escolaridade'
+        ]
+      }
+    ]
+  });
+
+  if (!user) return null;
+  return buildUserWithSpouse(user);
 }
 
 async function createUser(body) {
@@ -244,5 +317,6 @@ module.exports = {
   createUser,
   getUserById,
   updateUser,
-  getUserWithSpouse
+  getUserWithSpouse,
+  findUserWithSpouseByContact
 };
