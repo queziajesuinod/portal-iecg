@@ -48,7 +48,7 @@ async function updateUser(id, updateData) {
     throw new Error('Usuário não encontrado');
   }
 
-  const fields = ['name', 'email', 'image', 'username', 'perfilId', 'active'];
+  const fields = ['name', 'email', 'image', 'username', 'perfilId', 'active', 'telefone', 'endereco', 'bairro', 'numero', 'cep'];
   fields.forEach((field) => {
     if (updateData[field] !== undefined) {
       user[field] = updateData[field];
@@ -98,7 +98,20 @@ async function getUserWithSpouse(id) {
       {
         model: User,
         as: 'conjuge',
-        attributes: ['id', 'name', 'email', 'telefone', 'username', 'cpf', 'estado_civil', 'profissao']
+        attributes: [
+          'id',
+          'name',
+          'email',
+          'telefone',
+          'username',
+          'cpf',
+          'estado_civil',
+          'profissao',
+          'endereco',
+          'bairro',
+          'numero',
+          'cep'
+        ]
       }
     ]
   });
@@ -122,6 +135,10 @@ async function createUser(body) {
     image,
     username,
     telefone,
+    endereco,
+    bairro,
+    numero,
+    cep,
     perfilIds = []
   } = body;
   const safePassword = password || crypto.randomBytes(8).toString('hex');
@@ -138,7 +155,11 @@ async function createUser(body) {
     salt,
     image,
     username: safeUsername,
-    telefone
+    telefone,
+    endereco,
+    bairro,
+    cep,
+    numero
   });
   const finalPerfilIds = Array.isArray(perfilIds) && perfilIds.length ? perfilIds : perfilId ? [perfilId] : [];
   await syncUserPerfis(newUser, finalPerfilIds);

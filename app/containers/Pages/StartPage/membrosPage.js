@@ -3,6 +3,7 @@ import { Helmet } from 'react-helmet';
 import {
   Box,
   Stack,
+  Grid,
   Typography,
   Button,
   Table,
@@ -21,6 +22,7 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { PapperBlock } from 'dan-components';
+import { fetchGeocode } from '../../../utils/googleGeocode';
 
 const fallbackHost = `${window.location.protocol}//${window.location.host}`;
 const API_URL = (process.env.REACT_APP_API_URL && process.env.REACT_APP_API_URL.replace(/\/$/, '')) || fallbackHost || 'https://portal.iecg.com.br';
@@ -29,7 +31,11 @@ const MEMBER_PROFILE_ID = '7d47d03a-a7aa-4907-b8b9-8fcf87bd52dc';
 const initialFormState = {
   name: '',
   email: '',
-  telefone: ''
+  telefone: '',
+  endereco: '',
+  numero: '',
+  bairro: '',
+  cep: ''
 };
 
 const MembrosPage = () => {
@@ -42,6 +48,7 @@ const MembrosPage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState(initialFormState);
+  const [geoLoading, setGeoLoading] = useState(false);
 
   const token = localStorage.getItem('token');
   const headersAuth = {
@@ -109,6 +116,10 @@ const MembrosPage = () => {
         name: form.name,
         email: form.email,
         telefone: form.telefone,
+        endereco: form.endereco,
+        numero: form.numero,
+        bairro: form.bairro,
+        cep: form.cep,
         perfilId: MEMBER_PROFILE_ID,
         active: true
       };
@@ -134,6 +145,36 @@ const MembrosPage = () => {
 
   const handleFormChange = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleCompleteAddressFromCep = async () => {
+    const rawCep = (form.cep || '').replace(/\D/g, '');
+    if (rawCep.length < 8) {
+      setMessage('Informe um CEP válido para completar o endereço');
+      return;
+    }
+    setGeoLoading(true);
+    setMessage('');
+    try {
+      const geocodeResult = await fetchGeocode(rawCep);
+      if (!geocodeResult) {
+        setMessage('Nenhum resultado encontrado para o CEP informado');
+        return;
+      }
+      setForm((prev) => ({
+        ...prev,
+        endereco: geocodeResult.logradouro || prev.endereco,
+        numero: geocodeResult.numeroEncontrado || prev.numero,
+        bairro: geocodeResult.bairro || prev.bairro,
+        cep: geocodeResult.cepEncontrado || prev.cep
+      }));
+      setMessage('Endereço complementado via Google Maps');
+    } catch (error) {
+      console.error('Erro ao buscar CEP:', error);
+      setMessage(error.message || 'Erro ao buscar o CEP');
+    } finally {
+      setGeoLoading(false);
+    }
   };
 
   return (
@@ -238,6 +279,53 @@ const MembrosPage = () => {
               onChange={(event) => handleFormChange('telefone', event.target.value)}
               fullWidth
             />
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={8}>
+                <TextField
+                  label="CEP"
+                  value={form.cep}
+                  onChange={(event) => handleFormChange('cep', event.target.value)}
+                  helperText="Preencha o CEP antes de completar para atualizar endereço e bairro"
+                  fullWidth
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <Button
+                  variant="outlined"
+                  color="primary"
+                  onClick={handleCompleteAddressFromCep}
+                  disabled={geoLoading}
+                  fullWidth
+                  sx={{ height: '100%' }}
+                >
+                  {geoLoading ? 'Buscando CEP...' : 'Completar pelo CEP'}
+                </Button>
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  label="Endereço"
+                  value={form.endereco}
+                  onChange={(event) => handleFormChange('endereco', event.target.value)}
+                  fullWidth
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={4}>
+                <TextField
+                  label="Número"
+                  value={form.numero}
+                  onChange={(event) => handleFormChange('numero', event.target.value)}
+                  fullWidth
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={4}>
+                <TextField
+                  label="Bairro"
+                  value={form.bairro}
+                  onChange={(event) => handleFormChange('bairro', event.target.value)}
+                  fullWidth
+                />
+              </Grid>
+            </Grid>
           </Stack>
         </DialogContent>
         <DialogActions>

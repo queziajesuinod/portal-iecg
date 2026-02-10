@@ -224,7 +224,11 @@ const CelulaService = {
         'encontro',
         'escolas',
         'image',
-        'conjuge_id'
+        'conjuge_id',
+        'endereco',
+        'bairro',
+        'numero',
+        'cep'
       ],
       include: [
         {
@@ -235,7 +239,18 @@ const CelulaService = {
         {
           model: User,
           as: 'conjuge',
-          attributes: ['id', 'name', 'email', 'telefone', 'username', 'image']
+          attributes: [
+            'id',
+            'name',
+            'email',
+            'telefone',
+            'username',
+            'image',
+            'endereco',
+            'bairro',
+            'numero',
+            'cep'
+          ]
         }
       ]
     });
