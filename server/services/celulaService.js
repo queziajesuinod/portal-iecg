@@ -209,28 +209,29 @@ const CelulaService = {
       where: {
         [Op.or]: clauses
       },
-        attributes: [
-          'id',
-          'name',
-          'email',
-          'telefone',
-          'username',
-          'is_lider_celula',
-          'data_nascimento',
-          'cpf',
-          'estado_civil',
-          'profissao',
-          'batizado',
-          'encontro',
-          'escolas',
-          'image',
-          'conjuge_id',
-          'endereco',
-          'bairro',
-          'numero',
-          'cep',
-          'escolaridade'
-        ],
+      attributes: [
+        'id',
+        'name',
+        'email',
+        'telefone',
+        'username',
+        'is_lider_celula',
+        'data_nascimento',
+        'cpf',
+        'estado_civil',
+        'profissao',
+        'batizado',
+        'encontro',
+        'escolas',
+        'image',
+        'conjuge_id',
+        'endereco',
+        'bairro',
+        'numero',
+        'cep',
+        'escolaridade',
+        'nome_esposo'
+      ],
       include: [
         {
           model: Celula,
@@ -241,19 +242,20 @@ const CelulaService = {
           model: User,
           as: 'conjuge',
           attributes: [
-            'id',
-            'name',
-            'email',
-            'telefone',
-            'username',
-            'image',
-            'endereco',
-            'bairro',
-            'numero',
-            'cep',
-            'escolaridade'
-          ]
-        }
+          'id',
+          'name',
+          'email',
+          'telefone',
+          'username',
+          'image',
+          'endereco',
+          'bairro',
+          'numero',
+          'cep',
+          'escolaridade',
+          'nome_esposo'
+        ]
+      }
       ]
     });
 

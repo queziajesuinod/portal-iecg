@@ -19,6 +19,7 @@ router.get('/celulas/contato', CelulaPublicController.buscarPorContato);
 router.put('/celulas/:id', CelulaPublicController.atualizar);
 router.post('/celulas/leader', CelulaLeaderPublicController.upsertLeader);
 router.post('/celulas/leader/spouse', CelulaLeaderPublicController.linkSpouse);
+router.delete('/celulas/leader/spouse', CelulaLeaderPublicController.unlinkSpouse);
 router.get('/celulas/leader/contact', CelulaController.buscarPorLeaderContact);
 const PublicUserController = require('../controllers/publicUserController');
 router.get('/users/:id', PublicUserController.getLeaderById);

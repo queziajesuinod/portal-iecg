@@ -22,6 +22,17 @@ class CelulaLeaderPublicController {
       return res.status(400).json({ erro: error.message });
     }
   }
+
+  async unlinkSpouse(req, res) {
+    try {
+      const payload = req.body;
+      const result = await CelulaLeaderService.unlinkSpouseByLeaderId(payload);
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error('Erro público ao desvincular cônjuge:', error);
+      return res.status(400).json({ erro: error.message });
+    }
+  }
 }
 
 module.exports = new CelulaLeaderPublicController();

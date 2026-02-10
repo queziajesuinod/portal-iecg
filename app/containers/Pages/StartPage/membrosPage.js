@@ -47,7 +47,8 @@ const initialFormState = {
   numero: '',
   bairro: '',
   cep: '',
-  escolaridade: ''
+  escolaridade: '',
+  nome_esposo: ''
 };
 
 const MembrosPage = () => {
@@ -133,6 +134,7 @@ const MembrosPage = () => {
         bairro: form.bairro,
         escolaridade: form.escolaridade,
         cep: form.cep,
+        nome_esposo: form.nome_esposo,
         perfilId: MEMBER_PROFILE_ID,
         active: true
       };
@@ -213,19 +215,21 @@ const MembrosPage = () => {
       )}
       <Table size="small">
         <TableHead>
-          <TableRow>
-            <TableCell>Nome</TableCell>
-            <TableCell>Email</TableCell>
-            <TableCell>Telefone</TableCell>
-            <TableCell>Username</TableCell>
-            <TableCell>Status</TableCell>
-          </TableRow>
+        <TableRow>
+          <TableCell>Nome</TableCell>
+          <TableCell>Email</TableCell>
+          <TableCell>Nome do cônjuge</TableCell>
+          <TableCell>Telefone</TableCell>
+          <TableCell>Username</TableCell>
+          <TableCell>Status</TableCell>
+        </TableRow>
         </TableHead>
         <TableBody>
           {pagedMembers.map((member) => (
             <TableRow hover key={member.id}>
               <TableCell>{member.name}</TableCell>
               <TableCell>{member.email}</TableCell>
+              <TableCell>{member.nome_esposo || '-'}</TableCell>
               <TableCell>{member.telefone || '-'}</TableCell>
               <TableCell>{member.username || '-'}</TableCell>
               <TableCell>
@@ -239,14 +243,14 @@ const MembrosPage = () => {
           ))}
           {!pagedMembers.length && !loading && (
             <TableRow>
-              <TableCell colSpan={5}>
+              <TableCell colSpan={6}>
                 <Typography color="textSecondary">Nenhum membro encontrado.</Typography>
               </TableCell>
             </TableRow>
           )}
           {loading && (
             <TableRow>
-              <TableCell colSpan={5}>
+              <TableCell colSpan={6}>
                 <Box display="flex" justifyContent="center" py={2}>
                   <CircularProgress size={24} />
                 </Box>
@@ -290,6 +294,12 @@ const MembrosPage = () => {
               label="Telefone"
               value={form.telefone}
               onChange={(event) => handleFormChange('telefone', event.target.value)}
+              fullWidth
+            />
+            <TextField
+              label="Nome do cônjuge"
+              value={form.nome_esposo}
+              onChange={(event) => handleFormChange('nome_esposo', event.target.value)}
               fullWidth
             />
             <Grid container spacing={2}>

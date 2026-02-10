@@ -9,6 +9,8 @@ const sanitizePhone = (value) => {
   return digits || null;
 };
 
+const getPreferredName = (user) => (user?.name || user?.username || null);
+
 const createUsername = (name, email, suffix = '') => {
   if (email) {
     const localPart = email.split('@')[0];
@@ -75,7 +77,16 @@ class CelulaLeaderService {
     ]);
 
     if (!leader || !spouse) throw new Error('Usuário ou cônjuge não encontrado');
-    await leader.update({ conjuge_id: spouse.id });
+    const spouseName = getPreferredName(spouse);
+    const leaderName = getPreferredName(leader);
+    await leader.update({
+      conjuge_id: spouse.id,
+      ...(spouseName ? { nome_esposo: spouseName } : {})
+    });
+    await spouse.update({
+      conjuge_id: leader.id,
+      ...(leaderName ? { nome_esposo: leaderName } : {})
+    });
     return leader.reload();
   }
 
@@ -153,9 +164,9 @@ class CelulaLeaderService {
     endereco,
     bairro,
     numero,
-    cep
-    ,
-    escolaridade
+    cep,
+    escolaridade,
+    nome_esposo
   }) {
     const celula = celulaId ? await Celula.findByPk(celulaId) : null;
     if (celulaId && !celula) throw new Error('Célula não encontrada');
@@ -195,7 +206,8 @@ class CelulaLeaderService {
         is_lider_celula: true,
         frequenta_celula: true,
         ...addressPayload,
-        ...(escolaridade != null ? { escolaridade } : {})
+        ...(escolaridade != null ? { escolaridade } : {}),
+        ...(nome_esposo != null ? { nome_esposo } : {})
       });
     } else {
       await CelulaLeaderService.markAsLeader(leader, {
@@ -203,7 +215,8 @@ class CelulaLeaderService {
         email: leaderAttrs.email || leader.email,
         telefone: leaderAttrs.telefone || leader.telefone,
         perfilId: leader.perfilId || perfilId || MEMBER_PROFILE_ID,
-        ...(escolaridade != null ? { escolaridade } : {})
+        ...(escolaridade != null ? { escolaridade } : {}),
+        ...(nome_esposo != null ? { nome_esposo } : {})
       });
     }
 
@@ -229,7 +242,8 @@ class CelulaLeaderService {
       ...(bairro != null ? { bairro } : {}),
       ...(numero != null ? { numero } : {}),
       ...(cep != null ? { cep } : {}),
-      ...(escolaridade != null ? { escolaridade } : {})
+      ...(escolaridade != null ? { escolaridade } : {}),
+      ...(nome_esposo != null ? { nome_esposo } : {})
     };
 
     if (Object.keys(leaderExtras).length) {
@@ -257,12 +271,43 @@ class CelulaLeaderService {
     const leader = await User.findByPk(leaderId);
     if (!leader) throw new Error('Líder não encontrado');
 
-    await leader.update({ conjuge_id: spouse.id });
-    await spouse.update({ conjuge_id: leader.id });
+    const spouseName = getPreferredName(spouse);
+    const leaderName = getPreferredName(leader);
+    await leader.update({
+      conjuge_id: spouse.id,
+      ...(spouseName ? { nome_esposo: spouseName } : {})
+    });
+    await spouse.update({
+      conjuge_id: leader.id,
+      ...(leaderName ? { nome_esposo: leaderName } : {})
+    });
 
     return {
       leader: await leader.reload(),
       spouse: await spouse.reload()
+    };
+  }
+
+  static async unlinkSpouseByLeaderId({ leaderId }) {
+    if (!leaderId) throw new Error('leaderId é obrigatório');
+    const leader = await User.findByPk(leaderId);
+    if (!leader) throw new Error('Líder não encontrado');
+
+    const spouseId = leader.conjuge_id;
+    await leader.update({ conjuge_id: null });
+
+    if (!spouseId) {
+      return { leader: await leader.reload(), spouse: null };
+    }
+
+    const spouse = await User.findByPk(spouseId);
+    if (spouse) {
+      await spouse.update({ conjuge_id: null });
+    }
+
+    return {
+      leader: await leader.reload(),
+      spouse: spouse ? await spouse.reload() : null
     };
   }
 }
