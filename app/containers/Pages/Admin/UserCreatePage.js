@@ -1,7 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet';
 import { PapperBlock } from 'dan-components';
-import { TextField, Button, MenuItem, Box, Typography } from '@mui/material';
+import {
+  TextField,
+  Button,
+  MenuItem,
+  Box,
+  Typography,
+  FormControl,
+  InputLabel,
+  Select,
+  Checkbox,
+  ListItemText
+} from '@mui/material';
 
 const fallbackHost = `${window.location.protocol}//${window.location.host}`;
 const API_URL = (process.env.REACT_APP_API_URL && process.env.REACT_APP_API_URL.replace(/\/$/, '')) || fallbackHost || 'https://portal.iecg.com.br';
@@ -13,7 +24,7 @@ const UserCreatePage = () => {
     email: '',
     username: '',
     password: '',
-    perfilId: '',
+    perfilIds: []
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -44,21 +55,21 @@ const UserCreatePage = () => {
       const resp = await fetch(`${API_URL}/users`, {
         method: 'POST',
         headers: headersAuth,
-        body: JSON.stringify({
-          name: form.name,
-          email: form.email,
-          username: form.username,
-          password: form.password,
-          perfilId: form.perfilId,
-          active: true,
-        }),
+      body: JSON.stringify({
+        name: form.name,
+        email: form.email,
+        username: form.username,
+        password: form.password,
+        perfilIds: form.perfilIds,
+        active: true,
+      }),
       });
       if (!resp.ok) {
         const errorData = await resp.json();
         throw new Error(errorData?.message || 'Erro ao criar usuario');
       }
       setMessage('Usuario criado com sucesso');
-      setForm({ name: '', email: '', username: '', password: '', perfilId: '' });
+    setForm({ name: '', email: '', username: '', password: '', perfilIds: [] });
     } catch (err) {
       setMessage(err.message);
     } finally {
@@ -76,17 +87,29 @@ const UserCreatePage = () => {
         <TextField label="Email" value={form.email} onChange={(e) => updateField('email', e.target.value)} fullWidth />
         <TextField label="Username" value={form.username} onChange={(e) => updateField('username', e.target.value)} fullWidth />
         <TextField label="Senha" type="password" value={form.password} onChange={(e) => updateField('password', e.target.value)} fullWidth />
-        <TextField
-          select
-          label="Perfil"
-          value={form.perfilId}
-          onChange={(e) => updateField('perfilId', e.target.value)}
-          fullWidth
-        >
-          {perfis.map((p) => (
-            <MenuItem key={p.id} value={p.id}>{p.descricao}</MenuItem>
-          ))}
-        </TextField>
+        <FormControl fullWidth>
+          <InputLabel id="create-user-perfis-label">Perfis</InputLabel>
+          <Select
+            labelId="create-user-perfis-label"
+            multiple
+            value={form.perfilIds}
+            onChange={(e) => updateField('perfilIds', e.target.value)}
+            renderValue={(selected) => {
+              if (!selected || !selected.length) return 'Nenhum';
+              return perfis
+                .filter((perfil) => selected.includes(perfil.id))
+                .map((perfil) => perfil.descricao)
+                .join(', ');
+            }}
+          >
+            {perfis.map((p) => (
+              <MenuItem key={p.id} value={p.id}>
+                <Checkbox checked={form.perfilIds.includes(p.id)} />
+                <ListItemText primary={p.descricao} />
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
         <Button variant="contained" color="primary" onClick={submit} disabled={loading}>
           {loading ? 'Salvando...' : 'Cadastrar'}
         </Button>

@@ -7,6 +7,12 @@ module.exports = (sequelize) => {
       // Define que um perfil tem muitos usuarios
       if (models.User) {
         Perfil.hasMany(models.User, { foreignKey: 'perfilId' });
+        Perfil.belongsToMany(models.User, {
+          through: models.UserPerfil,
+          as: 'usuarios',
+          foreignKey: 'perfilId',
+          otherKey: 'userId'
+        });
       }
       if (models.Permissao) {
         Perfil.belongsToMany(models.Permissao, {

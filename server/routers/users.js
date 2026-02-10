@@ -8,6 +8,7 @@ const autenticado = require('../middlewares/autenticado')
 router.use(express.json());
 router.get('/', getUsers)
 router.get('/:id', getUserDetalhe)
+
 router.post('/', postUsers)
 router.put('/:id', putUser)
 

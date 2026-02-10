@@ -2,9 +2,31 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet';
 import { PapperBlock } from 'dan-components';
 import {
-  Table, TableBody, TableCell, TableHead, TableRow, TablePagination,
-  Button, Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField, MenuItem, Switch, FormControlLabel, Typography, Box, Chip, CircularProgress, Stack
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TablePagination,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  MenuItem,
+  Switch,
+  FormControlLabel,
+  Typography,
+  Box,
+  Chip,
+  CircularProgress,
+  Stack,
+  FormControl,
+  InputLabel,
+  Select,
+  Checkbox,
+  ListItemText
 } from '@mui/material';
 
 const fallbackHost = `${window.location.protocol}//${window.location.host}`;
@@ -20,7 +42,7 @@ const UsersListPage = () => {
   const [users, setUsers] = useState([]);
   const [perfis, setPerfis] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [form, setForm] = useState({});
+  const [form, setForm] = useState({ perfilIds: [] });
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -60,7 +82,7 @@ const UsersListPage = () => {
       name: user.name || '',
       email: user.email || '',
       username: user.username || '',
-      perfilId: user.perfilId || '',
+      perfilIds: user.perfis?.map((p) => p.id) || (user.perfilId ? [user.perfilId] : []),
       active: user.active !== false,
     });
     setOpen(true);
@@ -73,7 +95,10 @@ const UsersListPage = () => {
       const resp = await fetch(`${API_URL}/users/${selectedUser.id}`, {
         method: 'PUT',
         headers: headersAuth,
-        body: JSON.stringify(form),
+      body: JSON.stringify({
+        ...form,
+        perfilIds: form.perfilIds || []
+      }),
       });
       if (!resp.ok) {
         const data = await resp.json();
@@ -207,15 +232,31 @@ const UsersListPage = () => {
             <TextField label="Nome" value={form.name || ''} onChange={(e) => updateField('name', e.target.value)} fullWidth />
             <TextField label="Email" value={form.email || ''} onChange={(e) => updateField('email', e.target.value)} fullWidth />
             <TextField label="Username" value={form.username || ''} onChange={(e) => updateField('username', e.target.value)} fullWidth />
-            <TextField
-              select
-              label="Perfil"
-              value={form.perfilId || ''}
-              onChange={(e) => updateField('perfilId', e.target.value)}
-              fullWidth
-            >
-              {perfis.map(p => <MenuItem key={p.id} value={p.id}>{p.descricao}</MenuItem>)}
-            </TextField>
+            <FormControl fullWidth>
+              <InputLabel id="usuarios-perfis-label">Perfis</InputLabel>
+              <Select
+                labelId="usuarios-perfis-label"
+                multiple
+                value={form.perfilIds || []}
+                onChange={(e) => updateField('perfilIds', e.target.value)}
+                renderValue={(selected) => {
+                  if (!selected || selected.length === 0) {
+                    return 'Nenhum';
+                  }
+                  return perfis
+                    .filter((perfil) => selected.includes(perfil.id))
+                    .map((perfil) => perfil.descricao)
+                    .join(', ');
+                }}
+              >
+                {perfis.map((p) => (
+                  <MenuItem key={p.id} value={p.id}>
+                    <Checkbox checked={(form.perfilIds || []).includes(p.id)} />
+                    <ListItemText primary={p.descricao} />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             <FormControlLabel
               control={<Switch checked={form.active !== false} onChange={(e) => updateField('active', e.target.checked)} />}
               label="Ativo"

@@ -1,14 +1,18 @@
 const express = require('express');
 const CelulaController = require('../controllers/celulaController');
 const ApeloDirecionadoCelulaController = require('../controllers/apelodirecionadocelulaController');
+const CelulaLeaderController = require('../controllers/celulaLeaderController');
 const router = express.Router();
 
 router.post('/celula/', CelulaController.criar);
 router.get('/celula/listagemgeral', CelulaController.listarTodas);
 router.get('/celula/', CelulaController.listar);
+router.get('/celula/leader/contact', CelulaController.buscarPorLeaderContact);
 router.get('/celula/:id', CelulaController.buscarPorId);
 router.put('/celula/:id', CelulaController.atualizar);
 router.delete('/celula/:id', CelulaController.deletar);
+router.post('/celula/leader', CelulaLeaderController.upsertLeader);
+router.post('/celula/leader/spouse', CelulaLeaderController.linkSpouse);
 router.post('/direcionamentos/', ApeloDirecionadoCelulaController.criar);
 router.get('/direcionamentos/', ApeloDirecionadoCelulaController.listarTodos);
 router.get('/direcionamentos/por-celula/:celulaId', ApeloDirecionadoCelulaController.listarPorCelula);

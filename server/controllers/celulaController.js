@@ -1,6 +1,81 @@
 const CelulaService = require('../services/celulaService');
 
+const serializeCelula = (celula) => {
+  if (!celula) {
+    return null;
+  }
+  const payload = celula.toJSON ? celula.toJSON() : celula;
+  const leader = payload.liderRef || null;
+  payload.leaderUser = leader
+    ? {
+        id: leader.id,
+        name: leader.name,
+        email: leader.email,
+        telefone: leader.telefone,
+        username: leader.username,
+        isLeader: leader.is_lider_celula
+      }
+    : null;
+  return payload;
+};
+
 class CelulaController {
+  async buscarPorLeaderContact(req, res) {
+    try {
+      const { email, telefone } = req.query;
+      if (!email && !telefone) {
+        return res.status(400).json({ erro: 'Informe email ou telefone do líder.' });
+      }
+
+      const leader = await CelulaService.buscarPorContatoLeader({ email, telefone });
+      if (!leader) {
+        return res.status(404).json({ erro: 'Líder não encontrado' });
+      }
+
+      const celulas = (leader.lideranca || []).map((celula) => {
+        const payload = celula.toJSON ? celula.toJSON() : celula;
+        payload.liderRef = leader;
+        return serializeCelula(payload);
+      });
+
+      const spouse = leader.conjuge ? {
+        id: leader.conjuge.id,
+        name: leader.conjuge.name,
+        email: leader.conjuge.email,
+        telefone: leader.conjuge.telefone,
+        username: leader.conjuge.username,
+        image: leader.conjuge.image
+      } : null;
+
+      return res.status(200).json({
+        leader: {
+          id: leader.id,
+          name: leader.name,
+          email: leader.email,
+          telefone: leader.telefone,
+          username: leader.username,
+          isLeader: leader.is_lider_celula,
+          data_nascimento: leader.data_nascimento,
+          cpf: leader.cpf,
+          estado_civil: leader.estado_civil,
+          profissao: leader.profissao,
+          batizado: leader.batizado,
+          encontro: leader.encontro,
+          escolas: leader.escolas,
+          image: leader.image,
+          conjuge_id: leader.conjuge_id,
+          spouse,
+          perfilId: leader.perfilId,
+          active: leader.active
+        },
+        celulas
+      });
+    } catch (error) {
+      console.error('Erro ao buscar líder por contato:', error);
+      return res.status(500).json({ erro: 'Falha ao buscar líder' });
+    }
+  }
+
   async criar(req, res) {
     try {
       console.log('Dados recebidos no corpo da requisição:', req.body);
@@ -17,7 +92,7 @@ class CelulaController {
       const celula = await CelulaService.criarCelula(req.body);
       console.log('Célula criada com sucesso:', celula);
 
-      return res.status(201).json(celula);
+      return res.status(201).json(serializeCelula(celula));
     } catch (error) {
       console.error('Erro ao criar célula:', error);
       return res.status(400).json({ erro: error.message });
@@ -27,7 +102,7 @@ class CelulaController {
   async listarTodas(req, res) {
     try {
       const celulas = await CelulaService.buscarTodasCelulas();
-      return res.status(200).json(celulas);
+      return res.status(200).json(celulas.map(serializeCelula));
     } catch (error) {
       return res.status(500).json({ erro: 'Erro ao buscar células' });
     }
@@ -63,7 +138,10 @@ class CelulaController {
         parseInt(page, 10),
         parseInt(limit, 10)
       );
-      return res.status(200).json(resultado);
+      return res.status(200).json({
+        ...resultado,
+        registros: resultado.registros.map(serializeCelula)
+      });
     } catch (error) {
       return res.status(500).json({ erro: 'Erro ao listar celulas', detalhe: error.message });
     }
@@ -91,7 +169,7 @@ class CelulaController {
       }
 
       const celula = await CelulaService.buscarCelulaPorId(req.params.id);
-      return res.status(200).json(celula);
+      return res.status(200).json(serializeCelula(celula));
     } catch (error) {
       console.error('Erro ao buscar célula por ID:', error);
       return res.status(404).json({ erro: error.message });
@@ -109,7 +187,7 @@ class CelulaController {
       }
 
       const celula = await CelulaService.atualizarCelula(req.params.id, req.body);
-      return res.status(200).json(celula);
+      return res.status(200).json(serializeCelula(celula));
     } catch (error) {
       console.error('Erro ao atualizar célula:', error);
       return res.status(400).json({ erro: error.message });

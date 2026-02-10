@@ -305,7 +305,7 @@ async function estornarPagamento(paymentId, amount) {
   logCielo('Refund request', { paymentId, amount });
   try {
     const response = await axios.put(
-      `${BASE_URL}/1/sales/${paymentId}/refund`,
+      `${BASE_URL}/1/sales/${paymentId}/void`,
       { Amount: amount },
       {
         headers: {

@@ -14,7 +14,8 @@ import {
   Divider,
   Chip,
   LinearProgress,
-  useTheme
+  useTheme,
+  Stack
 } from '@mui/material';
 import PropTypes from 'prop-types';
 import { Helmet } from 'react-helmet';
@@ -133,6 +134,8 @@ const CadastrarCelula = () => {
   const [diasSelecionados, setDiasSelecionados] = useState([]);
   const [loading, setLoading] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
+  const [leaderSearchLoading, setLeaderSearchLoading] = useState(false);
+  const [leaderSearchResult, setLeaderSearchResult] = useState(null);
   const location = useLocation();
   const celulaEditando = location.state?.celula;
   const isEdit = Boolean(celulaEditando);
@@ -195,6 +198,10 @@ const CadastrarCelula = () => {
     setFormData({ ...formData, [name]: nextValue });
   };
 
+  const clearLeaderSearch = () => {
+    setLeaderSearchResult(null);
+  };
+
 
   const handleDiaToggle = (dia) => {
     setDiasSelecionados((prev) => {
@@ -246,6 +253,7 @@ const CadastrarCelula = () => {
           setFormData(formInicial);
           setDiasSelecionados([]);
         }
+        await ensureLeaderRecord(isEdit ? formData.id : data.id);
       } else {
         setNotification(`Erro: ${data.message || 'Falha no processamento'}`);
       }
@@ -254,6 +262,68 @@ const CadastrarCelula = () => {
       setNotification('Erro na conexão com o servidor.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const ensureLeaderRecord = async (celulaId) => {
+    if (!celulaId) return;
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`${API_URL}/start/celula/leader`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          celulaId,
+          lider: formData.lider,
+          email_lider: formData.email_lider,
+          cel_lider: formData.cel_lider,
+          perfilId: process.env.REACT_APP_MEMBER_LEADER_PROFILE || undefined
+        })
+      });
+    } catch (error) {
+      console.error('Erro ao garantir registro do líder:', error);
+    }
+  };
+
+  const handleLeaderSearch = async () => {
+    const email = formData.email_lider?.trim();
+    const telefone = formatPhoneNumber(formData.cel_lider || '');
+    if (!email && telefone.replace(/\D/g, '').length === 0) {
+      setNotification('Informe o e-mail ou celular do líder para buscar.');
+      return;
+    }
+    setLeaderSearchLoading(true);
+    setLeaderSearchResult(null);
+    try {
+      const params = new URLSearchParams();
+      if (email) params.append('email', email);
+      if (telefone) params.append('telefone', telefone.replace(/\D/g, ''));
+      const res = await fetch(`${API_URL}/public/celulas/leader/contact?${params.toString()}`);
+      if (!res.ok) {
+        if (res.status === 404) {
+          setNotification('Líder não encontrado. Continuaremos com cadastro interno.');
+        } else {
+          setNotification('Não foi possível buscar o líder.');
+        }
+        return;
+      }
+      const data = await res.json();
+      const leader = data.leader || {};
+      setLeaderSearchResult(leader);
+      setFormData((prev) => ({
+        ...prev,
+        lider: leader.name || prev.lider,
+        email_lider: leader.email || prev.email_lider,
+        cel_lider: leader.telefone ? formatPhoneNumber(leader.telefone) : prev.cel_lider
+      }));
+    } catch (error) {
+      console.error('Erro ao buscar líder:', error);
+      setNotification('Erro ao buscar líder pelo contato.');
+    } finally {
+      setLeaderSearchLoading(false);
     }
   };
 
@@ -328,10 +398,43 @@ return (
                     <TextField fullWidth label="Líder" name="lider" value={formData.lider} onChange={handleChange} />
                   </Grid>
                   <Grid item xs={12} md={6}>
-                    <TextField fullWidth label="Email do Líder" name="email_lider" value={formData.email_lider} onChange={handleChange} />
+                    <TextField
+                      fullWidth
+                      label="Email do Líder"
+                      name="email_lider"
+                      value={formData.email_lider}
+                      onChange={(e) => { handleChange(e); clearLeaderSearch(); }}
+                    />
                   </Grid>
                   <Grid item xs={12} md={6}>
-                    <TextField fullWidth label="Celular do Líder" name="cel_lider" value={formData.cel_lider} onChange={handleChange} />
+                    <TextField
+                      fullWidth
+                      label="Celular do Líder"
+                      name="cel_lider"
+                      value={formData.cel_lider}
+                      onChange={(e) => { handleChange(e); clearLeaderSearch(); }}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Stack direction="row" spacing={2} alignItems="center">
+                      <Button
+                        variant="outlined"
+                        color="primary"
+                        onClick={handleLeaderSearch}
+                        disabled={leaderSearchLoading}
+                      >
+                        {leaderSearchLoading ? 'Buscando líder...' : 'Buscar líder no Users'}
+                      </Button>
+                      {leaderSearchResult ? (
+                        <Typography variant="body2" color="primary">
+                          {leaderSearchResult.name} encontrado (#{leaderSearchResult.id})
+                        </Typography>
+                      ) : (
+                        <Typography variant="body2" color="textSecondary">
+                          Informe e-mail ou telefone e clique em Buscar.
+                        </Typography>
+                      )}
+                    </Stack>
                   </Grid>
                   <Grid item xs={12} md={6}>
                     <TextField fullWidth label="Anfitrião" name="anfitriao" value={formData.anfitriao} onChange={handleChange} />

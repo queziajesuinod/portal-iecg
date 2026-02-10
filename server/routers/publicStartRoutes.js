@@ -2,6 +2,8 @@ const express = require('express');
 const ApeloDirecionadoCelulaController = require('../controllers/apelodirecionadocelulaController');
 const CelulaPublicController = require('../controllers/celulaPublicController');
 const CampusController = require('../controllers/campus');
+const CelulaController = require('../controllers/celulaController');
+const CelulaLeaderPublicController = require('../controllers/celulaLeaderPublicController');
 
 const router = express.Router();
 
@@ -15,5 +17,10 @@ router.get('/campus', CampusController.listar);
 router.get('/celulas/contato', CelulaPublicController.buscarPorContato);
 // Atualizacao publica de dados da celula
 router.put('/celulas/:id', CelulaPublicController.atualizar);
+router.post('/celulas/leader', CelulaLeaderPublicController.upsertLeader);
+router.post('/celulas/leader/spouse', CelulaLeaderPublicController.linkSpouse);
+router.get('/celulas/leader/contact', CelulaController.buscarPorLeaderContact);
+const PublicUserController = require('../controllers/publicUserController');
+router.get('/users/:id', PublicUserController.getLeaderById);
 
 module.exports = router;

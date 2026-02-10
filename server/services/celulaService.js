@@ -1,4 +1,4 @@
-const { Celula, Campus } = require('../models');
+const { Celula, Campus, User } = require('../models');
 const { Op } = require('sequelize');
 const webhookEmitter = require('./webhookEmitter');
 
@@ -6,6 +6,27 @@ const sanitizeCelular = (valor) => {
   if (!valor) return '';
   return String(valor).replace(/\D/g, '');
 };
+
+const defaultCelulaIncludes = [
+  {
+    model: Campus,
+    as: 'campusRef',
+    attributes: ['id', 'nome']
+  },
+  {
+    model: User,
+    as: 'liderRef',
+    attributes: ['id', 'name', 'email', 'telefone', 'username', 'is_lider_celula']
+  }
+];
+
+const celulaForLeaderSearchIncludes = [
+  {
+    model: Campus,
+    as: 'campusRef',
+    attributes: ['id', 'nome']
+  }
+];
 
 const CelulaService = {
   async criarCelula(dados = {}) {
@@ -39,7 +60,7 @@ const CelulaService = {
   },
 
   async buscarTodasCelulas() {
-    return Celula.findAll();
+    return Celula.findAll({ include: defaultCelulaIncludes });
   },
 
   async buscaPaginada(page, limit) {
@@ -92,18 +113,25 @@ const CelulaService = {
       }
     }
 
+    const includes = [...defaultCelulaIncludes];
+    if (filtros.leaderEmail || filtros.leaderTelefone) {
+      includes.push({
+        model: User,
+        as: 'liderRef',
+        required: true,
+        where: {
+          ...(filtros.leaderEmail ? { email: { [Op.iLike]: filtros.leaderEmail } } : {}),
+          ...(filtros.leaderTelefone ? { telefone: sanitizeCelular(filtros.leaderTelefone) } : {})
+        }
+      });
+    }
+
     const { count, rows } = await Celula.findAndCountAll({
       where,
       limit,
       offset,
       order: [['createdAt', 'DESC']],
-      include: [
-        {
-          model: Campus,
-          as: 'campusRef',
-          attributes: ['id', 'nome']
-        }
-      ]
+      include: includes
     });
 
     const totalPaginas = Math.ceil(count / limit) || 1;
@@ -117,7 +145,7 @@ const CelulaService = {
   },
 
   async buscarCelulaPorId(id) {
-    const celula = await Celula.findByPk(id);
+    const celula = await Celula.findByPk(id, { include: defaultCelulaIncludes });
     if (!celula) {
       throw new Error('Célula não encontrada');
     }
@@ -161,6 +189,58 @@ const CelulaService = {
       rede: celula.rede
     });
     return { mensagem: 'Célula removida com sucesso' };
+  }
+,
+
+  async buscarPorContatoLeader({ email, telefone }) {
+    if (!email && !telefone) {
+      return null;
+    }
+
+    const clauses = [];
+    if (email) {
+      clauses.push({ email: { [Op.iLike]: email } });
+    }
+    if (telefone) {
+      clauses.push({ telefone: sanitizeCelular(telefone) });
+    }
+
+    const user = await User.findOne({
+      where: {
+        [Op.or]: clauses
+      },
+      attributes: [
+        'id',
+        'name',
+        'email',
+        'telefone',
+        'username',
+        'is_lider_celula',
+        'data_nascimento',
+        'cpf',
+        'estado_civil',
+        'profissao',
+        'batizado',
+        'encontro',
+        'escolas',
+        'image',
+        'conjuge_id'
+      ],
+      include: [
+        {
+          model: Celula,
+          as: 'lideranca',
+          include: celulaForLeaderSearchIncludes
+        },
+        {
+          model: User,
+          as: 'conjuge',
+          attributes: ['id', 'name', 'email', 'telefone', 'username', 'image']
+        }
+      ]
+    });
+
+    return user;
   }
 };
 
