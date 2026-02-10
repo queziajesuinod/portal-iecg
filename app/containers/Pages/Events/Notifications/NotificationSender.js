@@ -28,7 +28,19 @@ import { listarInscricoesPorEvento } from '../../../../api/eventsApi';
 
 const normalizeBuyerPhone = (buyerData) => {
   if (!buyerData) return null;
-  const rawPhone = buyerData.whatsapp || buyerData.phone;
+  const phoneCandidates = [
+    'whatsapp',
+    'phone',
+    'telefone',
+    'celular',
+    'buyer_phone',
+    'buyerPhone',
+    'buyer_whatsapp',
+    'buyerPhoneNumber'
+  ];
+  const rawPhone = phoneCandidates
+    .map((key) => buyerData[key])
+    .find((value) => Boolean(value));
   if (!rawPhone) return null;
   const digits = String(rawPhone).replace(/\D/g, '');
   if (!digits) return null;

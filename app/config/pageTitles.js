@@ -24,6 +24,7 @@ const pageTitles = {
   'app/start/campus': 'Campus',
   'app/start/direcionamentos': 'Apelos Direcionados',
   'app/start/fila-apelos': 'Fila de Apelos',
+  'app/start/membros': 'Membros',
 
   // Administração
   'app/admin': 'Administração',
@@ -51,6 +52,7 @@ const pageTitles = {
   campus: 'Campus',
   direcionamentos: 'Apelos Direcionados',
   'fila-apelos': 'Fila de Apelos',
+  membros: 'Membros',
   perfis: 'Perfis e Permissões',
   usuarios: 'Usuários',
   webhooks: 'Webhooks',

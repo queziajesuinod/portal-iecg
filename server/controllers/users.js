@@ -1,4 +1,4 @@
-const { getTodosUsers, createUser, getUserById, updateUser } = require("../services/users");
+const { getTodosUsers, createUser, getUserById, updateUser, getUserWithSpouse } = require("../services/users");
 
 async function getUsers(req, res) {
     try {
@@ -42,9 +42,23 @@ async function postUsers(req, res) {
     }
 }
 
+async function getUserComConjuge(req, res) {
+    try {
+        const result = await getUserWithSpouse(req.params.id);
+        if (!result) {
+            return res.status(404).json({ message: 'Usuário não encontrado' });
+        }
+        res.status(200).json(result);
+    } catch (error) {
+        console.error('Erro ao buscar usuário com cônjuge:', error);
+        res.status(500).json({ message: 'Erro interno do servidor' });
+    }
+}
+
 module.exports = {
     getUsers,
     postUsers,
     getUserDetalhe,
-    putUser
+    putUser,
+    getUserComConjuge
 };

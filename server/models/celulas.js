@@ -7,6 +7,9 @@ module.exports = (sequelize) => {
       if (models.Campus) {
         Celula.belongsTo(models.Campus, { foreignKey: 'campusId', as: 'campusRef' });
       }
+      if (models.User) {
+        Celula.belongsTo(models.User, { foreignKey: 'liderId', as: 'liderRef' });
+      }
     }
   }
 
@@ -104,6 +107,10 @@ module.exports = (sequelize) => {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true
+    },
+    liderId: {
+      type: DataTypes.UUID,
+      allowNull: true
     }
   }, {
     sequelize,

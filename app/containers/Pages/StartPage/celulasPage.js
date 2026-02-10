@@ -385,9 +385,53 @@ const ListagemCelulasPage = () => {
       total, processed: 0, success: 0, failed: 0
     });
 
+    const searchLeaderByContact = async (record) => {
+      const email = record.data?.email_lider?.trim();
+      const telefone = record.data?.cel_lider ? normalizeDigits(record.data.cel_lider) : '';
+      if (!email && !telefone) {
+        return null;
+      }
+      const params = new URLSearchParams();
+      if (email) params.append('email', email);
+      if (telefone) params.append('telefone', telefone);
+      const res = await fetch(`${API_URL}/public/celulas/leader/contact?${params.toString()}`);
+      if (!res.ok) return null;
+      const parsed = await res.json();
+      return parsed?.leader || null;
+    };
+
+    const ensureLeaderForCelula = async (celulaId, row) => {
+      if (!celulaId) return;
+      const payload = {
+        celulaId,
+        lider: row.lider || '',
+        email_lider: row.email_lider || '',
+        cel_lider: row.cel_lider ? normalizeDigits(row.cel_lider) : '',
+        perfilId: process.env.REACT_APP_MEMBER_LEADER_PROFILE || undefined
+      };
+      try {
+        await fetch(`${API_URL}/start/celula/leader`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify(payload)
+        });
+      } catch (err) {
+        console.error('Erro ao criar/atualizar líder via importação:', err);
+      }
+    };
+
     await validRecords.reduce(async (previousPromise, record) => {
       await previousPromise;
       try {
+        const leader = await searchLeaderByContact(record);
+        if (leader) {
+          record.data.lider = leader.name || record.data.lider;
+          record.data.email_lider = leader.email || record.data.email_lider;
+          record.data.cel_lider = leader.telefone || record.data.cel_lider;
+        }
         const isDuplicate = await celulaJaCadastrada(record.data, token);
         if (isDuplicate) {
           failed += 1;
@@ -414,6 +458,8 @@ const ListagemCelulasPage = () => {
             throw new Error(message);
           }
           success += 1;
+          const saved = await response.json();
+          await ensureLeaderForCelula(saved.id || payload.id, record.data);
         }
       } catch (error) {
         failed += 1;

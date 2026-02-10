@@ -33,6 +33,13 @@ module.exports = [
         permission: 'CELULA_LISTAR'
       },
       {
+        key: 'listagemMembros',
+        name: 'Membros',
+        link: '/app/start/membros',
+        icon: 'ion-ios-people',
+        permission: 'CELULA_LISTAR'
+      },
+      {
         key: 'apelosDirecionados',
         name: 'Apelos Direcionados',
         link: '/app/start/direcionamentos',

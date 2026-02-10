@@ -4,8 +4,17 @@ const { Model, DataTypes } = require('sequelize');
 module.exports = (sequelize) => {
   class User extends Model {
     static associate(models) {
-      User.belongsTo(models.Perfil, { foreignKey: 'perfilId' });
-      User.hasOne(models.Aposentado, { foreignKey: 'user_id', as: 'aposentado' });
+    User.belongsTo(models.Perfil, { foreignKey: 'perfilId' });
+    User.belongsToMany(models.Perfil, {
+      through: models.UserPerfil,
+      as: 'perfis',
+      foreignKey: 'userId',
+      otherKey: 'perfilId'
+    });
+    User.hasOne(models.Aposentado, { foreignKey: 'user_id', as: 'aposentado' });
+    User.belongsTo(models.User, { as: 'conjuge', foreignKey: 'conjuge_id' });
+    User.hasMany(models.User, { as: 'conjugeDe', foreignKey: 'conjuge_id' });
+    User.hasMany(models.Celula, { as: 'lideranca', foreignKey: 'liderId' });
     }
   }
 
@@ -75,8 +84,17 @@ module.exports = (sequelize) => {
     cpf: {
       type: DataTypes.TEXT,
       allowNull: true
+    },
+    is_lider_celula: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    conjuge_id: {
+      type: DataTypes.UUID,
+      allowNull: true
     }
-  
+
   }, {
     sequelize,
     modelName: 'User',
