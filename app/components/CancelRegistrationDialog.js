@@ -10,7 +10,7 @@ import {
   List,
   ListItem,
   ListItemText
-} from '@material-ui/core';
+} from '@mui/material';
 
 function formatCurrency(value) {
   const number = Number(value || 0);

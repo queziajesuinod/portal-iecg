@@ -174,6 +174,9 @@ async function verificarDisponibilidade(batchId, quantidade) {
 
     const disponiveis = batch.maxQuantity - inscritosOcupados;
     if (disponiveis < quantidade) {
+      console.warn(
+        `[batchService] lote ${batch.id} sem vagas: maxQuantity=${batch.maxQuantity} ocupados=${inscritosOcupados} solicitado=${quantidade}`
+      );
       throw new Error(`Apenas ${disponiveis} vagas disponíveis neste lote`);
     }
 

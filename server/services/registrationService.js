@@ -684,7 +684,7 @@ async function listarInscricoes() {
       {
         model: Event,
         as: 'event',
-        attributes: ['id', 'title']
+        attributes: ['id', 'title', 'imageUrl']
       },
       {
         model: EventBatch,
@@ -776,6 +776,11 @@ async function listarInscricoesPorEvento(eventId, options = {}) {
     where,
     include: [
       {
+        model: Event,
+        as: 'event',
+        attributes: ['id', 'title', 'imageUrl']
+      },
+      {
         model: EventBatch,
         as: 'batch',
         attributes: ['id', 'name', 'price']
@@ -821,7 +826,7 @@ async function buscarInscricaoPorCodigo(orderCode) {
       {
         model: Event,
         as: 'event',
-        attributes: ['id', 'title', 'startDate', 'location', 'registrationPaymentMode', 'minDepositAmount', 'maxPaymentCount']
+        attributes: ['id', 'title', 'startDate', 'location', 'registrationPaymentMode', 'minDepositAmount', 'maxPaymentCount', 'imageUrl']
       },
       {
         model: EventBatch,
