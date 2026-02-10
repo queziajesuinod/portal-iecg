@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const ENVIRONMENT = (process.env.EFI_ENVIRONMENT || 'sandbox').toLowerCase();
 const IS_SANDBOX = ENVIRONMENT !== 'production';
 const COMMISSION_PERCENT = Number.parseFloat(process.env.EFI_COMMISSION_PERCENT || '1.5');
+const COMMISSION_ENABLED = process.env.EFI_COMMISSION_ENABLED !== 'false';
 const FAVORECIDO_CHAVE = process.env.EFI_PIX_FAVORECIDO_CHAVE;
 const PAGADOR_CHAVE = process.env.EFI_PIX_PAGADOR_CHAVE;
 const INFO_PAGADOR_DEFAULT = process.env.EFI_PIX_INFO_PAGADOR || 'Comissão Efipay';
@@ -45,6 +46,7 @@ function getEfiClient() {
 
 function isCommissionEnabled() {
   return (
+    COMMISSION_ENABLED &&
     COMMISSION_PERCENT > 0 &&
     efiOptions.client_id &&
     efiOptions.client_secret &&
