@@ -236,6 +236,8 @@ function EventDetails() {
     setLotes(lotesCacheRef.current.get(id) || []);
     setFormasPagamento(formasCacheRef.current.get(id) || []);
     carregarDados();
+    carregarLotes();
+    carregarFormas();
   }, [id]);
 
   useEffect(() => {

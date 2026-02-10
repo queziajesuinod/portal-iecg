@@ -18,7 +18,8 @@ import {
   DialogActions,
   TextField,
   Chip,
-  CircularProgress
+  CircularProgress,
+  MenuItem
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { PapperBlock } from 'dan-components';
@@ -28,6 +29,16 @@ const fallbackHost = `${window.location.protocol}//${window.location.host}`;
 const API_URL = (process.env.REACT_APP_API_URL && process.env.REACT_APP_API_URL.replace(/\/$/, '')) || fallbackHost || 'https://portal.iecg.com.br';
 const MEMBER_PROFILE_ID = '7d47d03a-a7aa-4907-b8b9-8fcf87bd52dc';
 
+const ESCOLARIDADE_OPTIONS = [
+  'ANALFABETO',
+  'ENSINO FUNDAMENTAL INCOMPLETO',
+  'ENSINO FUNDAMENTAL COMPLETO',
+  'ENSINO MÉDIO INCOMPLETO',
+  'ENSINO MÉDIO COMPLETO',
+  'ENSINO SUPERIOR INCOMPLETO',
+  'ENSINO SUPERIOR COMPLETO'
+];
+
 const initialFormState = {
   name: '',
   email: '',
@@ -35,7 +46,8 @@ const initialFormState = {
   endereco: '',
   numero: '',
   bairro: '',
-  cep: ''
+  cep: '',
+  escolaridade: ''
 };
 
 const MembrosPage = () => {
@@ -119,6 +131,7 @@ const MembrosPage = () => {
         endereco: form.endereco,
         numero: form.numero,
         bairro: form.bairro,
+        escolaridade: form.escolaridade,
         cep: form.cep,
         perfilId: MEMBER_PROFILE_ID,
         active: true
@@ -280,6 +293,22 @@ const MembrosPage = () => {
               fullWidth
             />
             <Grid container spacing={2}>
+              <Grid item xs={12}>
+                <TextField
+                  select
+                  label="Escolaridade"
+                  value={form.escolaridade}
+                  onChange={(event) => handleFormChange('escolaridade', event.target.value)}
+                  helperText="Informe a escolaridade do membro"
+                  fullWidth
+                >
+                  {ESCOLARIDADE_OPTIONS.map((option) => (
+                    <MenuItem key={option} value={option}>
+                      {option}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
               <Grid item xs={12} sm={8}>
                 <TextField
                   label="CEP"

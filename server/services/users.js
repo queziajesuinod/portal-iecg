@@ -48,7 +48,20 @@ async function updateUser(id, updateData) {
     throw new Error('Usuário não encontrado');
   }
 
-  const fields = ['name', 'email', 'image', 'username', 'perfilId', 'active', 'telefone', 'endereco', 'bairro', 'numero', 'cep'];
+  const fields = [
+    'name',
+    'email',
+    'image',
+    'username',
+    'perfilId',
+    'active',
+    'telefone',
+    'endereco',
+    'bairro',
+    'numero',
+    'cep',
+    'escolaridade'
+  ];
   fields.forEach((field) => {
     if (updateData[field] !== undefined) {
       user[field] = updateData[field];
@@ -139,6 +152,7 @@ async function createUser(body) {
     bairro,
     numero,
     cep,
+    escolaridade,
     perfilIds = []
   } = body;
   const safePassword = password || crypto.randomBytes(8).toString('hex');
@@ -159,7 +173,8 @@ async function createUser(body) {
     endereco,
     bairro,
     cep,
-    numero
+    numero,
+    escolaridade
   });
   const finalPerfilIds = Array.isArray(perfilIds) && perfilIds.length ? perfilIds : perfilId ? [perfilId] : [];
   await syncUserPerfis(newUser, finalPerfilIds);

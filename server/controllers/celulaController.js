@@ -48,7 +48,8 @@ class CelulaController {
         endereco: leader.conjuge.endereco,
         bairro: leader.conjuge.bairro,
         numero: leader.conjuge.numero,
-        cep: leader.conjuge.cep
+        cep: leader.conjuge.cep,
+        escolaridade: leader.conjuge.escolaridade
       } : null;
 
       return res.status(200).json({
@@ -74,6 +75,7 @@ class CelulaController {
           bairro: leader.bairro,
           numero: leader.numero,
           cep: leader.cep,
+          escolaridade: leader.escolaridade,
           spouse
         },
         celulas
