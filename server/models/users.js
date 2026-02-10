@@ -97,6 +97,18 @@ module.exports = (sequelize) => {
       type: DataTypes.TEXT,
       allowNull: true
     },
+    escolaridade: {
+      type: DataTypes.ENUM(
+        'ANALFABETO',
+        'ENSINO FUNDAMENTAL INCOMPLETO',
+        'ENSINO FUNDAMENTAL COMPLETO',
+        'ENSINO MÉDIO INCOMPLETO',
+        'ENSINO MÉDIO COMPLETO',
+        'ENSINO SUPERIOR INCOMPLETO',
+        'ENSINO SUPERIOR COMPLETO'
+      ),
+      allowNull: true
+    },
     is_lider_celula: {
       type: DataTypes.BOOLEAN,
       allowNull: false,

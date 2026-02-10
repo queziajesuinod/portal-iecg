@@ -154,6 +154,8 @@ class CelulaLeaderService {
     bairro,
     numero,
     cep
+    ,
+    escolaridade
   }) {
     const celula = celulaId ? await Celula.findByPk(celulaId) : null;
     if (celulaId && !celula) throw new Error('Célula não encontrada');
@@ -191,16 +193,17 @@ class CelulaLeaderService {
         active: true,
         perfilId: perfilId || MEMBER_PROFILE_ID,
         is_lider_celula: true,
-        frequenta_celula: true
-        ,
-        ...addressPayload
+        frequenta_celula: true,
+        ...addressPayload,
+        ...(escolaridade != null ? { escolaridade } : {})
       });
     } else {
       await CelulaLeaderService.markAsLeader(leader, {
         name: leaderAttrs.name,
         email: leaderAttrs.email || leader.email,
         telefone: leaderAttrs.telefone || leader.telefone,
-        perfilId: leader.perfilId || perfilId || MEMBER_PROFILE_ID
+        perfilId: leader.perfilId || perfilId || MEMBER_PROFILE_ID,
+        ...(escolaridade != null ? { escolaridade } : {})
       });
     }
 
@@ -221,12 +224,12 @@ class CelulaLeaderService {
       ...(typeof batizado === 'boolean' ? { batizado } : {}),
       ...(typeof encontro === 'boolean' ? { encontro } : {}),
       ...(Array.isArray(escolas) ? { escolas: escolas.join(', ') } : {}),
-      ...(image ? { image } : {})
-      ,
+      ...(image ? { image } : {}),
       ...(endereco != null ? { endereco } : {}),
       ...(bairro != null ? { bairro } : {}),
       ...(numero != null ? { numero } : {}),
-      ...(cep != null ? { cep } : {})
+      ...(cep != null ? { cep } : {}),
+      ...(escolaridade != null ? { escolaridade } : {})
     };
 
     if (Object.keys(leaderExtras).length) {

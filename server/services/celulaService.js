@@ -209,27 +209,28 @@ const CelulaService = {
       where: {
         [Op.or]: clauses
       },
-      attributes: [
-        'id',
-        'name',
-        'email',
-        'telefone',
-        'username',
-        'is_lider_celula',
-        'data_nascimento',
-        'cpf',
-        'estado_civil',
-        'profissao',
-        'batizado',
-        'encontro',
-        'escolas',
-        'image',
-        'conjuge_id',
-        'endereco',
-        'bairro',
-        'numero',
-        'cep'
-      ],
+        attributes: [
+          'id',
+          'name',
+          'email',
+          'telefone',
+          'username',
+          'is_lider_celula',
+          'data_nascimento',
+          'cpf',
+          'estado_civil',
+          'profissao',
+          'batizado',
+          'encontro',
+          'escolas',
+          'image',
+          'conjuge_id',
+          'endereco',
+          'bairro',
+          'numero',
+          'cep',
+          'escolaridade'
+        ],
       include: [
         {
           model: Celula,
@@ -249,7 +250,8 @@ const CelulaService = {
             'endereco',
             'bairro',
             'numero',
-            'cep'
+            'cep',
+            'escolaridade'
           ]
         }
       ]
