@@ -9,26 +9,27 @@ class PublicUserController {
       }
       const { user, spouse } = result;
       return res.status(200).json({
-      leader: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        telefone: user.telefone,
-        image: user.image,
-        username: user.username,
-        perfilId: user.perfilId,
-        data_nascimento: user.data_nascimento,
-        cpf: user.cpf,
-        endereco: user.endereco,
-        bairro: user.bairro,
-        numero: user.numero,
-        cep: user.cep,
-        escolaridade: user.escolaridade,
-        estado_civil: user.estado_civil,
-        profissao: user.profissao,
-        batizado: user.batizado,
-        encontro: user.encontro,
-        escolas: user.escolas,
+        leader: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          telefone: user.telefone,
+          image: user.image,
+          username: user.username,
+          perfilId: user.perfilId,
+          data_nascimento: user.data_nascimento,
+          cpf: user.cpf,
+          endereco: user.endereco,
+          bairro: user.bairro,
+          numero: user.numero,
+          cep: user.cep,
+          escolaridade: user.escolaridade,
+          estado_civil: user.estado_civil,
+          profissao: user.profissao,
+          batizado: user.batizado,
+          encontro: user.encontro,
+          escolas: user.escolas,
+          nome_esposo: user.nome_esposo,
           is_lider_celula: user.is_lider_celula
         },
         spouse: spouse
@@ -51,7 +52,7 @@ class PublicUserController {
 }
 
   async updateLeaderById(req, res) {
-    const allowedFields = ['endereco', 'bairro', 'numero', 'cep', 'telefone', 'escolaridade'];
+    const allowedFields = ['endereco', 'bairro', 'numero', 'cep', 'telefone', 'escolaridade', 'nome_esposo'];
     const payload = {};
     allowedFields.forEach((field) => {
       if (Object.prototype.hasOwnProperty.call(req.body, field)) {
@@ -74,7 +75,8 @@ class PublicUserController {
         bairro: user.bairro,
         numero: user.numero,
         cep: user.cep,
-        escolaridade: user.escolaridade
+        escolaridade: user.escolaridade,
+        nome_esposo: user.nome_esposo
       });
     } catch (error) {
       console.error('Erro ao atualizar usuário público:', error);

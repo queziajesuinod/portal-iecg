@@ -76,6 +76,7 @@ class CelulaController {
           numero: leader.numero,
           cep: leader.cep,
           escolaridade: leader.escolaridade,
+          nome_esposo: leader.nome_esposo,
           spouse
         },
         celulas

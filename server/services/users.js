@@ -1,6 +1,5 @@
 const { User, Perfil, Permissao } = require('../models');
 const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
 const uuid = require('uuid');
 
 async function syncUserPerfis(user, perfilIds = []) {
@@ -24,6 +23,16 @@ async function syncUserPerfis(user, perfilIds = []) {
   }
 }
 
+function serializeUserWithSpouse(user) {
+  if (!user) return null;
+  const plainUser = typeof user.get === 'function' ? user.get({ plain: true }) : { ...user };
+  const spouse = plainUser.conjuge || null;
+  if (spouse && spouse.name) {
+    plainUser.nome_esposo = spouse.name;
+  }
+  return plainUser;
+}
+
 async function getTodosUsers() {
   const users = await User.findAll({
     include: [
@@ -36,10 +45,30 @@ async function getTodosUsers() {
         model: Perfil,
         as: 'perfis',
         through: { attributes: [] }
+      },
+      {
+        model: User,
+        as: 'conjuge',
+        attributes: [
+          'id',
+          'name',
+          'email',
+          'telefone',
+          'username',
+          'cpf',
+          'estado_civil',
+          'profissao',
+          'endereco',
+          'bairro',
+          'numero',
+          'cep',
+          'escolaridade'
+        ]
       }
     ]
   });
-  return users;
+
+  return users.map((user) => serializeUserWithSpouse(user));
 }
 
 async function updateUser(id, updateData) {
@@ -60,7 +89,8 @@ async function updateUser(id, updateData) {
     'bairro',
     'numero',
     'cep',
-    'escolaridade'
+    'escolaridade',
+    'nome_esposo'
   ];
   fields.forEach((field) => {
     if (updateData[field] !== undefined) {
@@ -89,10 +119,30 @@ async function getUserById(id) {
         model: Perfil,
         as: 'perfis',
         through: { attributes: [] }
+      },
+      {
+        model: User,
+        as: 'conjuge',
+        attributes: [
+          'id',
+          'name',
+          'email',
+          'telefone',
+          'username',
+          'cpf',
+          'estado_civil',
+          'profissao',
+          'endereco',
+          'bairro',
+          'numero',
+          'cep',
+          'escolaridade'
+        ]
       }
     ]
   });
-  return user;
+
+  return serializeUserWithSpouse(user);
 }
 
 async function getUserWithSpouse(id) {
@@ -123,7 +173,8 @@ async function getUserWithSpouse(id) {
           'endereco',
           'bairro',
           'numero',
-          'cep'
+          'cep',
+          'escolaridade'
         ]
       }
     ]
@@ -133,9 +184,10 @@ async function getUserWithSpouse(id) {
     return null;
   }
 
-  const spouse = user.conjuge ? (user.conjuge.toJSON ? user.conjuge.toJSON() : user.conjuge) : null;
-  delete user.dataValues.conjuge;
-  return { user, spouse };
+  const plainUser = serializeUserWithSpouse(user);
+  const spouse = plainUser.conjuge || null;
+  delete plainUser.conjuge;
+  return { user: plainUser, spouse };
 }
 
 async function createUser(body) {
@@ -153,6 +205,7 @@ async function createUser(body) {
     numero,
     cep,
     escolaridade,
+    nome_esposo,
     perfilIds = []
   } = body;
   const safePassword = password || crypto.randomBytes(8).toString('hex');
@@ -174,7 +227,8 @@ async function createUser(body) {
     bairro,
     cep,
     numero,
-    escolaridade
+    escolaridade,
+    nome_esposo
   });
   const finalPerfilIds = Array.isArray(perfilIds) && perfilIds.length ? perfilIds : perfilId ? [perfilId] : [];
   await syncUserPerfis(newUser, finalPerfilIds);
