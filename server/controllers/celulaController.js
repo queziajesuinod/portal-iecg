@@ -130,6 +130,7 @@ class CelulaController {
         horario,
         ativo,
         lider,
+        dia,
         pastor_geracao,
         page = 1,
         limit = 10
@@ -144,6 +145,7 @@ class CelulaController {
           horario,
           ativo,
           lider,
+          dia,
           pastor_geracao
         },
         parseInt(page, 10),

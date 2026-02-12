@@ -16,13 +16,32 @@ const moment = require('moment-timezone');
 const evolutionApiService = require('./evolutionApiService');
 
 const TIMEZONE = 'America/Campo_Grande';
+const GROUP_SEND_DELAY_MS = Number(process.env.NOTIFICATION_GROUP_DELAY_MS || 1200);
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const normalizeWhatsappDigits = (value) => {
   if (!value) return null;
   const digits = String(value).replace(/\D/g, '');
   if (!digits) return null;
-  return digits.startsWith('55') ? digits : `55${digits}`;
+
+  // Se já vier com DDI 55, apenas normaliza removendo DDI para aplicar regra local
+  const raw = digits.startsWith('55') ? digits.slice(2) : digits;
+  if (!raw) return null;
+
+  if (raw.length >= 10) {
+    const ddd = raw.slice(0, 2);
+    let number = raw.slice(2);
+    if (number.length === 9) {
+      number = number.slice(1); // remove o primeiro dígito se for '9'
+    }
+    return `55${ddd}${number}`;
+  }
+
+  return `55${raw}`;
 };
+
+const extractBuyerPhone = (buyerData = {}) => buyerData?.buyer_whatsapp || null;
 
 const isWhatsappValid = (validation) => {
   if (!validation) return true;
@@ -249,6 +268,10 @@ class NotificationService {
     let mensagem = template;
 
     const variaveis = {
+      '{{buyer_name}}': dados.buyer_name || '',
+      '{{buyer_email}}': dados.buyer_email || '',
+      '{{buyer_whatsapp}}': dados.buyer_whatsapp || '',
+      '{{orderCode}}': dados.orderCode || '',
       '{{nome}}': dados.nome || '',
       '{{evento}}': dados.evento || '',
       '{{data}}': dados.data || '',
@@ -262,6 +285,14 @@ class NotificationService {
 
     Object.keys(variaveis).forEach(variavel => {
       mensagem = mensagem.replace(new RegExp(variavel, 'g'), variaveis[variavel]);
+    });
+
+    // Substituir variáveis dinâmicas como {{orderCode_1}}, {{lote_1}}, etc.
+    Object.keys(dados || {}).forEach((key) => {
+      const token = `{{${key}}}`;
+      if (mensagem.includes(token)) {
+        mensagem = mensagem.replace(new RegExp(token, 'g'), dados[key] ?? '');
+      }
     });
 
     return mensagem;
@@ -288,7 +319,11 @@ class NotificationService {
       include: [
         { model: Event, as: 'event' },
         { model: EventBatch, as: 'batch' },
-        { model: RegistrationAttendee, as: 'attendees' }
+        {
+          model: RegistrationAttendee,
+          as: 'attendees',
+          include: [{ model: EventBatch, as: 'batch', attributes: ['id', 'name'] }]
+        }
       ]
     });
 
@@ -297,17 +332,43 @@ class NotificationService {
     }
 
     // Preparar dados para substituição de variáveis
+    const buyerName = registration.buyerData?.buyer_name
+      || registration.buyerData?.name
+      || registration.buyerData?.nome
+      || registration.buyerData?.nome_completo
+      || 'Participante';
+    const buyerEmail = registration.buyerData?.buyer_email
+      || registration.buyerData?.email
+      || '';
+    const buyerWhatsapp = registration.buyerData?.buyer_whatsapp || '';
+    const attendeeBatches = (registration.attendees || [])
+      .map((attendee) => attendee.batch?.name)
+      .filter(Boolean);
+    const loteSummary = attendeeBatches.length
+      ? attendeeBatches.join(' / ')
+      : (registration.batch?.name || '');
+
     const dadosSubstituicao = {
-      nome: registration.buyerData?.name || 'Participante',
+      nome: buyerName,
       evento: registration.event.title,
       data: moment(registration.event.startDate).tz(TIMEZONE).format('DD/MM/YYYY'),
       hora: moment(registration.event.startDate).tz(TIMEZONE).format('HH:mm'),
       local: registration.event.location || '',
       codigo: registration.orderCode,
+      orderCode: registration.orderCode,
       link: `${process.env.FRONTEND_URL}/eventos/${registration.event.id}`,
       valor: registration.totalAmount ? `R$ ${registration.totalAmount.toFixed(2)}` : '',
-      lote: registration.batch?.name || ''
+      lote: loteSummary,
+      buyer_name: buyerName,
+      buyer_email: buyerEmail,
+      buyer_whatsapp: buyerWhatsapp
     };
+
+    (registration.attendees || []).forEach((attendee, index) => {
+      const pos = index + 1;
+      dadosSubstituicao[`orderCode_${pos}`] = `${registration.orderCode}_${pos}`;
+      dadosSubstituicao[`lote_${pos}`] = attendee.batch?.name || '';
+    });
 
     let message = customMessage;
     let subject = customSubject;
@@ -331,22 +392,27 @@ class NotificationService {
 
     // Obter destinatário e validar WhatsApp
     let recipient = '';
-    if (channel === 'whatsapp' || channel === 'sms') {
-      const rawPhone = registration.buyerData?.whatsapp || registration.buyerData?.phone;
-      const normalizedPhone = normalizeWhatsappDigits(rawPhone);
-      if (!normalizedPhone) {
-        throw new Error('Telefone não encontrado na inscrição');
-      }
-
-      if (channel === 'whatsapp') {
-        const validation = await evolutionApiService.validarNumeroWhatsapp(normalizedPhone);
-        if (!isWhatsappValid(validation)) {
-          throw new Error(validation?.message || 'Número de WhatsApp inválido ou desconectado');
+      if (channel === 'whatsapp' || channel === 'sms') {
+        const rawPhone = extractBuyerPhone(registration.buyerData);
+        const normalizedPhone = normalizeWhatsappDigits(rawPhone);
+        console.log('[Notification] Número recebido', {
+          rawPhone,
+          normalizedPhone,
+          registrationId: registration.id
+        });
+        if (!normalizedPhone) {
+          throw new Error('Telefone não encontrado na inscrição');
         }
-      }
 
-      recipient = normalizedPhone;
-    } else if (channel === 'email') {
+        if (channel === 'whatsapp') {
+          const validation = await evolutionApiService.validarNumeroWhatsapp(normalizedPhone);
+          if (!isWhatsappValid(validation)) {
+            throw new Error(validation?.message || 'Número de WhatsApp inválido ou desconectado');
+          }
+        }
+
+        recipient = normalizedPhone;
+      } else if (channel === 'email') {
       recipient = registration.buyerData?.email;
       if (!recipient) {
         throw new Error('Email não encontrado na inscrição');
@@ -445,7 +511,8 @@ class NotificationService {
     };
 
     // Enviar para cada membro
-    for (const member of group.members) {
+    for (let index = 0; index < group.members.length; index += 1) {
+      const member = group.members[index];
       try {
         await this.enviarNotificacao({
           ...dados,
@@ -459,6 +526,10 @@ class NotificationService {
           registrationId: member.registrationId,
           erro: error.message
         });
+      }
+
+      if (GROUP_SEND_DELAY_MS > 0 && index < group.members.length - 1) {
+        await sleep(GROUP_SEND_DELAY_MS);
       }
     }
 

@@ -25,6 +25,7 @@ const pageTitles = {
   'app/start/direcionamentos': 'Apelos Direcionados',
   'app/start/fila-apelos': 'Fila de Apelos',
   'app/start/membros': 'Membros',
+  'app/start/membros/detalhes': 'Detalhes do Membro',
 
   // Administração
   'app/admin': 'Administração',
