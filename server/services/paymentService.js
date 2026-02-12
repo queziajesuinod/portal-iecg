@@ -407,6 +407,27 @@ function mapearStatusCielo(statusCielo) {
     13: 'cancelled' // Aborted
   };
 
+  if (typeof statusCielo === 'string') {
+    const trimmed = statusCielo.trim();
+    if (trimmed === '') return 'pending';
+    const asNumber = Number(trimmed);
+    if (!Number.isNaN(asNumber)) {
+      return statusMap[asNumber] || 'pending';
+    }
+    const normalized = trimmed.toLowerCase();
+    const statusMapText = {
+      notfinished: 'pending',
+      authorized: 'authorized',
+      paymentconfirmed: 'confirmed',
+      denied: 'denied',
+      voided: 'cancelled',
+      refunded: 'refunded',
+      pending: 'pending',
+      aborted: 'cancelled'
+    };
+    return statusMapText[normalized] || 'pending';
+  }
+
   return statusMap[statusCielo] || 'pending';
 }
 

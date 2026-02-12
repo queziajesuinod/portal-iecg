@@ -153,6 +153,62 @@ async function prepararRegistroComCampos(registration) {
   return registration;
 }
 
+async function montarPayloadWebhookInscricao(registrationId) {
+  if (!registrationId) {
+    return null;
+  }
+  const registration = await Registration.findByPk(registrationId, {
+    include: [
+      {
+        model: Event,
+        as: 'event'
+      },
+      {
+        model: EventBatch,
+        as: 'batch'
+      },
+      {
+        model: Coupon,
+        as: 'coupon'
+      },
+      {
+        model: RegistrationAttendee,
+        as: 'attendees',
+        include: [
+          {
+            model: EventBatch,
+            as: 'batch',
+            attributes: ['id', 'name', 'price']
+          }
+        ]
+      },
+      {
+        model: RegistrationPayment,
+        as: 'payments'
+      }
+    ],
+    order: [[{ model: RegistrationAttendee, as: 'attendees' }, 'attendeeNumber', 'ASC']]
+  });
+
+  if (!registration) {
+    return null;
+  }
+
+  await prepararRegistroComCampos(registration);
+  await anexarResumoPagamentos(registration);
+
+  return registration;
+}
+
+async function emitirWebhookRegistroAtualizado(registrationId, extra = {}) {
+  const registrationPayload = await montarPayloadWebhookInscricao(registrationId);
+  webhookEmitter.emit('registration.updated', {
+    registrationId,
+    registration: registrationPayload,
+    ...extra
+  });
+}
+
 async function prepararListaComCampos(registrations) {
   if (!Array.isArray(registrations)) return registrations;
   await Promise.all(registrations.map(reg => prepararRegistroComCampos(reg)));
@@ -350,6 +406,10 @@ async function atualizarStatusPagamentoPorPagamentos(registration, options = {})
     registration.paymentStatus = resumo.derivedStatus;
     await registration.save({ transaction: options.transaction });
     await ajustarContadoresDeStatus(registration, statusAnterior);
+    await emitirWebhookRegistroAtualizado(registration.id, {
+      previousStatus: statusAnterior,
+      currentStatus: registration.paymentStatus
+    });
     /* eslint-enable no-param-reassign */
   }
   return resumo;
@@ -458,6 +518,95 @@ async function processarInscricao(dadosInscricao) {
   // 7. Gerar código único de pedido
   const orderCode = await orderCodeService.gerarCodigoUnico();
 
+  const precoFinalNormalizado = normalizarValor(precoFinal);
+  if (precoFinalNormalizado <= 0) {
+    const paymentMethod = 'manual';
+    const registration = await Registration.create({
+      id: uuid.v4(),
+      orderCode,
+      eventId,
+      batchId: null,
+      couponId,
+      quantity,
+      buyerData,
+      originalPrice: precoOriginal,
+      discountAmount: desconto,
+      finalPrice: precoFinal,
+      paymentStatus: 'confirmed',
+      paymentId: null,
+      paymentMethod,
+      cieloResponse: null,
+      pixQrCode: null,
+      pixQrCodeBase64: null
+    });
+
+    const attendeesPromises = attendeesData.map((attendee, index) => RegistrationAttendee.create({
+      id: uuid.v4(),
+      registrationId: registration.id,
+      batchId: attendee.batchId,
+      attendeeData: attendee.data || attendee,
+      attendeeNumber: index + 1
+    }));
+
+    await Promise.all(attendeesPromises);
+
+    const attendees = await RegistrationAttendee.findAll({
+      where: { registrationId: registration.id },
+      include: [
+        {
+          model: EventBatch,
+          as: 'batch',
+          attributes: ['id', 'name', 'price']
+        }
+      ],
+      order: [['attendeeNumber', 'ASC']]
+    });
+
+    registration.attendees = attendees;
+    await prepararRegistroComCampos(registration);
+
+    await RegistrationPayment.create({
+      id: uuid.v4(),
+      registrationId: registration.id,
+      channel: 'ONLINE',
+      method: paymentMethod,
+      amount: 0,
+      status: 'confirmed',
+      provider: 'discount',
+      providerPaymentId: null,
+      providerPayload: couponId
+        ? { couponId, reason: 'coupon_full_discount', originalStatus: 'confirmed' }
+        : { reason: 'zero_amount', originalStatus: 'confirmed' },
+      confirmedAt: new Date()
+    });
+
+    if (couponId) {
+      await couponService.incrementarUso(couponId);
+    }
+
+    await ajustarContadoresDeStatus(registration, null);
+
+    const registrationPayload = await montarPayloadWebhookInscricao(registration.id);
+    webhookEmitter.emit('registration.created', {
+      registrationId: registration.id,
+      registration: registrationPayload,
+      data: dadosInscricao
+    });
+
+    return {
+      sucesso: true,
+      orderCode,
+      registration,
+      attendees,
+      pagamento: {
+        sucesso: true,
+        status: 'confirmed',
+        paymentId: null,
+        reason: 'zero_amount'
+      }
+    };
+  }
+
   // 8. Buscar configuração de pagamento
   const paymentOption = await PaymentOption.findByPk(paymentOptionId);
 
@@ -482,6 +631,7 @@ async function processarInscricao(dadosInscricao) {
     : precoFinal;
   let valorFinalComJuros = valorBasePagamento;
   const parcelas = paymentData.installments || 1;
+  const paymentMethod = paymentOption.paymentType;
 
   if (paymentOption.paymentType === 'credit_card' && parcelas > 1 && paymentOption.interestRate > 0) {
     if (paymentOption.interestType === 'percentage') {
@@ -495,7 +645,6 @@ async function processarInscricao(dadosInscricao) {
 
   // 8.2. Processar pagamento conforme o tipo
   let resultadoPagamento;
-  const paymentMethod = paymentOption.paymentType;
 
   const buyerDocumentoRaw = buyerData.buyer_document || buyerData.documento || buyerData.cpf || buyerData.cnpj || buyerData.document || '';
   const buyerNome = buyerData.buyer_name || buyerData.nome || buyerData.name || 'Cliente';
@@ -601,7 +750,9 @@ async function processarInscricao(dadosInscricao) {
     status: paymentService.mapearStatusCielo(resultadoPagamento.status),
     provider: 'cielo',
     providerPaymentId: resultadoPagamento.paymentId,
-    providerPayload: resultadoPagamento.dadosCompletos,
+    providerPayload: resultadoPagamento.dadosCompletos
+      ? { ...resultadoPagamento.dadosCompletos, originalStatus: resultadoPagamento.status }
+      : { originalStatus: resultadoPagamento.status },
     pixQrCode: resultadoPagamento.qrCodeString || null,
     pixQrCodeBase64: resultadoPagamento.qrCodeBase64 || null,
     installments: paymentOption.paymentType === 'credit_card' ? parcelas : null
@@ -638,7 +789,9 @@ async function processarInscricao(dadosInscricao) {
       await RegistrationPayment.update(
         {
           status: 'confirmed',
-          providerPayload: captura.dadosCompletos || null
+          providerPayload: captura.dadosCompletos
+            ? { ...captura.dadosCompletos, originalStatus: captura.status }
+            : { originalStatus: captura.status }
         },
         { where: { providerPaymentId: resultadoPagamento.paymentId } }
       );
@@ -662,8 +815,10 @@ async function processarInscricao(dadosInscricao) {
     await atualizarStatusPagamentoPorPagamentos(registration);
   }
 
+  const registrationPayload = await montarPayloadWebhookInscricao(registration.id);
   webhookEmitter.emit('registration.created', {
     registrationId: registration.id,
+    registration: registrationPayload,
     data: dadosInscricao
   });
 
@@ -1036,7 +1191,9 @@ async function criarPagamentoOnline(registrationId, payload = {}) {
     status: paymentService.mapearStatusCielo(resultadoPagamento.status),
     provider: 'cielo',
     providerPaymentId: resultadoPagamento.paymentId,
-    providerPayload: resultadoPagamento.dadosCompletos,
+    providerPayload: resultadoPagamento.dadosCompletos
+      ? { ...resultadoPagamento.dadosCompletos, originalStatus: resultadoPagamento.status }
+      : { originalStatus: resultadoPagamento.status },
     pixQrCode: resultadoPagamento.qrCodeString || null,
     pixQrCodeBase64: resultadoPagamento.qrCodeBase64 || null,
     installments: paymentOption.paymentType === 'credit_card' ? parcelas : null
@@ -1057,7 +1214,9 @@ async function criarPagamentoOnline(registrationId, payload = {}) {
 
     if (captura.sucesso) {
       paymentRecord.status = 'confirmed';
-      paymentRecord.providerPayload = captura.dadosCompletos || paymentRecord.providerPayload;
+      paymentRecord.providerPayload = captura.dadosCompletos
+        ? { ...captura.dadosCompletos, originalStatus: captura.status }
+        : { originalStatus: captura.status };
       await paymentRecord.save();
       await paymentService.registrarTransacao(
         registration.id,
@@ -1171,6 +1330,10 @@ async function cancelarInscricao(id) {
     );
 
     await ajustarContadoresDeStatus(registration, statusAnterior);
+    await emitirWebhookRegistroAtualizado(registration.id, {
+      previousStatus: statusAnterior,
+      currentStatus: registration.paymentStatus
+    });
 
     return registration;
   };
@@ -1241,7 +1404,9 @@ async function cancelarInscricao(id) {
     if (payment.id) {
       const novoStatusPagamento = cancelamento.type === 'refund' ? 'refunded' : 'cancelled';
       payment.status = novoStatusPagamento;
-      payment.providerPayload = cancelamento.dadosCompletos || payment.providerPayload;
+      payment.providerPayload = cancelamento.dadosCompletos
+        ? { ...cancelamento.dadosCompletos, originalStatus: cancelamento.status }
+        : { originalStatus: cancelamento.status };
       if (!payment.confirmedAt && novoStatusPagamento === 'refunded') {
         payment.confirmedAt = new Date();
       }
@@ -1275,6 +1440,10 @@ async function cancelarInscricao(id) {
   await registration.save();
 
   await ajustarContadoresDeStatus(registration, statusAnterior);
+  await emitirWebhookRegistroAtualizado(registration.id, {
+    previousStatus: statusAnterior,
+    currentStatus: registration.paymentStatus
+  });
 
   return registration;
 }
@@ -1332,5 +1501,6 @@ module.exports = {
   obterInfoCancelamento,
   ajustarContadoresDeStatus,
   atualizarStatusPagamentoPorPagamentos,
-  anexarResumoPagamentos
+  anexarResumoPagamentos,
+  emitirWebhookRegistroAtualizado
 };
