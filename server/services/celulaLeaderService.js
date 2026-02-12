@@ -101,7 +101,7 @@ class CelulaLeaderService {
   }
 
   static async migrateCelulaLeaders({ memberProfileId = MEMBER_PROFILE_ID } = {}) {
-    const celulas = await Celula.findAll();
+    const celulas = await Celula.findAll({ where: { ativo: true } });
     const migrated = [];
 
     for (const celula of celulas) {

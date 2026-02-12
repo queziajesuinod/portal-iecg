@@ -12,6 +12,7 @@ router.get('/celula/:id', CelulaController.buscarPorId);
 router.put('/celula/:id', CelulaController.atualizar);
 router.delete('/celula/:id', CelulaController.deletar);
 router.post('/celula/leader', CelulaLeaderController.upsertLeader);
+router.post('/celula/leader/migrate', CelulaLeaderController.migrateLeaders);
 router.post('/celula/leader/spouse', CelulaLeaderController.linkSpouse);
 router.post('/direcionamentos/', ApeloDirecionadoCelulaController.criar);
 router.get('/direcionamentos/', ApeloDirecionadoCelulaController.listarTodos);

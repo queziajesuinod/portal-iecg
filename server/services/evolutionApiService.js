@@ -32,7 +32,19 @@ class EvolutionApiService {
     const cleaned = String(phone).replace(/\D/g, '');
     if (!cleaned) return null;
 
-    return cleaned.startsWith('55') ? cleaned : `55${cleaned}`;
+    const raw = cleaned.startsWith('55') ? cleaned.slice(2) : cleaned;
+    if (!raw) return null;
+
+    if (raw.length >= 10) {
+      const ddd = raw.slice(0, 2);
+      let number = raw.slice(2);
+      if (number.length === 9) {
+        number = number.slice(1); // remove o primeiro dígito se for '9'
+      }
+      return `55${ddd}${number}`;
+    }
+
+    return `55${raw}`;
   }
 
   formatPhoneNumber(phone) {
@@ -40,7 +52,7 @@ class EvolutionApiService {
     if (!normalized) {
       throw new Error('Telefone inválido para envio via WhatsApp');
     }
-    return `${normalized}@s.whatsapp.net`;
+    return `${normalized}`;
   }
 
   async validarNumeroWhatsapp(phone) {
@@ -52,13 +64,17 @@ class EvolutionApiService {
     try {
       const client = this.getClient();
       const response = await client.post(`/chat/whatsappNumbers/${this.instanceName}`, {
-        number: normalized
+        numbers: [normalized]
       });
 
       return response.data;
     } catch (error) {
       const message = error.response?.data?.message || error.message;
-      console.error('Erro ao validar número de WhatsApp:', message);
+      console.error('Erro ao validar número de WhatsApp:', {
+        message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
       throw new Error(message);
     }
   }

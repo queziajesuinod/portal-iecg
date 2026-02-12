@@ -22,6 +22,21 @@ class CelulaLeaderController {
       return res.status(400).json({ erro: error.message });
     }
   }
+
+
+  async migrateLeaders(req, res) {
+    try {
+      const migrated = await CelulaLeaderService.migrateCelulaLeaders();
+      return res.status(200).json({
+        migrated,
+        total: migrated.length,
+        mensagem: `Sincroniza??o conclu?da. ${migrated.length} l?deres vinculados.`
+      });
+    } catch (error) {
+      console.error('Erro ao migrar l?deres de c?lula:', error);
+      return res.status(500).json({ erro: error.message });
+    }
+  }
 }
 
 module.exports = new CelulaLeaderController();

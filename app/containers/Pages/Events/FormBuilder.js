@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
 import {
@@ -35,10 +35,14 @@ import ArrowUpIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownIcon from '@mui/icons-material/ArrowDownward';
 import SaveIcon from '@mui/icons-material/Save';
 import BackIcon from '@mui/icons-material/ArrowBack';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { useHistory, useParams } from 'react-router-dom';
 import {
   listarCamposPorEvento,
+  criarCampo,
   criarCamposEmLote,
+  atualizarCampo,
   deletarCampo,
   buscarEvento
 } from '../../../api/eventsApi';
@@ -82,6 +86,25 @@ function FormBuilder() {
     carregarDados();
   }, [id]);
 
+  const normalizeOrderBySection = (items) => {
+    const bySection = items.reduce((acc, item) => {
+      const key = item.section || 'attendee';
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(item);
+      return acc;
+    }, {});
+    const normalized = [];
+    Object.keys(bySection).forEach((sectionKey) => {
+      const list = bySection[sectionKey];
+      list
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        .forEach((item, idx) => {
+          normalized.push({ ...item, order: idx });
+        });
+    });
+    return normalized;
+  };
+
   const carregarDados = async () => {
     try {
       setLoading(true);
@@ -90,7 +113,7 @@ function FormBuilder() {
         listarCamposPorEvento(id)
       ]);
       setEvento(eventoRes);
-      setCampos(camposRes);
+      setCampos(normalizeOrderBySection(camposRes || []));
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
       setNotification('Erro ao carregar dados');
@@ -220,22 +243,38 @@ function FormBuilder() {
     }
   };
 
-  const handleMoverCampo = (index, direcao) => {
-    const novoIndex = direcao === 'up' ? index - 1 : index + 1;
-    if (novoIndex < 0 || novoIndex >= campos.length) return;
-
-    const novosCampos = [...campos];
-    const temp = novosCampos[index];
-    novosCampos[index] = novosCampos[novoIndex];
-    novosCampos[novoIndex] = temp;
-
-    // Atualizar ordem
-    novosCampos.forEach((campo, idx) => {
-      campo.order = idx;
+  const reorderSection = useCallback((section, fromIndex, toIndex) => {
+    setCampos((prev) => {
+      const sectionItems = prev
+        .filter((c) => c.section === section)
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      if (fromIndex < 0 || fromIndex >= sectionItems.length) return prev;
+      if (toIndex < 0 || toIndex >= sectionItems.length) return prev;
+      const updated = [...sectionItems];
+      const [moved] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, moved);
+      const updatedIds = new Set(updated.map((c) => c.id));
+      const next = prev.map((item) => {
+        if (!updatedIds.has(item.id)) return item;
+        const newIndex = updated.findIndex((u) => u.id === item.id);
+        return { ...item, order: newIndex };
+      });
+      return next;
     });
+  }, []);
 
-    setCampos(novosCampos);
-  };
+  const handleMoverCampo = useCallback((section, index, direcao) => {
+    const novoIndex = direcao === 'up' ? index - 1 : index + 1;
+    reorderSection(section, index, novoIndex);
+  }, [reorderSection]);
+
+  const handleDragEnd = useCallback((result) => {
+    const { destination, source } = result;
+    if (!destination) return;
+    if (destination.droppableId !== source.droppableId) return;
+    const section = destination.droppableId;
+    reorderSection(section, source.index, destination.index);
+  }, [reorderSection]);
 
   const handleSalvarFormulario = async () => {
     if (campos.length === 0) {
@@ -246,11 +285,13 @@ function FormBuilder() {
     try {
       setLoading(true);
 
+      const camposExistentes = campos.filter(c => !c.id.toString().startsWith('temp_'));
       // Separar campos novos (temp_) dos existentes
       const camposNovos = campos.filter(c => c.id.toString().startsWith('temp_'));
       
       if (camposNovos.length > 0) {
         const camposParaSalvar = camposNovos.map((campo, index) => ({
+          eventId: id,
           fieldType: campo.fieldType,
           fieldLabel: campo.fieldLabel,
           fieldName: campo.fieldName,
@@ -258,13 +299,38 @@ function FormBuilder() {
           isRequired: campo.isRequired,
           section: campo.section,
           options: campo.options,
-          order: campos.indexOf(campo)
+          order: typeof campo.order === 'number' ? campo.order : index
         }));
 
-        await criarCamposEmLote({
-          eventId: id,
-          campos: camposParaSalvar
-        });
+        const resultados = await Promise.allSettled(
+          camposParaSalvar.map((payload) => criarCampo(payload))
+        );
+        const falhas = resultados.filter((r) => r.status === 'rejected');
+        if (falhas.length) {
+          const mensagens = falhas
+            .map((f) => f.reason?.message)
+            .filter(Boolean);
+          setNotification(
+            mensagens.length
+              ? `Alguns campos não foram criados: ${mensagens.join(' | ')}`
+              : 'Alguns campos não foram criados.'
+          );
+        }
+      }
+
+      if (camposExistentes.length > 0) {
+        await Promise.all(
+          camposExistentes.map((campo) => atualizarCampo(campo.id, {
+            fieldType: campo.fieldType,
+            fieldLabel: campo.fieldLabel,
+            fieldName: campo.fieldName,
+            placeholder: campo.placeholder,
+            isRequired: campo.isRequired,
+            section: campo.section,
+            options: campo.options,
+            order: typeof campo.order === 'number' ? campo.order : 0
+          }))
+        );
       }
 
       setNotification('Formulário salvo com sucesso!');
@@ -277,11 +343,26 @@ function FormBuilder() {
     }
   };
 
-  const camposComprador = campos.filter(c => c.section === 'buyer');
-  const camposInscritos = campos.filter(c => c.section === 'attendee');
+  const camposComprador = useMemo(
+    () => campos.filter(c => c.section === 'buyer').sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [campos]
+  );
+  const camposInscritos = useMemo(
+    () => campos.filter(c => c.section === 'attendee').sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [campos]
+  );
 
-  const renderCampo = (campo, index, lista) => (
-    <ListItem key={campo.id}>
+  const FieldListItem = React.memo(({ campo, index, listLength, section }) => (
+    <Draggable draggableId={String(campo.id)} index={index}>
+      {(provided) => (
+        <ListItem
+          ref={provided.innerRef}
+          {...provided.draggableProps}
+          divider
+        >
+          <span {...provided.dragHandleProps} style={{ display: 'flex', alignItems: 'center', marginRight: 8 }}>
+            <DragIndicatorIcon fontSize="small" />
+          </span>
       <ListItemText
         primary={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -295,14 +376,14 @@ function FormBuilder() {
         <IconButton
           size="small"
           disabled={index === 0}
-          onClick={() => handleMoverCampo(campos.indexOf(campo), 'up')}
+          onClick={() => handleMoverCampo(section, index, 'up')}
         >
           <ArrowUpIcon />
         </IconButton>
         <IconButton
           size="small"
-          disabled={index === lista.length - 1}
-          onClick={() => handleMoverCampo(campos.indexOf(campo), 'down')}
+          disabled={index === listLength - 1}
+          onClick={() => handleMoverCampo(section, index, 'down')}
         >
           <ArrowDownIcon />
         </IconButton>
@@ -319,8 +400,10 @@ function FormBuilder() {
           <DeleteIcon />
         </IconButton>
       </ListItemSecondaryAction>
-    </ListItem>
-  );
+        </ListItem>
+      )}
+    </Draggable>
+  ));
 
   const skeletonListItems = Array.from({ length: 3 }).map((_, idx) => (
     <ListItem key={`field-skeleton-${idx}`}>
@@ -355,6 +438,7 @@ function FormBuilder() {
         icon="ion-ios-list-outline"
         desc="Configure os campos que serão preenchidos na inscrição"
       >
+        <DragDropContext onDragEnd={handleDragEnd}>
         <Grid container spacing={3}>
           {/* Campos do Comprador */}
           <Grid item xs={12} md={6}>
@@ -389,9 +473,22 @@ function FormBuilder() {
                     Nenhum campo adicionado
                   </Typography>
                 ) : (
-                  <List>
-                    {camposComprador.map((campo, index) => renderCampo(campo, index, camposComprador))}
-                  </List>
+                  <Droppable droppableId="buyer">
+                    {(provided) => (
+                      <List ref={provided.innerRef} {...provided.droppableProps}>
+                        {camposComprador.map((campo, index) => (
+                          <FieldListItem
+                            key={campo.id}
+                            campo={campo}
+                            index={index}
+                            listLength={camposComprador.length}
+                            section="buyer"
+                          />
+                        ))}
+                        {provided.placeholder}
+                      </List>
+                    )}
+                  </Droppable>
                 )}
               </CardContent>
             </Card>
@@ -430,9 +527,22 @@ function FormBuilder() {
                     Nenhum campo adicionado
                   </Typography>
                 ) : (
-                  <List>
-                    {camposInscritos.map((campo, index) => renderCampo(campo, index, camposInscritos))}
-                  </List>
+                  <Droppable droppableId="attendee">
+                    {(provided) => (
+                      <List ref={provided.innerRef} {...provided.droppableProps}>
+                        {camposInscritos.map((campo, index) => (
+                          <FieldListItem
+                            key={campo.id}
+                            campo={campo}
+                            index={index}
+                            listLength={camposInscritos.length}
+                            section="attendee"
+                          />
+                        ))}
+                        {provided.placeholder}
+                      </List>
+                    )}
+                  </Droppable>
                 )}
               </CardContent>
             </Card>
@@ -460,6 +570,7 @@ function FormBuilder() {
             </div>
           </Grid>
         </Grid>
+        </DragDropContext>
       </PapperBlock>
 
       {/* Dialog de Adicionar/Editar Campo */}

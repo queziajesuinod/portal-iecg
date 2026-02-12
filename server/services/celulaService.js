@@ -92,6 +92,9 @@ const CelulaService = {
     if (filtros.horario) {
       where.horario = { [Op.iLike]: `%${filtros.horario}%` };
     }
+    if (filtros.dia) {
+      where.dia = { [Op.iLike]: `%${filtros.dia}%` };
+    }
     if (filtros.bairro) {
       where.bairro = { [Op.iLike]: `%${filtros.bairro}%` };
     }

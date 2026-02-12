@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Card,
   CardContent,
@@ -25,6 +25,7 @@ import {
   listarGrupos
 } from '../../../../api/notificationsApi';
 import { listarInscricoesPorEvento } from '../../../../api/eventsApi';
+import { NOTIFICATION_VARIABLES, NOTIFICATION_VARIABLES_DYNAMIC } from './notificationVariables';
 
 const normalizeBuyerPhone = (buyerData) => {
   if (!buyerData) return null;
@@ -58,6 +59,41 @@ const getBuyerDisplayName = (buyerData) => {
 };
 
 function NotificationSender({ eventId }) {
+  const messageRef = useRef(null);
+  const formatErrorMessage = (err) => {
+    const data = err?.response?.data;
+    const raw = data?.erro || data?.message || err?.message || 'Erro ao enviar notifica??o';
+    if (Array.isArray(raw)) {
+      return raw.join(' | ');
+    }
+    if (typeof raw === 'object' && raw !== null) {
+      if (Array.isArray(raw.message)) {
+        return raw.message.join(' | ');
+      }
+      if (raw.message) return String(raw.message);
+      return JSON.stringify(raw);
+    }
+    return String(raw);
+  };
+
+  const appendVariableToMessage = (variable) => {
+    setFormData((prev) => {
+      const current = prev.customMessage || '';
+      const el = messageRef.current;
+      const start = el?.selectionStart ?? current.length;
+      const end = el?.selectionEnd ?? current.length;
+      const next = `${current.slice(0, start)}${variable}${current.slice(end)}`;
+      const nextCursor = start + variable.length;
+      setTimeout(() => {
+        if (messageRef.current) {
+          messageRef.current.focus();
+          messageRef.current.setSelectionRange(nextCursor, nextCursor);
+        }
+      }, 0);
+      return { ...prev, customMessage: next };
+    });
+  };
+
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState([]);
   const [grupos, setGrupos] = useState([]);
@@ -178,7 +214,7 @@ function NotificationSender({ eventId }) {
       }, 3000);
     } catch (error) {
       console.error('Erro ao enviar notificação:', error);
-      setErro(error.response?.data?.erro || 'Erro ao enviar notificação');
+      setErro(formatErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -278,7 +314,6 @@ function NotificationSender({ eventId }) {
                   onChange={(e) => setFormData({ ...formData, channel: e.target.value })}
                 >
                   <MenuItem value="whatsapp">WhatsApp</MenuItem>
-                  <MenuItem value="sms">SMS</MenuItem>
                   <MenuItem value="email">Email</MenuItem>
                 </Select>
               </FormControl>
@@ -312,8 +347,31 @@ function NotificationSender({ eventId }) {
                   value={formData.customMessage}
                   onChange={(e) => setFormData({ ...formData, customMessage: e.target.value })}
                   placeholder="Digite a mensagem..."
-                  helperText="Variáveis: {{nome}}, {{evento}}, {{data}}, {{codigo}}"
+                  inputRef={messageRef}
                 />
+                </Box>
+                <Box mt={1} display="flex" flexWrap="wrap" gap={1}>
+                  {NOTIFICATION_VARIABLES.map((variable) => (
+                    <Chip
+                      key={variable}
+                      label={variable}
+                      size="small"
+                      variant="outlined"
+                      clickable
+                      onClick={() => appendVariableToMessage(variable)}
+                    />
+                  ))}
+                  {NOTIFICATION_VARIABLES_DYNAMIC.map((variable) => (
+                    <Chip
+                      key={variable}
+                      label={variable}
+                      size="small"
+                      color="secondary"
+                      variant="outlined"
+                      clickable
+                      onClick={() => appendVariableToMessage(variable.split(' ')[0])}
+                    />
+                  ))}
                 </Box>
 
                 <Box mt={2}>

@@ -2,6 +2,7 @@ const uuid = require('uuid');
 const {
   Registration,
   RegistrationAttendee,
+  EventCheckIn,
   Event,
   EventBatch,
   Coupon,
@@ -810,6 +811,30 @@ async function listarInscricoesPorEvento(eventId, options = {}) {
   });
 
   const rows = await prepararListaComCampos(result.rows);
+
+  if (rows.length) {
+    const ids = rows.map((r) => r.id);
+    const checkins = await EventCheckIn.findAll({
+      where: { registrationId: { [Op.in]: ids } },
+      attributes: ['registrationId'],
+      group: ['registrationId'],
+      raw: true
+    });
+    const checkedSet = new Set(checkins.map((c) => c.registrationId));
+    rows.forEach((r) => {
+      r.setDataValue('hasCheckIn', checkedSet.has(r.id));
+    });
+
+    if (filters.checkinStatus) {
+      const wantChecked = String(filters.checkinStatus).toLowerCase() === 'checked';
+      const filtered = rows.filter((r) => Boolean(r.getDataValue('hasCheckIn')) === wantChecked);
+      return {
+        rows: filtered,
+        count: filtered.length
+      };
+    }
+  }
+
   return {
     rows,
     count: Number(result.count)

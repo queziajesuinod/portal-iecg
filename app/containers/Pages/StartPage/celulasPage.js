@@ -15,7 +15,7 @@ import { useHistory } from 'react-router-dom';
 import useStyles from 'dan-components/Tables/tableStyle-jss';
 import Notification from 'dan-components/Notification/Notification';
 import {
-  GoogleMap, Marker, InfoWindow, useLoadScript
+  GoogleMap, Marker, InfoWindow, useLoadScript, Circle
 } from '@react-google-maps/api';
 import { fetchGeocode } from '../../../utils/googleGeocode';
 
@@ -29,6 +29,16 @@ const REDE_OPTIONS = [
   'HOMENS IECG',
   'JUVENTUDE RELEVANTE MOÇAS',
   'RELEVANTE JUNIORS MOÇAS'
+];
+
+const DIAS_SEMANA_OPTIONS = [
+  'Segunda',
+  'Terça',
+  'Quarta',
+  'Quinta',
+  'Sexta',
+  'Sábado',
+  'Domingo'
 ];
 
 const STATUS_OPTIONS = [
@@ -85,7 +95,6 @@ const ListagemCelulasPage = () => {
   const history = useHistory();
 
   const [celulas, setCelulas] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [rowsPerPage] = useState(10);
@@ -96,6 +105,7 @@ const ListagemCelulasPage = () => {
   const [filterBairro, setFilterBairro] = useState('');
   const [filterLider, setFilterLider] = useState('');
   const [filterPastorGeracao, setFilterPastorGeracao] = useState('');
+  const [filterDia, setFilterDia] = useState('');
   const [mapCelulas, setMapCelulas] = useState([]);
   const [hoveredMarkerId, setHoveredMarkerId] = useState(null);
   const [filterStatus, setFilterStatus] = useState('true');
@@ -117,6 +127,17 @@ const ListagemCelulasPage = () => {
   const [statusSelecionado, setStatusSelecionado] = useState('');
   const [apeloSelecionado, setApeloSelecionado] = useState(null);
   const [motivoStatus, setMotivoStatus] = useState('');
+  const [migratingLeaders, setMigratingLeaders] = useState(false);
+  const [referenceAddress, setReferenceAddress] = useState({
+    endereco: '',
+    numero: '',
+    bairro: '',
+    cep: '',
+    cidade: '',
+    estado: ''
+  });
+  const [referenceLocation, setReferenceLocation] = useState(null);
+  const [referenceRadiusKm, setReferenceRadiusKm] = useState(3);
 
   const API_URL = resolveApiUrl();
   const mapKey = process.env.REACT_APP_GOOGLE_GEOCODE_KEY || '';
@@ -125,9 +146,18 @@ const ListagemCelulasPage = () => {
     libraries: GOOGLE_MAP_LIBRARIES
   });
   const normalizeValue = (value) => (value || '').trim().toLowerCase();
-  const normalizeSearchValue = (value) => {
-    const base = (value || '').normalize('NFD');
-    return base.replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const toRad = (value) => (value * Math.PI) / 180;
+  const calcDistanceKm = (a, b) => {
+    if (!a || !b) return null;
+    const R = 6371;
+    const dLat = toRad(b.lat - a.lat);
+    const dLng = toRad(b.lng - a.lng);
+    const lat1 = toRad(a.lat);
+    const lat2 = toRad(b.lat);
+    const sinDLat = Math.sin(dLat / 2);
+    const sinDLng = Math.sin(dLng / 2);
+    const h = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
   };
   const buildCelulaQueryParams = ({
     page: overridePage,
@@ -136,10 +166,10 @@ const ListagemCelulasPage = () => {
     includeStatus = true
   } = {}) => {
     const params = new URLSearchParams({
-      celula: normalizeSearchValue(searchTerm) || '',
       campusId: filterCampus || '',
       bairro: filterBairro || '',
       lider: filterLider || '',
+      dia: filterDia || '',
       pastor_geracao: filterPastorGeracao || '',
       page: overridePage ?? page,
       limit: overrideLimit ?? rowsPerPage
@@ -219,6 +249,23 @@ const ListagemCelulasPage = () => {
     if (!mapMarkers.length) return { lat: -20.44225, lng: -54.646814 };
     return mapMarkers[0].position;
   }, [mapMarkers]);
+  const referencePoint = referenceLocation
+    ? { lat: referenceLocation.lat, lng: referenceLocation.lng }
+    : null;
+  const nearbySummary = useMemo(() => {
+    if (!referencePoint) return { list: [], ids: new Set() };
+    const list = mapMarkers
+      .map((marker) => {
+        const distance = calcDistanceKm(referencePoint, marker.position);
+        return { ...marker, distance };
+      })
+      .filter((item) => typeof item.distance === 'number')
+      .sort((a, b) => a.distance - b.distance);
+    const ids = new Set(
+      list.filter((item) => item.distance <= referenceRadiusKm).map((item) => item.id)
+    );
+    return { list, ids };
+  }, [mapMarkers, referencePoint, referenceRadiusKm]);
 
   const parseCsvText = (text) => {
     const lines = text.split(/\r?\n/).filter((line) => line.trim());
@@ -800,11 +847,11 @@ const ListagemCelulasPage = () => {
     fetchCelulas();
   }, [
     page,
-    searchTerm,
     filterCampus,
     filterRede,
     filterBairro,
     filterLider,
+    filterDia,
     filterPastorGeracao,
     filterStatus,
     API_URL
@@ -813,11 +860,11 @@ const ListagemCelulasPage = () => {
   useEffect(() => {
     fetchMapCelulas();
   }, [
-    searchTerm,
     filterCampus,
     filterRede,
     filterBairro,
     filterLider,
+    filterDia,
     filterPastorGeracao,
     filterStatus,
     API_URL
@@ -901,6 +948,70 @@ const ListagemCelulasPage = () => {
     }
   };
 
+  const handleReferenceFieldChange = (field, value) => {
+    setReferenceAddress((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleAddReference = async () => {
+    const { endereco, numero, bairro, cep, cidade, estado } = referenceAddress;
+    const queryParts = [endereco, numero, bairro, cidade, estado, cep].filter(Boolean);
+    if (!queryParts.length) {
+      setNotification('Informe ao menos bairro, CEP ou endereço para gerar o marcador.');
+      return;
+    }
+    try {
+      const result = await fetchGeocode(queryParts.join(' '));
+      if (!result?.lat || !result?.lon) {
+        setNotification('Não foi possível localizar o endereço informado.');
+        return;
+      }
+      setReferenceLocation({
+        lat: Number(result.lat),
+        lng: Number(result.lon),
+        label: queryParts.join(' ')
+      });
+    } catch (err) {
+      console.error('Erro ao localizar endereço:', err);
+      setNotification('Erro ao localizar o endereço.');
+    }
+  };
+
+  const handleClearReference = () => {
+    setReferenceLocation(null);
+  };
+
+  const migrateCelulaLeaders = async () => {
+    const confirma = window.confirm('Deseja sincronizar líderes e células agora?');
+    if (!confirma) return;
+    setNotification('');
+    setMigratingLeaders(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/start/celula/leader/migrate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.erro || 'Falha ao sincronizar líderes e células.');
+      }
+      const total = Array.isArray(data?.migrated) ? data.migrated.length : data?.total;
+      const message = typeof total === 'number'
+        ? `Sincronização concluída. ${total} líderes vinculados.`
+        : (data?.mensagem || 'Sincronização concluída.');
+      setNotification(message);
+      fetchCelulas();
+    } catch (err) {
+      console.error('Erro ao sincronizar líderes e células:', err);
+      setNotification(err.message || 'Erro ao sincronizar líderes e células.');
+    } finally {
+      setMigratingLeaders(false);
+    }
+  };
+
   return (
     <div>
       <Helmet>
@@ -936,6 +1047,14 @@ const ListagemCelulasPage = () => {
           >
             {exporting ? 'Exportando...' : 'Exportar Excel'}
           </Button>
+          <Button
+            variant="outlined"
+            color="success"
+            onClick={migrateCelulaLeaders}
+            disabled={migratingLeaders}
+          >
+            {migratingLeaders ? 'Sincronizando...' : 'Sincronizar líder e célula'}
+          </Button>
         </Box>
       </Toolbar>
       <Box mt={2}>
@@ -947,17 +1066,6 @@ const ListagemCelulasPage = () => {
             alignItems="center"
             sx={{ width: '100%', justifyContent: 'flex-start' }}
           >
-            <TextField
-              label="Pesquisar por nome da célula"
-              variant="outlined"
-              size="small"
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setPage(1);
-              }}
-              sx={{ width: { xs: '100%', sm: 220 }, flex: { xs: '1 1 100%', sm: '0 1 220px' } }}
-            />
             <TextField
               select
               label="Campus"
@@ -1023,6 +1131,22 @@ const ListagemCelulasPage = () => {
               </Select>
             </FormControl>
             <TextField
+              select
+              label="Dia da semana"
+              variant="outlined"
+              size="small"
+              value={filterDia}
+              onChange={(e) => { setFilterDia(e.target.value); setPage(1); }}
+              sx={{ minWidth: 160, flex: { xs: '1 1 100%', sm: '0 1 180px' } }}
+            >
+              <MenuItem value="">Todos</MenuItem>
+              {DIAS_SEMANA_OPTIONS.map((dia) => (
+                <MenuItem key={dia} value={dia}>
+                  {dia}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
               label="Bairro"
               variant="outlined"
               size="small"
@@ -1052,6 +1176,90 @@ const ListagemCelulasPage = () => {
           </Box>
         </Paper>
       </Box>
+      <Box mt={2}>
+        <Paper variant="outlined" sx={{ p: 2 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            Ponto de referência (mantém os filtros atuais)
+          </Typography>
+          <Box
+            display="flex"
+            flexWrap="wrap"
+            gap={1}
+            alignItems="center"
+            sx={{ width: '100%', justifyContent: 'flex-start' }}
+          >
+            <TextField
+              label="CEP"
+              variant="outlined"
+              size="small"
+              value={referenceAddress.cep}
+              onChange={(e) => handleReferenceFieldChange('cep', e.target.value)}
+              sx={{ minWidth: 140, flex: { xs: '1 1 100%', sm: '0 1 160px' } }}
+            />
+            <TextField
+              label="Bairro"
+              variant="outlined"
+              size="small"
+              value={referenceAddress.bairro}
+              onChange={(e) => handleReferenceFieldChange('bairro', e.target.value)}
+              sx={{ minWidth: 180, flex: { xs: '1 1 100%', sm: '0 1 200px' } }}
+            />
+            <TextField
+              label="Endereço"
+              variant="outlined"
+              size="small"
+              value={referenceAddress.endereco}
+              onChange={(e) => handleReferenceFieldChange('endereco', e.target.value)}
+              sx={{ minWidth: 220, flex: { xs: '1 1 100%', sm: '0 1 280px' } }}
+            />
+            <TextField
+              label="Cidade"
+              variant="outlined"
+              size="small"
+              value={referenceAddress.cidade}
+              onChange={(e) => handleReferenceFieldChange('cidade', e.target.value)}
+              sx={{ minWidth: 160, flex: { xs: '1 1 100%', sm: '0 1 180px' } }}
+            />
+            <TextField
+              label="Estado"
+              variant="outlined"
+              size="small"
+              value={referenceAddress.estado}
+              onChange={(e) => handleReferenceFieldChange('estado', e.target.value)}
+              sx={{ minWidth: 120, flex: { xs: '1 1 100%', sm: '0 1 140px' } }}
+            />
+            <TextField
+              select
+              label="Raio (km)"
+              variant="outlined"
+              size="small"
+              value={referenceRadiusKm}
+              onChange={(e) => setReferenceRadiusKm(Number(e.target.value))}
+              sx={{ minWidth: 140, flex: { xs: '1 1 100%', sm: '0 1 160px' } }}
+            >
+              {[1, 2, 3, 5, 8, 10, 15].map((km) => (
+                <MenuItem key={km} value={km}>{km}</MenuItem>
+              ))}
+            </TextField>
+            <Button variant="contained" onClick={handleAddReference}>
+              Adicionar referência
+            </Button>
+            <Button variant="outlined" onClick={handleClearReference} disabled={!referenceLocation}>
+              Limpar referência
+            </Button>
+          </Box>
+          {referenceLocation && (
+            <Box mt={1} display="flex" flexWrap="wrap" gap={2} alignItems="center">
+              <Typography variant="caption">
+                Referência: {referenceLocation.label || `${referenceLocation.lat}, ${referenceLocation.lng}`}
+              </Typography>
+              <Typography variant="caption">
+                Próximas no raio: {nearbySummary.list.filter((item) => item.distance <= referenceRadiusKm).length}
+              </Typography>
+            </Box>
+          )}
+        </Paper>
+      </Box>
       <Box mt={2} mb={2} sx={{ borderRadius: 1, overflow: 'hidden' }}>
         {mapLoaded && mapMarkers.length ? (
           <GoogleMap
@@ -1066,10 +1274,38 @@ const ListagemCelulasPage = () => {
                 position={marker.position}
                 title={`${marker.celula || 'célula'} ? ${marker.rede || 'sem rede'}`}
                 icon={marker.icon}
-                onMouseOver={() => setHoveredMarkerId(marker.id)}
-                onMouseOut={() => setHoveredMarkerId((prev) => (prev === marker.id ? null : prev))}
+                zIndex={nearbySummary.ids.has(marker.id) ? 999 : undefined}
+                onClick={() => setHoveredMarkerId(marker.id)}
               />
             ))}
+            {referencePoint && (
+              <>
+                <Marker
+                  position={referencePoint}
+                  title="Referência"
+                  icon={{
+                    url: 'https://maps.google.com/mapfiles/ms/icons/purple-dot.png',
+                    scaledSize: new window.google.maps.Size(40, 40)
+                  }}
+                  label={{
+                    text: 'P',
+                    color: '#4a148c',
+                    fontWeight: '700'
+                  }}
+                />
+                <Circle
+                  center={referencePoint}
+                  radius={referenceRadiusKm * 1000}
+                  options={{
+                    fillColor: '#7b1fa2',
+                    fillOpacity: 0.12,
+                    strokeColor: '#4a148c',
+                    strokeOpacity: 0.8,
+                    strokeWeight: 2
+                  }}
+                />
+              </>
+            )}
             {hoveredMarker && (
               <InfoWindow
                 position={hoveredMarker.position}
