@@ -10,7 +10,8 @@ const DEFAULT_EVENTS = [
   'event.created',
   'event.updated',
   'event.deleted',
-  'registration.created'
+  'registration.created',
+  'registration.updated'
 ];
 
 const rawList = (process.env.ENABLED_WEBHOOK_EVENTS || '').split(',').map((v) => v.trim()).filter(Boolean);

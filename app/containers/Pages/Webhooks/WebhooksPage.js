@@ -103,7 +103,14 @@ const DEFAULT_EVENT_DEFINITIONS = [
     tableName: 'registrations',
     fieldName: 'id',
     changeType: 'INSERT'
-  }
+  },
+  {
+    eventKey: 'registration.updated',
+    label: 'Inscri??o atualizada',
+    tableName: 'registrations',
+    fieldName: 'updatedAt',
+    changeType: 'UPDATE'
+  },
 ];
 
 const EVENT_CHANGE_TYPES = ['INSERT', 'UPDATE', 'DELETE'];

@@ -114,6 +114,8 @@ const WebhookController = {
         });
       }
 
+      let statusAtualizado = false;
+      let statusAnteriorWebhook = null;
       await sequelize.transaction(async (transaction) => {
         if (!registrationPayment) {
           registrationPayment = await RegistrationPayment.create({
@@ -124,13 +126,17 @@ const WebhookController = {
             status: novoStatus,
             provider: 'cielo',
             providerPaymentId: PaymentId,
-            providerPayload: statusCielo.dadosCompletos,
+            providerPayload: statusCielo.dadosCompletos
+              ? { ...statusCielo.dadosCompletos, originalStatus: statusCielo.status }
+              : { originalStatus: statusCielo.status },
             pixQrCode: statusCielo.dadosCompletos?.Payment?.QrCodeString || null,
             pixQrCodeBase64: statusCielo.dadosCompletos?.Payment?.QrCodeBase64Image || null
           }, { transaction });
         } else {
           registrationPayment.status = novoStatus;
-          registrationPayment.providerPayload = statusCielo.dadosCompletos;
+          registrationPayment.providerPayload = statusCielo.dadosCompletos
+            ? { ...statusCielo.dadosCompletos, originalStatus: statusCielo.status }
+            : { originalStatus: statusCielo.status };
           registrationPayment.pixQrCode = statusCielo.dadosCompletos?.Payment?.QrCodeString || registrationPayment.pixQrCode;
           registrationPayment.pixQrCodeBase64 = statusCielo.dadosCompletos?.Payment?.QrCodeBase64Image || registrationPayment.pixQrCodeBase64;
           await registrationPayment.save({ transaction });
@@ -145,6 +151,8 @@ const WebhookController = {
             await registration.save({ transaction });
             await registrationService.ajustarContadoresDeStatus(registration, statusAnterior);
             console.log(`🔁 [WEBHOOK CIELO] Status atualizado: ${statusAnterior} → ${novoStatus}`);
+            statusAtualizado = true;
+            statusAnteriorWebhook = statusAnterior;
           }
         } else {
           await registrationService.atualizarStatusPagamentoPorPagamentos(registration, { transaction });
@@ -157,6 +165,14 @@ const WebhookController = {
           statusCielo.dadosCompletos
         );
       });
+
+      if (statusAtualizado) {
+        await registrationService.emitirWebhookRegistroAtualizado(registration.id, {
+          previousStatus: statusAnteriorWebhook,
+          currentStatus: novoStatus,
+          source: 'cielo_webhook'
+        });
+      }
 
       return res.status(200).json({
         success: true,
