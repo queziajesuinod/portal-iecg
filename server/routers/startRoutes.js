@@ -24,5 +24,19 @@ router.put('/direcionamentos/:id', ApeloDirecionadoCelulaController.atualizar);
 router.delete('/direcionamentos/:id', ApeloDirecionadoCelulaController.deletar);
 router.post('/direcionamentos/processar-fila', ApeloDirecionadoCelulaController.processarFila);
 router.use('/campus', require('./campus'));
+router.get('/direcionamentos/health', ApeloDirecionadoCelulaController.healthCheck);
+
+/**
+ * GET /apelos-direcionados/fila/stats
+ * Estatísticas detalhadas (alias para health)
+ */
+router.get('/direcionamentos/stats', ApeloDirecionadoCelulaController.getStats);
+
+/**
+ * POST /apelos-direcionados/fila/reset-monitoring
+ * Reset do monitoramento (apenas admin)
+ */
+router.post('/direcionamentos/reset-monitoring', ApeloDirecionadoCelulaController.resetMonitoring);
+
 
 module.exports = router;
