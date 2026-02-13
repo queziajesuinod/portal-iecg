@@ -244,6 +244,7 @@ const CACHE_KEYS = {
   event: (id) => `event:${id}`,
   eventBatches: (eventId) => `event:${eventId}:batches`,
   eventFormFields: (eventId) => `event:${eventId}:form-fields`,
+  formFields: (eventId) => `event:${eventId}:form-fields`, // Alias para eventFormFields
   eventPaymentOptions: (eventId) => `event:${eventId}:payment-options`,
   eventPublic: (id) => `event:public:${id}`,
   eventsList: () => 'events:list',

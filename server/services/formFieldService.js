@@ -1,5 +1,6 @@
 const uuid = require('uuid');
 const { FormField, Event } = require('../models');
+const cache = require('../utils/cache');
 
 const FIELD_ATTRIBUTES = [
   'id',
@@ -16,22 +17,36 @@ const FIELD_ATTRIBUTES = [
 ];
 
 async function listarCamposPorEvento(eventId) {
-  const campos = await FormField.findAll({
-    where: { eventId },
-    order: [
-      ['section', 'ASC'],
-      ['order', 'ASC'],
-    ],
-    attributes: FIELD_ATTRIBUTES,
-    raw: true,
-  });
+  const cacheKey = cache.CACHE_KEYS.formFields(eventId);
+  
+  // ============================================
+  // OTIMIZAÇÃO: Cache Redis para campos de formulário
+  // ============================================
+  // Campos de formulário não mudam com frequência
+  // Cache de 24h reduz drasticamente tempo de carregamento
+  // ============================================
+  return cache.getOrSet(
+    cacheKey,
+    async () => {
+      const campos = await FormField.findAll({
+        where: { eventId },
+        order: [
+          ['section', 'ASC'],
+          ['order', 'ASC'],
+        ],
+        attributes: FIELD_ATTRIBUTES,
+        raw: true,
+      });
 
-  // Mapear para formato esperado pelo frontend
-  return campos.map((campo) => ({
-    ...campo,
-    label: campo.fieldLabel,
-    orderIndex: campo.order,
-  }));
+      // Mapear para formato esperado pelo frontend
+      return campos.map((campo) => ({
+        ...campo,
+        label: campo.fieldLabel,
+        orderIndex: campo.order,
+      }));
+    },
+    cache.DEFAULT_TTL
+  );
 }
 
 async function buscarCampoPorId(id) {
@@ -88,7 +103,7 @@ async function criarCampo(body) {
     }
   }
 
-  return FormField.create({
+  const newField = await FormField.create({
     id: uuid.v4(),
     eventId,
     fieldType,
@@ -101,6 +116,11 @@ async function criarCampo(body) {
     section: section ?? 'attendee',
     validationRules
   });
+  
+  // Invalidar cache de campos do formulário
+  await cache.del(cache.CACHE_KEYS.formFields(eventId));
+  
+  return newField;
 }
 
 async function atualizarCampo(id, body) {
@@ -121,6 +141,10 @@ async function atualizarCampo(id, body) {
   field.validationRules = body.validationRules ?? field.validationRules;
 
   await field.save();
+  
+  // Invalidar cache de campos do formulário
+  await cache.del(cache.CACHE_KEYS.formFields(field.eventId));
+  
   return field;
 }
 
@@ -130,8 +154,12 @@ async function deletarCampo(id) {
   if (!field) {
     throw new Error('Campo não encontrado');
   }
-
+  
+  const eventId = field.eventId;
   await field.destroy();
+  
+  // Invalidar cache de campos do formulário
+  await cache.del(cache.CACHE_KEYS.formFields(eventId));
 }
 
 // Criar múltiplos campos de uma vez
@@ -160,7 +188,12 @@ async function criarCamposEmLote(eventId, campos) {
     validationRules: campo.validationRules
   }));
 
-  return FormField.bulkCreate(camposParaCriar);
+  const newFields = await FormField.bulkCreate(camposParaCriar);
+  
+  // Invalidar cache de campos do formulário
+  await cache.del(cache.CACHE_KEYS.formFields(eventId));
+  
+  return newFields;
 }
 
 // Validar dados do formulário
