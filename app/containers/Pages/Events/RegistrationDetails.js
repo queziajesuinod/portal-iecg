@@ -39,6 +39,7 @@ import {
   recalcularStatusInscricao,
   obterInfoCancelamentoInscricao
 } from '../../../api/eventsApi';
+import { getPaymentStatusChipSx, getPaymentStatusLabel } from '../../../constants/paymentStatus';
 import { getStoredPermissions } from '../../../utils/permissions';
 import Notification from '../../../components/Notification/Notification';
 import CancelRegistrationDialog from '../../../components/CancelRegistrationDialog';
@@ -235,32 +236,6 @@ function RegistrationDetails() {
     return labels[metodo] || metodo;
   };
 
-  const getStatusColor = (status) => {
-    const colors = {
-      pending: 'default',
-      authorized: 'default',
-      partial: 'default',
-      confirmed: 'primary',
-      denied: 'secondary',
-      cancelled: 'secondary',
-      refunded: 'default'
-    };
-    return colors[status] || 'default';
-  };
-
-  const getStatusLabel = (status) => {
-    const labels = {
-      pending: 'Pendente',
-      authorized: 'Autorizado',
-      partial: 'Parcial',
-      confirmed: 'Confirmado',
-      denied: 'Negado',
-      cancelled: 'Cancelado',
-      refunded: 'Reembolsado'
-    };
-    return labels[status] || status;
-  };
-
   if (loading) {
     return (
       <div
@@ -338,8 +313,8 @@ function RegistrationDetails() {
                       <strong>Status:</strong>
                     </Typography>
                     <Chip
-                      label={getStatusLabel(paymentStatusLabel)}
-                      color={getStatusColor(paymentStatusLabel)}
+                      label={getPaymentStatusLabel(paymentStatusLabel)}
+                      sx={getPaymentStatusChipSx(paymentStatusLabel)}
                     />
                   </Grid>
                   <Grid item xs={12} sm={6}>
@@ -486,9 +461,9 @@ function RegistrationDetails() {
                           <TableCell>{getMetodoPagamentoLabel(payment.method)}</TableCell>
                           <TableCell>
                             <Chip
-                              label={getStatusLabel(payment.status)}
+                              label={getPaymentStatusLabel(payment.status)}
                               size="small"
-                              color={getStatusColor(payment.status)}
+                              sx={getPaymentStatusChipSx(payment.status)}
                             />
                           </TableCell>
                           <TableCell align="right">{formatarPreco(payment.amount)}</TableCell>
