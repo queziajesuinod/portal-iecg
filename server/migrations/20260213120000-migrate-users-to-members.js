@@ -53,8 +53,8 @@ module.exports = {
         
         const notesText = notes.length > 0 ? notes.join('\\n') : null;
         
-        // Tratar CPF muito longo (limitar a 14 caracteres)
-        const cpfTreated = user.cpf ? user.cpf.substring(0, 14) : null;
+        // Tratar CPF (limitar a 14 caracteres se existir)
+        const cpfTreated = user.cpf ? user.cpf.toString().substring(0, 14) : null;
         
         // Gerar email único se não existir
         const emailUnique = user.email || `membro_${user.id.substring(0, 8)}@temp.iecg.com.br`;
