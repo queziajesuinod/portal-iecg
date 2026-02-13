@@ -19,6 +19,7 @@ const bodyParser = require('body-parser');
 const WebhookController = require('./controllers/webhookController');
 const pixPendingJob = require('./jobs/pixPendingRegistrationsJob');
 const singlePaymentStatusJob = require('./jobs/singlePaymentStatusSyncJob');
+const cache = require('./utils/cache');
 const customHost = argv.host || process.env.HOST;
 const host = customHost || null; // Permite IPv6/IPv4
 const prettyHost = customHost || 'localhost';
@@ -127,6 +128,11 @@ app.listen(port, host, async (err) => {
   } else {
     logger.appStarted(port, prettyHost);
   }
+
+  // Inicializar cache Redis
+  cache.connect().catch(err => {
+    console.warn('⚠️  Redis não disponível, sistema continuará sem cache:', err.message);
+  });
 
   pixPendingJob.startPixPendingJob();
   singlePaymentStatusJob.startSinglePaymentStatusJob();
