@@ -1,8 +1,25 @@
 const formFieldService = require('../services/formFieldService');
 
+// Regex para validar UUID v4
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isValidUUID(uuid) {
+  return UUID_REGEX.test(uuid);
+}
+
 async function listarPorEvento(req, res) {
   try {
-    const campos = await formFieldService.listarCamposPorEvento(req.params.eventId);
+    const { eventId } = req.params;
+    
+    // Validar se eventId é um UUID válido
+    if (!isValidUUID(eventId)) {
+      return res.status(400).json({ 
+        message: 'ID de evento inválido. Deve ser um UUID válido.',
+        receivedId: eventId 
+      });
+    }
+    
+    const campos = await formFieldService.listarCamposPorEvento(eventId);
     res.status(200).json(campos);
   } catch (err) {
     console.error('Erro ao listar campos:', err);
