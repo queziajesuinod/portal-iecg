@@ -83,8 +83,9 @@ if (REDIS_ENABLED && redisClient) {
   });
 }
 
-// TTL padrão: 5 minutos
-const DEFAULT_TTL = 5 * 60; // segundos
+// TTL padrão: 24 horas (86400 segundos)
+// Para eventos públicos que não mudam com frequência
+const DEFAULT_TTL = 24 * 60 * 60; // 24 horas em segundos
 
 /**
  * Buscar valor do cache
@@ -114,7 +115,7 @@ async function get(key) {
  * Salvar valor no cache
  * @param {string} key - Chave do cache
  * @param {any} value - Valor a ser armazenado
- * @param {number} ttl - Tempo de vida em segundos (padrão: 5 minutos)
+ * @param {number} ttl - Tempo de vida em segundos (padrão: 24 horas)
  * @returns {Promise<boolean>} - true se salvou com sucesso
  */
 async function set(key, value, ttl = DEFAULT_TTL) {
