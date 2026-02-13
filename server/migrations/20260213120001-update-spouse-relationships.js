@@ -21,7 +21,7 @@ module.exports = {
     for (const user of usersWithSpouse) {
       try {
         // Buscar o Member correspondente ao User
-        const [members] = await queryInterface.sequelize.query(`
+        const members = await queryInterface.sequelize.query(`
           SELECT id FROM ${schema}."Members"
           WHERE "userId" = :userId
           LIMIT 1
@@ -30,16 +30,16 @@ module.exports = {
           type: Sequelize.QueryTypes.SELECT
         });
         
-        if (!members || members.length === 0) {
+        if (!members || !members[0] || members[0].length === 0) {
           console.warn(`⚠️  Member não encontrado para User ${user.user_id} (${user.name})`);
           errorCount++;
           continue;
         }
         
-        const memberId = members[0].id;
+        const memberId = members[0][0].id;
         
         // Buscar o Member correspondente ao cônjuge
-        const [spouseMembers] = await queryInterface.sequelize.query(`
+        const spouseMembers = await queryInterface.sequelize.query(`
           SELECT id FROM ${schema}."Members"
           WHERE "userId" = :spouseUserId
           LIMIT 1
@@ -48,13 +48,13 @@ module.exports = {
           type: Sequelize.QueryTypes.SELECT
         });
         
-        if (!spouseMembers || spouseMembers.length === 0) {
+        if (!spouseMembers || !spouseMembers[0] || spouseMembers[0].length === 0) {
           console.warn(`⚠️  Member cônjuge não encontrado para User ${user.conjuge_id}`);
           errorCount++;
           continue;
         }
         
-        const spouseMemberId = spouseMembers[0].id;
+        const spouseMemberId = spouseMembers[0][0].id;
         
         // Atualizar spouseMemberId no Member
         await queryInterface.sequelize.query(`
