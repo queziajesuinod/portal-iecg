@@ -56,6 +56,7 @@ import {
   obterInfoCancelamentoInscricao
 } from '../../../api/eventsApi';
 import { EVENT_TYPE_LABELS } from '../../../constants/eventTypes';
+import { getPaymentStatusChipSx, getPaymentStatusLabel } from '../../../constants/paymentStatus';
 import CancelRegistrationDialog from '../../../components/CancelRegistrationDialog';
 
 function TabPanel({ children, value, index }) {
@@ -114,19 +115,6 @@ function EventDetails() {
     'cancelled',
     'refunded'
   ];
-
-  const getStatusLabel = (status) => {
-    const labels = {
-      pending: 'Pendente',
-      authorized: 'Autorizado',
-      partial: 'Parcial',
-      confirmed: 'Confirmado',
-      denied: 'Negado',
-      cancelled: 'Cancelado',
-      refunded: 'Reembolsado'
-    };
-    return labels[status] || status;
-  };
 
   // Dialog de lote
   const [dialogLoteAberto, setDialogLoteAberto] = useState(false);
@@ -864,7 +852,7 @@ function EventDetails() {
                 >
                   {statusOptions.map((status) => (
                     <MenuItem key={status} value={status}>
-                      {status ? getStatusLabel(status) : 'Todos'}
+                      {status ? getPaymentStatusLabel(status) : 'Todos'}
                     </MenuItem>
                   ))}
                 </Select>
@@ -933,8 +921,8 @@ function EventDetails() {
                       <TableCell>{formatarDataHora(inscricao.createdAt)}</TableCell>
                       <TableCell align="center">
                         <Chip
-                          label={getStatusLabel(inscricao.paymentStatus)}
-                          color={inscricao.paymentStatus === 'confirmed' ? 'primary' : 'default'}
+                          label={getPaymentStatusLabel(inscricao.paymentStatus)}
+                          sx={getPaymentStatusChipSx(inscricao.paymentStatus)}
                           size="small"
                         />
                       </TableCell>

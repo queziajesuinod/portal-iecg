@@ -22,6 +22,8 @@ import {
   CircularProgress,
   Avatar,
   MenuItem,
+  Switch,
+  FormControlLabel,
   IconButton,
   Tooltip
 } from '@mui/material';
@@ -105,6 +107,7 @@ const MembrosPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState(initialFormState);
   const [geoLoading, setGeoLoading] = useState(false);
+  const [updatingMemberId, setUpdatingMemberId] = useState('');
 
   const token = localStorage.getItem('token');
   const headersAuth = {
@@ -141,15 +144,23 @@ const MembrosPage = () => {
     loadMembers();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const sortedMembers = useMemo(() => {
+    return [...members].sort((a, b) => {
+      const nameA = (a?.name || '').trim();
+      const nameB = (b?.name || '').trim();
+      return nameA.localeCompare(nameB, 'pt-BR', { sensitivity: 'base' });
+    });
+  }, [members]);
+
   const filteredMembers = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return members;
-    return members.filter((member) => {
+    if (!query) return sortedMembers;
+    return sortedMembers.filter((member) => {
       const name = (member.name || '').toLowerCase();
       const email = (member.email || '').toLowerCase();
       return name.includes(query) || email.includes(query);
     });
-  }, [members, search]);
+  }, [sortedMembers, search]);
 
   const pagedMembers = useMemo(() => {
     const start = page * rowsPerPage;
@@ -230,6 +241,34 @@ const MembrosPage = () => {
 
   const handleOpenDetails = (member) => {
     history.push(`/app/start/membros/detalhes?id=${member.id}`);
+  };
+
+  const handleToggleMemberStatus = async (member, forcedActive) => {
+    const nextActive = typeof forcedActive === 'boolean' ? forcedActive : !member.active;
+    setUpdatingMemberId(member.id);
+    setMessage('');
+
+    try {
+      const response = await fetch(`${API_URL}/users/${member.id}`, {
+        method: 'PUT',
+        headers: headersAuth,
+        body: JSON.stringify({ active: nextActive })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData?.message || 'Erro ao atualizar status do membro');
+      }
+
+      setMembers((prev) => prev.map((item) => (
+        item.id === member.id ? { ...item, active: nextActive } : item
+      )));
+      setMessage(nextActive ? 'Membro ativado com sucesso' : 'Membro inativado com sucesso');
+    } catch (error) {
+      setMessage(error.message || 'Erro ao atualizar status do membro');
+    } finally {
+      setUpdatingMemberId('');
+    }
   };
 
   const handleCompleteAddressFromCep = async () => {
@@ -318,10 +357,21 @@ const MembrosPage = () => {
                 />
               </TableCell>
               <TableCell>
-                <Chip
-                  label={member.active ? 'Ativo' : 'Inativo'}
-                  color={member.active ? 'success' : 'default'}
-                  size="small"
+                <FormControlLabel
+                  sx={{ m: 0 }}
+                  control={(
+                    <Switch
+                      size="small"
+                      color="primary"
+                      checked={Boolean(member.active)}
+                      disabled={updatingMemberId === member.id}
+                      onChange={(event) => {
+                        const nextActive = event.target.checked;
+                        handleToggleMemberStatus(member, nextActive);
+                      }}
+                    />
+                  )}
+                  label={updatingMemberId === member.id ? 'Salvando...' : member.active ? 'Ativo' : 'Inativo'}
                 />
               </TableCell>
               <TableCell>
