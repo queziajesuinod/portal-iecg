@@ -11,6 +11,7 @@ const {
 } = require("../models");
 const { Op, QueryTypes } = require("sequelize");
 const webhookEmitter = require("./webhookEmitter");
+const cache = require("../utils/cache");
 
 const camposPadraoComprador = [
   {
@@ -261,29 +262,51 @@ async function listarEventosPublicos() {
 }
 
 async function buscarEventoPublicoPorId(id) {
-  const event = await Event.findOne({
-    where: { id, isActive: true },
-    include: [
-      {
-        model: EventBatch,
-        as: "batches",
-        where: { isActive: true },
-        required: false,
-        order: [["order", "ASC"]],
-      },
-      {
-        model: FormField,
-        as: "formFields",
-        order: [["order", "ASC"]],
-      },
-    ],
-  });
+  const startTime = Date.now();
+  const cacheKey = cache.CACHE_KEYS.eventPublic(id);
 
-  if (!event) {
-    throw new Error("Evento não encontrado ou inativo");
-  }
+  // ============================================
+  // OTIMIZAÇÃO: Cache Redis
+  // ============================================
+  // Buscar do cache primeiro, se não existir, buscar do banco
+  // Ganho estimado: 10-13 segundos para requisições em cache
+  // ============================================
+  const result = await cache.getOrSet(
+    cacheKey,
+    async () => {
+      console.log(`[DB QUERY] Buscando evento ${id} do banco de dados...`);
+      
+      const event = await Event.findOne({
+        where: { id, isActive: true },
+        include: [
+          {
+            model: EventBatch,
+            as: "batches",
+            where: { isActive: true },
+            required: false,
+            order: [["order", "ASC"]],
+          },
+          {
+            model: FormField,
+            as: "formFields",
+            order: [["order", "ASC"]],
+          },
+        ],
+      });
 
-  return event;
+      if (!event) {
+        throw new Error("Evento não encontrado ou inativo");
+      }
+
+      return event;
+    },
+    cache.DEFAULT_TTL
+  );
+
+  const duration = Date.now() - startTime;
+  console.log(`[PERFORMANCE] buscarEventoPublicoPorId: ${duration}ms`);
+
+  return result;
 }
 
 async function obterEstatisticasGerais() {
