@@ -110,9 +110,9 @@ module.exports = options => ({
             sassOptions: {
               outputStyle: 'expanded',
               sourceMap: false,
-              // Suprimir warnings de deprecação do Sass (Bourbon antigo)
+              // Suprimir warnings de deprecação do Sass
               quietDeps: true,
-              silenceDeprecations: ['import', 'global-builtin', 'if-function']
+              silenceDeprecations: ['import', 'global-builtin', 'if-function', 'color-functions', 'legacy-js-api']
             }
           }
         }],
