@@ -9,20 +9,32 @@
 
 const redis = require('redis');
 
-// Configuração do cliente Redis
-const redisClient = redis.createClient({
-  url: process.env.REDIS_URL || 'redis://localhost:6379',
-  socket: {
-    reconnectStrategy: (retries) => {
-      if (retries > 10) {
-        console.error('❌ Redis: Máximo de tentativas de reconexão atingido');
-        return new Error('Redis: Falha ao reconectar');
-      }
-      // Exponential backoff: 100ms, 200ms, 400ms, 800ms...
-      return Math.min(retries * 100, 3000);
+// Verificar se Redis está configurado
+const REDIS_ENABLED = !!process.env.REDIS_URL;
+
+if (!REDIS_ENABLED) {
+  console.warn('⚠️  REDIS_URL não configurado. Sistema funcionará sem cache.');
+  console.warn('⚠️  Para melhor performance, configure REDIS_URL no arquivo .env');
+}
+
+// Configuração do cliente Redis (apenas se REDIS_URL estiver configurado)
+let redisClient = null;
+
+if (REDIS_ENABLED) {
+  redisClient = redis.createClient({
+    url: process.env.REDIS_URL,
+    socket: {
+      reconnectStrategy: (retries) => {
+        if (retries > 10) {
+          console.error('❌ Redis: Máximo de tentativas de reconexão atingido');
+          return new Error('Redis: Falha ao reconectar');
+        }
+        // Exponential backoff: 100ms, 200ms, 400ms, 800ms...
+        return Math.min(retries * 100, 3000);
+      },
     },
-  },
-});
+  });
+}
 
 // Flags de controle
 let isConnected = false;
@@ -30,6 +42,11 @@ let isConnecting = false;
 
 // Conectar ao Redis
 async function connect() {
+  if (!REDIS_ENABLED) {
+    console.log('ℹ️  Redis desabilitado. Sistema funcionando sem cache.');
+    return;
+  }
+
   if (isConnected || isConnecting) {
     return;
   }
@@ -48,21 +65,23 @@ async function connect() {
   }
 }
 
-// Event listeners
-redisClient.on('error', (err) => {
-  console.error('❌ Redis Error:', err.message);
-  isConnected = false;
-});
+// Event listeners (apenas se Redis estiver habilitado)
+if (REDIS_ENABLED && redisClient) {
+  redisClient.on('error', (err) => {
+    console.error('❌ Redis Error:', err.message);
+    isConnected = false;
+  });
 
-redisClient.on('reconnecting', () => {
-  console.log('🔄 Redis: Tentando reconectar...');
-  isConnected = false;
-});
+  redisClient.on('reconnecting', () => {
+    console.log('🔄 Redis: Tentando reconectar...');
+    isConnected = false;
+  });
 
-redisClient.on('ready', () => {
-  console.log('✅ Redis: Pronto para uso');
-  isConnected = true;
-});
+  redisClient.on('ready', () => {
+    console.log('✅ Redis: Pronto para uso');
+    isConnected = true;
+  });
+}
 
 // TTL padrão: 5 minutos
 const DEFAULT_TTL = 5 * 60; // segundos
@@ -73,7 +92,7 @@ const DEFAULT_TTL = 5 * 60; // segundos
  * @returns {Promise<any|null>} - Valor do cache ou null se não encontrado
  */
 async function get(key) {
-  if (!isConnected) {
+  if (!REDIS_ENABLED || !isConnected) {
     return null;
   }
 
@@ -99,7 +118,7 @@ async function get(key) {
  * @returns {Promise<boolean>} - true se salvou com sucesso
  */
 async function set(key, value, ttl = DEFAULT_TTL) {
-  if (!isConnected) {
+  if (!REDIS_ENABLED || !isConnected) {
     return false;
   }
 
@@ -119,7 +138,7 @@ async function set(key, value, ttl = DEFAULT_TTL) {
  * @returns {Promise<boolean>} - true se deletou com sucesso
  */
 async function del(key) {
-  if (!isConnected) {
+  if (!REDIS_ENABLED || !isConnected) {
     return false;
   }
 
@@ -139,7 +158,7 @@ async function del(key) {
  * @returns {Promise<number>} - Número de chaves deletadas
  */
 async function delPattern(pattern) {
-  if (!isConnected) {
+  if (!REDIS_ENABLED || !isConnected) {
     return 0;
   }
 
@@ -163,7 +182,7 @@ async function delPattern(pattern) {
  * @returns {Promise<boolean>} - true se limpou com sucesso
  */
 async function flush() {
-  if (!isConnected) {
+  if (!REDIS_ENABLED || !isConnected) {
     return false;
   }
 
@@ -212,7 +231,7 @@ function isReady() {
  * Desconectar do Redis
  */
 async function disconnect() {
-  if (isConnected) {
+  if (REDIS_ENABLED && isConnected && redisClient) {
     await redisClient.quit();
     isConnected = false;
     console.log('✅ Redis desconectado');
