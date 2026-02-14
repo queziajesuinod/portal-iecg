@@ -635,11 +635,11 @@ async function processarInscricao(dadosInscricao) {
 
   if (paymentOption.paymentType === 'credit_card' && parcelas > 1 && paymentOption.interestRate > 0) {
     if (paymentOption.interestType === 'percentage') {
-      // Juros percentual por parcela
-      valorFinalComJuros += valorBasePagamento * (paymentOption.interestRate / 100) * (parcelas - 1);
+      // Juros percentual aplicado uma única vez sobre o valor base
+      valorFinalComJuros += valorBasePagamento * (paymentOption.interestRate / 100);
     } else {
-      // Juros fixo por parcela
-      valorFinalComJuros += paymentOption.interestRate * (parcelas - 1);
+      // Juros fixo aplicado uma única vez
+      valorFinalComJuros += paymentOption.interestRate;
     }
   }
 
@@ -1138,9 +1138,9 @@ async function criarPagamentoOnline(registrationId, payload = {}) {
   let valorFinalComJuros = amount;
   if (paymentOption.paymentType === 'credit_card' && parcelas > 1 && paymentOption.interestRate > 0) {
     if (paymentOption.interestType === 'percentage') {
-      valorFinalComJuros += amount * (paymentOption.interestRate / 100) * (parcelas - 1);
+      valorFinalComJuros += amount * (paymentOption.interestRate / 100);
     } else {
-      valorFinalComJuros += paymentOption.interestRate * (parcelas - 1);
+      valorFinalComJuros += paymentOption.interestRate;
     }
   }
 

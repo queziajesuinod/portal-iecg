@@ -1011,7 +1011,7 @@ function EventDetails() {
                     </TableCell>
                     <TableCell>
                       {pagamento.paymentType === 'credit_card' && pagamento.interestRate > 0
-                        ? `${pagamento.interestRate}% ${pagamento.interestType === 'percentage' ? 'a.m.' : 'fixo'}`
+                        ? `${pagamento.interestRate}${pagamento.interestType === 'percentage' ? '%' : ' R$'} (taxa única)`
                         : 'Sem juros'}
                     </TableCell>
                     <TableCell>
@@ -1175,7 +1175,7 @@ function EventDetails() {
                     value={formPagamento.interestRate}
                     onChange={(e) => setFormPagamento({ ...formPagamento, interestRate: e.target.value })}
                     inputProps={{ min: 0, step: 0.01 }}
-                    helperText="0 = sem juros"
+                    helperText="0 = sem juros (taxa aplicada uma única vez)"
                   />
                 </Grid>
 
@@ -1188,7 +1188,7 @@ function EventDetails() {
                     onChange={(e) => setFormPagamento({ ...formPagamento, interestType: e.target.value })}
                     SelectProps={{ native: true }}
                   >
-                    <option value="percentage">Percentual (a.m.)</option>
+                    <option value="percentage">Percentual (%)</option>
                     <option value="fixed">Fixo (R$)</option>
                   </TextField>
                 </Grid>
