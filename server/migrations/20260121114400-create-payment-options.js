@@ -35,7 +35,7 @@ module.exports = {
         type: Sequelize.DECIMAL(5, 2),
         allowNull: true,
         defaultValue: 0,
-        comment: 'Taxa de juros por parcela'
+        comment: 'Taxa de juros aplicada uma vez por transação'
       },
       interestType: {
         type: Sequelize.ENUM('percentage', 'fixed'),
