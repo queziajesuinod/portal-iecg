@@ -691,7 +691,15 @@ async function processarInscricao(dadosInscricao) {
   }
 
   if (!resultadoPagamento.sucesso) {
-    throw new Error(`Erro no pagamento: ${resultadoPagamento.erro}`);
+    if (resultadoPagamento.tipoErro === 'validation') {
+      throw new Error(resultadoPagamento.erro || 'Verifique os dados informados do pagamento e tente novamente.');
+    }
+
+    resultadoPagamento = {
+      ...resultadoPagamento,
+      status: 3, // denied
+      paymentId: resultadoPagamento.paymentId || null
+    };
   }
 
   // 9. Criar registro de inscrição

@@ -78,10 +78,20 @@ async function processar(req, res) {
       attendeeData: attendee.attendeeData
     })) ?? [];
 
+    const paymentStatus = resultado.registration?.paymentStatus;
+    const responseMessageByStatus = {
+      confirmed: 'Inscrição realizada com pagamento confirmado.',
+      pending: 'Inscrição realizada. Pagamento pendente.',
+      authorized: 'Inscrição realizada. Pagamento autorizado.',
+      denied: 'Pagamento negado. Inscrição registrada com status negado.',
+      expired: 'Pagamento expirado. Inscrição registrada com status expirado.'
+    };
+
     res.status(201).json({
       sucesso: true,
+      pagamentoAprovado: paymentStatus === 'confirmed',
       orderCode: resultado.orderCode,
-      message: 'Inscrição realizada com sucesso!',
+      message: responseMessageByStatus[paymentStatus] || `Inscrição registrada com status ${paymentStatus || 'pending'}.`,
       registration: {
         id: resultado.registration.id,
         orderCode: resultado.orderCode,

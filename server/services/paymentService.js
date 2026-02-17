@@ -24,6 +24,57 @@ function logCielo(message, payload = {}) {
   console.info(`[Cielo] ${message}`, JSON.stringify(payload));
 }
 
+function montarMensagemErroCampos(dadosErro = []) {
+  if (!Array.isArray(dadosErro) || !dadosErro.length) {
+    return 'Verifique os dados informados e tente novamente.';
+  }
+  return dadosErro
+    .map((item) => item?.Message || item?.message || item?.Code || item?.code)
+    .filter(Boolean)
+    .join(', ');
+}
+
+function classificarErroCielo(error) {
+  const status = Number(error?.response?.status || 0);
+  const payload = error?.response?.data;
+
+  if (Array.isArray(payload)) {
+    return {
+      tipoErro: 'validation',
+      mensagem: montarMensagemErroCampos(payload),
+      detalhes: payload
+    };
+  }
+
+  if (payload?.ModelState) {
+    const mensagens = Object.values(payload.ModelState || {}).flat();
+    return {
+      tipoErro: 'validation',
+      mensagem: montarMensagemErroCampos(mensagens.map((message) => ({ Message: message }))),
+      detalhes: payload
+    };
+  }
+
+  const mensagemPadrao = payload?.Payment?.ReturnMessage || payload?.message || error?.message || 'Erro ao processar pagamento';
+  if (status === 400) {
+    const msg = String(mensagemPadrao || '').toLowerCase();
+    const pareceErroCampo = /(invalid|inválid|campo|required|obrigat|formato|tamanho|cpf|cnpj|cartao|cartão|expiration|security code|cvv)/i.test(msg);
+    if (pareceErroCampo) {
+      return {
+        tipoErro: 'validation',
+        mensagem: mensagemPadrao,
+        detalhes: payload
+      };
+    }
+  }
+
+  return {
+    tipoErro: 'processing',
+    mensagem: mensagemPadrao,
+    detalhes: payload
+  };
+}
+
 function montarCustomer(dadosPagamento) {
   const customerData = dadosPagamento.customer || {};
   const documentValue = (
@@ -110,21 +161,12 @@ async function criarTransacaoPix(dadosPagamento) {
     console.error('Data:', JSON.stringify(error.response?.data, null, 2));
     console.error('Message:', error.message);
 
-    // Extrair mensagem de erro mais específica
-    let mensagemErro = error.message;
-    if (error.response?.data) {
-      if (Array.isArray(error.response.data)) {
-        mensagemErro = error.response.data.map(e => `${e.Code}: ${e.Message}`).join(', ');
-      } else if (error.response.data.Payment?.ReturnMessage) {
-        mensagemErro = error.response.data.Payment.ReturnMessage;
-      } else if (error.response.data.message) {
-        mensagemErro = error.response.data.message;
-      }
-    }
+    const erroClassificado = classificarErroCielo(error);
 
     return {
       sucesso: false,
-      erro: mensagemErro,
+      erro: erroClassificado.mensagem,
+      tipoErro: erroClassificado.tipoErro,
       returnCode: error.response?.data?.Payment?.ReturnCode,
       dadosCompletos: error.response?.data
     };
@@ -207,9 +249,12 @@ async function criarTransacao(dadosPagamento) {
     });
     console.error('Erro ao criar transação Cielo:', error.response?.data || error.message);
 
+    const erroClassificado = classificarErroCielo(error);
+
     return {
       sucesso: false,
-      erro: error.response?.data?.Payment?.ReturnMessage || error.message,
+      erro: erroClassificado.mensagem,
+      tipoErro: erroClassificado.tipoErro,
       returnCode: error.response?.data?.Payment?.ReturnCode,
       dadosCompletos: error.response?.data
     };
