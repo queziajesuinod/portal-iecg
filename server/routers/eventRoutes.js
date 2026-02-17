@@ -65,5 +65,6 @@ router.get('/:eventId/form-fields', formFieldController.listarPorEvento);
 router.get('/:eventId/payment-options', paymentOptionController.listarPorEvento);
 router.post('/:eventId/payment-options', paymentOptionController.criar);
 router.get('/:eventId/registrations', registrationController.listarPorEvento);
+router.get('/:eventId/tickets-summary', eventController.resumoIngressos);
 
 module.exports = router;

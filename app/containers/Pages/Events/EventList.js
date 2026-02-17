@@ -18,7 +18,9 @@ import {
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
+  Collapse,
+  LinearProgress
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -29,11 +31,16 @@ import PeopleIcon from '@mui/icons-material/People';
 import MoneyIcon from '@mui/icons-material/AttachMoney';
 import TrendingIcon from '@mui/icons-material/TrendingUp';
 import DuplicateIcon from '@mui/icons-material/FileCopy';
+import ExpandMoreIcon from '@mui/icons-material/KeyboardArrowDown';
+import ExpandLessIcon from '@mui/icons-material/KeyboardArrowUp';
+import CreditCardIcon from '@mui/icons-material/CreditCard';
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import { useHistory } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
 import {
   listarEventos,
   listarEstatisticas,
+  listarResumoIngressosEvento,
   deletarEvento,
   duplicarEvento,
   atualizarEvento
@@ -56,6 +63,9 @@ function EventList() {
     busca: '',
     status: 'todos'
   });
+  const [expandedEvents, setExpandedEvents] = useState({});
+  const [ticketsSummaryByEvent, setTicketsSummaryByEvent] = useState({});
+  const [ticketsSummaryLoading, setTicketsSummaryLoading] = useState({});
 
   async function carregarEventos() {
     try {
@@ -156,6 +166,16 @@ function EventList() {
   };
 
   const formatarPreco = (preco) => `R$ ${parseFloat(preco || 0).toFixed(2).replace('.', ',')}`;
+
+  const formatarVendidosTotal = (vendidos, total) => {
+    if (total == null) return `${vendidos} / -`;
+    return `${vendidos} / ${total}`;
+  };
+
+  const calcularPercentualVendidos = (vendidos, total) => {
+    if (!total || total <= 0) return 0;
+    return Math.max(0, Math.min(100, (Number(vendidos || 0) / Number(total)) * 100));
+  };
  
   const handleToggleStatus = async (evento) => {
     try {
@@ -168,7 +188,97 @@ function EventList() {
     }
   };
 
+  const carregarResumoIngressos = async (eventId) => {
+    if (!eventId) return;
+    if (ticketsSummaryByEvent[eventId]) return;
+    if (ticketsSummaryLoading[eventId]) return;
+    try {
+      setTicketsSummaryLoading((prev) => ({ ...prev, [eventId]: true }));
+      const summary = await listarResumoIngressosEvento(eventId);
+      setTicketsSummaryByEvent((prev) => ({ ...prev, [eventId]: summary }));
+    } catch (error) {
+      console.error('Erro ao carregar resumo de ingressos:', error);
+      setNotification(error.message || 'Erro ao carregar resumo de ingressos');
+    } finally {
+      setTicketsSummaryLoading((prev) => ({ ...prev, [eventId]: false }));
+    }
+  };
+
+  const toggleEventSummary = (eventId) => {
+    setExpandedEvents((prev) => {
+      const nextExpanded = !prev[eventId];
+      if (nextExpanded) {
+        carregarResumoIngressos(eventId);
+      }
+      return { ...prev, [eventId]: nextExpanded };
+    });
+  };
+
   const title = brand.name + ' - Eventos';
+
+  const renderResumoIngressos = (eventId) => {
+    const loadingResumo = Boolean(ticketsSummaryLoading[eventId]);
+    const resumo = ticketsSummaryByEvent[eventId];
+
+    if (loadingResumo) {
+      return <Typography variant="body2">Carregando resumo...</Typography>;
+    }
+
+    if (!resumo || !Array.isArray(resumo.batches) || resumo.batches.length === 0) {
+      return <Typography variant="body2">Sem dados de ingressos para este evento.</Typography>;
+    }
+
+    return (
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Lote</TableCell>
+            <TableCell>Preço</TableCell>
+            <TableCell>Vendidos/Total</TableCell>
+            <TableCell><CreditCardIcon fontSize="small" /> Cartão</TableCell>
+            <TableCell><AccountBalanceWalletIcon fontSize="small" /> Pix</TableCell>
+            <TableCell><MoneyIcon fontSize="small" /> Outros</TableCell>
+            <TableCell align="right">Total</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {resumo.batches.map((row) => (
+            <TableRow key={row.batchId}>
+              <TableCell>{row.batchName}</TableCell>
+              <TableCell>{formatarPreco(row.price)}</TableCell>
+              <TableCell>
+                <div style={{ minWidth: 150 }}>
+                  <LinearProgress
+                    variant="determinate"
+                    value={calcularPercentualVendidos(row.sold, row.total)}
+                    style={{ height: 10, borderRadius: 6, marginBottom: 4 }}
+                  />
+                  <Typography variant="caption">
+                    {formatarVendidosTotal(row.sold, row.total)}
+                  </Typography>
+                </div>
+              </TableCell>
+              <TableCell>{formatarPreco(row.credit)}</TableCell>
+              <TableCell>{formatarPreco(row.pix)}</TableCell>
+              <TableCell>{formatarPreco(row.others)}</TableCell>
+              <TableCell align="right">{formatarPreco(row.totalPaid)}</TableCell>
+            </TableRow>
+          ))}
+          <TableRow>
+            <TableCell><strong>TOTAL</strong></TableCell>
+            <TableCell>-</TableCell>
+            <TableCell>
+              <strong>{formatarVendidosTotal(resumo.totals?.sold || 0, resumo.totals?.total || 0)}</strong>
+            </TableCell>
+            <TableCell><strong>{formatarPreco(resumo.totals?.credit || 0)}</strong></TableCell>
+            <TableCell><strong>{formatarPreco(resumo.totals?.pix || 0)}</strong></TableCell>
+            <TableCell><strong>{formatarPreco(resumo.totals?.others || 0)}</strong></TableCell>
+            <TableCell align="right"><strong>{formatarPreco(resumo.totals?.totalPaid || 0)}</strong></TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    );
+  };
 
   return (
     <div>
@@ -306,6 +416,7 @@ function EventList() {
           <Table>
             <TableHead>
               <TableRow>
+                <TableCell width={40}> </TableCell>
                 <TableCell>Título</TableCell>
                 <TableCell>Data Início</TableCell>
                 <TableCell>Local</TableCell>
@@ -317,64 +428,83 @@ function EventList() {
             </TableHead>
             <TableBody>
               {eventosFiltrados.map((evento) => (
-                <TableRow key={evento.id}>
-                  <TableCell>
-                    <Typography variant="subtitle2">{evento.title}</Typography>
-                  </TableCell>
-                  <TableCell>{formatarData(evento.startDate)}</TableCell>
-                  <TableCell>{evento.location || '-'}</TableCell>
-                  <TableCell>
-                    {EVENT_TYPE_LABELS[evento.eventType] || evento.eventType || '-'}
-                  </TableCell>
-                  <TableCell align="center">
-                    {evento.currentRegistrations || 0}
-                    {evento.maxRegistrations && ` / ${evento.maxRegistrations}`}
-                  </TableCell>
-                  <TableCell align="center">
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color={evento.isActive ? 'primary' : 'inherit'}
-                    onClick={() => handleToggleStatus(evento)}
-                  >
-                    {evento.isActive ? 'Ativo' : 'Inativo'}
-                  </Button>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Tooltip title="Ver Detalhes">
-                      <IconButton
-                        size="small"
-                        onClick={() => history.push(`/app/events/${evento.id}`)}
-                      >
-                        <ViewIcon />
+                <React.Fragment key={evento.id}>
+                  <TableRow>
+                    <TableCell>
+                      <IconButton size="small" onClick={() => toggleEventSummary(evento.id)}>
+                        {expandedEvents[evento.id] ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                       </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Editar">
-                      <IconButton
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="subtitle2">{evento.title}</Typography>
+                    </TableCell>
+                    <TableCell>{formatarData(evento.startDate)}</TableCell>
+                    <TableCell>{evento.location || '-'}</TableCell>
+                    <TableCell>
+                      {EVENT_TYPE_LABELS[evento.eventType] || evento.eventType || '-'}
+                    </TableCell>
+                    <TableCell align="center">
+                      {evento.currentRegistrations || 0}
+                      {evento.maxRegistrations && ` / ${evento.maxRegistrations}`}
+                    </TableCell>
+                    <TableCell align="center">
+                      <Button
                         size="small"
-                        onClick={() => history.push(`/app/events/${evento.id}/editar`)}
+                        variant="outlined"
+                        color={evento.isActive ? 'primary' : 'inherit'}
+                        onClick={() => handleToggleStatus(evento)}
                       >
-                        <EditIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Deletar">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDeletar(evento.id, evento.title)}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Duplicar">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDuplicar(evento)}
-                      >
-                        <DuplicateIcon />
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
+                        {evento.isActive ? 'Ativo' : 'Inativo'}
+                      </Button>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Tooltip title="Ver Detalhes">
+                        <IconButton
+                          size="small"
+                          onClick={() => history.push(`/app/events/${evento.id}`)}
+                        >
+                          <ViewIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Editar">
+                        <IconButton
+                          size="small"
+                          onClick={() => history.push(`/app/events/${evento.id}/editar`)}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Deletar">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDeletar(evento.id, evento.title)}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Duplicar">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDuplicar(evento)}
+                        >
+                          <DuplicateIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={8}>
+                      <Collapse in={Boolean(expandedEvents[evento.id])} timeout="auto" unmountOnExit>
+                        <div style={{ margin: '12px 0 16px 0', padding: 12, background: '#fafafa', borderRadius: 8 }}>
+                          <Typography variant="subtitle2" style={{ marginBottom: 10 }}>
+                            Ingressos
+                          </Typography>
+                          {renderResumoIngressos(evento.id)}
+                        </div>
+                      </Collapse>
+                    </TableCell>
+                  </TableRow>
+                </React.Fragment>
               ))}
             </TableBody>
           </Table>

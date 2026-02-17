@@ -874,6 +874,7 @@ async function listarInscricoes() {
 function escapeLike(value = '') {
   return value
     .toLowerCase()
+    .replace(/\\/g, '\\\\')
     .replace(/%/g, '\\%')
     .replace(/_/g, '\\_')
     .replace(/'/g, "''");
@@ -883,8 +884,16 @@ function buildJsonCondition(value, keys) {
   const sanitized = escapeLike(value);
   if (!sanitized) return null;
   const likePattern = `%${sanitized}%`;
-  const parts = keys.map((key) => `LOWER(COALESCE(buyerData->>'${key}', '')) LIKE '${likePattern}' ESCAPE '\\\\'`);
+  const parts = keys.map((key) => `LOWER(COALESCE("Registration"."buyerData"->>'${key}', '')) LIKE '${likePattern}'`);
   return sequelize.literal(`(${parts.join(' OR ')})`);
+}
+
+function normalizeFilterValue(value) {
+  if (value == null) return null;
+  const normalized = String(value).trim();
+  if (!normalized) return null;
+  if (/^buyerData\.(buyer_name|buyer_document)$/i.test(normalized)) return null;
+  return normalized;
 }
 
 async function listarInscricoesPorEvento(eventId, options = {}) {
@@ -919,8 +928,11 @@ async function listarInscricoesPorEvento(eventId, options = {}) {
     where[Op.and] = (where[Op.and] || []).concat(dateConditions);
   }
 
-  const nameCondition = filters.buyerName ? buildJsonCondition(filters.buyerName, ['buyer_name', 'nome', 'name']) : null;
-  const documentCondition = filters.buyerDocument ? buildJsonCondition(filters.buyerDocument, ['buyer_document', 'cpf', 'documento', 'document']) : null;
+  const buyerNameFilter = normalizeFilterValue(filters.buyerName) || normalizeFilterValue(filters['buyerData.buyer_name']);
+  const buyerDocumentFilter = normalizeFilterValue(filters.buyerDocument) || normalizeFilterValue(filters['buyerData.buyer_document']);
+
+  const nameCondition = buyerNameFilter ? buildJsonCondition(buyerNameFilter, ['buyer_name', 'nome', 'name']) : null;
+  const documentCondition = buyerDocumentFilter ? buildJsonCondition(buyerDocumentFilter, ['buyer_document', 'cpf', 'documento', 'document']) : null;
   const additionalConditions = [];
   if (nameCondition) additionalConditions.push(nameCondition);
   if (documentCondition) additionalConditions.push(documentCondition);
