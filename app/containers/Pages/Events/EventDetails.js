@@ -40,6 +40,12 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import CheckInIcon from '@mui/icons-material/CheckCircle';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import DescriptionIcon from '@mui/icons-material/Description';
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import CreditCardIcon from '@mui/icons-material/CreditCard';
+import StoreIcon from '@mui/icons-material/Store';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import CloseIcon from '@mui/icons-material/Close';
 import { useHistory, useParams } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
 import {
@@ -108,7 +114,7 @@ function EventDetails() {
   const statusOptions = [
     '',
     'pending',
-    'authorized',
+    'expired',
     'partial',
     'confirmed',
     'denied',
@@ -399,6 +405,39 @@ function EventDetails() {
     };
     return traducoes[tipo] || tipo;
   };
+
+  const renderFormaPagamento = (paymentMethod) => {
+    const method = paymentMethod || 'credit_card';
+    const meta = {
+      credit_card: { label: 'Cartão de Crédito', icon: <CreditCardIcon fontSize="small" /> },
+      pix: { label: 'PIX', icon: <AttachMoneyIcon fontSize="small" /> },
+      boleto: { label: 'Boleto', icon: <ReceiptLongIcon fontSize="small" /> },
+      offline: { label: 'Presencial', icon: <StoreIcon fontSize="small" /> },
+      manual: { label: 'Manual', icon: <StoreIcon fontSize="small" /> }
+    }[method] || { label: traduzirTipoPagamento(method), icon: <CreditCardIcon fontSize="small" /> };
+
+    return (
+      <Box display="flex" alignItems="center" gap={1}>
+        {meta.icon}
+        <span>{meta.label}</span>
+      </Box>
+    );
+  };
+
+  const getBuyerName = (inscricao) => (
+    inscricao?.buyerData?.buyer_name
+    || inscricao?.buyerData?.nome
+    || inscricao?.buyerData?.name
+    || '-'
+  );
+
+  const getBuyerDocument = (inscricao) => (
+    inscricao?.buyerData?.buyer_document
+    || inscricao?.buyerData?.cpf
+    || inscricao?.buyerData?.documento
+    || inscricao?.buyerData?.document
+    || '-'
+  );
 
   const formatarData = (data) => {
     if (!data) return '-';
@@ -898,9 +937,12 @@ function EventDetails() {
                 <TableHead>
                   <TableRow>
                     <TableCell>Código</TableCell>
+                    <TableCell>Comprador</TableCell>
+                    <TableCell>Documento</TableCell>
                     <TableCell>Lote</TableCell>
                     <TableCell>Quantidade</TableCell>
                     <TableCell>Valor</TableCell>
+                    <TableCell>Forma de Pagamento</TableCell>
                     <TableCell>Data</TableCell>
                     <TableCell align="center">Status</TableCell>
                     <TableCell align="center">Ações</TableCell>
@@ -911,13 +953,14 @@ function EventDetails() {
                     <TableRow
                       key={inscricao.id}
                       hover
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => history.push(`/app/events/registrations/${inscricao.id}`)}
                     >
                       <TableCell>{inscricao.orderCode}</TableCell>
+                      <TableCell>{getBuyerName(inscricao)}</TableCell>
+                      <TableCell>{getBuyerDocument(inscricao)}</TableCell>
                       <TableCell>{inscricao.batchName || inscricao.batch?.name || '-'}</TableCell>
                       <TableCell>{inscricao.quantity}</TableCell>
                       <TableCell>{formatarPreco(inscricao.finalPrice)}</TableCell>
+                      <TableCell>{renderFormaPagamento(inscricao.paymentMethod)}</TableCell>
                       <TableCell>{formatarDataHora(inscricao.createdAt)}</TableCell>
                       <TableCell align="center">
                         <Chip
@@ -927,19 +970,28 @@ function EventDetails() {
                         />
                       </TableCell>
                       <TableCell align="center">
-                        {!bannableStatuses.has(inscricao.paymentStatus) && (
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            color="secondary"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            abrirDialogCancelamento(inscricao.id, inscricao.orderCode);
-                          }}
-                          >
-                            Cancelar
-                          </Button>
-                        )}
+                        <Box display="flex" alignItems="center" justifyContent="center" gap={1}>
+                          <Tooltip title="Ver detalhes">
+                            <IconButton
+                              size="small"
+                              color="primary"
+                              onClick={() => history.push(`/app/events/registrations/${inscricao.id}`)}
+                            >
+                              <VisibilityIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          {!bannableStatuses.has(inscricao.paymentStatus) && (
+                            <Tooltip title="Cancelar inscrição">
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => abrirDialogCancelamento(inscricao.id, inscricao.orderCode)}
+                              >
+                                <CloseIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                        </Box>
                       </TableCell>
                     </TableRow>
                   ))}

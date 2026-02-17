@@ -6,6 +6,7 @@ const {
   PaymentOption,
   Registration,
   RegistrationPayment,
+  RegistrationAttendee,
   User,
   sequelize,
 } = require("../models");
@@ -348,6 +349,178 @@ async function obterEstatisticasGerais() {
   };
 }
 
+function categorizarMetodoPagamento(method) {
+  if (method === 'credit_card') return 'credit';
+  if (method === 'pix') return 'pix';
+  return 'others';
+}
+
+function arredondarMoeda(valor) {
+  return Number((Number(valor || 0)).toFixed(2));
+}
+
+async function obterResumoIngressosPorEvento(eventId) {
+  if (!eventId) {
+    return { batches: [], totals: {} };
+  }
+
+  const [batches, registrations, attendees, payments] = await Promise.all([
+    EventBatch.findAll({
+      where: { eventId },
+      attributes: ['id', 'name', 'price', 'maxQuantity', 'currentQuantity', 'order'],
+      order: [['order', 'ASC']]
+    }),
+    Registration.findAll({
+      where: { eventId },
+      attributes: ['id', 'batchId']
+    }),
+    RegistrationAttendee.findAll({
+      include: [
+        {
+          model: Registration,
+          as: 'registration',
+          attributes: [],
+          where: { eventId },
+          required: true
+        }
+      ],
+      attributes: ['registrationId', 'batchId'],
+      raw: true
+    }),
+    RegistrationPayment.findAll({
+      where: { status: 'confirmed' },
+      include: [
+        {
+          model: Registration,
+          as: 'registration',
+          attributes: [],
+          where: { eventId },
+          required: true
+        }
+      ],
+      attributes: ['registrationId', 'method', 'amount'],
+      raw: true
+    })
+  ]);
+
+  const batchesById = new Map();
+  const summaryByBatchId = new Map();
+
+  batches.forEach((batch) => {
+    const batchId = batch.id;
+    batchesById.set(batchId, batch);
+    summaryByBatchId.set(batchId, {
+      batchId,
+      batchName: batch.name,
+      price: Number(batch.price || 0),
+      sold: Number(batch.currentQuantity || 0),
+      total: batch.maxQuantity == null ? null : Number(batch.maxQuantity),
+      credit: 0,
+      pix: 0,
+      others: 0,
+      totalPaid: 0
+    });
+  });
+
+  const attendeeCountsByRegistration = attendees.reduce((acc, attendee) => {
+    const regId = attendee.registrationId;
+    const batchId = attendee.batchId;
+    if (!regId || !batchId || !summaryByBatchId.has(batchId)) return acc;
+    if (!acc[regId]) acc[regId] = {};
+    acc[regId][batchId] = (acc[regId][batchId] || 0) + 1;
+    return acc;
+  }, {});
+
+  const sharesByRegistration = {};
+  registrations.forEach((registration) => {
+    const regId = registration.id;
+    const counts = attendeeCountsByRegistration[regId];
+    if (counts && Object.keys(counts).length) {
+      const weightedTotal = Object.entries(counts).reduce((sum, [batchId, count]) => {
+        const batch = batchesById.get(batchId);
+        const batchPrice = Number(batch?.price || 0);
+        return sum + (batchPrice * Number(count || 0));
+      }, 0);
+
+      if (weightedTotal > 0) {
+        sharesByRegistration[regId] = Object.entries(counts).map(([batchId, count]) => {
+          const batch = batchesById.get(batchId);
+          const batchPrice = Number(batch?.price || 0);
+          return {
+            batchId,
+            share: (batchPrice * Number(count || 0)) / weightedTotal
+          };
+        });
+      } else {
+        const countTotal = Object.values(counts).reduce((sum, count) => sum + Number(count || 0), 0);
+        sharesByRegistration[regId] = Object.entries(counts).map(([batchId, count]) => ({
+          batchId,
+          share: countTotal > 0 ? Number(count || 0) / countTotal : 0
+        }));
+      }
+      return;
+    }
+
+    if (registration.batchId && summaryByBatchId.has(registration.batchId)) {
+      sharesByRegistration[regId] = [{ batchId: registration.batchId, share: 1 }];
+    } else {
+      sharesByRegistration[regId] = [];
+    }
+  });
+
+  payments.forEach((payment) => {
+    const regShares = sharesByRegistration[payment.registrationId] || [];
+    if (!regShares.length) return;
+
+    const amount = Number(payment.amount || 0);
+    const category = categorizarMetodoPagamento(payment.method);
+
+    regShares.forEach(({ batchId, share }) => {
+      const row = summaryByBatchId.get(batchId);
+      if (!row) return;
+      const allocated = amount * Number(share || 0);
+      row[category] += allocated;
+      row.totalPaid += allocated;
+    });
+  });
+
+  const rows = Array.from(summaryByBatchId.values()).map((row) => ({
+    ...row,
+    credit: arredondarMoeda(row.credit),
+    pix: arredondarMoeda(row.pix),
+    others: arredondarMoeda(row.others),
+    totalPaid: arredondarMoeda(row.totalPaid)
+  }));
+
+  const totals = rows.reduce((acc, row) => {
+    acc.sold += Number(row.sold || 0);
+    acc.total += Number(row.total || 0);
+    acc.credit += Number(row.credit || 0);
+    acc.pix += Number(row.pix || 0);
+    acc.others += Number(row.others || 0);
+    acc.totalPaid += Number(row.totalPaid || 0);
+    return acc;
+  }, {
+    sold: 0,
+    total: 0,
+    credit: 0,
+    pix: 0,
+    others: 0,
+    totalPaid: 0
+  });
+
+  return {
+    batches: rows,
+    totals: {
+      ...totals,
+      credit: arredondarMoeda(totals.credit),
+      pix: arredondarMoeda(totals.pix),
+      others: arredondarMoeda(totals.others),
+      totalPaid: arredondarMoeda(totals.totalPaid)
+    }
+  };
+}
+
 async function criarEvento(body, userId) {
   const {
     title,
@@ -614,5 +787,6 @@ module.exports = {
   listarEventosPublicos,
   buscarEventoPublicoPorId,
   obterEstatisticasGerais,
+  obterResumoIngressosPorEvento,
   duplicarEvento,
 };

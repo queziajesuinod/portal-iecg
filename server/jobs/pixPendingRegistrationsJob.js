@@ -60,7 +60,7 @@ async function checkPixPendingRegistrations() {
       await RegistrationPayment.update(
         {
           status: 'expired',
-          notes: `Cancelado automaticamente após ${PIX_PENDING_TIMEOUT_MINUTES} minutos pendente`
+          notes: `Expirado automaticamente após ${PIX_PENDING_TIMEOUT_MINUTES} minutos pendente`
         },
         {
           where: {
@@ -82,11 +82,11 @@ async function checkPixPendingRegistrations() {
 
     if (!hasActivePayment) {
       const statusAnterior = registration.paymentStatus;
-      registration.set('paymentStatus', 'cancelled');
+      registration.set('paymentStatus', 'expired');
       await registration.save();
       await registrationService.ajustarContadoresDeStatus(registration, statusAnterior);
 
-      console.info(`[pixPendingJob] Inscrição ${registration.orderCode} cancelada automaticamente após ${PIX_PENDING_TIMEOUT_MINUTES} minutos pendente`);
+      console.info(`[pixPendingJob] Inscrição ${registration.orderCode} expirada automaticamente após ${PIX_PENDING_TIMEOUT_MINUTES} minutos pendente`);
       return;
     }
 
@@ -96,11 +96,11 @@ async function checkPixPendingRegistrations() {
     }
 
     const statusAnterior = registration.paymentStatus;
-    registration.set('paymentStatus', 'cancelled');
+    registration.set('paymentStatus', 'expired');
     await registration.save();
     await registrationService.ajustarContadoresDeStatus(registration, statusAnterior);
 
-    console.info(`[pixPendingJob] Inscrição ${registration.orderCode} cancelada automaticamente após ${PIX_PENDING_TIMEOUT_MINUTES} minutos pendente`);
+    console.info(`[pixPendingJob] Inscrição ${registration.orderCode} expirada automaticamente após ${PIX_PENDING_TIMEOUT_MINUTES} minutos pendente`);
   }));
 }
 

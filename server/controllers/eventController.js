@@ -20,6 +20,16 @@ async function estatisticas(req, res) {
   }
 }
 
+async function resumoIngressos(req, res) {
+  try {
+    const summary = await eventService.obterResumoIngressosPorEvento(req.params.eventId);
+    res.status(200).json(summary);
+  } catch (err) {
+    console.error('Erro ao obter resumo de ingressos do evento:', err);
+    res.status(500).json({ message: 'Erro ao obter resumo de ingressos do evento' });
+  }
+}
+
 async function buscarPorId(req, res) {
   try {
     const evento = await eventService.buscarEventoPorId(req.params.id);
@@ -104,5 +114,6 @@ module.exports = {
   listarPublicos,
   buscarPublicoPorId,
   estatisticas,
+  resumoIngressos,
   duplicar
 };

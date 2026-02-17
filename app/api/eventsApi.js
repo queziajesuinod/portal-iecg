@@ -46,6 +46,7 @@ const response = await fetch(url, {
 export const listarEventos = () => fetchWithAuth(`${API_URL}/api/admin/events`);
 
 export const listarEstatisticas = () => fetchWithAuth(`${API_URL}/api/admin/events/stats`);
+export const listarResumoIngressosEvento = (eventId) => fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/tickets-summary`);
 
 export const buscarEvento = (id) => fetchWithAuth(`${API_URL}/api/admin/events/${id}`);
 
