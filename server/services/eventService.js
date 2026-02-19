@@ -774,6 +774,7 @@ async function duplicarEvento(eventId, userId) {
           maxInstallments: option.maxInstallments,
           interestRate: option.interestRate,
           interestType: option.interestType,
+          installmentInterestRates: option.installmentInterestRates || {},
           isActive: option.isActive,
         },
         { transaction }

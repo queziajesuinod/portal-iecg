@@ -221,6 +221,35 @@ function normalizarValor(valor) {
   return Number(numero.toFixed(2));
 }
 
+function calcularValorComJurosPorParcelas(valorBase, paymentOption, parcelas) {
+  const valor = normalizarValor(valorBase);
+  const installments = Number(parcelas) || 1;
+
+  if (paymentOption?.paymentType !== 'credit_card' || installments <= 1) {
+    return valor;
+  }
+
+  const installmentRates = paymentOption.installmentInterestRates && typeof paymentOption.installmentInterestRates === 'object'
+    ? paymentOption.installmentInterestRates
+    : {};
+
+  const perInstallmentRate = Number(installmentRates[String(installments)]);
+  if (Number.isFinite(perInstallmentRate) && perInstallmentRate > 0) {
+    return normalizarValor(valor + (valor * (perInstallmentRate / 100)));
+  }
+
+  const legacyRate = Number(paymentOption.interestRate || 0);
+  if (!Number.isFinite(legacyRate) || legacyRate <= 0) {
+    return valor;
+  }
+
+  if (paymentOption.interestType === 'fixed') {
+    return normalizarValor(valor + legacyRate);
+  }
+
+  return normalizarValor(valor + (valor * (legacyRate / 100)));
+}
+
 function calcularResumoPagamentos(registration, payments = []) {
   const paidTotal = payments.reduce((sum, payment) => (
     payment.status === 'confirmed' ? sum + Number(payment.amount || 0) : sum
@@ -633,15 +662,7 @@ async function processarInscricao(dadosInscricao) {
   const parcelas = paymentData.installments || 1;
   const paymentMethod = paymentOption.paymentType;
 
-  if (paymentOption.paymentType === 'credit_card' && parcelas > 1 && paymentOption.interestRate > 0) {
-    if (paymentOption.interestType === 'percentage') {
-      // Juros percentual aplicado uma única vez sobre o valor base
-      valorFinalComJuros += valorBasePagamento * (paymentOption.interestRate / 100);
-    } else {
-      // Juros fixo aplicado uma única vez
-      valorFinalComJuros += paymentOption.interestRate;
-    }
-  }
+  valorFinalComJuros = calcularValorComJurosPorParcelas(valorBasePagamento, paymentOption, parcelas);
 
   // 8.2. Processar pagamento conforme o tipo
   let resultadoPagamento;
@@ -1229,14 +1250,7 @@ async function criarPagamentoOnline(registrationId, payload = {}) {
 
   const paymentData = payload.paymentData || {};
   const parcelas = paymentData.installments || 1;
-  let valorFinalComJuros = amount;
-  if (paymentOption.paymentType === 'credit_card' && parcelas > 1 && paymentOption.interestRate > 0) {
-    if (paymentOption.interestType === 'percentage') {
-      valorFinalComJuros += amount * (paymentOption.interestRate / 100);
-    } else {
-      valorFinalComJuros += paymentOption.interestRate;
-    }
-  }
+  const valorFinalComJuros = calcularValorComJurosPorParcelas(amount, paymentOption, parcelas);
 
   const merchantOrderId = `${registration.orderCode}-P${pagamentosExistentes.length + 1}`;
   let resultadoPagamento;
