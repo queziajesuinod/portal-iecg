@@ -26,7 +26,7 @@ import { fetchGeocode } from '../../../utils/googleGeocode';
 const formInicial = {
   id: '',
   celula: '',
-  rede: '',
+  liderMemberId: '',
   lider: '',
   email_lider: '',
   cel_lider: '',
@@ -131,9 +131,10 @@ const CadastrarCelula = () => {
   const [formData, setFormData] = useState(formInicial);
   const [notification, setNotification] = useState('');
   const [campi, setCampi] = useState([]);
+  const [membros, setMembros] = useState([]);
   const [diasSelecionados, setDiasSelecionados] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [geoLoading, setGeoLoading] = useState(false);
+  const [geoLoading] = useState(false);
   const [leaderSearchLoading, setLeaderSearchLoading] = useState(false);
   const [leaderSearchResult, setLeaderSearchResult] = useState(null);
   const location = useLocation();
@@ -167,23 +168,42 @@ const CadastrarCelula = () => {
   }, [isEdit, celulaEditando]);
 
   useEffect(() => {
-    const carregarCampi = async () => {
+    const carregarDadosBase = async () => {
+      const token = localStorage.getItem('token');
       try {
-        const token = localStorage.getItem('token');
-        const res = await fetch(`${API_URL}/start/campus`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (!res.ok) {
-          throw new Error(`Status ${res.status}`);
+        const [campiRes, membrosRes] = await Promise.all([
+          fetch(`${API_URL}/start/campus`, {
+            headers: { Authorization: `Bearer ${token}` }
+          }),
+          fetch(`${API_URL}/api/admin/members?page=1&limit=5000`, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+        ]);
+
+        if (!campiRes.ok) {
+          throw new Error(`Erro ao carregar campus: ${campiRes.status}`);
         }
-        const data = await res.json();
-        setCampi(Array.isArray(data) ? data : []);
+
+        const campiData = await campiRes.json();
+        setCampi(Array.isArray(campiData) ? campiData : []);
+
+        if (!membrosRes.ok) {
+          throw new Error(`Erro ao carregar membros: ${membrosRes.status}`);
+        }
+
+        const membrosPayload = await membrosRes.json();
+        const membrosData = Array.isArray(membrosPayload?.members) ? membrosPayload.members : [];
+        const membrosOrdenados = [...membrosData].sort((a, b) => (
+          (a?.fullName || '').localeCompare(b?.fullName || '', 'pt-BR', { sensitivity: 'base' })
+        ));
+        setMembros(membrosOrdenados);
       } catch (err) {
-        console.error('Erro ao carregar campus:', err);
+        console.error('Erro ao carregar dados base da célula:', err);
         setCampi([]);
+        setMembros([]);
       }
     };
-    carregarCampi();
+    carregarDadosBase();
   }, [API_URL]);
 
   const handleChange = (e) => {
@@ -202,6 +222,43 @@ const CadastrarCelula = () => {
     setLeaderSearchResult(null);
   };
 
+  const handleMemberLeaderChange = (memberId) => {
+    const member = membros.find((item) => item.id === memberId);
+    setFormData((prev) => ({
+      ...prev,
+      liderMemberId: memberId || '',
+      lider: member ? (member.fullName || '') : prev.lider,
+      email_lider: member ? (member.email || '') : prev.email_lider,
+      cel_lider: member
+        ? formatPhoneNumber(member.phone || member.whatsapp || '')
+        : prev.cel_lider
+    }));
+    clearLeaderSearch();
+  };
+
+  const ensureLeaderRecord = async (celulaId) => {
+    if (!celulaId) return;
+    if (formData.liderMemberId) return;
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`${API_URL}/start/celula/leader`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          celulaId,
+          lider: formData.lider,
+          email_lider: formData.email_lider,
+          cel_lider: formData.cel_lider,
+          perfilId: process.env.REACT_APP_MEMBER_LEADER_PROFILE || undefined
+        })
+      });
+    } catch (error) {
+      console.error('Erro ao garantir registro do l?der:', error);
+    }
+  };
 
   const handleDiaToggle = (dia) => {
     setDiasSelecionados((prev) => {
@@ -227,6 +284,7 @@ const CadastrarCelula = () => {
 
     const payload = {
       ...formData,
+      liderMemberId: formData.liderMemberId || null,
       dia: diasSelecionados.join(', '),
       lat: formData.lat ? parseFloat(formData.lat) : null,
       lon: formData.lon ? parseFloat(formData.lon) : null
@@ -262,29 +320,6 @@ const CadastrarCelula = () => {
       setNotification('Erro na conexão com o servidor.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const ensureLeaderRecord = async (celulaId) => {
-    if (!celulaId) return;
-    try {
-      const token = localStorage.getItem('token');
-      await fetch(`${API_URL}/start/celula/leader`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          celulaId,
-          lider: formData.lider,
-          email_lider: formData.email_lider,
-          cel_lider: formData.cel_lider,
-          perfilId: process.env.REACT_APP_MEMBER_LEADER_PROFILE || undefined
-        })
-      });
-    } catch (error) {
-      console.error('Erro ao garantir registro do líder:', error);
     }
   };
 
@@ -328,7 +363,14 @@ const CadastrarCelula = () => {
   };
 
   const buscarCoordenadas = async () => {
-    const { endereco, numero, bairro, cidade, estado, cep } = formData;
+    const {
+      endereco,
+      numero,
+      bairro,
+      cidade,
+      estado,
+      cep
+    } = formData;
     const queryParts = [endereco, numero, bairro, cidade, estado, cep].filter(Boolean);
     if (!queryParts.length) {
       setNotification('Informe endere�o, n�mero, bairro, cidade, estado ou CEP para buscar coordenadas.');
@@ -359,7 +401,7 @@ const CadastrarCelula = () => {
     }
   };
 
-return (
+  return (
     <div>
       <Helmet>
         <title>{isEdit ? 'Editar Célula' : 'Cadastrar Célula'}</title>
@@ -395,6 +437,23 @@ return (
                     </TextField>
                   </Grid>
                   <Grid item xs={12} md={6}>
+                    <TextField
+                      select
+                      fullWidth
+                      label="Membro lider"
+                      name="liderMemberId"
+                      value={formData.liderMemberId || ''}
+                      onChange={(e) => handleMemberLeaderChange(e.target.value)}
+                    >
+                      <MenuItem value="">Nenhum</MenuItem>
+                      {membros.map((member) => (
+                        <MenuItem key={member.id} value={member.id}>
+                          {member.fullName}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
                     <TextField fullWidth label="Líder" name="lider" value={formData.lider} onChange={handleChange} />
                   </Grid>
                   <Grid item xs={12} md={6}>
@@ -423,7 +482,7 @@ return (
                         onClick={handleLeaderSearch}
                         disabled={leaderSearchLoading}
                       >
-                        {leaderSearchLoading ? 'Buscando líder...' : 'Buscar líder no Users'}
+                        {leaderSearchLoading ? 'Buscando líder...' : 'Buscar líder por contato'}
                       </Button>
                       {leaderSearchResult ? (
                         <Typography variant="body2" color="primary">

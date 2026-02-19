@@ -17,48 +17,36 @@ import {
 } from '@mui/material';
 import { PapperBlock } from 'dan-components';
 import {
-  Person,
   Email,
   Phone,
   Cake,
   Badge,
-  School,
-  Work,
   Home,
   LocationOn,
   Favorite
 } from '@mui/icons-material';
-
-const fallbackHost = `${window.location.protocol}//${window.location.host}`;
-const API_URL = (process.env.REACT_APP_API_URL && process.env.REACT_APP_API_URL.replace(/\/$/, '')) || fallbackHost || 'https://portal.iecg.com.br';
+import { buscarMembro } from '../../../api/membersApi';
 
 const formatDate = (value) => {
-  if (!value) return 'Não informado';
+  if (!value) return 'Nao informado';
   const [year, month, day] = value.split('-');
   if (!year || !month || !day) return value;
   return `${day}/${month}/${year}`;
 };
 
-const formatCPF = (cpf) => {
-  if (!cpf) return 'Não informado';
-  const digits = String(cpf).replace(/\D/g, '');
-  if (digits.length !== 11) return cpf;
-  return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-};
-
-const formatEndereco = (user) => {
-  if (!user) return 'Não informado';
+const formatEndereco = (member) => {
+  if (!member) return 'Nao informado';
   const parts = [
-    user.endereco,
-    user.numero ? `nº ${user.numero}` : null,
-    user.bairro,
-    user.cep ? `CEP ${user.cep}` : null
+    member.street,
+    member.number ? `n ${member.number}` : null,
+    member.neighborhood,
+    member.zipCode ? `CEP ${member.zipCode}` : null
   ].filter(Boolean);
-  return parts.length ? parts.join(' - ') : 'Não informado';
+  return parts.length ? parts.join(' - ') : 'Nao informado';
 };
 
 const MembroDetailsPage = () => {
-  const [data, setData] = useState(null);
+  const [member, setMember] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const location = useLocation();
@@ -70,25 +58,15 @@ const MembroDetailsPage = () => {
     let isMounted = true;
     const fetchMember = async () => {
       if (!id) {
-        setError('ID do membro não informado.');
+        setError('ID do membro nao informado.');
         return;
       }
       setLoading(true);
       setError('');
       try {
-        const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/users/${id}/spouse`, {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          }
-        });
-        if (!response.ok) {
-          throw new Error('Erro ao carregar os detalhes do membro.');
-        }
-        const payload = await response.json();
+        const payload = await buscarMembro(id);
         if (isMounted) {
-          setData(payload);
+          setMember(payload);
         }
       } catch (err) {
         if (isMounted) {
@@ -105,11 +83,11 @@ const MembroDetailsPage = () => {
     };
   }, [id]);
 
-  const member = data?.user || null;
-  const spouse = data?.spouse || null;
+  const spouse = member?.spouse || null;
+  const liderancaCelulas = Array.isArray(member?.liderancaCelulas) ? member.liderancaCelulas : [];
 
   return (
-    <PapperBlock title="Detalhes do Membro" desc="Informações completas do membro">
+    <PapperBlock title="Detalhes do Membro" desc="Informacoes completas do membro">
       <Helmet>
         <title>Detalhes do Membro</title>
       </Helmet>
@@ -132,13 +110,13 @@ const MembroDetailsPage = () => {
             <Paper variant="outlined" sx={{ p: 2 }}>
               <Stack direction="row" spacing={2} alignItems="center" mb={2}>
                 <Avatar
-                  src={member.image || 'https://via.placeholder.com/80'}
-                  alt={member.name}
+                  src={member.photoUrl || 'https://via.placeholder.com/80'}
+                  alt={member.fullName}
                   sx={{ width: 80, height: 80 }}
                 />
                 <Box>
-                  <Typography variant="h6">{member.name}</Typography>
-                  <Typography variant="body2" color="textSecondary">{member.email}</Typography>
+                  <Typography variant="h6">{member.fullName}</Typography>
+                  <Typography variant="body2" color="textSecondary">{member.email || 'Sem e-mail'}</Typography>
                 </Box>
               </Stack>
               <Divider sx={{ mb: 2 }} />
@@ -147,23 +125,19 @@ const MembroDetailsPage = () => {
                   <List dense>
                     <ListItem>
                       <ListItemIcon><Phone /></ListItemIcon>
-                      <ListItemText primary="Telefone" secondary={member.telefone || 'Nao informado'} />
+                      <ListItemText primary="Telefone" secondary={member.phone || member.whatsapp || 'Nao informado'} />
                     </ListItem>
                     <ListItem>
                       <ListItemIcon><Badge /></ListItemIcon>
-                      <ListItemText primary="CPF" secondary={formatCPF(member.cpf)} />
+                      <ListItemText primary="CPF" secondary={member.cpf || 'Nao informado'} />
                     </ListItem>
                     <ListItem>
                       <ListItemIcon><Cake /></ListItemIcon>
-                      <ListItemText primary="Data de nascimento" secondary={formatDate(member.data_nascimento)} />
+                      <ListItemText primary="Data de nascimento" secondary={formatDate(member.birthDate)} />
                     </ListItem>
                     <ListItem>
                       <ListItemIcon><Favorite /></ListItemIcon>
-                      <ListItemText primary="Estado civil" secondary={member.estado_civil || 'Nao informado'} />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon><Person /></ListItemIcon>
-                      <ListItemText primary="Nome do conjuge" secondary={member.nome_esposo || 'Nao informado'} />
+                      <ListItemText primary="Estado civil" secondary={member.maritalStatus || 'Nao informado'} />
                     </ListItem>
                   </List>
                 </Grid>
@@ -171,15 +145,7 @@ const MembroDetailsPage = () => {
                   <List dense>
                     <ListItem>
                       <ListItemIcon><Email /></ListItemIcon>
-                      <ListItemText primary="Email" secondary={member.email || 'Nao informado'} />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon><Work /></ListItemIcon>
-                      <ListItemText primary="Profissao" secondary={member.profissao || 'Nao informado'} />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon><School /></ListItemIcon>
-                      <ListItemText primary="Escolaridade" secondary={member.escolaridade || 'Nao informado'} />
+                      <ListItemText primary="E-mail" secondary={member.email || 'Nao informado'} />
                     </ListItem>
                     <ListItem>
                       <ListItemIcon><Home /></ListItemIcon>
@@ -187,11 +153,7 @@ const MembroDetailsPage = () => {
                     </ListItem>
                     <ListItem>
                       <ListItemIcon><LocationOn /></ListItemIcon>
-                      <ListItemText primary="Status" secondary={member.active ? 'Ativo' : 'Inativo'} />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon><Person /></ListItemIcon>
-                      <ListItemText primary="Lider de celula" secondary={member.is_lider_celula ? 'Sim' : 'Nao'} />
+                      <ListItemText primary="Status" secondary={member.status || 'Nao informado'} />
                     </ListItem>
                   </List>
                 </Grid>
@@ -206,36 +168,38 @@ const MembroDetailsPage = () => {
                 <Stack spacing={2}>
                   <Stack direction="row" spacing={2} alignItems="center">
                     <Avatar
-                      src={spouse.image || 'https://via.placeholder.com/60'}
-                      alt={spouse.name}
+                      src={spouse.photoUrl || 'https://via.placeholder.com/60'}
+                      alt={spouse.fullName}
                       sx={{ width: 60, height: 60 }}
                     />
                     <Box>
-                      <Typography variant="body1">{spouse.name}</Typography>
-                      <Typography variant="body2" color="textSecondary">{spouse.email}</Typography>
+                      <Typography variant="body1">{spouse.fullName}</Typography>
                     </Box>
                   </Stack>
-                  <List dense>
-                    <ListItem>
-                      <ListItemIcon><Phone /></ListItemIcon>
-                      <ListItemText primary="Telefone" secondary={spouse.telefone || 'Nao informado'} />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon><Badge /></ListItemIcon>
-                      <ListItemText primary="CPF" secondary={formatCPF(spouse.cpf)} />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon><Favorite /></ListItemIcon>
-                      <ListItemText primary="Estado civil" secondary={spouse.estado_civil || 'Nao informado'} />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon><Work /></ListItemIcon>
-                      <ListItemText primary="Profissao" secondary={spouse.profissao || 'Nao informado'} />
-                    </ListItem>
-                  </List>
                 </Stack>
               ) : (
                 <Typography variant="body2" color="textSecondary">Nenhum conjuge vinculado.</Typography>
+              )}
+            </Paper>
+
+            <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
+              <Typography variant="subtitle1" gutterBottom>Celulas que lidera</Typography>
+              {liderancaCelulas.length ? (
+                <Stack spacing={1.5}>
+                  {liderancaCelulas.map((celula) => (
+                    <Box key={celula.id} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.25 }}>
+                      <Typography variant="body1">{celula.celula || 'Sem nome'}</Typography>
+                      <Typography variant="body2" color="textSecondary">
+                        {celula.campusRef?.nome || 'Sem campus'} - {celula.bairro || 'Sem bairro'}
+                      </Typography>
+                      <Typography variant="caption" color="textSecondary">
+                        {celula.dia || 'Dia nao informado'} - {celula.horario || 'Horario nao informado'} - {celula.ativo ? 'Ativa' : 'Inativa'}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Stack>
+              ) : (
+                <Typography variant="body2" color="textSecondary">Este membro nao lidera nenhuma celula.</Typography>
               )}
             </Paper>
           </Grid>

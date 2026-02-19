@@ -1,9 +1,11 @@
+/* eslint-disable import/prefer-default-export */
 const GOOGLE_GEOCODE_KEY = process.env.REACT_APP_GOOGLE_GEOCODE_KEY;
 
-const getComponentValue = (components, types) =>
-  components.find((component) =>
-    types.every((type) => component.types.includes(type))
-  )?.long_name || '';
+const getComponentValue = (components, types) => components.find((component) => types.every((type) => component.types.includes(type))
+)?.long_name || '';
+
+const getComponentShortValue = (components, types) => components.find((component) => types.every((type) => component.types.includes(type))
+)?.short_name || '';
 
 export const fetchGeocode = async (query) => {
   if (!query) return null;
@@ -29,21 +31,19 @@ export const fetchGeocode = async (query) => {
     return null;
   }
   const components = result.address_components || [];
-  const bairro =
-    getComponentValue(components, ['sublocality', 'political']) ||
-    getComponentValue(components, ['neighborhood', 'political']) ||
-    '';
+  const bairro = getComponentValue(components, ['sublocality', 'political'])
+    || getComponentValue(components, ['neighborhood', 'political'])
+    || '';
   const logradouro = getComponentValue(components, ['route']);
-  const numeroEncontrado =
-    getComponentValue(components, ['street_number']) ||
-    getComponentValue(components, ['premise']) ||
-    getComponentValue(components, ['subpremise']) ||
-    '';
-  const cidade =
-    getComponentValue(components, ['locality']) ||
-    getComponentValue(components, ['administrative_area_level_2']) ||
-    '';
+  const numeroEncontrado = getComponentValue(components, ['street_number'])
+    || getComponentValue(components, ['premise'])
+    || getComponentValue(components, ['subpremise'])
+    || '';
+  const cidade = getComponentValue(components, ['locality'])
+    || getComponentValue(components, ['administrative_area_level_2'])
+    || '';
   const estado = getComponentValue(components, ['administrative_area_level_1']) || '';
+  const uf = getComponentShortValue(components, ['administrative_area_level_1']) || '';
   const cepEncontrado = getComponentValue(components, ['postal_code']) || '';
 
   return {
@@ -54,6 +54,7 @@ export const fetchGeocode = async (query) => {
     numeroEncontrado,
     cidade,
     estado,
+    uf,
     cepEncontrado,
   };
 };

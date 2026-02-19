@@ -1,4 +1,4 @@
-const { Celula, Campus, User } = require('../models');
+const { Celula, Campus, Member } = require('../models');
 const { Op } = require('sequelize');
 const webhookEmitter = require('./webhookEmitter');
 
@@ -14,9 +14,9 @@ const defaultCelulaIncludes = [
     attributes: ['id', 'nome']
   },
   {
-    model: User,
-    as: 'liderRef',
-    attributes: ['id', 'name', 'email', 'telefone', 'username', 'is_lider_celula']
+    model: Member,
+    as: 'liderMemberRef',
+    attributes: ['id', 'fullName', 'userId', 'email', 'phone', 'whatsapp', 'photoUrl']
   }
 ];
 
@@ -29,6 +29,42 @@ const celulaForLeaderSearchIncludes = [
 ];
 
 const CelulaService = {
+  async resolveLeaderLinks(payload = {}) {
+    if (Object.prototype.hasOwnProperty.call(payload, 'liderMemberId')) {
+      if (!payload.liderMemberId) {
+        payload.liderMemberId = null;
+        payload.liderId = null;
+        return payload;
+      }
+
+      const member = await Member.findByPk(payload.liderMemberId, {
+        attributes: ['id', 'userId']
+      });
+      if (!member) {
+        throw new Error('Membro líder informado não encontrado');
+      }
+      payload.liderMemberId = member.id;
+      payload.liderId = member.userId || null;
+      return payload;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'liderId')) {
+      if (!payload.liderId) {
+        payload.liderId = null;
+        payload.liderMemberId = null;
+        return payload;
+      }
+      const member = await Member.findOne({
+        where: { userId: payload.liderId },
+        attributes: ['id']
+      });
+      payload.liderMemberId = member?.id || null;
+      return payload;
+    }
+
+    return payload;
+  },
+
   async criarCelula(dados = {}) {
     const payload = { ...dados };
     if (payload.campus && !payload.campusId) {
@@ -50,6 +86,7 @@ const CelulaService = {
     if (Object.prototype.hasOwnProperty.call(payload, 'cel_lider')) {
       payload.cel_lider = sanitizeCelular(payload.cel_lider);
     }
+    await CelulaService.resolveLeaderLinks(payload);
 
     const celula = await Celula.create(payload);
     webhookEmitter.emit('celula.created', {
@@ -116,17 +153,23 @@ const CelulaService = {
       }
     }
 
-    const includes = [...defaultCelulaIncludes];
+    const includes = defaultCelulaIncludes.map((item) => ({ ...item }));
     if (filtros.leaderEmail || filtros.leaderTelefone) {
-      includes.push({
-        model: User,
-        as: 'liderRef',
-        required: true,
-        where: {
+      const leaderFilter = includes.find((item) => item.as === 'liderMemberRef');
+      if (leaderFilter) {
+        leaderFilter.required = true;
+        leaderFilter.where = {
           ...(filtros.leaderEmail ? { email: { [Op.iLike]: filtros.leaderEmail } } : {}),
-          ...(filtros.leaderTelefone ? { telefone: sanitizeCelular(filtros.leaderTelefone) } : {})
-        }
-      });
+          ...(filtros.leaderTelefone
+            ? {
+              [Op.or]: [
+                { phone: sanitizeCelular(filtros.leaderTelefone) },
+                { whatsapp: sanitizeCelular(filtros.leaderTelefone) }
+              ]
+            }
+            : {})
+        };
+      }
     }
 
     const { count, rows } = await Celula.findAndCountAll({
@@ -173,6 +216,7 @@ const CelulaService = {
     if (Object.prototype.hasOwnProperty.call(payload, 'cel_lider')) {
       payload.cel_lider = sanitizeCelular(payload.cel_lider);
     }
+    await CelulaService.resolveLeaderLinks(payload);
 
     const updated = await celula.update(payload);
     webhookEmitter.emit('celula.updated', {
@@ -205,64 +249,60 @@ const CelulaService = {
       clauses.push({ email: { [Op.iLike]: email } });
     }
     if (telefone) {
-      clauses.push({ telefone: sanitizeCelular(telefone) });
+      const sanitizedPhone = sanitizeCelular(telefone);
+      clauses.push({ phone: sanitizedPhone });
+      clauses.push({ whatsapp: sanitizedPhone });
     }
 
-    const user = await User.findOne({
+    const leader = await Member.findOne({
       where: {
         [Op.or]: clauses
       },
       attributes: [
         'id',
-        'name',
+        'fullName',
+        'preferredName',
+        'userId',
         'email',
-        'telefone',
-        'username',
-        'is_lider_celula',
-        'data_nascimento',
+        'phone',
+        'whatsapp',
+        'birthDate',
         'cpf',
-        'estado_civil',
-        'profissao',
-        'batizado',
-        'encontro',
-        'escolas',
-        'image',
-        'conjuge_id',
-        'endereco',
-        'bairro',
-        'numero',
-        'cep',
-        'escolaridade',
-        'nome_esposo'
+        'maritalStatus',
+        'status',
+        'street',
+        'neighborhood',
+        'number',
+        'zipCode',
+        'photoUrl',
+        'notes'
       ],
       include: [
         {
           model: Celula,
-          as: 'lideranca',
+          as: 'liderancaCelulas',
           include: celulaForLeaderSearchIncludes
         },
         {
-          model: User,
-          as: 'conjuge',
+          model: Member,
+          as: 'spouse',
           attributes: [
-          'id',
-          'name',
-          'email',
-          'telefone',
-          'username',
-          'image',
-          'endereco',
-          'bairro',
-          'numero',
-          'cep',
-          'escolaridade',
-          'nome_esposo'
-        ]
-      }
+            'id',
+            'fullName',
+            'email',
+            'phone',
+            'whatsapp',
+            'photoUrl',
+            'street',
+            'neighborhood',
+            'number',
+            'zipCode'
+          ]
+        }
       ]
     });
 
-    return user;
+    return leader;
   }
 };
 

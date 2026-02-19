@@ -1,4 +1,4 @@
-const { Celula, User } = require('../models');
+const { Celula, User, Member } = require('../models');
 const { Op } = require('sequelize');
 
 const MEMBER_PROFILE_ID = '7d47d03a-a7aa-4907-b8b9-8fcf87bd52dc';
@@ -34,6 +34,15 @@ const buildLeaderAttributes = ({ name, email, telefone, celulaId }) => {
 };
 
 class CelulaLeaderService {
+  static async resolveMemberIdByUserId(userId) {
+    if (!userId) return null;
+    const member = await Member.findOne({
+      where: { userId },
+      attributes: ['id']
+    });
+    return member?.id || null;
+  }
+
   static async findCandidateLeader({ email, telefone, excludeId } = {}) {
     const clauses = [];
     if (email) clauses.push({ email: { [Op.iLike]: email } });
@@ -63,7 +72,8 @@ class CelulaLeaderService {
       const leader = await User.findByPk(leaderId);
       if (!leader) throw new Error('Líder não encontrado');
     }
-    await celula.update({ liderId: leaderId || null });
+    const liderMemberId = await CelulaLeaderService.resolveMemberIdByUserId(leaderId);
+    await celula.update({ liderId: leaderId || null, liderMemberId });
     return celula;
   }
 
@@ -136,6 +146,7 @@ class CelulaLeaderService {
 
       await celula.update({
         liderId: leader.id,
+        liderMemberId: await CelulaLeaderService.resolveMemberIdByUserId(leader.id),
         lider: leaderAttrs.name,
         email_lider: leaderAttrs.email,
         cel_lider: leaderAttrs.telefone
@@ -223,6 +234,7 @@ class CelulaLeaderService {
     if (celula) {
       await celula.update({
         liderId: leader.id,
+        liderMemberId: await CelulaLeaderService.resolveMemberIdByUserId(leader.id),
         lider: leaderAttrs.name,
         email_lider: leaderAttrs.email,
         cel_lider: leaderAttrs.telefone
@@ -313,3 +325,5 @@ class CelulaLeaderService {
 }
 
 module.exports = CelulaLeaderService;
+
+

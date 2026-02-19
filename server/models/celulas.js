@@ -10,6 +10,9 @@ module.exports = (sequelize) => {
       if (models.User) {
         Celula.belongsTo(models.User, { foreignKey: 'liderId', as: 'liderRef' });
       }
+      if (models.Member) {
+        Celula.belongsTo(models.Member, { foreignKey: 'liderMemberId', as: 'liderMemberRef' });
+      }
     }
   }
 
@@ -109,6 +112,10 @@ module.exports = (sequelize) => {
       defaultValue: true
     },
     liderId: {
+      type: DataTypes.UUID,
+      allowNull: true
+    },
+    liderMemberId: {
       type: DataTypes.UUID,
       allowNull: true
     }
