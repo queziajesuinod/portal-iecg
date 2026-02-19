@@ -26,6 +26,10 @@ module.exports = (sequelize) => {
           foreignKey: 'celulaId', 
           as: 'celula' 
         });
+        Member.hasMany(models.Celula, {
+          foreignKey: 'liderMemberId',
+          as: 'liderancaCelulas'
+        });
       }
       
       // Auto-relacionamento para cônjuge
@@ -249,7 +253,7 @@ module.exports = (sequelize) => {
     
     // Foto
     photoUrl: {
-      type: DataTypes.STRING(500),
+      type: DataTypes.TEXT,
       allowNull: true
     },
     
@@ -275,3 +279,4 @@ module.exports = (sequelize) => {
 
   return Member;
 };
+

@@ -6,8 +6,19 @@ const serializeCelula = (celula) => {
   }
   const payload = celula.toJSON ? celula.toJSON() : celula;
   const leader = payload.liderRef || null;
-  payload.leaderUser = leader
+  const leaderMember = payload.liderMemberRef || null;
+
+  payload.leaderUser = leaderMember
     ? {
+      id: leaderMember.userId || leaderMember.id,
+      name: leaderMember.fullName,
+      email: leaderMember.email,
+      telefone: leaderMember.phone || leaderMember.whatsapp,
+      username: null,
+      isLeader: true
+    }
+    : (leader
+      ? {
         id: leader.id,
         name: leader.name,
         email: leader.email,
@@ -15,7 +26,19 @@ const serializeCelula = (celula) => {
         username: leader.username,
         isLeader: leader.is_lider_celula
       }
+      : null);
+
+  payload.leaderMember = leaderMember
+    ? {
+      id: leaderMember.id,
+      fullName: leaderMember.fullName,
+      userId: leaderMember.userId,
+      email: leaderMember.email,
+      phone: leaderMember.phone || leaderMember.whatsapp,
+      photoUrl: leaderMember.photoUrl
+    }
     : null;
+
   return payload;
 };
 
@@ -24,88 +47,82 @@ class CelulaController {
     try {
       const { email, telefone } = req.query;
       if (!email && !telefone) {
-        return res.status(400).json({ erro: 'Informe email ou telefone do líder.' });
+        return res.status(400).json({ erro: 'Informe email ou telefone do lider.' });
       }
 
       const leader = await CelulaService.buscarPorContatoLeader({ email, telefone });
       if (!leader) {
-        return res.status(404).json({ erro: 'Líder não encontrado' });
+        return res.status(404).json({ erro: 'Lider nao encontrado' });
       }
 
-      const celulas = (leader.lideranca || []).map((celula) => {
+      const celulas = (leader.liderancaCelulas || []).map((celula) => {
         const payload = celula.toJSON ? celula.toJSON() : celula;
-        payload.liderRef = leader;
+        payload.liderMemberRef = leader;
         return serializeCelula(payload);
       });
 
-      const spouse = leader.conjuge ? {
-        id: leader.conjuge.id,
-        name: leader.conjuge.name,
-        email: leader.conjuge.email,
-        telefone: leader.conjuge.telefone,
-        username: leader.conjuge.username,
-        image: leader.conjuge.image,
-        endereco: leader.conjuge.endereco,
-        bairro: leader.conjuge.bairro,
-        numero: leader.conjuge.numero,
-        cep: leader.conjuge.cep,
-        escolaridade: leader.conjuge.escolaridade
+      const spouse = leader.spouse ? {
+        id: leader.spouse.id,
+        name: leader.spouse.fullName,
+        email: leader.spouse.email,
+        telefone: leader.spouse.phone || leader.spouse.whatsapp,
+        image: leader.spouse.photoUrl,
+        endereco: leader.spouse.street,
+        bairro: leader.spouse.neighborhood,
+        numero: leader.spouse.number,
+        cep: leader.spouse.zipCode
       } : null;
 
       return res.status(200).json({
         leader: {
           id: leader.id,
-          name: leader.name,
+          name: leader.fullName,
           email: leader.email,
-          telefone: leader.telefone,
-          username: leader.username,
-          isLeader: leader.is_lider_celula,
-          data_nascimento: leader.data_nascimento,
+          telefone: leader.phone || leader.whatsapp,
+          username: null,
+          isLeader: celulas.length > 0,
+          data_nascimento: leader.birthDate,
           cpf: leader.cpf,
-          estado_civil: leader.estado_civil,
-          profissao: leader.profissao,
-          batizado: leader.batizado,
-          encontro: leader.encontro,
-          escolas: leader.escolas,
-          image: leader.image,
-          conjuge_id: leader.conjuge_id,
-          perfilId: leader.perfilId,
-          active: leader.active,
-          endereco: leader.endereco,
-          bairro: leader.bairro,
-          numero: leader.numero,
-          cep: leader.cep,
-          escolaridade: leader.escolaridade,
-          nome_esposo: leader.nome_esposo,
+          estado_civil: leader.maritalStatus,
+          profissao: null,
+          batizado: null,
+          encontro: null,
+          escolas: null,
+          image: leader.photoUrl,
+          conjuge_id: leader.spouseMemberId || null,
+          perfilId: null,
+          active: !['INATIVO', 'MIA', 'TRANSFERIDO', 'FALECIDO'].includes(leader.status),
+          endereco: leader.street,
+          bairro: leader.neighborhood,
+          numero: leader.number,
+          cep: leader.zipCode,
+          escolaridade: null,
+          nome_esposo: spouse?.name || null,
+          userId: leader.userId,
           spouse
         },
         celulas
       });
     } catch (error) {
-      console.error('Erro ao buscar líder por contato:', error);
-      return res.status(500).json({ erro: 'Falha ao buscar líder' });
+      console.error('Erro ao buscar lider por contato:', error);
+      return res.status(500).json({ erro: 'Falha ao buscar lider' });
     }
   }
 
   async criar(req, res) {
     try {
-      console.log('Dados recebidos no corpo da requisição:', req.body);
-
       if (!req.body || Object.keys(req.body).length === 0) {
-        return res.status(400).json({ erro: 'Dados inválidos ou ausentes' });
+        return res.status(400).json({ erro: 'Dados invalidos ou ausentes' });
       }
 
-      // Remove o campo 'id' do corpo da requisição, caso esteja presente
       if (req.body.id) {
         delete req.body.id;
       }
 
       const celula = await CelulaService.criarCelula(req.body);
-      console.log('Célula criada com sucesso:', celula);
-
       return res.status(201).json(serializeCelula(celula));
     } catch (error) {
-      console.error('Erro ao criar célula:', error);
+      console.error('Erro ao criar celula:', error);
       return res.status(400).json({ erro: error.message });
     }
   }
@@ -115,7 +132,7 @@ class CelulaController {
       const celulas = await CelulaService.buscarTodasCelulas();
       return res.status(200).json(celulas.map(serializeCelula));
     } catch (error) {
-      return res.status(500).json({ erro: 'Erro ao buscar células' });
+      return res.status(500).json({ erro: 'Erro ao buscar celulas' });
     }
   }
 
@@ -160,31 +177,29 @@ class CelulaController {
     }
   }
 
-
   async listarPaginado(req, res) {
     try {
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
+      const page = parseInt(req.query.page, 10) || 1;
+      const limit = parseInt(req.query.limit, 10) || 10;
 
       const resultado = await CelulaService.buscaPaginada(page, limit);
       return res.status(200).json(resultado);
     } catch (error) {
-      console.error('Erro ao listar células:', error);
-      return res.status(500).json({ erro: 'Erro ao buscar células' });
+      console.error('Erro ao listar celulas:', error);
+      return res.status(500).json({ erro: 'Erro ao buscar celulas' });
     }
   }
-
 
   async buscarPorId(req, res) {
     try {
       if (!req.params.id) {
-        return res.status(400).json({ erro: 'ID da célula é obrigatório' });
+        return res.status(400).json({ erro: 'ID da celula e obrigatorio' });
       }
 
       const celula = await CelulaService.buscarCelulaPorId(req.params.id);
       return res.status(200).json(serializeCelula(celula));
     } catch (error) {
-      console.error('Erro ao buscar célula por ID:', error);
+      console.error('Erro ao buscar celula por ID:', error);
       return res.status(404).json({ erro: error.message });
     }
   }
@@ -192,17 +207,17 @@ class CelulaController {
   async atualizar(req, res) {
     try {
       if (!req.params.id) {
-        return res.status(400).json({ erro: 'ID da célula é obrigatório' });
+        return res.status(400).json({ erro: 'ID da celula e obrigatorio' });
       }
 
       if (!req.body || Object.keys(req.body).length === 0) {
-        return res.status(400).json({ erro: 'Dados para atualização são obrigatórios' });
+        return res.status(400).json({ erro: 'Dados para atualizacao sao obrigatorios' });
       }
 
       const celula = await CelulaService.atualizarCelula(req.params.id, req.body);
       return res.status(200).json(serializeCelula(celula));
     } catch (error) {
-      console.error('Erro ao atualizar célula:', error);
+      console.error('Erro ao atualizar celula:', error);
       return res.status(400).json({ erro: error.message });
     }
   }
@@ -210,13 +225,13 @@ class CelulaController {
   async deletar(req, res) {
     try {
       if (!req.params.id) {
-        return res.status(400).json({ erro: 'ID da célula é obrigatório' });
+        return res.status(400).json({ erro: 'ID da celula e obrigatorio' });
       }
 
       const resposta = await CelulaService.deletarCelula(req.params.id);
       return res.status(200).json(resposta);
     } catch (error) {
-      console.error('Erro ao deletar célula:', error);
+      console.error('Erro ao deletar celula:', error);
       return res.status(400).json({ erro: error.message });
     }
   }

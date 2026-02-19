@@ -76,6 +76,8 @@ app.use('/api/public/checkin', require('./routers/publicCheckInRoutes'));
 app.use('/public', require('./routers/publicStartRoutes'));
 // Rotas administrativas de eventos (protegidas)
 app.use('/api/admin/events', authMiddleware, require('./routers/eventRoutes'));
+// Rotas administrativas de membros (protegidas)
+app.use('/api/admin/members', authMiddleware, require('./routers/memberRoutes'));
 // Rotas administrativas de check-in (protegidas)
 app.use('/api/admin/checkin', authMiddleware, require('./routers/checkInRoutes'));
 // Rotas administrativas de notificações (protegidas)
