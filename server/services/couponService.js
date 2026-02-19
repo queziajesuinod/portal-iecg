@@ -140,16 +140,23 @@ async function deletarCupom(id) {
 
 // Validar e aplicar cupom
 async function validarCupom(code, eventId, preco, quantity) {
+  const normalizedCode = String(code || '').toUpperCase().trim();
   const coupon = await Coupon.findOne({
-    where: { code: code.toUpperCase() }
+    where: {
+      code: normalizedCode,
+      isActive: true
+    }
   });
 
   if (!coupon) {
-    throw new Error('Cupom não encontrado');
-  }
-
-  if (!coupon.isActive) {
-    throw new Error('Cupom inativo');
+    const existingCoupon = await Coupon.findOne({
+      where: { code: normalizedCode },
+      attributes: ['id', 'isActive']
+    });
+    if (existingCoupon && !existingCoupon.isActive) {
+      throw new Error('Cupom inativo');
+    }
+    throw new Error('Cupom n�o encontrado');
   }
 
   // Verificar se cupom é específico para um evento
@@ -222,3 +229,4 @@ module.exports = {
   validarCupom,
   incrementarUso
 };
+

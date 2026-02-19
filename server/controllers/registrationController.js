@@ -40,6 +40,35 @@ async function listarPorEvento(req, res) {
   }
 }
 
+async function listarInscritosConfirmadosPorEvento(req, res) {
+  try {
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const perPage = Math.min(Math.max(parseInt(req.query.perPage, 10) || 20, 1), 100);
+    const offset = (page - 1) * perPage;
+    const filters = {};
+    ['lote', 'orderCode', 'nomeCompleto'].forEach((key) => {
+      const value = req.query[key];
+      if (value && value !== 'undefined') {
+        filters[key] = value;
+      }
+    });
+    const { rows, count } = await registrationService.listarInscritosConfirmadosPorEvento(req.params.eventId, {
+      limit: perPage,
+      offset,
+      filters
+    });
+    res.status(200).json({
+      records: rows,
+      total: count,
+      page,
+      perPage
+    });
+  } catch (err) {
+    console.error('Erro ao listar inscritos confirmados do evento:', err);
+    res.status(500).json({ message: 'Erro ao listar inscritos confirmados' });
+  }
+}
+
 async function buscarPorId(req, res) {
   try {
     const inscricao = await registrationService.buscarInscricaoPorId(req.params.id);
@@ -183,6 +212,7 @@ async function obterInfoCancelamento(req, res) {
 module.exports = {
   listar,
   listarPorEvento,
+  listarInscritosConfirmadosPorEvento,
   buscarPorId,
   cancelar,
   processar,

@@ -54,6 +54,7 @@ import {
   criarLote,
   atualizarLote,
   listarInscricoesPorEvento,
+  listarInscritosConfirmadosPorEvento,
   listarFormasPagamento,
   criarFormaPagamento,
   atualizarFormaPagamento,
@@ -86,6 +87,7 @@ function EventDetails() {
   const [evento, setEvento] = useState(null);
   const [lotes, setLotes] = useState([]);
   const [inscricoes, setInscricoes] = useState([]);
+  const [inscritosConfirmados, setInscritosConfirmados] = useState([]);
   const [filters, setFilters] = useState({
     orderCode: '',
     buyerName: '',
@@ -99,9 +101,18 @@ function EventDetails() {
   const [lotesLoading, setLotesLoading] = useState(false);
   const [formasLoading, setFormasLoading] = useState(false);
   const [registrationsLoading, setRegistrationsLoading] = useState(false);
+  const [confirmedAttendeesLoading, setConfirmedAttendeesLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalInscricoes, setTotalInscricoes] = useState(0);
+  const [confirmedFilters, setConfirmedFilters] = useState({
+    lote: '',
+    orderCode: '',
+    nomeCompleto: ''
+  });
+  const [confirmedPage, setConfirmedPage] = useState(0);
+  const [confirmedRowsPerPage, setConfirmedRowsPerPage] = useState(10);
+  const [totalInscritosConfirmados, setTotalInscritosConfirmados] = useState(0);
   const [notification, setNotification] = useState('');
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelDialogLoading, setCancelDialogLoading] = useState(false);
@@ -226,9 +237,37 @@ function EventDetails() {
     }
   }
 
+  async function carregarInscritosConfirmados(
+    page = confirmedPage,
+    perPage = confirmedRowsPerPage,
+    currentFilters = confirmedFilters
+  ) {
+    if (!id) return;
+    setConfirmedAttendeesLoading(true);
+    try {
+      const params = {
+        page: page + 1,
+        perPage,
+        lote: currentFilters.lote || undefined,
+        orderCode: currentFilters.orderCode || undefined,
+        nomeCompleto: currentFilters.nomeCompleto || undefined
+      };
+      const response = await listarInscritosConfirmadosPorEvento(id, params);
+      setInscritosConfirmados(response.records || []);
+      setTotalInscritosConfirmados(response.total || 0);
+    } catch (error) {
+      console.error('Erro ao carregar inscritos confirmados:', error);
+      setNotification('Erro ao carregar inscritos confirmados do evento');
+    } finally {
+      setConfirmedAttendeesLoading(false);
+    }
+  }
+
   useEffect(() => {
     setLotes(lotesCacheRef.current.get(id) || []);
     setFormasPagamento(formasCacheRef.current.get(id) || []);
+    setInscritosConfirmados([]);
+    setTotalInscritosConfirmados(0);
     carregarDados();
     carregarLotes();
     carregarFormas();
@@ -243,16 +282,27 @@ function EventDetails() {
   }, [filters]);
 
   useEffect(() => {
+    setConfirmedPage(0);
+  }, [id]);
+
+  useEffect(() => {
+    setConfirmedPage(0);
+  }, [confirmedFilters]);
+
+  useEffect(() => {
     if (tabAtiva === 0) {
       carregarLotes();
-    }
-    if (tabAtiva === 2) {
-      carregarFormas();
     }
     if (tabAtiva === 1) {
       carregarInscricoes(currentPage, rowsPerPage, filters);
     }
-  }, [tabAtiva, id, currentPage, rowsPerPage, filters]);
+    if (tabAtiva === 2) {
+      carregarInscritosConfirmados(confirmedPage, confirmedRowsPerPage, confirmedFilters);
+    }
+    if (tabAtiva === 3) {
+      carregarFormas();
+    }
+  }, [tabAtiva, id, currentPage, rowsPerPage, filters, confirmedPage, confirmedRowsPerPage, confirmedFilters]);
 
   const handleAbrirDialogLote = (lote = null) => {
     if (lote) {
@@ -463,6 +513,10 @@ function EventDetails() {
     setFilters(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleConfirmedFilterChange = (field, value) => {
+    setConfirmedFilters((prev) => ({ ...prev, [field]: value }));
+  };
+
   const abrirDialogCancelamento = async (inscricaoId, orderCode) => {
     try {
       const info = await obterInfoCancelamentoInscricao(inscricaoId);
@@ -498,6 +552,7 @@ function EventDetails() {
       fecharDialogCancelamento();
       carregarDados();
       carregarInscricoes();
+      carregarInscritosConfirmados();
     } catch (error) {
       console.error('Erro ao cancelar inscrição:', error);
       setNotification(error.message || 'Erro ao cancelar a inscrição.');
@@ -523,6 +578,15 @@ function EventDetails() {
     setCurrentPage(0);
   };
 
+  const handleChangeConfirmedPage = (event, newPage) => {
+    setConfirmedPage(newPage);
+  };
+
+  const handleChangeConfirmedRowsPerPage = (event) => {
+    setConfirmedRowsPerPage(parseInt(event.target.value, 10));
+    setConfirmedPage(0);
+  };
+
   if (!loading && !evento) {
     return <Typography>Evento não encontrado</Typography>;
   }
@@ -535,6 +599,10 @@ function EventDetails() {
   const negadoCancelado = resumoInscricoes.deniedCancelled ?? 0;
   const expirados = resumoInscricoes.expiredCount ?? 0;
   const pendentes = resumoInscricoes.pendingCount ?? 0;
+  const totalVagas = Number(evento?.maxRegistrations || 0);
+  const porcentagemInscritos = totalVagas > 0
+    ? `${((totalInscritos / totalVagas) * 100).toFixed(1).replace('.', ',')}%`
+    : 'N/A';
   const locationSummary = [
     evento?.location,
     evento?.addressNumber,
@@ -547,6 +615,7 @@ function EventDetails() {
     : null;
   const kpiItems = [
     { label: 'Inscritos confirmados', value: totalInscritos },
+    { label: 'Porcentagem de Inscritos', value: porcentagemInscritos },
     { label: 'Valor Confirmados', value: formatarMoeda(totalValorConfirmado) },
     { label: 'Negado/Cancelado', value: negadoCancelado },
     { label: 'Expirados', value: expirados },
@@ -767,6 +836,7 @@ function EventDetails() {
           textColor="primary"
         >
           <Tab label="Lotes" />
+          <Tab label="Vendas" />
           <Tab label="Inscrições" />
           <Tab label="Formas de Pagamento" />
         </Tabs>
@@ -853,7 +923,7 @@ function EventDetails() {
           )}
         </TabPanel>
 
-        {/* Tab Inscrições */}
+        {/* Tab Vendas */}
         <TabPanel value={tabAtiva} index={1}>
           <Grid container spacing={2} alignItems="flex-end" style={{ marginBottom: 8 }}>
             <Grid item xs={12} sm={6} md={2}>
@@ -939,7 +1009,6 @@ function EventDetails() {
                     <TableCell>Código</TableCell>
                     <TableCell>Comprador</TableCell>
                     <TableCell>Documento</TableCell>
-                    <TableCell>Lote</TableCell>
                     <TableCell>Quantidade</TableCell>
                     <TableCell>Valor</TableCell>
                     <TableCell>Forma de Pagamento</TableCell>
@@ -957,7 +1026,6 @@ function EventDetails() {
                       <TableCell>{inscricao.orderCode}</TableCell>
                       <TableCell>{getBuyerName(inscricao)}</TableCell>
                       <TableCell>{getBuyerDocument(inscricao)}</TableCell>
-                      <TableCell>{inscricao.batchName || inscricao.batch?.name || '-'}</TableCell>
                       <TableCell>{inscricao.quantity}</TableCell>
                       <TableCell>{formatarPreco(inscricao.finalPrice)}</TableCell>
                       <TableCell>{renderFormaPagamento(inscricao.paymentMethod)}</TableCell>
@@ -997,6 +1065,9 @@ function EventDetails() {
                   ))}
                 </TableBody>
               </Table>
+              <Typography variant="body2" color="textSecondary" style={{ marginTop: 8 }}>
+                Total de registros: {totalInscricoes}
+              </Typography>
               <TablePagination
                 component="div"
                 count={totalInscricoes}
@@ -1010,9 +1081,97 @@ function EventDetails() {
           )}
         </TabPanel>
 
-        {/* Tab Formulário */}
-        {/* Tab Formas de Pagamento */}
+        {/* Tab Inscrições */}
         <TabPanel value={tabAtiva} index={2}>
+          <Grid container spacing={2} alignItems="flex-end" style={{ marginBottom: 8 }}>
+            <Grid item xs={12} sm={6} md={4}>
+              <FormControl fullWidth>
+                <InputLabel id="confirmed-batch-filter-label">Lote</InputLabel>
+                <Select
+                  labelId="confirmed-batch-filter-label"
+                  value={confirmedFilters.lote}
+                  label="Lote"
+                  onChange={(event) => handleConfirmedFilterChange('lote', event.target.value)}
+                >
+                  <MenuItem value="">Todos</MenuItem>
+                  {lotes
+                    .filter((lote) => lote.isActive)
+                    .map((lote) => (
+                      <MenuItem key={lote.id} value={lote.name}>
+                        {lote.name}
+                      </MenuItem>
+                    ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <TextField
+                label="Código"
+                fullWidth
+                value={confirmedFilters.orderCode}
+                onChange={(event) => handleConfirmedFilterChange('orderCode', event.target.value)}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <TextField
+                label="Nome completo"
+                fullWidth
+                value={confirmedFilters.nomeCompleto}
+                onChange={(event) => handleConfirmedFilterChange('nomeCompleto', event.target.value)}
+              />
+            </Grid>
+          </Grid>
+          {confirmedAttendeesLoading ? (
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell> </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {skeletonRows}
+              </TableBody>
+            </Table>
+          ) : inscritosConfirmados.length === 0 ? (
+            <Typography>Nenhum inscrito confirmado encontrado</Typography>
+          ) : (
+            <>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Nome Completo</TableCell>
+                    <TableCell>Lote</TableCell>
+                    <TableCell>Código</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {inscritosConfirmados.map((inscrito) => (
+                    <TableRow key={inscrito.id}>
+                      <TableCell>{inscrito.nomeCompleto || '-'}</TableCell>
+                      <TableCell>{inscrito.lote || '-'}</TableCell>
+                      <TableCell>{inscrito.orderCode || '-'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <Typography variant="body2" color="textSecondary" style={{ marginTop: 8 }}>
+                Total de registros: {totalInscritosConfirmados}
+              </Typography>
+              <TablePagination
+                component="div"
+                count={totalInscritosConfirmados}
+                page={confirmedPage}
+                onPageChange={handleChangeConfirmedPage}
+                rowsPerPage={confirmedRowsPerPage}
+                onRowsPerPageChange={handleChangeConfirmedRowsPerPage}
+                rowsPerPageOptions={[10, 20, 50]}
+              />
+            </>
+          )}
+        </TabPanel>
+
+        {/* Tab Formas de Pagamento */}
+        <TabPanel value={tabAtiva} index={3}>
           <div style={{ marginBottom: 16 }}>
             <Button
               variant="contained"
