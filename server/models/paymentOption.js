@@ -45,6 +45,12 @@ module.exports = (sequelize) => {
       defaultValue: 'percentage',
       comment: 'Tipo de juros: percentual ou fixo'
     },
+    installmentInterestRates: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: {},
+      comment: 'Mapa de juros por parcela. Ex.: {"2": 1.5, "3": 2.1}'
+    },
     isActive: {
       type: DataTypes.BOOLEAN,
       defaultValue: true

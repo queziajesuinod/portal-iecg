@@ -152,8 +152,7 @@ function EventDetails() {
   const [formPagamento, setFormPagamento] = useState({
     paymentType: 'credit_card',
     maxInstallments: 1,
-    interestRate: 0,
-    interestType: 'percentage'
+    installmentInterestRates: {}
   });
 
   async function carregarDados() {
@@ -381,22 +380,79 @@ function EventDetails() {
   };
 
   // Funções de Forma de Pagamento
+  const normalizeInstallmentRates = (rates, maxInstallments) => {
+    const max = Number(maxInstallments) || 1;
+    if (!rates || typeof rates !== 'object') {
+      return {};
+    }
+
+    return Object.entries(rates).reduce((acc, [installments, rate]) => {
+      const installmentCount = Number(installments);
+      const parsedRate = Number(rate);
+      if (!Number.isInteger(installmentCount) || installmentCount < 2 || installmentCount > max) {
+        return acc;
+      }
+      if (!Number.isFinite(parsedRate) || parsedRate < 0) {
+        return acc;
+      }
+      acc[String(installmentCount)] = parsedRate;
+      return acc;
+    }, {});
+  };
+
+  const buildLegacyRates = (maxInstallments, interestRate) => {
+    const max = Number(maxInstallments) || 1;
+    const rate = Number(interestRate || 0);
+    if (!Number.isFinite(rate) || rate <= 0 || max < 2) {
+      return {};
+    }
+
+    const legacyRates = {};
+    for (let i = 2; i <= max; i += 1) {
+      legacyRates[String(i)] = rate;
+    }
+    return legacyRates;
+  };
+
+  const formatarJurosParcelados = (pagamento) => {
+    const max = Number(pagamento.maxInstallments || 1);
+    const rates = normalizeInstallmentRates(pagamento.installmentInterestRates, max);
+    const entries = Object.entries(rates)
+      .sort((a, b) => Number(a[0]) - Number(b[0]))
+      .map(([installments, rate]) => `${installments}x: ${Number(rate).toFixed(2).replace('.', ',')}%`);
+
+    if (entries.length > 0) {
+      return entries.join(' | ');
+    }
+
+    if (Number(pagamento.interestRate || 0) > 0) {
+      return `${Number(pagamento.interestRate).toFixed(2).replace('.', ',')}% (taxa legada)`;
+    }
+
+    return 'Sem juros';
+  };
+
   const handleAbrirDialogPagamento = (pagamento = null) => {
     if (pagamento) {
+      const maxInstallments = pagamento.maxInstallments || 1;
+      const normalizedRates = normalizeInstallmentRates(
+        pagamento.installmentInterestRates,
+        maxInstallments
+      );
       setPagamentoEdicao(pagamento);
       setFormPagamento({
         paymentType: pagamento.paymentType,
-        maxInstallments: pagamento.maxInstallments || 1,
-        interestRate: pagamento.interestRate || 0,
-        interestType: pagamento.interestType || 'percentage'
+        maxInstallments,
+        installmentInterestRates: Object.keys(normalizedRates).length > 0
+          ? normalizedRates
+          : buildLegacyRates(maxInstallments, pagamento.interestRate)
       });
     } else {
       setPagamentoEdicao(null);
       setFormPagamento({
         paymentType: 'credit_card',
         maxInstallments: 1,
-        interestRate: 0,
-        interestType: 'percentage'
+        installmentInterestRates: {}
       });
     }
     setDialogPagamentoAberto(true);
@@ -409,10 +465,15 @@ function EventDetails() {
 
   const handleSalvarPagamento = async () => {
     try {
+      const maxInstallments = parseInt(formPagamento.maxInstallments, 10) || 1;
+      const installmentInterestRates = normalizeInstallmentRates(
+        formPagamento.installmentInterestRates,
+        maxInstallments
+      );
       const dados = {
         ...formPagamento,
-        maxInstallments: parseInt(formPagamento.maxInstallments, 10),
-        interestRate: parseFloat(formPagamento.interestRate)
+        maxInstallments,
+        installmentInterestRates
       };
 
       if (pagamentoEdicao) {
@@ -828,7 +889,7 @@ function EventDetails() {
       </PapperBlock>
 
       {/* Tabs */}
-        <Card style={{ marginTop: 16 }}>
+      <Card style={{ marginTop: 16 }}>
         <Tabs
           value={tabAtiva}
           onChange={(e, newValue) => setTabAtiva(newValue)}
@@ -1221,8 +1282,8 @@ function EventDetails() {
                           : 'À vista'}
                     </TableCell>
                     <TableCell>
-                      {pagamento.paymentType === 'credit_card' && pagamento.interestRate > 0
-                        ? `${pagamento.interestRate}${pagamento.interestType === 'percentage' ? '%' : ' R$'} (taxa única)`
+                      {pagamento.paymentType === 'credit_card'
+                        ? formatarJurosParcelados(pagamento)
                         : 'Sem juros'}
                     </TableCell>
                     <TableCell>
@@ -1373,35 +1434,56 @@ function EventDetails() {
                     type="number"
                     label="Máximo de Parcelas"
                     value={formPagamento.maxInstallments}
-                    onChange={(e) => setFormPagamento({ ...formPagamento, maxInstallments: e.target.value })}
+                    onChange={(e) => {
+                      const nextMaxInstallments = Math.max(1, Math.min(12, Number(e.target.value) || 1));
+                      setFormPagamento((prev) => ({
+                        ...prev,
+                        maxInstallments: nextMaxInstallments,
+                        installmentInterestRates: normalizeInstallmentRates(
+                          prev.installmentInterestRates,
+                          nextMaxInstallments
+                        )
+                      }));
+                    }}
                     inputProps={{ min: 1, max: 12 }}
                   />
                 </Grid>
 
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    type="number"
-                    label="Taxa de Juros (%)"
-                    value={formPagamento.interestRate}
-                    onChange={(e) => setFormPagamento({ ...formPagamento, interestRate: e.target.value })}
-                    inputProps={{ min: 0, step: 0.01 }}
-                    helperText="0 = sem juros (taxa aplicada uma única vez)"
-                  />
+                <Grid item xs={12}>
+                  <Typography variant="body2" color="textSecondary">
+                    Configure o juros percentual para cada quantidade de parcela (a partir de 2x).
+                  </Typography>
                 </Grid>
 
+                {Array.from({ length: Math.max(0, Number(formPagamento.maxInstallments || 1) - 1) }).map((_, index) => {
+                  const installments = index + 2;
+                  return (
+                    <Grid item xs={12} sm={6} key={`interest-${installments}`}>
+                      <TextField
+                        fullWidth
+                        type="number"
+                        label={`Juros para ${installments}x (%)`}
+                        value={formPagamento.installmentInterestRates?.[String(installments)] ?? 0}
+                        onChange={(e) => {
+                          const nextRate = Number(e.target.value);
+                          setFormPagamento((prev) => ({
+                            ...prev,
+                            installmentInterestRates: {
+                              ...(prev.installmentInterestRates || {}),
+                              [String(installments)]: Number.isFinite(nextRate) && nextRate >= 0 ? nextRate : 0
+                            }
+                          }));
+                        }}
+                        inputProps={{ min: 0, step: 0.01 }}
+                      />
+                    </Grid>
+                  );
+                })}
+
                 <Grid item xs={12}>
-                  <TextField
-                    select
-                    fullWidth
-                    label="Tipo de Juros"
-                    value={formPagamento.interestType}
-                    onChange={(e) => setFormPagamento({ ...formPagamento, interestType: e.target.value })}
-                    SelectProps={{ native: true }}
-                  >
-                    <option value="percentage">Percentual (%)</option>
-                    <option value="fixed">Fixo (R$)</option>
-                  </TextField>
+                  <Typography variant="caption" color="textSecondary">
+                    Exemplo: 2x = 1,50 e 3x = 2,10. Deixe 0 para parcela sem juros.
+                  </Typography>
                 </Grid>
               </>
             )}
