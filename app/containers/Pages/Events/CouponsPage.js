@@ -26,6 +26,8 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import BlockIcon from '@mui/icons-material/Block';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import brand from 'dan-api/dummy/brand';
 import {
   listarCupons,
@@ -157,6 +159,22 @@ function CouponsPage() {
     }
   };
 
+  const handleAlternarStatus = async (cupom) => {
+    const acao = cupom.isActive ? 'inativar' : 'reativar';
+    if (!window.confirm(`Tem certeza que deseja ${acao} o cupom "${cupom.code}"?`)) {
+      return;
+    }
+
+    try {
+      await atualizarCupom(cupom.id, { isActive: !cupom.isActive });
+      setNotification(`Cupom ${cupom.isActive ? 'inativado' : 'reativado'} com sucesso!`);
+      carregarDados();
+    } catch (error) {
+      console.error('Erro ao atualizar status do cupom:', error);
+      setNotification(error.message || 'Erro ao atualizar status do cupom');
+    }
+  };
+
   const formatarData = (data) => {
     if (!data) return '-';
     return new Date(data).toLocaleDateString('pt-BR');
@@ -256,6 +274,14 @@ function CouponsPage() {
                         onClick={() => handleDeletar(cupom.id, cupom.code)}
                       >
                         <DeleteIcon />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title={cupom.isActive ? 'Inativar cupom' : 'Reativar cupom'}>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleAlternarStatus(cupom)}
+                      >
+                        {cupom.isActive ? <BlockIcon /> : <CheckCircleIcon />}
                       </IconButton>
                     </Tooltip>
                   </TableCell>

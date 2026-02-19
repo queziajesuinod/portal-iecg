@@ -53,19 +53,33 @@ const camposPadraoComprador = [
   },
 ];
 
-async function garantirCamposBasicosDoComprador(eventId) {
+const camposPadraoInscrito = [
+  {
+    fieldType: "text",
+    fieldLabel: "Nome Completo",
+    fieldName: "nome_completo",
+    placeholder: "Nome completo do inscrito",
+    isRequired: true,
+    order: 0,
+    section: "attendee",
+  },
+];
+
+async function garantirCamposPadraoFormulario(eventId, options = {}) {
   if (!eventId) return;
-  const fieldNames = camposPadraoComprador.map((campo) => campo.fieldName);
+  const todosCamposPadrao = [...camposPadraoComprador, ...camposPadraoInscrito];
+  const fieldNames = todosCamposPadrao.map((campo) => campo.fieldName);
   const existentes = await FormField.findAll({
     where: {
       eventId,
       fieldName: fieldNames,
     },
     attributes: ["fieldName"],
+    transaction: options.transaction,
   });
   const existentesSet = new Set(existentes.map((campo) => campo.fieldName));
 
-  const criacoes = camposPadraoComprador
+  const criacoes = todosCamposPadrao
     .filter((campo) => !existentesSet.has(campo.fieldName))
     .map((campo) => ({
       id: uuid.v4(),
@@ -80,7 +94,7 @@ async function garantirCamposBasicosDoComprador(eventId) {
     }));
 
   if (criacoes.length) {
-    await FormField.bulkCreate(criacoes);
+    await FormField.bulkCreate(criacoes, { transaction: options.transaction });
   }
 }
 
@@ -572,7 +586,7 @@ async function criarEvento(body, userId) {
     createdBy: userId,
   });
 
-  await garantirCamposBasicosDoComprador(event.id);
+  await garantirCamposPadraoFormulario(event.id);
   webhookEmitter.emit("event.created", {
     id: event.id,
     data: body,
@@ -767,6 +781,7 @@ async function duplicarEvento(eventId, userId) {
     );
 
     await Promise.all([...batchPromises, ...fieldPromises, ...paymentPromises]);
+    await garantirCamposPadraoFormulario(newEvent.id, { transaction });
 
     webhookEmitter.emit("event.duplicated", {
       originalEventId: eventId,

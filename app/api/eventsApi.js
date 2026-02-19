@@ -136,6 +136,11 @@ export const listarInscricoesPorEvento = (eventId, params = {}) => {
   const url = `${API_URL}/api/admin/events/${eventId}/registrations${query ? `?${query}` : ''}`;
   return fetchWithAuth(url);
 };
+export const listarInscritosConfirmadosPorEvento = (eventId, params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  const url = `${API_URL}/api/admin/events/${eventId}/registration-attendees/confirmed${query ? `?${query}` : ''}`;
+  return fetchWithAuth(url);
+};
 
 export const buscarInscricao = (id) => fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}`);
 

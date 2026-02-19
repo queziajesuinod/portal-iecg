@@ -1016,6 +1016,80 @@ async function listarInscricoesPorEvento(eventId, options = {}) {
   };
 }
 
+async function listarInscritosConfirmadosPorEvento(eventId, options = {}) {
+  const filters = options.filters || {};
+  const limit = Number(options.limit) || 20;
+  const offset = Number(options.offset) || 0;
+
+  const registrationWhere = {
+    eventId,
+    paymentStatus: 'confirmed'
+  };
+  const batchWhere = {};
+  const attendeeWhere = {};
+
+  if (filters.orderCode) {
+    registrationWhere.orderCode = { [Op.iLike]: `%${filters.orderCode}%` };
+  }
+  if (filters.lote) {
+    batchWhere.name = { [Op.iLike]: `%${filters.lote}%` };
+  }
+  if (filters.nomeCompleto) {
+    const nome = escapeLike(filters.nomeCompleto);
+    attendeeWhere[Op.or] = [
+      sequelize.literal(`LOWER(COALESCE("RegistrationAttendee"."attendeeData"->>'nome_completo', '')) LIKE '%${nome}%'`),
+      sequelize.literal(`LOWER(COALESCE("RegistrationAttendee"."attendeeData"->>'nome', '')) LIKE '%${nome}%'`),
+      sequelize.literal(`LOWER(COALESCE("RegistrationAttendee"."attendeeData"->>'name', '')) LIKE '%${nome}%'`)
+    ];
+  }
+
+  const result = await RegistrationAttendee.findAndCountAll({
+    where: attendeeWhere,
+    include: [
+      {
+        model: Registration,
+        as: 'registration',
+        attributes: ['id', 'orderCode', 'eventId', 'paymentStatus'],
+        where: registrationWhere
+      },
+      {
+        model: EventBatch,
+        as: 'batch',
+        attributes: ['id', 'name'],
+        where: batchWhere,
+        required: Boolean(filters.lote)
+      }
+    ],
+    order: [
+      [
+        sequelize.literal(
+          `LOWER(COALESCE("RegistrationAttendee"."attendeeData"->>'nome_completo', "RegistrationAttendee"."attendeeData"->>'nome', "RegistrationAttendee"."attendeeData"->>'name', ''))`
+        ),
+        'ASC'
+      ],
+      [{ model: Registration, as: 'registration' }, 'createdAt', 'DESC'],
+      ['attendeeNumber', 'ASC']
+    ],
+    limit,
+    offset
+  });
+
+  const rows = result.rows.map((attendee) => {
+    const attendeeData = attendee.attendeeData || {};
+    return {
+      id: attendee.id,
+      orderCode: attendee.registration?.orderCode || '-',
+      lote: attendee.batch?.name || '-',
+      nomeCompleto: attendeeData.nome_completo || attendeeData.nome || attendeeData.name || '-'
+    };
+  });
+
+  return {
+    rows,
+    count: Number(result.count)
+  };
+}
+
 /**
  * Buscar inscrição por código de pedido
  */
@@ -1513,6 +1587,7 @@ module.exports = {
   processarInscricao,
   listarInscricoes,
   listarInscricoesPorEvento,
+  listarInscritosConfirmadosPorEvento,
   buscarInscricaoPorCodigo,
   buscarInscricaoPorId,
   criarPagamentoOnline,
