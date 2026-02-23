@@ -74,6 +74,10 @@ module.exports = (sequelize) => {
       type: DataTypes.INTEGER,
       allowNull: true
     },
+    cardBrand: {
+      type: DataTypes.STRING(30),
+      allowNull: true
+    },
     createdBy: {
       type: DataTypes.UUID,
       allowNull: true

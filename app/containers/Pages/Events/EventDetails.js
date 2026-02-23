@@ -535,6 +535,26 @@ function EventDetails() {
     );
   };
 
+  const getInstallmentsLabel = (inscricao) => {
+    if (inscricao?.paymentMethod !== 'credit_card') {
+      return '-';
+    }
+
+    const payments = Array.isArray(inscricao?.payments)
+      ? inscricao.payments
+      : Array.isArray(inscricao?.RegistrationPayments)
+        ? inscricao.RegistrationPayments
+        : [];
+    const creditCardPayments = payments.filter((payment) => payment?.method === 'credit_card');
+    const preferredPayment = creditCardPayments.find((payment) => (
+      Number(payment?.installments) > 0
+      && ['confirmed', 'authorized', 'pending'].includes(payment?.status)
+    )) || creditCardPayments.find((payment) => Number(payment?.installments) > 0);
+
+    const installments = Number(preferredPayment?.installments);
+    return Number.isInteger(installments) && installments > 0 ? `${installments}x` : '1x';
+  };
+
   const getBuyerName = (inscricao) => (
     inscricao?.buyerData?.buyer_name
     || inscricao?.buyerData?.nome
@@ -1073,6 +1093,7 @@ function EventDetails() {
                     <TableCell>Quantidade</TableCell>
                     <TableCell>Valor</TableCell>
                     <TableCell>Forma de Pagamento</TableCell>
+                    <TableCell>Parcelas</TableCell>
                     <TableCell>Data</TableCell>
                     <TableCell align="center">Status</TableCell>
                     <TableCell align="center">Ações</TableCell>
@@ -1090,6 +1111,7 @@ function EventDetails() {
                       <TableCell>{inscricao.quantity}</TableCell>
                       <TableCell>{formatarPreco(inscricao.finalPrice)}</TableCell>
                       <TableCell>{renderFormaPagamento(inscricao.paymentMethod)}</TableCell>
+                      <TableCell>{getInstallmentsLabel(inscricao)}</TableCell>
                       <TableCell>{formatarDataHora(inscricao.createdAt)}</TableCell>
                       <TableCell align="center">
                         <Chip

@@ -32,6 +32,15 @@ import {
 const fallbackHost = `${window.location.protocol}//${window.location.host}`;
 const API_URL = (process.env.REACT_APP_API_URL && process.env.REACT_APP_API_URL.replace(/\/$/, '')) || fallbackHost || 'https://portal.iecg.com.br';
 
+const generateRandomPassword = (length = 10) => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*';
+  let result = '';
+  for (let i = 0; i < length; i += 1) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+};
+
 const UsersListPage = () => {
   const token = localStorage.getItem('token');
   const headersAuth = {
@@ -42,7 +51,12 @@ const UsersListPage = () => {
   const [users, setUsers] = useState([]);
   const [perfis, setPerfis] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [form, setForm] = useState({ perfilIds: [] });
+  const [form, setForm] = useState({
+    perfilIds: [],
+    changePassword: false,
+    passwordMode: 'auto',
+    password: ''
+  });
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -84,6 +98,9 @@ const UsersListPage = () => {
       username: user.username || '',
       perfilIds: user.perfis?.map((p) => p.id) || (user.perfilId ? [user.perfilId] : []),
       active: user.active !== false,
+      changePassword: false,
+      passwordMode: 'auto',
+      password: '',
     });
     setOpen(true);
   };
@@ -92,28 +109,50 @@ const UsersListPage = () => {
     if (!selectedUser) return;
     try {
       setLoading(true);
+      const payload = {
+        ...form,
+        perfilIds: form.perfilIds || []
+      };
+
+      delete payload.changePassword;
+      delete payload.passwordMode;
+
+      if (form.changePassword) {
+        const nextPassword = String(form.password || '').trim();
+        if (!nextPassword) {
+          throw new Error('Informe a nova senha');
+        }
+        payload.password = nextPassword;
+      } else {
+        delete payload.password;
+      }
+
       const resp = await fetch(`${API_URL}/users/${selectedUser.id}`, {
         method: 'PUT',
         headers: headersAuth,
-      body: JSON.stringify({
-        ...form,
-        perfilIds: form.perfilIds || []
-      }),
+        body: JSON.stringify(payload),
       });
       if (!resp.ok) {
         const data = await resp.json();
         throw new Error(data?.message || 'Erro ao salvar');
       }
-      setMessage('Usuário atualizado');
+
+      let successMessage = 'Usuario atualizado';
+      if (form.changePassword && form.passwordMode === 'auto') {
+        successMessage = `Usuario atualizado. Senha gerada: ${form.password}`;
+      } else if (form.changePassword) {
+        successMessage = 'Usuario atualizado com nova senha';
+      }
+
       setOpen(false);
       await loadData();
+      setMessage(successMessage);
     } catch (err) {
       setMessage(err.message);
     } finally {
       setLoading(false);
     }
   };
-
   const handleToggleActive = async (user) => {
     try {
       setLoading(true);
@@ -132,14 +171,49 @@ const UsersListPage = () => {
     setForm(prev => ({ ...prev, [field]: value }));
   };
 
-  const filteredUsers = useMemo(() => {
-    return users.filter((u) => {
-      const matchPerfil = filterPerfil ? (u.perfilId === filterPerfil || u.Perfil?.id === filterPerfil) : true;
-      const matchStatus = filterStatus ? (filterStatus === 'ativo' ? u.active : !u.active) : true;
-      const matchNome = filterNome ? (u.name || '').toLowerCase().includes(filterNome.toLowerCase()) : true;
-      return matchPerfil && matchStatus && matchNome;
+  const handleToggleChangePassword = (enabled) => {
+    setForm((prev) => {
+      if (!enabled) {
+        return {
+          ...prev,
+          changePassword: false,
+          password: ''
+        };
+      }
+
+      if (prev.passwordMode === 'auto' && !prev.password) {
+        return {
+          ...prev,
+          changePassword: true,
+          password: generateRandomPassword()
+        };
+      }
+
+      return {
+        ...prev,
+        changePassword: true
+      };
     });
-  }, [users, filterPerfil, filterStatus, filterNome]);
+  };
+
+  const handlePasswordModeChange = (mode) => {
+    setForm((prev) => ({
+      ...prev,
+      passwordMode: mode,
+      password: mode === 'auto' ? generateRandomPassword() : ''
+    }));
+  };
+
+  const handleGeneratePassword = () => {
+    updateField('password', generateRandomPassword());
+  };
+
+  const filteredUsers = useMemo(() => users.filter((u) => {
+    const matchPerfil = filterPerfil ? (u.perfilId === filterPerfil || u.Perfil?.id === filterPerfil) : true;
+    const matchStatus = filterStatus ? (filterStatus === 'ativo' ? u.active : !u.active) : true;
+    const matchNome = filterNome ? (u.name || '').toLowerCase().includes(filterNome.toLowerCase()) : true;
+    return matchPerfil && matchStatus && matchNome;
+  }), [users, filterPerfil, filterStatus, filterNome]);
 
   const pagedUsers = useMemo(() => {
     const start = page * rowsPerPage;
@@ -232,6 +306,51 @@ const UsersListPage = () => {
             <TextField label="Nome" value={form.name || ''} onChange={(e) => updateField('name', e.target.value)} fullWidth />
             <TextField label="Email" value={form.email || ''} onChange={(e) => updateField('email', e.target.value)} fullWidth />
             <TextField label="Username" value={form.username || ''} onChange={(e) => updateField('username', e.target.value)} fullWidth />
+            <FormControlLabel
+              control={(
+                <Switch
+                  checked={Boolean(form.changePassword)}
+                  onChange={(e) => handleToggleChangePassword(e.target.checked)}
+                />
+              )}
+              label="Atualizar senha"
+            />
+            {form.changePassword && (
+              <FormControl fullWidth>
+                <InputLabel id="usuarios-password-mode-label">Modo da senha</InputLabel>
+                <Select
+                  labelId="usuarios-password-mode-label"
+                  value={form.passwordMode || 'auto'}
+                  label="Modo da senha"
+                  onChange={(e) => handlePasswordModeChange(e.target.value)}
+                >
+                  <MenuItem value="auto">Automatico</MenuItem>
+                  <MenuItem value="manual">Manual</MenuItem>
+                </Select>
+              </FormControl>
+            )}
+            {form.changePassword && form.passwordMode === 'auto' && (
+              <Box display="flex" gap={1}>
+                <TextField
+                  label="Senha gerada"
+                  value={form.password || ''}
+                  fullWidth
+                  InputProps={{ readOnly: true }}
+                />
+                <Button variant="outlined" onClick={handleGeneratePassword}>
+                  Gerar
+                </Button>
+              </Box>
+            )}
+            {form.changePassword && form.passwordMode === 'manual' && (
+              <TextField
+                label="Nova senha"
+                type="password"
+                value={form.password || ''}
+                onChange={(e) => updateField('password', e.target.value)}
+                fullWidth
+              />
+            )}
             <FormControl fullWidth>
               <InputLabel id="usuarios-perfis-label">Perfis</InputLabel>
               <Select
