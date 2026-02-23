@@ -9,7 +9,19 @@ const {
 } = require('../models');
 const paymentService = require('./paymentService');
 
-const ALLOWED_PAYMENT_METHODS = ['pix', 'credit_card', 'debit_card', 'boleto', 'cash', 'transfer', 'other'];
+const ALLOWED_PAYMENT_METHODS = [
+  'pix',
+  'credit_card',
+  'debit_card',
+  'boleto',
+  'cash',
+  'transfer',
+  'pos',
+  'manual',
+  'offline',
+  'other'
+];
+const ACTIVE_FINANCIAL_ENTRY_STATUSES = ['pending', 'authorized', 'confirmed'];
 
 function toMoney(value) {
   const number = Number(value || 0);
@@ -351,8 +363,12 @@ async function listFinancialRecords(filters = {}) {
   }
   const normalizedPaymentMethod = normalizeOptionalValue(filters.paymentMethod);
 
-  const paymentWhere = {
+  const summaryPaymentWhere = {
     status: 'confirmed',
+    ...paymentDateFilter
+  };
+  const entriesPaymentWhere = {
+    status: { [Op.in]: ACTIVE_FINANCIAL_ENTRY_STATUSES },
     ...paymentDateFilter
   };
   const expenseWhere = {
@@ -360,7 +376,8 @@ async function listFinancialRecords(filters = {}) {
   };
 
   if (normalizedPaymentMethod && ALLOWED_PAYMENT_METHODS.includes(normalizedPaymentMethod)) {
-    paymentWhere.method = normalizedPaymentMethod;
+    summaryPaymentWhere.method = normalizedPaymentMethod;
+    entriesPaymentWhere.method = normalizedPaymentMethod;
     expenseWhere.paymentMethod = normalizedPaymentMethod;
   }
   if (normalizedEventId) {
@@ -369,7 +386,7 @@ async function listFinancialRecords(filters = {}) {
 
   // Usado para o resumo financeiro total (não paginado)
   const paymentsForSummary = await RegistrationPayment.findAll({
-    where: paymentWhere,
+    where: summaryPaymentWhere,
     attributes: ['amount', 'provider', 'method', 'installments', 'cardBrand', 'providerPayload'],
     include: [
       {
@@ -385,7 +402,7 @@ async function listFinancialRecords(filters = {}) {
   // Lista paginada de entradas de tickets
   const paginatedPayments = await RegistrationPayment.findAndCountAll({
     where: {
-      ...paymentWhere
+      ...entriesPaymentWhere
     },
     include: [
       {
@@ -422,6 +439,7 @@ async function listFinancialRecords(filters = {}) {
       eventId: payment.registration?.event?.id || null,
       eventTitle: payment.registration?.event?.title || '-',
       paymentMethod: payment.method,
+      paymentStatus: payment.status,
       provider: payment.provider || null,
       installments: payment.installments || null,
       cardBrand: payment.cardBrand || paymentService.extrairBandeiraCartao(payment.providerPayload),

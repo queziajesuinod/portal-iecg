@@ -26,6 +26,8 @@ const efiService = require('./efiService');
 const eventService = require('./eventService');
 const webhookEmitter = require('./webhookEmitter');
 
+const OFFLINE_PAYMENT_METHODS = ['cash', 'pos', 'transfer', 'manual', 'pix', 'credit_card'];
+
 function extrairResumoLote(attendees = []) {
   const batches = attendees
     .map(att => att.batch)
@@ -1408,18 +1410,40 @@ async function criarPagamentoOffline(registrationId, userId, payload = {}) {
   const resumoAtual = await anexarResumoPagamentos(registration);
   const remaining = resumoAtual?.remaining ?? normalizarValor(registration.finalPrice || 0);
   const amount = normalizarValor(payload.amount || 0);
+  const metodo = payload.method || 'manual';
 
   if (amount <= 0) {
     throw new Error('Valor do pagamento deve ser maior que zero');
   }
 
-  if (amount > remaining) {
+  if (remaining <= 0) {
+    throw new Error('Inscrição já está quitada');
+  }
+
+  if (metodo !== 'credit_card' && amount > remaining) {
     throw new Error('Valor do pagamento não pode ser maior que o saldo restante');
   }
 
-  const metodo = payload.method || 'manual';
-  if (!['cash', 'pos', 'transfer', 'manual'].includes(metodo)) {
+  if (!OFFLINE_PAYMENT_METHODS.includes(metodo)) {
     throw new Error('Método de pagamento offline inválido');
+  }
+
+  let installments = null;
+  let cardBrand = null;
+
+  if (metodo === 'credit_card') {
+    const parsedInstallments = Number.parseInt(payload.installments, 10);
+    if (!Number.isInteger(parsedInstallments) || parsedInstallments < 1 || parsedInstallments > 12) {
+      throw new Error('Quantidade de parcelas inválida para cartão de crédito');
+    }
+
+    const normalizedBrand = paymentService.normalizeCardBrand(payload.cardBrand || payload.brand);
+    if (!normalizedBrand) {
+      throw new Error('Bandeira do cartão é obrigatória para pagamento em cartão de crédito');
+    }
+
+    installments = parsedInstallments;
+    cardBrand = normalizedBrand;
   }
 
   return sequelize.transaction(async (transaction) => {
@@ -1431,6 +1455,8 @@ async function criarPagamentoOffline(registrationId, userId, payload = {}) {
       amount,
       status: 'confirmed',
       provider: 'offline',
+      installments,
+      cardBrand,
       createdBy: userId,
       confirmedBy: userId,
       confirmedAt: new Date(),
@@ -1448,6 +1474,122 @@ async function criarPagamentoOffline(registrationId, userId, payload = {}) {
 /**
  * Cancelar inscrição e reembolsar
  */
+async function atualizarPagamentoOffline(registrationId, paymentId, userId, payload = {}) {
+  const permitido = await usuarioPodeRegistrarPagamentoOffline(userId);
+  if (!permitido) {
+    throw new Error('Usuario nao autorizado a editar pagamento offline');
+  }
+
+  const registration = await Registration.findByPk(registrationId);
+  if (!registration) {
+    throw new Error('Inscricao nao encontrada');
+  }
+
+  const payment = await RegistrationPayment.findOne({
+    where: {
+      id: paymentId,
+      registrationId
+    }
+  });
+
+  if (!payment) {
+    throw new Error('Pagamento nao encontrado para esta inscricao');
+  }
+  if (payment.channel !== 'OFFLINE') {
+    throw new Error('Somente pagamentos offline podem ser editados');
+  }
+
+  const resumoAtual = await anexarResumoPagamentos(registration);
+  const remaining = resumoAtual?.remaining ?? normalizarValor(registration.finalPrice || 0);
+  const amountAtualConfirmado = payment.status === 'confirmed' ? normalizarValor(payment.amount || 0) : 0;
+  const limiteSemTaxaCartao = normalizarValor(remaining + amountAtualConfirmado);
+
+  const metodo = payload.method || payment.method || 'manual';
+  if (!OFFLINE_PAYMENT_METHODS.includes(metodo)) {
+    throw new Error('Metodo de pagamento offline invalido');
+  }
+
+  const amount = payload.amount !== undefined
+    ? normalizarValor(payload.amount)
+    : normalizarValor(payment.amount);
+  if (amount <= 0) {
+    throw new Error('Valor do pagamento deve ser maior que zero');
+  }
+  if (metodo !== 'credit_card' && amount > limiteSemTaxaCartao) {
+    throw new Error('Valor do pagamento nao pode ser maior que o saldo restante');
+  }
+
+  let installments = null;
+  let cardBrand = null;
+
+  if (metodo === 'credit_card') {
+    const parsedInstallments = Number.parseInt(
+      payload.installments !== undefined ? payload.installments : payment.installments,
+      10
+    );
+    if (!Number.isInteger(parsedInstallments) || parsedInstallments < 1 || parsedInstallments > 12) {
+      throw new Error('Quantidade de parcelas invalida para cartao de credito');
+    }
+
+    const normalizedBrand = paymentService.normalizeCardBrand(
+      payload.cardBrand || payload.brand || payment.cardBrand
+    );
+    if (!normalizedBrand) {
+      throw new Error('Bandeira do cartao e obrigatoria para pagamento em cartao de credito');
+    }
+
+    installments = parsedInstallments;
+    cardBrand = normalizedBrand;
+  }
+
+  return sequelize.transaction(async (transaction) => {
+    payment.method = metodo;
+    payment.amount = amount;
+    payment.installments = installments;
+    payment.cardBrand = cardBrand;
+    if (payload.notes !== undefined) {
+      payment.notes = payload.notes || null;
+    }
+    await payment.save({ transaction });
+
+    await atualizarStatusPagamentoPorPagamentos(registration, { transaction });
+
+    return { payment };
+  });
+}
+
+async function removerPagamento(registrationId, paymentId, userId) {
+  const permitido = await usuarioPodeRegistrarPagamentoOffline(userId);
+  if (!permitido) {
+    throw new Error('Usuario nao autorizado a remover pagamento');
+  }
+
+  const registration = await Registration.findByPk(registrationId);
+  if (!registration) {
+    throw new Error('Inscricao nao encontrada');
+  }
+
+  const payment = await RegistrationPayment.findOne({
+    where: {
+      id: paymentId,
+      registrationId
+    }
+  });
+
+  if (!payment) {
+    throw new Error('Pagamento nao encontrado para esta inscricao');
+  }
+  if (payment.status !== 'pending') {
+    throw new Error('Somente pagamentos pendentes podem ser excluidos');
+  }
+
+  return sequelize.transaction(async (transaction) => {
+    await payment.destroy({ transaction });
+    await atualizarStatusPagamentoPorPagamentos(registration, { transaction });
+    return { success: true };
+  });
+}
+
 async function cancelarInscricao(id) {
   const registration = await buscarInscricaoPorId(id);
 
@@ -1461,10 +1603,34 @@ async function cancelarInscricao(id) {
   const environment = process.env.CIELO_ENVIRONMENT || 'sandbox';
   const isProductionEnvironment = environment === 'production';
 
+  const atualizarPagamentosPorCancelamento = async (statusRegistroCancelamento) => {
+    const pagamentos = await RegistrationPayment.findAll({
+      where: {
+        registrationId: registration.id
+      }
+    });
+
+    for (const payment of pagamentos) {
+      if (['cancelled', 'refunded', 'denied', 'expired'].includes(payment.status)) {
+        continue;
+      }
+
+      const novoStatus = statusRegistroCancelamento === 'refunded' && payment.status === 'confirmed'
+        ? 'refunded'
+        : 'cancelled';
+
+      if (payment.status !== novoStatus) {
+        payment.status = novoStatus;
+        await payment.save();
+      }
+    }
+  };
+
   const aplicarCancelamentoLocal = async (status, mensagem) => {
     const statusAnterior = registration.paymentStatus;
     registration.paymentStatus = status;
     await registration.save();
+    await atualizarPagamentosPorCancelamento(status);
 
     await paymentService.registrarTransacao(
       registration.id,
@@ -1586,6 +1752,7 @@ async function cancelarInscricao(id) {
   const teveReembolso = cancelamentosConcluidos.some((item) => item.type === 'refund');
   registration.paymentStatus = teveReembolso ? 'refunded' : 'cancelled';
   await registration.save();
+  await atualizarPagamentosPorCancelamento(registration.paymentStatus);
 
   await ajustarContadoresDeStatus(registration, statusAnterior);
   await emitirWebhookRegistroAtualizado(registration.id, {
@@ -1646,6 +1813,8 @@ module.exports = {
   buscarInscricaoPorId,
   criarPagamentoOnline,
   criarPagamentoOffline,
+  atualizarPagamentoOffline,
+  removerPagamento,
   cancelarInscricao,
   obterInfoCancelamento,
   ajustarContadoresDeStatus,

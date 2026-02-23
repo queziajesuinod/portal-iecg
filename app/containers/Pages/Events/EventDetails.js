@@ -954,7 +954,7 @@ function EventDetails() {
                 <TableRow>
                   <TableCell>Nome</TableCell>
                   <TableCell>Preço</TableCell>
-                  <TableCell>Vagas</TableCell>
+                  <TableCell>Confirmados / Vagas</TableCell>
                   <TableCell>Período</TableCell>
                   <TableCell align="center">Status</TableCell>
                   <TableCell align="center">Ações</TableCell>
@@ -966,7 +966,7 @@ function EventDetails() {
                     <TableCell>{lote.name}</TableCell>
                     <TableCell>{formatarPreco(lote.price)}</TableCell>
                     <TableCell>
-                      {lote.currentQuantity || 0}
+                      {Number(lote.inscritosConfirmados ?? lote.currentQuantity ?? 0)}
                       {lote.maxQuantity && ` / ${lote.maxQuantity}`}
                     </TableCell>
                     <TableCell>

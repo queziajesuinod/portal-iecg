@@ -47,6 +47,8 @@ router.post('/registrations/:id/recalculate-status', registrationController.reca
 router.post('/registrations/:id/cancel', registrationController.cancelar);
 router.post('/registrations/:id/payments', registrationController.criarPagamento);
 router.post('/registrations/:id/payments/offline', registrationController.criarPagamentoOffline);
+router.put('/registrations/:id/payments/:paymentId/offline', registrationController.atualizarPagamentoOffline);
+router.delete('/registrations/:id/payments/:paymentId', registrationController.removerPagamento);
 
 // ============= ESTATÍSTICAS =============
 router.get('/stats', eventController.estatisticas);

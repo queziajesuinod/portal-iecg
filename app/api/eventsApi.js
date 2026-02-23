@@ -25,7 +25,7 @@ const fetchWithAuth = async (url, options = {}) => {
     headers.Authorization = `Bearer ${token}`;
   }
 
-const response = await fetch(url, {
+  const response = await fetch(url, {
     ...options,
     headers,
   });
@@ -158,6 +158,14 @@ export const criarPagamentoInscricao = (id, dados) => fetchWithAuth(`${API_URL}/
 export const criarPagamentoOfflineInscricao = (id, dados) => fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}/payments/offline`, {
   method: 'POST',
   body: JSON.stringify(dados),
+});
+export const atualizarPagamentoOfflineInscricao = (id, paymentId, dados) => fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}/payments/${paymentId}/offline`, {
+  method: 'PUT',
+  body: JSON.stringify(dados),
+});
+
+export const deletarPagamentoInscricao = (id, paymentId) => fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}/payments/${paymentId}`, {
+  method: 'DELETE'
 });
 
 export const recalcularStatusInscricao = (id) => fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}/recalculate-status`, {

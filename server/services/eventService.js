@@ -381,12 +381,12 @@ async function obterResumoIngressosPorEvento(eventId) {
   const [batches, registrations, attendees, payments] = await Promise.all([
     EventBatch.findAll({
       where: { eventId },
-      attributes: ['id', 'name', 'price', 'maxQuantity', 'currentQuantity', 'order'],
+      attributes: ['id', 'name', 'price', 'maxQuantity', 'order'],
       order: [['order', 'ASC']]
     }),
     Registration.findAll({
       where: { eventId },
-      attributes: ['id', 'batchId']
+      attributes: ['id', 'batchId', 'paymentStatus', 'quantity']
     }),
     RegistrationAttendee.findAll({
       include: [
@@ -427,7 +427,7 @@ async function obterResumoIngressosPorEvento(eventId) {
       batchId,
       batchName: batch.name,
       price: Number(batch.price || 0),
-      sold: Number(batch.currentQuantity || 0),
+      sold: 0,
       total: batch.maxQuantity == null ? null : Number(batch.maxQuantity),
       credit: 0,
       pix: 0,
@@ -449,7 +449,21 @@ async function obterResumoIngressosPorEvento(eventId) {
   registrations.forEach((registration) => {
     const regId = registration.id;
     const counts = attendeeCountsByRegistration[regId];
+    const isConfirmedRegistration = registration.paymentStatus === 'confirmed';
+
+    // "Vendidos" deve refletir inscritos confirmados, em linha com a KPI.
+    const incrementarVendidos = (batchId, quantidade) => {
+      if (!isConfirmedRegistration || !batchId) return;
+      const row = summaryByBatchId.get(batchId);
+      if (!row) return;
+      row.sold += Math.max(0, Number(quantidade || 0));
+    };
+
     if (counts && Object.keys(counts).length) {
+      Object.entries(counts).forEach(([batchId, count]) => {
+        incrementarVendidos(batchId, count);
+      });
+
       const weightedTotal = Object.entries(counts).reduce((sum, [batchId, count]) => {
         const batch = batchesById.get(batchId);
         const batchPrice = Number(batch?.price || 0);
@@ -476,6 +490,7 @@ async function obterResumoIngressosPorEvento(eventId) {
     }
 
     if (registration.batchId && summaryByBatchId.has(registration.batchId)) {
+      incrementarVendidos(registration.batchId, registration.quantity);
       sharesByRegistration[regId] = [{ batchId: registration.batchId, share: 1 }];
     } else {
       sharesByRegistration[regId] = [];

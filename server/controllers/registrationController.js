@@ -199,6 +199,31 @@ async function criarPagamentoOffline(req, res) {
   }
 }
 
+async function atualizarPagamentoOffline(req, res) {
+  try {
+    const userId = req.user?.userId || req.user?.id;
+    const resultado = await registrationService.atualizarPagamentoOffline(
+      req.params.id,
+      req.params.paymentId,
+      userId,
+      req.body || {}
+    );
+    res.status(200).json(resultado);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+}
+
+async function removerPagamento(req, res) {
+  try {
+    const userId = req.user?.userId || req.user?.id;
+    await registrationService.removerPagamento(req.params.id, req.params.paymentId, userId);
+    res.status(204).send();
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+}
+
 async function obterInfoCancelamento(req, res) {
   try {
     const info = await registrationService.obterInfoCancelamento(req.params.id);
@@ -221,5 +246,7 @@ module.exports = {
   obterInfoCancelamento,
   recalcularStatus,
   criarPagamento,
-  criarPagamentoOffline
+  criarPagamentoOffline,
+  atualizarPagamentoOffline,
+  removerPagamento
 };

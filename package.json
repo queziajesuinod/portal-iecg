@@ -35,6 +35,7 @@
     "seed:campus": "node ./server/scripts/seedCampus.js",
     "seed:celulas:campus": "node ./server/scripts/seedCelulaCampus.js",
     "backfill:card-brand": "node ./server/scripts/backfillRegistrationPaymentCardBrand.js",
+    "backfill:cancelled-payments": "node ./server/scripts/backfillCancelledRegistrationPayments.js",
     "migrate:celula-leaders": "node ./server/scripts/migrateCelulaLeaders.js",
     "lint": "npm run lint:js && npm run lint:css",
     "lint:css": "stylelint app/**/*.js",

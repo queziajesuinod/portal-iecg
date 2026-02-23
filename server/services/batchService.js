@@ -8,33 +8,46 @@ async function listarLotesPorEvento(eventId) {
     order: [['order', 'ASC']]
   });
 
-  // Contar inscritos com status pending ou paid para cada lote
+  // Returns two counters:
+  // - inscritosOcupados: used for capacity checks (pending/authorized/partial/confirmed)
+  // - inscritosConfirmados: used for KPI-aligned confirmed display
   const { RegistrationAttendee, Registration } = require('../models');
 
   const lotesComVagas = await Promise.all(lotes.map(async (lote) => {
-    let vagasDisponiveis = null;
+    const inscritosOcupados = await RegistrationAttendee.count({
+      where: { batchId: lote.id },
+      include: [{
+        model: Registration,
+        as: 'registration',
+        where: {
+          paymentStatus: COUNTABLE_PAYMENT_STATUSES
+        },
+        attributes: []
+      }]
+    });
 
-    if (lote.maxQuantity) {
-      const inscritosOcupados = await RegistrationAttendee.count({
-        where: { batchId: lote.id },
-        include: [{
-          model: Registration,
-          as: 'registration',
-          where: {
-            paymentStatus: COUNTABLE_PAYMENT_STATUSES
-          },
-          attributes: []
-        }]
-      });
+    const inscritosConfirmados = await RegistrationAttendee.count({
+      where: { batchId: lote.id },
+      include: [{
+        model: Registration,
+        as: 'registration',
+        where: {
+          paymentStatus: 'confirmed'
+        },
+        attributes: []
+      }]
+    });
 
-      vagasDisponiveis = lote.maxQuantity - inscritosOcupados;
-    }
+    const vagasDisponiveis = lote.maxQuantity
+      ? lote.maxQuantity - inscritosOcupados
+      : null;
 
     return {
       ...lote.toJSON(),
       price: Number(lote.price),
       vagasDisponiveis,
-      inscritosOcupados: vagasDisponiveis !== null ? lote.maxQuantity - vagasDisponiveis : 0
+      inscritosOcupados,
+      inscritosConfirmados
     };
   }));
 
