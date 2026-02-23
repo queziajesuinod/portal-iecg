@@ -31,9 +31,9 @@ import AutorenewIcon from '@mui/icons-material/Autorenew';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import { PapperBlock, Notification } from 'dan-components';
+import { useHistory } from 'react-router-dom';
 import { sendWebhookEvent } from '../../../utils/webhookClient';
 import { fetchGeocode } from '../../../utils/googleGeocode';
-import { useHistory } from 'react-router-dom';
 
 const resolveApiUrl = () => {
   if (process.env.REACT_APP_API_URL) {
@@ -156,6 +156,85 @@ const ApelosDirecionadosPage = () => {
     fetchCelulas();
   }, [monthFilter, statusFilter, nomeFilter, decisaoFilter, yearFilter, page]);
 
+  const normalizeRede = (value) => (value || '').toString().trim().toLowerCase();
+  const normalizeSearchValue = (value) => {
+    const base = (value || '').toString().normalize('NFD');
+    return base.replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  };
+
+  const haversine = (lat1, lon1, lat2, lon2) => {
+    const toRad = (v) => (v * Math.PI) / 180;
+    const R = 6371; // km
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+      + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2))
+      * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  const buscarCoordenadasApelo = async (apelo) => {
+    const lat = Number(apelo?.lat_apelo);
+    const lon = Number(apelo?.lon_apelo);
+    if (Number.isFinite(lat) && Number.isFinite(lon)) {
+      return { lat, lon };
+    }
+
+    const cep = String(apelo?.cep_apelo || '').replace(/\D/g, '');
+    const bairro = apelo?.bairro_apelo || '';
+    const cidade = apelo?.cidade_apelo || 'Campo Grande';
+    const estado = apelo?.estado_apelo || 'Mato Grosso do Sul';
+
+    const tries = [];
+    if (cep.length === 8) {
+      tries.push(cep);
+      tries.push(`${cep} ${cidade} ${estado} Brasil`);
+    }
+    const queryParts = [bairro, cidade, estado, 'Brasil'].filter(Boolean);
+    if (queryParts.length) {
+      tries.push(queryParts.join(' '));
+    }
+
+    const found = await tries.reduce(async (accPromise, query) => {
+      const acc = await accPromise;
+      if (acc) return acc;
+      try {
+        const geocodeResult = await fetchGeocode(query);
+        if (!geocodeResult) return null;
+        return { lat: geocodeResult.lat, lon: geocodeResult.lon };
+      } catch (err) {
+        console.error('Erro ao buscar coordenadas do apelo:', err);
+        return null;
+      }
+    }, Promise.resolve(null));
+
+    return found;
+  };
+
+  const sugerirCelulasProximas = async (apelo) => {
+    setLoadingSugestoes(true);
+    setSugestoes([]);
+    setApeloCoords(null);
+    const coords = await buscarCoordenadasApelo(apelo);
+    setApeloCoords(coords);
+    if (!coords) {
+      setLoadingSugestoes(false);
+      return;
+    }
+    const celulasFiltradas = celulas.filter((c) => {
+      const mesmaRede = normalizeRede(c.rede) === normalizeRede(apelo.rede);
+      return mesmaRede && c.lat && c.lon;
+    });
+    const calculadas = celulasFiltradas.map((c) => ({
+      ...c,
+      distancia: haversine(parseFloat(coords.lat), parseFloat(coords.lon), parseFloat(c.lat), parseFloat(c.lon))
+    }));
+    calculadas.sort((a, b) => a.distancia - b.distancia);
+    setSugestoes(calculadas.slice(0, 5));
+    setLoadingSugestoes(false);
+  };
+
   const abrirMover = (apelo) => {
     setApeloSelecionado(apelo);
     setCelulaDestinoId('');
@@ -222,12 +301,6 @@ const ApelosDirecionadosPage = () => {
     }
   };
 
-  const normalizeRede = (value) => (value || '').toString().trim().toLowerCase();
-  const normalizeSearchValue = (value) => {
-    const base = (value || '').toString().normalize('NFD');
-    return base.replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  };
-
   const celulaAtualTexto = (apelo) => apelo?.celulaAtual?.celula || 'Sem célula';
   const apeloSemDirecionamento = (apelo) => apelo?.status === 'NAO_HAVERAR_DIRECIONAMENTO';
 
@@ -271,8 +344,11 @@ const ApelosDirecionadosPage = () => {
     ENVIO_LIDER_PENDENTE: { label: 'Líder ainda não fez contato', color: 'secondary' },
     CONTATO_LIDER_SEM_RETORNO: { label: 'Líder enviou mensagem, sem retorno', color: 'secondary' },
     CONSOLIDACAO_INTERROMPIDA: { label: 'Não Consolidado', color: 'error' },
-    MOVIMENTACAO_CELULA: { label: 'Em movimentação de célula',color: 'default',
-      sx: { bgcolor: '#053f81ff', color: '#ffffffff' } },
+    MOVIMENTACAO_CELULA: {
+      label: 'Em movimentação de célula',
+      color: 'default',
+      sx: { bgcolor: '#053f81ff', color: '#ffffffff' }
+    },
     EM_CONSOLIDACAO: {
       label: 'Em Consolidação',
       color: 'default',
@@ -386,57 +462,6 @@ const ApelosDirecionadosPage = () => {
     }
   };
 
-  const haversine = (lat1, lon1, lat2, lon2) => {
-    const toRad = (v) => (v * Math.PI) / 180;
-    const R = 6371; // km
-    const dLat = toRad(lat2 - lat1);
-    const dLon = toRad(lon2 - lon1);
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
-      + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2))
-      * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  };
-
-  const buscarCoordenadasApelo = async (apelo) => {
-  const bairro = apelo?.bairro_apelo || '';
-  const cidade = apelo?.cidade_apelo || 'Campo Grande';
-  const estado = apelo?.estado_apelo || 'Mato Grosso do Sul';
-  const queryParts = [bairro, cidade, estado, 'Brasil'].filter(Boolean);
-  if (!queryParts.length) return null;
-  try {
-    const geocodeResult = await fetchGeocode(queryParts.join(' '));
-    if (!geocodeResult) return null;
-    return { lat: geocodeResult.lat, lon: geocodeResult.lon };
-  } catch (err) {
-    console.error('Erro ao buscar coordenadas do apelo:', err);
-    return null;
-  }
-};
-
-const sugerirCelulasProximas = async (apelo) => {
-    setLoadingSugestoes(true);
-    setSugestoes([]);
-    setApeloCoords(null);
-    const coords = await buscarCoordenadasApelo(apelo);
-    setApeloCoords(coords);
-    if (!coords) {
-      setLoadingSugestoes(false);
-      return;
-    }
-    const celulasFiltradas = celulas.filter((c) => {
-      const mesmaRede = normalizeRede(c.rede) === normalizeRede(apelo.rede);
-      return mesmaRede && c.lat && c.lon;
-    });
-    const calculadas = celulasFiltradas.map((c) => ({
-      ...c,
-      distancia: haversine(parseFloat(coords.lat), parseFloat(coords.lon), parseFloat(c.lat), parseFloat(c.lon))
-    }));
-    calculadas.sort((a, b) => a.distancia - b.distancia);
-    setSugestoes(calculadas.slice(0, 5));
-    setLoadingSugestoes(false);
-  };
-
   const celulasDisponiveis = apeloSelecionado ? celulasMesmaRede(apeloSelecionado) : [];
   const celulasRedeSemFiltro = useMemo(
     () => (apeloSelecionado ? celulasMesmaRede(apeloSelecionado, '') : []),
@@ -476,81 +501,81 @@ const sugerirCelulasProximas = async (apelo) => {
         <title>Apelos Direcionados</title>
       </Helmet>
       <PapperBlock title="Apelos Direcionados" desc="Gerencie apelos direcionados e movimentações">
-      <Box display="flex" justifyContent="space-between" gap={2} flexWrap="wrap" alignItems="center" mb={2}>
-        <Box display="flex" gap={2} flexWrap="wrap" alignItems="center">
-          <TextField
-            label="Nome do apelo"
-            size="small"
-            value={nomeFilter}
-            onChange={(e) => {
-              setNomeFilter(e.target.value);
-              setPage(1);
-            }}
-            sx={{ minWidth: 220 }}
-          />
-          <TextField
-            label="Mês do direcionamento"
-            type="month"
-            size="small"
-            value={monthFilter}
-            onChange={(e) => setMonthFilter(e.target.value)}
-          />
-          <TextField
-            select
-            label="Ano"
-            size="small"
-            value={yearFilter}
-            sx={{ width: 140 }}
-            onChange={(e) => {
-              setYearFilter(e.target.value);
-              setPage(1);
-            }}
-          >
-            {YEAR_OPTIONS.map((year) => (
-              <MenuItem key={year} value={year}>
-                {year === '' ? 'Todos' : year}
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            select
-            label="Decisão"
-            size="small"
-            value={decisaoFilter}
-            onChange={(e) => {
-              setDecisaoFilter(e.target.value);
-              setPage(1);
-            }}
-            sx={{ minWidth: 220 }}
-          >
-            <MenuItem value="">Todas</MenuItem>
-            {DECISAO_OPTIONS.map((opt) => (
-              <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            select
-            label="Status"
-            size="small"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            sx={{ minWidth: 220 }}
-          >
-            <MenuItem value="">Todos</MenuItem>
-            {Object.keys(statusConfig).map((key) => (
-              <MenuItem key={key} value={key}>{statusConfig[key].label}</MenuItem>
-            ))}
-          </TextField>
-        </Box>
-        <Box display="flex" gap={1}>
-          <Button variant="contained" color="secondary" onClick={() => history.push('/app/start/fila-apelos')}>
+        <Box display="flex" justifyContent="space-between" gap={2} flexWrap="wrap" alignItems="center" mb={2}>
+          <Box display="flex" gap={2} flexWrap="wrap" alignItems="center">
+            <TextField
+              label="Nome do apelo"
+              size="small"
+              value={nomeFilter}
+              onChange={(e) => {
+                setNomeFilter(e.target.value);
+                setPage(1);
+              }}
+              sx={{ minWidth: 220 }}
+            />
+            <TextField
+              label="Mês do direcionamento"
+              type="month"
+              size="small"
+              value={monthFilter}
+              onChange={(e) => setMonthFilter(e.target.value)}
+            />
+            <TextField
+              select
+              label="Ano"
+              size="small"
+              value={yearFilter}
+              sx={{ width: 140 }}
+              onChange={(e) => {
+                setYearFilter(e.target.value);
+                setPage(1);
+              }}
+            >
+              {YEAR_OPTIONS.map((year) => (
+                <MenuItem key={year} value={year}>
+                  {year === '' ? 'Todos' : year}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select
+              label="Decisão"
+              size="small"
+              value={decisaoFilter}
+              onChange={(e) => {
+                setDecisaoFilter(e.target.value);
+                setPage(1);
+              }}
+              sx={{ minWidth: 220 }}
+            >
+              <MenuItem value="">Todas</MenuItem>
+              {DECISAO_OPTIONS.map((opt) => (
+                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select
+              label="Status"
+              size="small"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              sx={{ minWidth: 220 }}
+            >
+              <MenuItem value="">Todos</MenuItem>
+              {Object.keys(statusConfig).map((key) => (
+                <MenuItem key={key} value={key}>{statusConfig[key].label}</MenuItem>
+              ))}
+            </TextField>
+          </Box>
+          <Box display="flex" gap={1}>
+            <Button variant="contained" color="secondary" onClick={() => history.push('/app/start/fila-apelos')}>
             Fila de apelos
-          </Button>
-          <Button variant="outlined" onClick={fetchApelos} disabled={loading}>
+            </Button>
+            <Button variant="outlined" onClick={fetchApelos} disabled={loading}>
             Atualizar
-          </Button>
+            </Button>
+          </Box>
         </Box>
-      </Box>
         <TableContainer component={Paper}>
           <Table size="small">
             <TableHead>
@@ -665,7 +690,7 @@ const sugerirCelulasProximas = async (apelo) => {
             Bairro: {apeloSelecionado?.bairro_apelo || '-'}
           </Typography>
           <Typography variant="caption" color="textSecondary" display="block" gutterBottom>
-            Rede: {apeloSelecionado?.rede || '-'} | Cidade: Campo Grande | Estado: Mato Grosso do Sul
+            Rede: {apeloSelecionado?.rede || '-'} | CEP: {apeloSelecionado?.cep_apelo || '-'} | Cidade: {apeloSelecionado?.cidade_apelo || '-'} | Estado: {apeloSelecionado?.estado_apelo || '-'}
           </Typography>
           <TextField
             label="Buscar célula"
@@ -746,14 +771,14 @@ const sugerirCelulasProximas = async (apelo) => {
                     <Grid item xs={12} sm={6} key={`rede-${c.id}`}>
                       <Card variant="outlined" sx={{ cursor: 'pointer' }} onClick={() => setCelulaDestinoId(c.id)}>
                         <CardContent>
-                      <Typography variant="subtitle2">{c.celula}</Typography>
-                      <Typography variant="caption" display="block">Rede: {c.rede}</Typography>
-                      <Typography variant="caption" display="block">Bairro: {c.bairro || '-'}</Typography>
-                      <Typography variant="caption" display="block">Dia: {c.dia || '-'}</Typography>
-                      <Typography variant="caption" display="block">Horário: {c.horario || '-'}</Typography>
-                      <Typography variant="caption" display="block">
+                          <Typography variant="subtitle2">{c.celula}</Typography>
+                          <Typography variant="caption" display="block">Rede: {c.rede}</Typography>
+                          <Typography variant="caption" display="block">Bairro: {c.bairro || '-'}</Typography>
+                          <Typography variant="caption" display="block">Dia: {c.dia || '-'}</Typography>
+                          <Typography variant="caption" display="block">Horário: {c.horario || '-'}</Typography>
+                          <Typography variant="caption" display="block">
                         Distância: {c.distancia ? `${c.distancia.toFixed(1)} km` : '-'}
-                      </Typography>
+                          </Typography>
                         </CardContent>
                       </Card>
                     </Grid>
@@ -813,12 +838,24 @@ const sugerirCelulasProximas = async (apelo) => {
                   <Typography variant="body2">{formatDate(detailApelo.data_direcionamento)}</Typography>
                 </Grid>
                 <Grid item xs={12} sm={6}>
+                  <Typography variant="caption" color="textSecondary">CEP</Typography>
+                  <Typography variant="body2">{detailApelo.cep_apelo || '-'}</Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
                   <Typography variant="caption" color="textSecondary">Cidade</Typography>
                   <Typography variant="body2">{detailApelo.cidade_apelo || '-'}</Typography>
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <Typography variant="caption" color="textSecondary">Estado</Typography>
                   <Typography variant="body2">{detailApelo.estado_apelo || '-'}</Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="caption" color="textSecondary">Latitude</Typography>
+                  <Typography variant="body2">{detailApelo.lat_apelo ?? '-'}</Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="caption" color="textSecondary">Longitude</Typography>
+                  <Typography variant="body2">{detailApelo.lon_apelo ?? '-'}</Typography>
                 </Grid>
                 <Grid item xs={12}>
                   <Typography variant="caption" color="textSecondary">Observação</Typography>

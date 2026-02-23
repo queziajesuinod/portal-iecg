@@ -30,6 +30,16 @@ const CONFIG = {
   // Configurações de geocoding
   timeoutGeocoding: 5000,
   statusTransitionDelayMs: 20 * 1000,
+  
+  // Validação da origem do apelo
+  validacaoOrigem: {
+    maxDivergenciaKm: 2 // Se coordenada salva divergir muito do CEP, usa CEP
+  },
+
+  // Seleção final entre candidatas
+  selecao: {
+    margemDistanciaKm: 1.5 // Dentro dessa margem, usa score/capacidade como desempate
+  }
 };
 
 const GOOGLE_GEOCODE_KEY = process.env.GOOGLE_GEOCODE_KEY;
@@ -100,6 +110,47 @@ const normalizeAddress = (address) => {
     .trim()
     .replace(/\s+/g, ' ')
     .replace(/[^a-z0-9\s,]/g, '');
+};
+
+const normalizeCep = (value) => {
+  const digits = String(value || '').replace(/\D/g, '');
+  return digits.length === 8 ? digits : null;
+};
+
+const parseCoordinateValue = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return Number.NaN;
+  }
+
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().replace(',', '.');
+    return Number(normalized);
+  }
+
+  return Number(value);
+};
+
+const parseCoordinates = (lat, lon) => {
+  const parsedLat = parseCoordinateValue(lat);
+  const parsedLon = parseCoordinateValue(lon);
+
+  if (!Number.isFinite(parsedLat) || !Number.isFinite(parsedLon)) {
+    return null;
+  }
+
+  if (parsedLat < -90 || parsedLat > 90) {
+    return null;
+  }
+
+  if (parsedLon < -180 || parsedLon > 180) {
+    return null;
+  }
+
+  return { lat: parsedLat, lon: parsedLon };
 };
 
 const normalizeDiaSemana = (dia) => {
@@ -352,12 +403,21 @@ class ApeloFilaService {
     return ApeloDirecionadoCelula.findOne({
       where: {
         celula_id: null,
-        bairro_apelo: { [Op.and]: [{ [Op.not]: null }, { [Op.ne]: '' }] },
-        [Op.or]: [
-          { status: null },
-          { status: { 
-            [Op.notIn]: ['DIRECIONADO_COM_SUCESSO', 'NAO_HAVERAR_DIRECIONAMENTO', 'CONSOLIDADO_CELULA'] 
-          }}
+        [Op.and]: [
+          {
+            [Op.or]: [
+              { cep_apelo: { [Op.and]: [{ [Op.not]: null }, { [Op.ne]: '' }] } },
+              { bairro_apelo: { [Op.and]: [{ [Op.not]: null }, { [Op.ne]: '' }] } }
+            ]
+          },
+          {
+            [Op.or]: [
+              { status: null },
+              { status: { 
+                [Op.notIn]: ['DIRECIONADO_COM_SUCESSO', 'NAO_HAVERAR_DIRECIONAMENTO', 'CONSOLIDADO_CELULA'] 
+              }}
+            ]
+          }
         ]
       },
       order: [['createdAt', 'ASC']]
@@ -386,9 +446,15 @@ class ApeloFilaService {
     where.rede = { [Op.iLike]: `%${rede}%` };
     
     const celulas = await Celula.findAll({ where });
-    console.log(`📍 Encontradas ${celulas.length} células da rede "${rede}"`);
+    const celulasComCoordValida = celulas.filter((celula) => parseCoordinates(celula.lat, celula.lon));
+
+    if (celulasComCoordValida.length < celulas.length) {
+      console.warn(`⚠️  ${celulas.length - celulasComCoordValida.length} células ignoradas por coordenadas inválidas`);
+    }
+
+    console.log(`📍 Encontradas ${celulasComCoordValida.length} células da rede "${rede}" com coordenadas válidas`);
     
-    return celulas;
+    return celulasComCoordValida;
   }
 
   /**
@@ -426,22 +492,153 @@ class ApeloFilaService {
   /**
    * Filtra células dentro de um raio específico
    */
-  filtrarPorRaio(celulasDisponiveis, origemCoord, raioKm) {
-    return celulasDisponiveis.filter(({ celula }) => {
-      const dist = haversine(origemCoord.lat, origemCoord.lon, celula.lat, celula.lon);
-      return dist <= raioKm;
-    });
+  filtrarPorRaio(celulasDisponiveis, raioKm) {
+    return celulasDisponiveis.filter(({ distKm }) => distKm <= raioKm);
+  }
+
+  normalizarQueryEndereco(...partes) {
+    return partes
+      .filter(Boolean)
+      .map((parte) => String(parte).trim())
+      .filter(Boolean)
+      .join(', ')
+      .replace(/\s+,/g, ',')
+      .replace(/,\s*,/g, ', ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
+
+  async geocodificarPorCep(apelo) {
+    const cep = normalizeCep(apelo?.cep_apelo);
+    if (!cep) {
+      return null;
+    }
+
+    const consultas = [
+      this.normalizarQueryEndereco(cep, apelo?.cidade_apelo, apelo?.estado_apelo, 'Brasil'),
+      this.normalizarQueryEndereco(cep, 'Brasil')
+    ].filter(Boolean);
+
+    for (const query of consultas) {
+      const result = await geocode(query);
+      if (result) {
+        return { ...result, query, cep };
+      }
+    }
+
+    return null;
+  }
+
+  async resolverOrigemApelo(apelo) {
+    const origemPersistida = parseCoordinates(apelo.lat_apelo, apelo.lon_apelo);
+    const origemPorCep = await this.geocodificarPorCep(apelo);
+
+    if (origemPersistida && origemPorCep) {
+      const divergencia = haversine(
+        origemPersistida.lat,
+        origemPersistida.lon,
+        origemPorCep.lat,
+        origemPorCep.lon
+      );
+
+      if (divergencia <= CONFIG.validacaoOrigem.maxDivergenciaKm) {
+        return {
+          coord: origemPersistida,
+          fonte: 'coordenadas_persistidas_validas',
+          divergenciaKm: divergencia,
+          precisaPersistir: false
+        };
+      }
+
+      console.warn(`⚠️  Coordenadas do apelo divergentes do CEP (${divergencia.toFixed(2)}km). Usando CEP.`);
+      return {
+        coord: origemPorCep,
+        fonte: `cep_geocodificado:${origemPorCep.query}`,
+        divergenciaKm: divergencia,
+        precisaPersistir: true
+      };
+    }
+
+    if (origemPorCep) {
+      return {
+        coord: origemPorCep,
+        fonte: `cep_geocodificado:${origemPorCep.query}`,
+        divergenciaKm: null,
+        precisaPersistir: !origemPersistida
+      };
+    }
+
+    if (origemPersistida) {
+      return {
+        coord: origemPersistida,
+        fonte: 'coordenadas_persistidas',
+        divergenciaKm: null,
+        precisaPersistir: false
+      };
+    }
+
+    const tries = this.construirTentativasGeocoding(apelo);
+    if (!tries.length) {
+      return null;
+    }
+
+    for (const t of tries) {
+      const origem = await geocode(t);
+      if (origem) {
+        return {
+          coord: origem,
+          fonte: `fallback_geocoding:${t}`,
+          divergenciaKm: null,
+          precisaPersistir: true
+        };
+      }
+    }
+
+    return null;
+  }
+
+  mapearDistancias(celulasDisponiveis, origemCoord) {
+    return celulasDisponiveis
+      .map((celulaInfo) => {
+        const celulaCoord = parseCoordinates(celulaInfo.celula.lat, celulaInfo.celula.lon);
+
+        if (!celulaCoord) {
+          return null;
+        }
+
+        const distKm = haversine(
+          origemCoord.lat,
+          origemCoord.lon,
+          celulaCoord.lat,
+          celulaCoord.lon
+        );
+
+        return {
+          ...celulaInfo,
+          distKm
+        };
+      })
+      .filter(Boolean);
   }
 
   construirTentativasGeocoding(apelo) {
     const tries = [];
+
+    // 1. CEP do apelo (prioridade máxima)
+    const cep = normalizeCep(apelo.cep_apelo);
+    if (cep) {
+      tries.push(`${cep}, Brasil`);
+      if (apelo.cidade_apelo || apelo.estado_apelo) {
+        tries.push(`${cep}, ${apelo.cidade_apelo || ''}, ${apelo.estado_apelo || ''}, Brasil`.trim());
+      }
+    }
     
-    // 1. Bairro do apelo (prioridade máxima)
+    // 2. Bairro do apelo
     if (apelo.bairro_apelo) {
       tries.push(`${apelo.bairro_apelo}, ${apelo.cidade_apelo || ''}, ${apelo.estado_apelo || ''}`.trim());
     }
 
-    // 2. Bairros próximos
+    // 3. Bairros próximos
     if (Array.isArray(apelo.bairro_proximo)) {
       apelo.bairro_proximo.forEach((b) => {
         if (b) {
@@ -450,7 +647,7 @@ class ApeloFilaService {
       });
     }
 
-    // 3. Cidade como fallback
+    // 4. Cidade como fallback
     if (!tries.length && apelo.cidade_apelo) {
       tries.push(`${apelo.cidade_apelo}, ${apelo.estado_apelo || ''}`.trim());
     }
@@ -485,32 +682,40 @@ class ApeloFilaService {
       return null;
     }
 
-    // 4. Geocodificar origem do apelo
-    const tries = this.construirTentativasGeocoding(apelo);
-    
-    if (!tries.length) {
-      console.warn('❌ Não foi possível construir endereço para geocoding');
+    // 4. Resolver origem do apelo com validação de CEP/coordenadas
+    const origemInfo = await this.resolverOrigemApelo(apelo);
+    if (!origemInfo || !origemInfo.coord) {
+      console.warn('❌ Não foi possível obter coordenadas válidas para o apelo');
       return null;
     }
+    const origemCoord = origemInfo.coord;
+    console.log(`✓ Origem do apelo definida por: ${origemInfo.fonte}`);
+    if (Number.isFinite(origemInfo.divergenciaKm)) {
+      console.log(`  Divergência coordenada x CEP: ${origemInfo.divergenciaKm.toFixed(2)}km`);
+    }
 
-    let origemCoord = null;
-    for (const t of tries) {
-      origemCoord = await geocode(t);
-      if (origemCoord) {
-        console.log(`✓ Geocoding bem-sucedido: ${t}`);
-        break;
+    if (origemInfo.precisaPersistir && apelo?.id) {
+      try {
+        await ApeloDirecionadoCelulaService.atualizar(apelo.id, {
+          lat_apelo: origemCoord.lat,
+          lon_apelo: origemCoord.lon
+        });
+      } catch (err) {
+        console.warn('⚠️  Não foi possível persistir coordenadas atualizadas do apelo:', err.message);
       }
     }
 
-    if (!origemCoord) {
-      console.warn('❌ Geocoding falhou para todas as tentativas');
+    const celulasComDistancia = this.mapearDistancias(celulasDisponiveis, origemCoord);
+
+    if (!celulasComDistancia.length) {
+      console.warn('❌ Nenhuma célula com coordenadas válidas para calcular distância');
       return null;
     }
 
     // 5. ESTRATÉGIA DE RAIOS EXPANDIDOS
     if (!CONFIG.raios.enabled) {
       // Sem raios, avaliar todas as células
-      return this.avaliarCelulas(celulasDisponiveis, origemCoord, apelo, Infinity);
+      return this.avaliarCelulas(celulasComDistancia, apelo, Infinity);
     }
 
     let raioAtual = CONFIG.raios.inicial;
@@ -522,13 +727,13 @@ class ApeloFilaService {
       console.log(`\n🔍 Tentativa ${tentativa}: Buscando células em raio de ${raioAtual}km...`);
       
       // Filtrar células dentro do raio atual
-      const celulasNoRaio = this.filtrarPorRaio(celulasDisponiveis, origemCoord, raioAtual);
+      const celulasNoRaio = this.filtrarPorRaio(celulasComDistancia, raioAtual);
       
       console.log(`   📍 ${celulasNoRaio.length} células encontradas neste raio`);
       
       if (celulasNoRaio.length > 0) {
         // Encontrou células - avaliar e retornar a melhor
-        const resultado = await this.avaliarCelulas(celulasNoRaio, origemCoord, apelo, raioAtual);
+        const resultado = await this.avaliarCelulas(celulasNoRaio, apelo, raioAtual);
         
         if (resultado) {
           console.log(`✅ Célula encontrada no raio de ${raioAtual}km!`);
@@ -547,12 +752,12 @@ class ApeloFilaService {
   /**
    * Avalia células e retorna a melhor com base no score
    */
-  async avaliarCelulas(celulasNoRaio, origemCoord, apelo, raioAtual) {
+  async avaliarCelulas(celulasNoRaio, apelo, raioAtual) {
     const celulasComScore = [];
     
     for (const celulaInfo of celulasNoRaio) {
       const { celula } = celulaInfo;
-      const dist = haversine(origemCoord.lat, origemCoord.lon, celula.lat, celula.lon);
+      const dist = celulaInfo.distKm;
 
       // Calcular score
       const { scoreTotal, detalhes } = ScoringEngine.calcularScore(
@@ -574,8 +779,22 @@ class ApeloFilaService {
       return null;
     }
 
-    // Ordenar por score (maior primeiro)
-    celulasComScore.sort((a, b) => b.score - a.score);
+    // Prioridade principal: menor distância real (coordenadas)
+    // Quando as distâncias são próximas, manter outras condições no critério
+    // (bairro, dia da semana, capacidade), via score.
+    celulasComScore.sort((a, b) => {
+      const distDiff = a.distKm - b.distKm;
+      if (Math.abs(distDiff) > CONFIG.selecao.margemDistanciaKm) {
+        return distDiff;
+      }
+
+      const scoreDiff = b.score - a.score;
+      if (Math.abs(scoreDiff) > 0.001) {
+        return scoreDiff;
+      }
+
+      return a.totalRecentes - b.totalRecentes;
+    });
 
     const melhor = celulasComScore[0];
     
@@ -624,6 +843,8 @@ class ApeloFilaService {
     console.log(`🔄 PROCESSANDO APELO #${apelo.id}`);
     console.log(`   Nome: ${apelo.nome || 'N/A'}`);
     console.log(`   Rede: ${apelo.rede || 'N/A'}`);
+    console.log(`   CEP: ${apelo.cep_apelo || 'N/A'}`);
+    console.log(`   Coord. apelo: ${apelo.lat_apelo || 'N/A'}, ${apelo.lon_apelo || 'N/A'}`);
     console.log(`   Bairro: ${apelo.bairro_apelo || 'N/A'}, ${apelo.cidade_apelo || 'N/A'}/${apelo.estado_apelo || 'N/A'}`);
     console.log(`   Dias preferência: ${Array.isArray(apelo.dias_semana) ? apelo.dias_semana.join(', ') : 'N/A'}`);
     console.log('='.repeat(80));

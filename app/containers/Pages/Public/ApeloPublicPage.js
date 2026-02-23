@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Box, Button, Container, Grid, MenuItem, Paper, TextField, Typography, Chip, FormControlLabel, Checkbox } from '@mui/material';
-import Outer from '../../Templates/Outer';
+import {
+  Box, Button, Container, Grid, MenuItem, Paper, TextField, Typography, Chip, FormControlLabel, Checkbox
+} from '@mui/material';
 import { sendWebhookEvent } from '../../../utils/webhookClient';
 
 const REDE_OPTIONS = [
@@ -31,6 +32,7 @@ const initialForm = {
   decisao: '',
   whatsapp: '',
   rede: '',
+  cep_apelo: '',
   bairro_apelo: '',
   cidade_apelo: 'Campo Grande',
   estado_apelo: 'Mato Grosso do Sul',
@@ -50,7 +52,9 @@ const ApeloPublicPage = () => {
   const API_URL = resolveApiUrl();
 
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
+    const {
+      name, value, type, checked
+    } = e.target;
     const val = type === 'checkbox' ? checked : value;
     setForm((prev) => ({ ...prev, [name]: val }));
   };
@@ -71,6 +75,17 @@ const ApeloPublicPage = () => {
     setForm((prev) => ({ ...prev, whatsapp: masked }));
   };
 
+  const formatCep = (value = '') => {
+    const digits = value.replace(/\D/g, '').slice(0, 8);
+    if (digits.length <= 5) return digits;
+    return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+  };
+
+  const handleCepChange = (e) => {
+    const masked = formatCep(e.target.value);
+    setForm((prev) => ({ ...prev, cep_apelo: masked }));
+  };
+
   const addBairroProximo = () => {
     const val = bairroTemp.trim();
     if (!val) return;
@@ -86,17 +101,23 @@ const ApeloPublicPage = () => {
     e.preventDefault();
     setNotification('');
     setSubmitting(true);
+    const cepDigits = (form.cep_apelo || '').replace(/\D/g, '');
+    if (form.decisao === 'encaminhamento_celula' && form.direcionar_celula && cepDigits.length !== 8) {
+      setNotification('Informe um CEP valido para encaminhamento de celula.');
+      setSubmitting(false);
+      return;
+    }
     const payload = {
       nome: form.nome,
       decisao: form.decisao,
       whatsapp: form.whatsapp.replace(/\D/g, ''),
       rede: form.rede,
+      cep_apelo: cepDigits || null,
       bairro_apelo: form.bairro_apelo,
       cidade_apelo: form.cidade_apelo,
       estado_apelo: form.estado_apelo,
       idade: form.idade ? Number(form.idade) : null,
       bairro_proximo: form.bairro_proximo,
-      decisao: form.decisao,
       direcionar_celula: !!form.direcionar_celula,
       campus_iecg: form.campus_iecg,
       status: form.status
@@ -186,56 +207,71 @@ const ApeloPublicPage = () => {
             <Grid item xs={12} md={6}>
               <TextField fullWidth label="Campus IECG (opcional)" name="campus_iecg" value={form.campus_iecg} onChange={handleChange} />
             </Grid>
-              <Grid item xs={12}>
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={!!form.direcionar_celula}
-                      onChange={(e) => handleChange({ target: { name: 'direcionar_celula', value: e.target.checked, type: 'checkbox', checked: e.target.checked } })}
-                    />
-                  }
-                  label="Desejo ser direcionado(a) para uma célula"
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  label="Bairro"
-                  name="bairro_apelo"
-                  value={form.bairro_apelo}
-                  onChange={handleChange}
-                  disabled={!form.direcionar_celula}
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  label="Cidade"
-                  name="cidade_apelo"
-                  value={form.cidade_apelo}
-                  onChange={handleChange}
-                  disabled={!form.direcionar_celula}
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  label="Estado"
-                  name="estado_apelo"
-                  value={form.estado_apelo}
-                  onChange={handleChange}
-                  disabled={!form.direcionar_celula}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <Box display="flex" gap={1} alignItems="center">
-                  <TextField
-                    fullWidth
-                    label="Adicionar bairro próximo"
-                    value={bairroTemp}
-                    onChange={(e) => setBairroTemp(e.target.value)}
-                    disabled={!form.direcionar_celula}
+            <Grid item xs={12}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={!!form.direcionar_celula}
+                    onChange={(e) => handleChange({
+                      target: {
+                        name: 'direcionar_celula', value: e.target.checked, type: 'checkbox', checked: e.target.checked
+                      }
+                    })}
                   />
+                }
+                label="Desejo ser direcionado(a) para uma célula"
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="CEP"
+                name="cep_apelo"
+                value={form.cep_apelo}
+                onChange={handleCepChange}
+                disabled={!form.direcionar_celula}
+                required={form.decisao === 'encaminhamento_celula' && !!form.direcionar_celula}
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Bairro"
+                name="bairro_apelo"
+                value={form.bairro_apelo}
+                onChange={handleChange}
+                disabled={!form.direcionar_celula}
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Cidade"
+                name="cidade_apelo"
+                value={form.cidade_apelo}
+                onChange={handleChange}
+                disabled={!form.direcionar_celula}
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Estado"
+                name="estado_apelo"
+                value={form.estado_apelo}
+                onChange={handleChange}
+                disabled={!form.direcionar_celula}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <Box display="flex" gap={1} alignItems="center">
+                <TextField
+                  fullWidth
+                  label="Adicionar bairro próximo"
+                  value={bairroTemp}
+                  onChange={(e) => setBairroTemp(e.target.value)}
+                  disabled={!form.direcionar_celula}
+                />
                 <Button variant="outlined" onClick={addBairroProximo} disabled={!form.direcionar_celula}>Adicionar</Button>
               </Box>
               <Box mt={1} display="flex" gap={1} flexWrap="wrap">

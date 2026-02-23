@@ -40,6 +40,18 @@ module.exports = (sequelize) => {
       type: DataTypes.STRING,
       allowNull: true
     },
+    cep_apelo: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    lat_apelo: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
+    lon_apelo: {
+      type: DataTypes.FLOAT,
+      allowNull: true
+    },
     cidade_apelo: {
       type: DataTypes.STRING,
       allowNull: true
