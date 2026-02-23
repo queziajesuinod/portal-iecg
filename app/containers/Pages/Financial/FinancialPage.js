@@ -39,6 +39,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import brand from 'dan-api/dummy/brand';
 import { listarEventos } from '../../../api/eventsApi';
+import { getPaymentStatusChipSx, getPaymentStatusLabel } from '../../../constants/paymentStatus';
 import {
   atualizarSaidaFinanceira,
   atualizarConfiguracaoTaxasFinanceiras,
@@ -54,7 +55,10 @@ const PAYMENT_METHOD_OPTIONS = [
   { value: 'debit_card', label: 'Cartao de Debito' },
   { value: 'boleto', label: 'Boleto' },
   { value: 'cash', label: 'Dinheiro' },
+  { value: 'pos', label: 'Maquininha' },
   { value: 'transfer', label: 'Transferencia' },
+  { value: 'manual', label: 'Manual' },
+  { value: 'offline', label: 'Presencial' },
   { value: 'other', label: 'Outro' }
 ];
 
@@ -660,6 +664,7 @@ function FinancialPage() {
                   <TableCell>Codigo</TableCell>
                   <TableCell>Evento</TableCell>
                   <TableCell>Forma</TableCell>
+                  <TableCell>Status</TableCell>
                   <TableCell>Bandeira</TableCell>
                   <TableCell>Parcelas</TableCell>
                   <TableCell>Bruto</TableCell>
@@ -674,6 +679,13 @@ function FinancialPage() {
                     <TableCell>{entry.orderCode}</TableCell>
                     <TableCell>{entry.eventTitle}</TableCell>
                     <TableCell>{getPaymentMethodLabel(entry.paymentMethod)}</TableCell>
+                    <TableCell>
+                      <Chip
+                        size="small"
+                        label={getPaymentStatusLabel(entry.paymentStatus)}
+                        sx={getPaymentStatusChipSx(entry.paymentStatus)}
+                      />
+                    </TableCell>
                     <TableCell>{renderCardBrand(entry)}</TableCell>
                     <TableCell>{entry.installments ? `${entry.installments}x` : '-'}</TableCell>
                     <TableCell>{formatCurrency(entry.grossAmount)}</TableCell>
