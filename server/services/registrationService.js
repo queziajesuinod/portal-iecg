@@ -289,6 +289,12 @@ async function anexarResumoPagamentos(registration, options = {}) {
   return resumo;
 }
 
+function extrairBandeiraPagamento({ brand = null, providerPayload = null } = {}) {
+  return paymentService.normalizeCardBrand(brand)
+    || paymentService.extrairBandeiraCartao(providerPayload)
+    || null;
+}
+
 async function sincronizarPagamentosCielo(registration, options = {}) {
   if (!registration || !registration.id) {
     return;
@@ -784,7 +790,13 @@ async function processarInscricao(dadosInscricao) {
       : { originalStatus: resultadoPagamento.status },
     pixQrCode: resultadoPagamento.qrCodeString || null,
     pixQrCodeBase64: resultadoPagamento.qrCodeBase64 || null,
-    installments: paymentOption.paymentType === 'credit_card' ? parcelas : null
+    installments: paymentOption.paymentType === 'credit_card' ? parcelas : null,
+    cardBrand: paymentOption.paymentType === 'credit_card'
+      ? extrairBandeiraPagamento({
+        brand: paymentData.brand,
+        providerPayload: resultadoPagamento.dadosCompletos
+      })
+      : null
   });
 
   // 11. Registrar transação de pagamento
@@ -820,7 +832,10 @@ async function processarInscricao(dadosInscricao) {
           status: 'confirmed',
           providerPayload: captura.dadosCompletos
             ? { ...captura.dadosCompletos, originalStatus: captura.status }
-            : { originalStatus: captura.status }
+            : { originalStatus: captura.status },
+          cardBrand: extrairBandeiraPagamento({
+            providerPayload: captura.dadosCompletos
+          }) || paymentRecord.cardBrand
         },
         { where: { providerPaymentId: resultadoPagamento.paymentId } }
       );
@@ -1001,8 +1016,7 @@ async function listarInscricoesPorEvento(eventId, options = {}) {
     ],
     order: [['createdAt', 'DESC']],
     limit,
-    offset
-    ,
+    offset,
     distinct: true
   });
 
@@ -1010,6 +1024,23 @@ async function listarInscricoesPorEvento(eventId, options = {}) {
 
   if (rows.length) {
     const ids = rows.map((r) => r.id);
+    const registrationPayments = await RegistrationPayment.findAll({
+      where: { registrationId: { [Op.in]: ids } },
+      attributes: ['id', 'registrationId', 'method', 'installments', 'cardBrand', 'status', 'createdAt'],
+      order: [['createdAt', 'DESC']]
+    });
+    const paymentsByRegistrationId = registrationPayments.reduce((acc, payment) => {
+      const { registrationId } = payment;
+      if (!acc[registrationId]) {
+        acc[registrationId] = [];
+      }
+      acc[registrationId].push(payment);
+      return acc;
+    }, {});
+    rows.forEach((registration) => {
+      registration.setDataValue('payments', paymentsByRegistrationId[registration.id] || []);
+    });
+
     const checkins = await EventCheckIn.findAll({
       where: { registrationId: { [Op.in]: ids } },
       attributes: ['registrationId'],
@@ -1304,7 +1335,13 @@ async function criarPagamentoOnline(registrationId, payload = {}) {
       : { originalStatus: resultadoPagamento.status },
     pixQrCode: resultadoPagamento.qrCodeString || null,
     pixQrCodeBase64: resultadoPagamento.qrCodeBase64 || null,
-    installments: paymentOption.paymentType === 'credit_card' ? parcelas : null
+    installments: paymentOption.paymentType === 'credit_card' ? parcelas : null,
+    cardBrand: paymentOption.paymentType === 'credit_card'
+      ? extrairBandeiraPagamento({
+        brand: paymentData.brand,
+        providerPayload: resultadoPagamento.dadosCompletos
+      })
+      : null
   });
 
   await paymentService.registrarTransacao(
@@ -1325,6 +1362,9 @@ async function criarPagamentoOnline(registrationId, payload = {}) {
       paymentRecord.providerPayload = captura.dadosCompletos
         ? { ...captura.dadosCompletos, originalStatus: captura.status }
         : { originalStatus: captura.status };
+      paymentRecord.cardBrand = extrairBandeiraPagamento({
+        providerPayload: captura.dadosCompletos
+      }) || paymentRecord.cardBrand;
       await paymentRecord.save();
       await paymentService.registrarTransacao(
         registration.id,

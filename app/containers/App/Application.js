@@ -1,6 +1,7 @@
 import React, { useContext, useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { Switch, Route, Redirect } from 'react-router-dom';
+import dummyContents from 'dan-api/dummy/dummyContents';
 import Dashboard from '../Templates/Dashboard';
 import { ThemeContext } from './ThemeWrapper';
 import MiaPage from '../Pages/MiaPage';
@@ -33,7 +34,7 @@ import NotificationsManagement from '../Pages/Events/NotificationsManagement';
 import CouponsPage from '../Pages/Events/CouponsPage';
 import FormBuilder from '../Pages/Events/FormBuilder';
 import RegistrationDetails from '../Pages/Events/RegistrationDetails';
-import dummyContents from 'dan-api/dummy/dummyContents';
+import FinancialPage from '../Pages/Financial/FinancialPage';
 
 function Application({ history }) {
   const changeMode = useContext(ThemeContext);
@@ -89,6 +90,7 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/events/:id/checkin" component={CheckInManagement} isAuthenticated={isAuthenticated} requiredPermission="EVENTS_ACESS" />
             <ProtectedRoute exact path="/app/events/:id/notificacoes" component={NotificationsManagement} isAuthenticated={isAuthenticated} requiredPermission="EVENTS_ACESS" />
             <ProtectedRoute exact path="/app/cupons" component={CouponsPage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/financeiro" component={FinancialPage} isAuthenticated={isAuthenticated} requiredPermission="EVENTS_ACESS" />
             <ProtectedRoute exact path="/app/events/:id/formulario" component={FormBuilder} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/registrations/:id" component={RegistrationDetails} isAuthenticated={isAuthenticated} />
           </Switch>

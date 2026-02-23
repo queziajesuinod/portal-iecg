@@ -540,6 +540,63 @@ function detectarBandeira(cardNumber) {
   return 'Visa';
 }
 
+function normalizeCardBrand(brand) {
+  if (!brand) return null;
+  const raw = String(brand).trim();
+  if (!raw) return null;
+  const normalized = raw.toLowerCase();
+  const mapping = {
+    visa: 'Visa',
+    master: 'Master',
+    mastercard: 'Master',
+    amex: 'Amex',
+    elo: 'Elo',
+    diners: 'Diners',
+    discover: 'Discover',
+    jcb: 'JCB',
+    hipercard: 'Hipercard'
+  };
+  return mapping[normalized] || raw;
+}
+
+function extrairBandeiraCartao(payload = {}) {
+  if (!payload) {
+    return null;
+  }
+
+  let parsedPayload = payload;
+  if (typeof payload === 'string') {
+    try {
+      parsedPayload = JSON.parse(payload);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  if (!parsedPayload || typeof parsedPayload !== 'object') {
+    return null;
+  }
+
+  const root = parsedPayload?.dadosCompletos && typeof parsedPayload.dadosCompletos === 'object'
+    ? parsedPayload.dadosCompletos
+    : parsedPayload?.responseData && typeof parsedPayload.responseData === 'object'
+      ? parsedPayload.responseData
+      : parsedPayload;
+
+  const candidates = [
+    // Formato padrão Cielo informado: Payment.CreditCard.Brand
+    root?.Payment?.CreditCard?.Brand,
+    root?.Payment?.Brand,
+    root?.Payment?.CardBrand,
+    root?.CreditCard?.Brand,
+    root?.creditCard?.brand,
+    root?.brand
+  ];
+
+  const found = candidates.find((item) => item && String(item).trim());
+  return normalizeCardBrand(found);
+}
+
 module.exports = {
   criarTransacao,
   criarTransacaoPix,
@@ -551,5 +608,7 @@ module.exports = {
   mapearStatusCielo,
   converterParaCentavos,
   converterParaReais,
-  detectarBandeira
+  detectarBandeira,
+  normalizeCardBrand,
+  extrairBandeiraCartao
 };

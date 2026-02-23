@@ -29,6 +29,20 @@ const sanitizePhone = (value) => {
   return String(value).replace(/\D/g, '');
 };
 
+function hashSHA256WithSalt(password, salt) {
+  return crypto.createHmac('sha256', salt).update(password).digest('hex');
+}
+
+function resolvePasswordForUpdate(updateData = {}) {
+  if (typeof updateData.password === 'string') {
+    return updateData.password;
+  }
+  if (typeof updateData.newPassword === 'string') {
+    return updateData.newPassword;
+  }
+  return null;
+}
+
 function serializeUserWithSpouse(user) {
   if (!user) return null;
   const plainUser = typeof user.get === 'function' ? user.get({ plain: true }) : { ...user };
@@ -112,6 +126,18 @@ async function updateUser(id, updateData) {
       user[field] = updateData[field];
     }
   });
+
+  const passwordFromPayload = resolvePasswordForUpdate(updateData);
+  if (typeof passwordFromPayload === 'string') {
+    const nextPassword = passwordFromPayload.trim();
+    if (!nextPassword) {
+      throw new Error('Senha informada e invalida');
+    }
+
+    const nextSalt = crypto.randomBytes(16).toString('hex');
+    user.salt = nextSalt;
+    user.passwordHash = hashSHA256WithSalt(nextPassword, nextSalt);
+  }
 
   await user.save();
 
@@ -310,10 +336,6 @@ async function createUser(body) {
   const finalPerfilIds = Array.isArray(perfilIds) && perfilIds.length ? perfilIds : perfilId ? [perfilId] : [];
   await syncUserPerfis(newUser, finalPerfilIds);
   return newUser;
-}
-
-function hashSHA256WithSalt(password, salt) {
-  return crypto.createHmac('sha256', salt).update(password).digest('hex');
 }
 
 module.exports = {

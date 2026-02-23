@@ -73,6 +73,13 @@ module.exports = [
         link: '/app/cupons',
         icon: 'ion-ios-pricetag-outline',
         permission: 'EVENTS_ACESS'
+      },
+      {
+        key: 'financeiroEventos',
+        name: 'Financeiro',
+        link: '/app/financeiro',
+        icon: 'ion-cash',
+        permission: 'EVENTS_ACESS'
       }
     ]
   },

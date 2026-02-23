@@ -22,6 +22,15 @@ class AuthService {
     }
 
     // Gerar o hash da senha enviada com o salt do usuário
+    if (!dto?.password || typeof dto.password !== 'string') {
+      throw new Error('Senha invalida');
+    }
+
+    if (!usuario.salt || !usuario.passwordHash) {
+      throw new Error('Usuario sem senha configurada. Atualize a senha no admin.');
+    }
+
+    // Gerar o hash da senha enviada com o salt do usuario
     const hash = hashSHA256WithSalt(dto.password, usuario.salt);
 
     // Verificar se o hash gerado é igual ao armazenado

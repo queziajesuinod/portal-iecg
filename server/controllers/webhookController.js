@@ -118,10 +118,14 @@ const WebhookController = {
       let statusAnteriorWebhook = null;
       await sequelize.transaction(async (transaction) => {
         if (!registrationPayment) {
+          const method = registration.paymentMethod || 'pix';
+          const cardBrand = method === 'credit_card'
+            ? paymentService.extrairBandeiraCartao(statusCielo.dadosCompletos)
+            : null;
           registrationPayment = await RegistrationPayment.create({
             registrationId: registration.id,
             channel: 'ONLINE',
-            method: registration.paymentMethod || 'pix',
+            method,
             amount: registration.finalPrice,
             status: novoStatus,
             provider: 'cielo',
@@ -130,7 +134,8 @@ const WebhookController = {
               ? { ...statusCielo.dadosCompletos, originalStatus: statusCielo.status }
               : { originalStatus: statusCielo.status },
             pixQrCode: statusCielo.dadosCompletos?.Payment?.QrCodeString || null,
-            pixQrCodeBase64: statusCielo.dadosCompletos?.Payment?.QrCodeBase64Image || null
+            pixQrCodeBase64: statusCielo.dadosCompletos?.Payment?.QrCodeBase64Image || null,
+            cardBrand
           }, { transaction });
         } else {
           registrationPayment.status = novoStatus;
@@ -139,6 +144,9 @@ const WebhookController = {
             : { originalStatus: statusCielo.status };
           registrationPayment.pixQrCode = statusCielo.dadosCompletos?.Payment?.QrCodeString || registrationPayment.pixQrCode;
           registrationPayment.pixQrCodeBase64 = statusCielo.dadosCompletos?.Payment?.QrCodeBase64Image || registrationPayment.pixQrCodeBase64;
+          if (registrationPayment.method === 'credit_card' && !registrationPayment.cardBrand) {
+            registrationPayment.cardBrand = paymentService.extrairBandeiraCartao(statusCielo.dadosCompletos);
+          }
           await registrationPayment.save({ transaction });
         }
 

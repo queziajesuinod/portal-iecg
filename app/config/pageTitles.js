@@ -38,7 +38,8 @@ const pageTitles = {
   'app/events/formulario': 'Configurar Formulário do Evento',
   'app/events/<id>/lotes': 'Configurar Lotes do Evento',
   'app/events/registrations': 'Detalhes da Inscrição',
-
+  'app/financeiro': 'Financeiro',
+  'app/cupons': 'Cupons de Desconto',
   // Perfil
   'app/profile': 'Meu Perfil',
 

@@ -82,6 +82,8 @@ app.use('/api/admin/members', authMiddleware, require('./routers/memberRoutes'))
 app.use('/api/admin/checkin', authMiddleware, require('./routers/checkInRoutes'));
 // Rotas administrativas de notificações (protegidas)
 app.use('/api/admin/notifications', authMiddleware, require('./routers/notificationRoutes'));
+// Rotas administrativas financeiras (protegidas)
+app.use('/api/admin/financial', authMiddleware, require('./routers/financialRoutes'));
 // Webhook Cielo (pública - sem autenticação)
 app.use('/api/webhooks', require('./routers/webhookRoutes'));
 // Webhook Evolution API (pública - sem autenticação)
@@ -141,3 +143,4 @@ app.listen(port, host, async (err) => {
 
   console.log(`Servidor rodando em: ${process.env.REACT_APP_API_URL}`);
 });
+
