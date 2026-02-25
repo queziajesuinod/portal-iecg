@@ -5,6 +5,8 @@ module.exports = (sequelize) => {
     static associate(models) {
       RegistrationAttendee.belongsTo(models.Registration, { foreignKey: 'registrationId', as: 'registration' });
       RegistrationAttendee.belongsTo(models.EventBatch, { foreignKey: 'batchId', as: 'batch' });
+      RegistrationAttendee.hasOne(models.EventHousingAllocation, { foreignKey: 'attendeeId', as: 'housingAllocation' });
+      RegistrationAttendee.hasOne(models.EventTeamsAllocation, { foreignKey: 'attendeeId', as: 'teamsAllocation' });
     }
   }
 

@@ -6,6 +6,8 @@ const couponController = require('../controllers/couponController');
 const formFieldController = require('../controllers/formFieldController');
 const registrationController = require('../controllers/registrationController');
 const paymentOptionController = require('../controllers/paymentOptionController');
+const housingController = require('../controllers/housingController');
+const teamsController = require('../controllers/teamsController');
 const requirePermission = require('../middlewares/requirePermission');
 const requireEventAccess = requirePermission(['EVENTS_ACESS', 'EVENTS_ACCESS', 'EVENTOS_LISTAR']);
 
@@ -69,5 +71,19 @@ router.post('/:eventId/payment-options', paymentOptionController.criar);
 router.get('/:eventId/registrations', registrationController.listarPorEvento);
 router.get('/:eventId/registration-attendees/confirmed', registrationController.listarInscritosConfirmadosPorEvento);
 router.get('/:eventId/tickets-summary', eventController.resumoIngressos);
+
+// ============= HOSPEDAGEM =============
+router.get('/:eventId/housing/config', housingController.getConfig);
+router.post('/:eventId/housing/config', housingController.saveConfig);
+router.post('/:eventId/housing/generate', housingController.generate);
+router.get('/:eventId/housing/allocation', housingController.getAllocation);
+router.put('/:eventId/housing/allocation', housingController.saveAllocation);
+
+// ============= TIMES =============
+router.get('/:eventId/teams/config', teamsController.getConfig);
+router.post('/:eventId/teams/config', teamsController.saveConfig);
+router.post('/:eventId/teams/generate', teamsController.generate);
+router.get('/:eventId/teams/allocation', teamsController.getAllocation);
+router.put('/:eventId/teams/allocation', teamsController.saveAllocation);
 
 module.exports = router;
