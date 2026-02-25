@@ -8,6 +8,10 @@ module.exports = (sequelize) => {
       Event.hasMany(models.FormField, { foreignKey: 'eventId', as: 'formFields' });
       Event.hasMany(models.Registration, { foreignKey: 'eventId', as: 'registrations' });
       Event.hasMany(models.PaymentOption, { foreignKey: 'eventId', as: 'paymentOptions' });
+      Event.hasOne(models.EventHousingConfig, { foreignKey: 'eventId', as: 'housingConfig' });
+      Event.hasMany(models.EventHousingAllocation, { foreignKey: 'eventId', as: 'housingAllocations' });
+      Event.hasOne(models.EventTeamsConfig, { foreignKey: 'eventId', as: 'teamsConfig' });
+      Event.hasMany(models.EventTeamsAllocation, { foreignKey: 'eventId', as: 'teamsAllocations' });
     }
   }
 

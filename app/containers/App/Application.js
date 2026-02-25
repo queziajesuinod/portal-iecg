@@ -34,6 +34,8 @@ import NotificationsManagement from '../Pages/Events/NotificationsManagement';
 import CouponsPage from '../Pages/Events/CouponsPage';
 import FormBuilder from '../Pages/Events/FormBuilder';
 import RegistrationDetails from '../Pages/Events/RegistrationDetails';
+import EventHousing from '../Pages/Events/EventHousing';
+import EventTeams from '../Pages/Events/EventTeams';
 import FinancialPage from '../Pages/Financial/FinancialPage';
 
 function Application({ history }) {
@@ -93,6 +95,8 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/financeiro" component={FinancialPage} isAuthenticated={isAuthenticated} requiredPermission="EVENTS_ACESS" />
             <ProtectedRoute exact path="/app/events/:id/formulario" component={FormBuilder} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/registrations/:id" component={RegistrationDetails} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/events/:id/housing" component={EventHousing} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/events/:id/teams" component={EventTeams} isAuthenticated={isAuthenticated} />
           </Switch>
         </Dashboard>
       </Route>

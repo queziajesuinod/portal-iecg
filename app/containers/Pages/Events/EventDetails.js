@@ -46,6 +46,8 @@ import StoreIcon from '@mui/icons-material/Store';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import CloseIcon from '@mui/icons-material/Close';
+import BedIcon from '@mui/icons-material/KingBed';
+import GroupsIcon from '@mui/icons-material/Groups';
 import { useHistory, useParams } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
 import {
@@ -904,6 +906,20 @@ function EventDetails() {
             onClick={() => history.push(`/app/events/${id}/notificacoes`)}
           >
             Notificações
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<BedIcon />}
+            onClick={() => history.push(`/app/events/${id}/housing`)}
+          >
+            Hospedagem
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<GroupsIcon />}
+            onClick={() => history.push(`/app/events/${id}/teams`)}
+          >
+            Times
           </Button>
         </div>
       </PapperBlock>
