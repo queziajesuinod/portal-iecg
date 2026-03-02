@@ -35,6 +35,8 @@ import InfoIcon from '@mui/icons-material/Info';
 import brand from 'dan-api/dummy/brand';
 import {
   getHousingConfig,
+  getHousingAvailableFields,
+  getEventBatches,
   saveHousingConfig,
   generateHousingAllocation,
   getHousingAllocation,
@@ -53,6 +55,13 @@ export default function EventHousing() {
   // ── Configuração de quartos ──
   const [rooms, setRooms] = useState([{ id: '1', name: 'Quarto 1', capacity: 4 }]);
   const [customRules, setCustomRules] = useState('');
+  const [availableFields, setAvailableFields] = useState([]);
+  const [availableFieldsByTable, setAvailableFieldsByTable] = useState({
+    attendeeData: [],
+    registrations: [],
+    registrationAttendees: [],
+  });
+  const [eventBatches, setEventBatches] = useState([]);
   const [savingConfig, setSavingConfig] = useState(false);
 
   // ── Geração LLM ──
@@ -70,9 +79,11 @@ export default function EventHousing() {
 
   async function carregarDados() {
     try {
-      const [config, allocation] = await Promise.all([
+      const [config, allocation, availableFieldsResponse, batchesResponse] = await Promise.all([
         getHousingConfig(eventId).catch(() => null),
         getHousingAllocation(eventId).catch(() => []),
+        getHousingAvailableFields(eventId).catch(() => ({ fields: [] })),
+        getEventBatches(eventId).catch(() => []),
       ]);
 
       if (config) {
@@ -80,9 +91,41 @@ export default function EventHousing() {
         setCustomRules(config.customRules || '');
       }
       setSavedAllocation(allocation || []);
+      setEventBatches(Array.isArray(batchesResponse) ? batchesResponse : []);
+      const flattenedFields = Array.isArray(availableFieldsResponse?.fields) ? availableFieldsResponse.fields : [];
+      setAvailableFields(flattenedFields);
+
+      const byTableFromResponse = availableFieldsResponse?.byTable;
+      const derivedByTable = {
+        attendeeData: flattenedFields
+          .filter((field) => typeof field === 'string' && field.startsWith('attendeeData.'))
+          .map((field) => field.replace('attendeeData.', '')),
+        registrations: flattenedFields
+          .filter((field) => typeof field === 'string' && field.startsWith('registration.'))
+          .map((field) => field.replace('registration.', '')),
+        registrationAttendees: flattenedFields
+          .filter((field) => typeof field === 'string' && field.startsWith('registrationAttendee.'))
+          .map((field) => field.replace('registrationAttendee.', '')),
+      };
+
+      const byTable = byTableFromResponse || derivedByTable;
+      setAvailableFieldsByTable({
+        attendeeData: Array.isArray(byTable.attendeeData) ? byTable.attendeeData : [],
+        registrations: Array.isArray(byTable.registrations) ? byTable.registrations : [],
+        registrationAttendees: Array.isArray(byTable.registrationAttendees) ? byTable.registrationAttendees : [],
+      });
     } catch (err) {
       console.error(err);
     }
+  }
+
+  function handleAddBatchReference(batch) {
+    if (!batch) return;
+    const ruleText = `Considerar lote "${batch.name}" (eventBatch.id=${batch.id}) nas regras de alocacao.`;
+    setCustomRules((prev) => {
+      const normalized = String(prev || '').trim();
+      return normalized ? `${normalized}\n- ${ruleText}` : `- ${ruleText}`;
+    });
   }
 
   // ── Gerenciar quartos ──
@@ -182,6 +225,8 @@ export default function EventHousing() {
             <TableRow>
               <TableCell width={80}>Cama</TableCell>
               <TableCell>Nome</TableCell>
+              <TableCell>Idade</TableCell>
+              <TableCell>Lider de celula</TableCell>
               {source === 'saved' && <TableCell>Sexo</TableCell>}
             </TableRow>
           </TableHead>
@@ -191,6 +236,12 @@ export default function EventHousing() {
                 || item.attendee?.attendeeData?.nome_completo
                 || item.attendee?.attendeeData?.nome
                 || '-';
+              const idade = item.idade
+                || item.attendee?.attendeeData?.idade
+                || '-';
+              const liderDeCelula = item.lider_de_celula
+                || item.attendee?.attendeeData?.lider_de_celula
+                || '-';
               const sexo = item.attendee?.attendeeData?.sexo || '';
               return (
                 <TableRow key={item.attendeeId || item.id}>
@@ -198,6 +249,8 @@ export default function EventHousing() {
                     <Chip size="small" label={item.slotLabel} variant="outlined" />
                   </TableCell>
                   <TableCell>{nome}</TableCell>
+                  <TableCell>{idade}</TableCell>
+                  <TableCell>{liderDeCelula}</TableCell>
                   {source === 'saved' && <TableCell>{sexo}</TableCell>}
                 </TableRow>
               );
@@ -296,10 +349,9 @@ export default function EventHousing() {
 
               <Alert severity="info" icon={<InfoIcon />} sx={{ mb: 2 }}>
                 <AlertTitle>Regras automáticas já aplicadas</AlertTitle>
-                ✅ Separação por sexo<br />
-                ✅ Pessoas da mesma compra no mesmo quarto<br />
-                ✅ Ordenação alfabética<br />
-                ✅ Numeração: 1.1, 1.2, 2.1...
+                  ✅ Numeração: 1.1, 1.2, 2.1...<br />
+                  ✅ Pessoas do mesmo sexo no mesmo quarto<br />
+                  (O LLM irá interpretar e aplicar essas regras obrigatórias além das suas regras adicionais)
               </Alert>
 
               <TextField
@@ -312,6 +364,71 @@ export default function EventHousing() {
                 onChange={(e) => setCustomRules(e.target.value)}
                 helperText="Escreva em português. O LLM irá interpretar e aplicar."
               />
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="caption" color="textSecondary" display="block" sx={{ mb: 1 }}>
+                  Lotes do evento (clique para inserir referencia no texto livre):
+                </Typography>
+                {eventBatches.length === 0 ? (
+                  <Typography variant="caption" color="textSecondary">
+                    Nenhum lote encontrado.
+                  </Typography>
+                ) : (
+                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                    {eventBatches.map((batch) => (
+                      <Chip
+                        key={batch.id}
+                        size="small"
+                        variant="outlined"
+                        label={`${batch.name} (${batch.id})`}
+                        onClick={() => handleAddBatchReference(batch)}
+                      />
+                    ))}
+                  </Box>
+                )}
+              </Box>
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="caption" color="textSecondary" display="block" sx={{ mb: 1 }}>
+                  Campos disponiveis por tabela:
+                </Typography>
+                {availableFields.length === 0 ? (
+                  <Typography variant="caption" color="textSecondary">
+                    Nenhum campo encontrado nos inscritos confirmados.
+                  </Typography>
+                ) : (
+                  <Box sx={{ display: 'flex', gap: 1.5, flexDirection: 'column' }}>
+                    <Box>
+                      <Typography variant="caption" color="textSecondary" display="block" sx={{ mb: 0.5 }}>
+                        RegistrationAttendees.attendeeData
+                      </Typography>
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        {availableFieldsByTable.attendeeData.map((field) => (
+                          <Chip key={`attendeeData.${field}`} size="small" variant="outlined" label={`attendeeData.${field}`} />
+                        ))}
+                      </Box>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" color="textSecondary" display="block" sx={{ mb: 0.5 }}>
+                        Registrations
+                      </Typography>
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        {availableFieldsByTable.registrations.map((field) => (
+                          <Chip key={`registration.${field}`} size="small" variant="outlined" label={`registration.${field}`} />
+                        ))}
+                      </Box>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" color="textSecondary" display="block" sx={{ mb: 0.5 }}>
+                        RegistrationAttendees
+                      </Typography>
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        {availableFieldsByTable.registrationAttendees.map((field) => (
+                          <Chip key={`registrationAttendee.${field}`} size="small" variant="outlined" label={`registrationAttendee.${field}`} />
+                        ))}
+                      </Box>
+                    </Box>
+                  </Box>
+                )}
+              </Box>
             </Grid>
 
             <Grid item xs={12}>

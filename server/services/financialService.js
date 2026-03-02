@@ -267,6 +267,50 @@ function calculateConfiguredFee(payment, feeConfig) {
   };
 }
 
+function getPaymentRegistrationId(payment) {
+  if (!payment) return null;
+  return payment.registrationId || payment.registration?.id || null;
+}
+
+function getRegistrationTicketAmount(registration) {
+  if (!registration) return 0;
+  const originalPrice = toMoney(registration.originalPrice || 0);
+  const discountAmount = toMoney(registration.discountAmount || 0);
+  return toMoney(Math.max(originalPrice - discountAmount, 0));
+}
+
+function buildTotalPaidByRegistration(payments = []) {
+  return payments.reduce((acc, payment) => {
+    const registrationId = getPaymentRegistrationId(payment);
+    if (!registrationId) return acc;
+    const currentTotal = Number(acc[registrationId] || 0);
+    acc[registrationId] = toMoney(currentTotal + toMoney(payment.amount));
+    return acc;
+  }, {});
+}
+
+function calculateCustomerFeeAmount({ grossAmount, registrationTicketAmount, totalPaidByRegistration }) {
+  const normalizedGrossAmount = toMoney(grossAmount);
+  const normalizedRegistrationTicketAmount = toMoney(registrationTicketAmount);
+  const normalizedTotalPaidByRegistration = toMoney(totalPaidByRegistration);
+
+  if (normalizedGrossAmount <= 0 || normalizedTotalPaidByRegistration <= 0) {
+    return {
+      customerFeeAmount: 0,
+      ticketAmountPortion: 0
+    };
+  }
+
+  const cappedTicketAmount = toMoney(Math.min(normalizedRegistrationTicketAmount, normalizedTotalPaidByRegistration));
+  const ticketAmountPortion = toMoney((cappedTicketAmount * normalizedGrossAmount) / normalizedTotalPaidByRegistration);
+  const customerFeeAmount = toMoney(Math.max(normalizedGrossAmount - ticketAmountPortion, 0));
+
+  return {
+    customerFeeAmount,
+    ticketAmountPortion
+  };
+}
+
 function normalizeFeeConfigPayload(payload = {}) {
   const parsed = {
     pixPercent: Number(payload.pixPercent || 0),
@@ -392,7 +436,7 @@ async function listFinancialRecords(filters = {}) {
       {
         model: Registration,
         as: 'registration',
-        attributes: ['id', 'eventId'],
+        attributes: ['id', 'eventId', 'originalPrice', 'discountAmount'],
         where: registrationWhere,
         required: true
       }
@@ -408,7 +452,7 @@ async function listFinancialRecords(filters = {}) {
       {
         model: Registration,
         as: 'registration',
-        attributes: ['id', 'orderCode', 'eventId'],
+        attributes: ['id', 'orderCode', 'eventId', 'originalPrice', 'discountAmount'],
         where: registrationWhere,
         required: true,
         include: [
@@ -426,15 +470,52 @@ async function listFinancialRecords(filters = {}) {
     distinct: true
   });
 
+  const entryTotalsByRegistrationRows = await RegistrationPayment.findAll({
+    where: {
+      ...entriesPaymentWhere
+    },
+    attributes: [
+      'registrationId',
+      [RegistrationPayment.sequelize.fn('SUM', RegistrationPayment.sequelize.col('amount')), 'totalPaid']
+    ],
+    include: [
+      {
+        model: Registration,
+        as: 'registration',
+        attributes: [],
+        where: registrationWhere,
+        required: true
+      }
+    ],
+    group: ['RegistrationPayment.registrationId'],
+    raw: true
+  });
+
+  const entryTotalPaidByRegistration = entryTotalsByRegistrationRows.reduce((acc, row) => {
+    const registrationId = normalizeOptionalValue(row.registrationId);
+    if (!registrationId) return acc;
+    acc[registrationId] = toMoney(row.totalPaid || 0);
+    return acc;
+  }, {});
+
   const ticketEntries = paginatedPayments.rows.map((payment) => {
+    const registrationId = getPaymentRegistrationId(payment);
     const grossAmount = toMoney(payment.amount);
+    const registrationTicketAmount = getRegistrationTicketAmount(payment.registration);
+    const totalPaidByRegistration = toMoney(entryTotalPaidByRegistration[registrationId] || grossAmount);
     const feeResult = calculateConfiguredFee(payment, feeConfig);
     const feeAmount = toMoney(feeResult.feeAmount);
+    const { customerFeeAmount, ticketAmountPortion } = calculateCustomerFeeAmount({
+      grossAmount,
+      registrationTicketAmount,
+      totalPaidByRegistration
+    });
+    const merchantFeeAmount = toMoney(feeAmount - customerFeeAmount);
     const netAmount = toMoney(grossAmount - feeAmount);
 
     return {
       id: payment.id,
-      registrationId: payment.registrationId,
+      registrationId,
       orderCode: payment.registration?.orderCode || '-',
       eventId: payment.registration?.event?.id || null,
       eventTitle: payment.registration?.event?.title || '-',
@@ -444,7 +525,10 @@ async function listFinancialRecords(filters = {}) {
       installments: payment.installments || null,
       cardBrand: payment.cardBrand || paymentService.extrairBandeiraCartao(payment.providerPayload),
       grossAmount,
+      ticketAmountPortion,
       feeAmount,
+      customerFeeAmount,
+      merchantFeeAmount,
       feeDetails: feeResult.details,
       netAmount,
       createdAt: payment.createdAt
@@ -487,21 +571,38 @@ async function listFinancialRecords(filters = {}) {
     updatedBy: expense.updater ? { id: expense.updater.id, name: expense.updater.name } : null
   }));
 
+  const summaryTotalPaidByRegistration = buildTotalPaidByRegistration(paymentsForSummary);
+
   const totals = paymentsForSummary.reduce((acc, payment) => {
+    const registrationId = getPaymentRegistrationId(payment);
     const grossAmount = toMoney(payment.amount);
+    const registrationTicketAmount = getRegistrationTicketAmount(payment.registration);
+    const totalPaidByRegistration = toMoney(summaryTotalPaidByRegistration[registrationId] || grossAmount);
     const feeResult = calculateConfiguredFee(payment, feeConfig);
     const feeAmount = toMoney(feeResult.feeAmount);
+    const { customerFeeAmount } = calculateCustomerFeeAmount({
+      grossAmount,
+      registrationTicketAmount,
+      totalPaidByRegistration
+    });
+    const merchantFeeAmount = toMoney(feeAmount - customerFeeAmount);
     acc.ticketGross += grossAmount;
-    acc.totalFees += feeAmount;
+    acc.totalFees += merchantFeeAmount;
+    acc.customerFees += customerFeeAmount;
+    acc.processorFees += feeAmount;
     return acc;
   }, {
     ticketGross: 0,
-    totalFees: 0
+    totalFees: 0,
+    customerFees: 0,
+    processorFees: 0
   });
 
   const ticketGrossTotal = toMoney(totals.ticketGross);
   const totalFees = toMoney(totals.totalFees);
-  const ticketNet = toMoney(ticketGrossTotal - totalFees);
+  const customerFees = toMoney(totals.customerFees);
+  const processorFees = toMoney(totals.processorFees);
+  const ticketNet = toMoney(ticketGrossTotal - processorFees);
 
   const expenseTotals = expensesForSummary.reduce((acc, expense) => {
     const amount = toMoney(expense.amount);
@@ -522,6 +623,8 @@ async function listFinancialRecords(filters = {}) {
     summary: {
       ticketGross: ticketGrossTotal,
       totalFees,
+      customerFees,
+      processorFees,
       ticketNet,
       expensesSettled: toMoney(expenseTotals.expensesSettled),
       expensesPending: toMoney(expenseTotals.expensesPending),
