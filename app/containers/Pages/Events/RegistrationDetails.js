@@ -162,6 +162,22 @@ function RegistrationDetails() {
     carregarInscricao();
   }, [carregarInscricao]);
 
+  useEffect(() => {
+    if (!inscricao?.orderCode) return;
+    const currentPageTitle = history.location?.state?.pageTitle;
+    if (currentPageTitle === inscricao.orderCode) return;
+
+    history.replace({
+      pathname: history.location.pathname,
+      search: history.location.search,
+      hash: history.location.hash,
+      state: {
+        ...(history.location.state || {}),
+        pageTitle: inscricao.orderCode
+      }
+    });
+  }, [inscricao?.orderCode, history]);
+
   const abrirDialogCancelamento = async () => {
     try {
       const info = await obterInfoCancelamentoInscricao(id);

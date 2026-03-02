@@ -99,6 +99,29 @@ const applicationTheme = (color, mode, direction) => {
       '0px 11px 15px -7px rgba(80,80,80, 0.2),0px 24px 38px 3px rgba(80,80,80, 0.14),0px 9px 46px 8px rgba(80,80,80, 0.12)',
     ],
   components: {
+    MuiCssBaseline: {
+      styleOverrides: {
+        '@media (max-width:900px)': {
+          '.MuiGrid-container > .MuiGrid-item:has(> .MuiButton-root)': {
+            flexBasis: '100%',
+            maxWidth: '100%',
+          },
+          '.MuiGrid-container > .MuiGrid-item:has(> .MuiButton-root) > .MuiButton-root': {
+            width: '100%',
+          },
+          '.MuiDialogActions-root:has(> .MuiButton-root + .MuiButton-root), .MuiCardActions-root:has(> .MuiButton-root + .MuiButton-root), .MuiBox-root:has(> .MuiButton-root + .MuiButton-root)': {
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'stretch',
+            gap: 8,
+          },
+          '.MuiDialogActions-root:has(> .MuiButton-root + .MuiButton-root) > .MuiButton-root, .MuiCardActions-root:has(> .MuiButton-root + .MuiButton-root) > .MuiButton-root, .MuiBox-root:has(> .MuiButton-root + .MuiButton-root) > .MuiButton-root': {
+            width: '100%',
+            marginLeft: '0 !important',
+          },
+        },
+      },
+    },
     MuiPaper: {
       styleOverrides: {
         root: {
@@ -309,6 +332,29 @@ const applicationTheme = (color, mode, direction) => {
         },
       }
     },
+    MuiTableContainer: {
+      styleOverrides: {
+        root: {
+          '@media (max-width:900px)': {
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
+          }
+        }
+      }
+    },
+    MuiTable: {
+      styleOverrides: {
+        root: {
+          '@media (max-width:900px)': {
+            display: 'block',
+            width: 'max-content',
+            minWidth: '100%',
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
+          }
+        }
+      }
+    },
     MuiTableCell: {
       styleOverrides: {
         root: {
@@ -316,6 +362,9 @@ const applicationTheme = (color, mode, direction) => {
             mode === 'dark'
               ? '1px solid #636363'
               : `1px solid ${themePalette(color, mode).palette.primary.light}`,
+          '@media (max-width:900px)': {
+            whiteSpace: 'nowrap',
+          }
         },
         head: {
           fontWeight: 600,

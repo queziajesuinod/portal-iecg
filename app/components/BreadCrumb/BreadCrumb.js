@@ -16,6 +16,7 @@ const Breadcrumbs = (props) => {
   const normalizedPath = pathname.replace(/^\/+/, '');
   const segments = normalizedPath.split('/');
   const placeKey = normalizedPath || 'app';
+  const currentPageTitle = location?.state?.pageTitle || getPageTitle(placeKey);
   const parts = segments.slice(0, -1);
 
   return (
@@ -37,7 +38,7 @@ const Breadcrumbs = (props) => {
             })
           }
           &nbsp;
-          {getPageTitle(placeKey)}
+          {currentPageTitle}
         </span>
       </p>
     </section>

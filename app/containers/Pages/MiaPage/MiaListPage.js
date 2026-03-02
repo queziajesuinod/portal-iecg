@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
-import { Helmet } from "react-helmet";
-import { useHistory } from "react-router-dom";
+import React, { useEffect, useState } from 'react';
+import { Helmet } from 'react-helmet';
+import { useHistory } from 'react-router-dom';
 import { PapperBlock, Notification } from 'dan-components';
 import {
   List,
@@ -16,12 +16,14 @@ import {
   TextField,
   Pagination,
   Button
-} from "@mui/material";
-import { Visibility, Delete, Edit, Add } from "@mui/icons-material";
+} from '@mui/material';
+import {
+  Visibility, Delete, Edit, Add
+} from '@mui/icons-material';
 
 const MiaListPage = () => {
-  const title = "Listagem Ministério MIA";
-  const description = "Listagem de todos os Integrantes do MIA cadastrados";
+  const title = 'Listagem Ministério MIA';
+  const description = 'Listagem de todos os Integrantes do MIA cadastrados';
 
   const [aposentados, setAposentados] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -39,7 +41,7 @@ const MiaListPage = () => {
   ).replace(/\/$/, '');
 
   const fetchAposentados = async () => {
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem('token');
 
     try {
       const query = new URLSearchParams({
@@ -49,15 +51,15 @@ const MiaListPage = () => {
       }).toString();
 
       const response = await fetch(`${API_URL}/mia?${query}`, {
-        method: "GET",
+        method: 'GET',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
       });
 
       if (!response.ok) {
-        throw new Error("Erro ao carregar dados");
+        throw new Error('Erro ao carregar dados');
       }
 
       const data = await response.json();
@@ -66,7 +68,7 @@ const MiaListPage = () => {
       setTotalPages(data.totalPaginas || 1);
       setTotalRegistros(data.totalRegistros || registros.length);
     } catch (error) {
-      console.error("Erro ao buscar Mia:", error);
+      console.error('Erro ao buscar Mia:', error);
     }
   };
 
@@ -75,32 +77,32 @@ const MiaListPage = () => {
   }, [page, searchTerm]);
 
   const handleDelete = async (id) => {
-    const confirm = window.confirm("Tem certeza que deseja excluir este registro?");
+    const confirm = window.confirm('Tem certeza que deseja excluir este registro?');
     if (!confirm) return;
 
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem('token');
 
     try {
       const response = await fetch(`${API_URL}/mia/${id}`, {
-        method: "DELETE",
+        method: 'DELETE',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
       });
 
       if (!response.ok) {
         const data = await response.json();
-        const errorMessage = data.erro || data.message || "Erro ao deletar Mia.";
+        const errorMessage = data.erro || data.message || 'Erro ao deletar Mia.';
         setNotification(`Erro: ${errorMessage}`);
         return;
       }
 
       setAposentados((prev) => prev.filter((p) => p.id !== id));
-      setNotification("Registro deletado com sucesso!");
+      setNotification('Registro deletado com sucesso!');
     } catch (error) {
-      console.error("Erro ao deletar Mia:", error);
-      setNotification("Erro ao conectar com o servidor. Por favor, tente novamente mais tarde.");
+      console.error('Erro ao deletar Mia:', error);
+      setNotification('Erro ao conectar com o servidor. Por favor, tente novamente mais tarde.');
     }
   };
 
@@ -112,9 +114,18 @@ const MiaListPage = () => {
       </Helmet>
 
       <PapperBlock title="Listagem Ministério Mia" desc="Todos os dados do MIA">
-        <Paper style={{ padding: 20, marginTop: 20 }}>
+        <Paper sx={{ p: { xs: 1.5, sm: 2.5 }, mt: 2.5 }}>
           {/* Campo de pesquisa */}
-          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: { xs: 'stretch', sm: 'center' },
+              flexDirection: { xs: 'column', sm: 'row' },
+              gap: 1.5,
+              mb: 2
+            }}
+          >
             <TextField
               label="Pesquisar por nome"
               variant="outlined"
@@ -124,13 +135,13 @@ const MiaListPage = () => {
                 setSearchTerm(e.target.value);
                 setPage(1); // reseta a paginação ao pesquisar
               }}
-              style={{ width: 300 }}
+              sx={{ width: { xs: '100%', sm: 300 } }}
             />
             <Button
               color="primary"
               startIcon={<Add />}
               onClick={() => history.push('/app/mia/cadastrar')}
-              sx={{ textTransform: 'none' }}
+              sx={{ textTransform: 'none', width: { xs: '100%', sm: 'auto' } }}
             >
               Cadastro
             </Button>
@@ -140,50 +151,93 @@ const MiaListPage = () => {
             {aposentados.map((item, index) => (
               <React.Fragment key={item.id}>
                 <ListItem
-                  style={{
-                    transition: "background 0.3s",
-                    borderRadius: 8,
-                    padding: "10px 25px",
-                    "&:hover": { backgroundColor: "#f5f5f5" }
+                  sx={{
+                    transition: 'background 0.3s',
+                    borderRadius: 1,
+                    px: { xs: '4px', sm: 3 },
+                    py: 1.25,
+                    display: 'flex',
+                    alignItems: { xs: 'flex-start', sm: 'center' },
+                    flexDirection: { xs: 'column', sm: 'row' },
+                    gap: { xs: 1, sm: 0 },
+                    '&:hover': { backgroundColor: '#f5f5f5' }
                   }}
                 >
-                  <ListItemAvatar>
-                    <Avatar
-                      src={item.user?.image || "https://via.placeholder.com/100"}
-                      alt={item.user?.name}
-                      sx={{ width: 60, height: 60 }}
-                    />
-                  </ListItemAvatar>
+                  <Box sx={{
+                    display: 'flex', alignItems: 'center', width: '100%', minWidth: 0
+                  }}>
+                    <ListItemAvatar sx={{ minWidth: { xs: 56, sm: 72 } }}>
+                      <Avatar
+                        src={item.user?.image || 'https://via.placeholder.com/100'}
+                        alt={item.user?.name}
+                        sx={{ width: { xs: 48, sm: 60 }, height: { xs: 48, sm: 60 } }}
+                      />
+                    </ListItemAvatar>
 
-                  <ListItemText style={{ padding: "10px" }}
-                    primary={<Typography variant="h6" fontWeight="bold">{item.user?.name}</Typography>}
-                    secondary={
-                      <>
-                        {item.remedios && item.remedios.length > 0 ? (
-                          item.remedios.map((remedio, remedioIndex) => (
-                            <Typography key={remedioIndex} variant="body2" color="textSecondary">
-                              {remedio.nome} - {remedio.indicacao}
+                    <ListItemText
+                      sx={{
+                        p: 0,
+                        m: 0,
+                        minWidth: 0,
+                        flex: 1,
+                        overflow: 'hidden'
+                      }}
+                      primary={(
+                        <Typography
+                          variant="h6"
+                          fontWeight="bold"
+                          sx={{
+                            wordBreak: 'break-word',
+                            overflowWrap: 'anywhere',
+                            whiteSpace: 'normal',
+                            pr: 1,
+                            fontSize: { xs: '1rem', sm: '1.25rem' },
+                            lineHeight: { xs: 1.35, sm: 1.5 }
+                          }}
+                        >
+                          {item.user?.name}
+                        </Typography>
+                      )}
+                      secondary={
+                        <>
+                          {item.remedios && item.remedios.length > 0 ? (
+                            item.remedios.map((remedio, remedioIndex) => (
+                              <Typography
+                                key={remedioIndex}
+                                variant="body2"
+                                color="textSecondary"
+                                sx={{ wordBreak: 'break-word', whiteSpace: 'normal' }}
+                              >
+                                {remedio.nome} - {remedio.indicacao}
+                              </Typography>
+                            ))
+                          ) : (
+                            <Typography variant="body2" color="textSecondary" sx={{ whiteSpace: 'normal' }}>
+                              Sem Remedio cadastrado
                             </Typography>
-                          ))
-                        ) : (
-                          <Typography variant="body2" color="textSecondary">
-                            Sem Remédio cadastrado
-                          </Typography>
-                        )}
-                      </>
-                    }
-                  />
+                          )}
+                        </>
+                      }
+                    />
+                  </Box>
 
-                  <Box display="flex" alignItems="center" gap={1}>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      width: { xs: '100%', sm: 'auto' },
+                      justifyContent: { xs: 'flex-end', sm: 'flex-start' },
+                      pl: { xs: 0, sm: 1 }
+                    }}
+                  >
                     <IconButton
                       color="primary"
-                      onClick={() =>
-                        history.push(
-                          `/app/mia/detalhes?id=${item.id}`,
-                          { pageTitle: 'Detalhes Dados do Mia' }
-                        )
+                      onClick={() => history.push(
+                        `/app/mia/detalhes?id=${item.id}`,
+                        { pageTitle: 'Detalhes Dados do Mia' }
+                      )
                       }
-
                     >
                       <Visibility />
                     </IconButton>
@@ -213,7 +267,7 @@ const MiaListPage = () => {
           </Typography>
 
           {/* Paginação */}
-          <Box mt={2} display="flex" justifyContent="center">
+          <Box mt={2} display="flex" justifyContent="center" sx={{ overflowX: 'auto' }}>
             <Pagination
               count={totalPages}
               page={page}

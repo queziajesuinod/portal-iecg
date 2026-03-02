@@ -12,6 +12,7 @@ import {
   Tab,
   Box,
   Table,
+  TableContainer,
   TableBody,
   TableCell,
   TableHead,
@@ -273,6 +274,22 @@ function EventDetails() {
     carregarLotes();
     carregarFormas();
   }, [id]);
+
+  useEffect(() => {
+    if (!evento?.title) return;
+    const currentPageTitle = history.location?.state?.pageTitle;
+    if (currentPageTitle === evento.title) return;
+
+    history.replace({
+      pathname: history.location.pathname,
+      search: history.location.search,
+      hash: history.location.hash,
+      state: {
+        ...(history.location.state || {}),
+        pageTitle: evento.title
+      }
+    });
+  }, [evento?.title, history]);
 
   useEffect(() => {
     setCurrentPage(0);
@@ -721,6 +738,30 @@ function EventDetails() {
       </TableCell>
     </TableRow>
   ));
+  const salesTableContainerSx = {
+    width: '100%',
+    overflowX: 'auto',
+    '& .MuiTable-root': { minWidth: 1100 },
+    '& .MuiTableCell-root': { whiteSpace: 'nowrap' }
+  };
+  const attendeesTableContainerSx = {
+    width: '100%',
+    overflowX: 'auto',
+    '& .MuiTable-root': { minWidth: 680 },
+    '& .MuiTableCell-root': { whiteSpace: 'nowrap' }
+  };
+  const lotsTableContainerSx = {
+    width: '100%',
+    overflowX: 'auto',
+    '& .MuiTable-root': { minWidth: 820 },
+    '& .MuiTableCell-root': { whiteSpace: 'nowrap' }
+  };
+  const paymentMethodsTableContainerSx = {
+    width: '100%',
+    overflowX: 'auto',
+    '& .MuiTable-root': { minWidth: 760 },
+    '& .MuiTableCell-root': { whiteSpace: 'nowrap' }
+  };
 
   return (
     <div>
@@ -867,61 +908,82 @@ function EventDetails() {
           </Grid>
         </Card>
 
-        <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-          <Button
-            variant="outlined"
-            startIcon={<BackIcon />}
-            onClick={() => history.push('/app/events')}
-          >
-            Voltar
-          </Button>
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<EditIcon />}
-            onClick={() => history.push(`/app/events/${id}/editar`)}
-          >
-            Editar Evento
-          </Button>
-          <Button
-            variant="contained"
-            color="secondary"
-            startIcon={<CheckInIcon />}
-            onClick={() => history.push(`/app/events/${id}/checkin`)}
-          >
-            Check-in
-          </Button>
-          <Button
-            variant="outlined"
-            color="primary"
-            startIcon={<DescriptionIcon />}
-            onClick={() => history.push(`/app/events/${id}/formulario`)}
-          >
-            Configurar Formulário
-          </Button>
-          <Button
-            variant="contained"
-            color="inherit"
-            startIcon={<NotificationsIcon />}
-            onClick={() => history.push(`/app/events/${id}/notificacoes`)}
-          >
-            Notificações
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<BedIcon />}
-            onClick={() => history.push(`/app/events/${id}/housing`)}
-          >
-            Hospedagem
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<GroupsIcon />}
-            onClick={() => history.push(`/app/events/${id}/teams`)}
-          >
-            Times
-          </Button>
-        </div>
+        <Grid container spacing={1} style={{ marginTop: 16 }}>
+          <Grid item xs={12} sm={6} md="auto">
+            <Button
+              fullWidth
+              variant="outlined"
+              startIcon={<BackIcon />}
+              onClick={() => history.push('/app/events')}
+            >
+              Voltar
+            </Button>
+          </Grid>
+          <Grid item xs={12} sm={6} md="auto">
+            <Button
+              fullWidth
+              variant="contained"
+              color="primary"
+              startIcon={<EditIcon />}
+              onClick={() => history.push(`/app/events/${id}/editar`)}
+            >
+              Editar Evento
+            </Button>
+          </Grid>
+          <Grid item xs={12} sm={6} md="auto">
+            <Button
+              fullWidth
+              variant="contained"
+              color="secondary"
+              startIcon={<CheckInIcon />}
+              onClick={() => history.push(`/app/events/${id}/checkin`)}
+            >
+              Check-in
+            </Button>
+          </Grid>
+          <Grid item xs={12} sm={6} md="auto">
+            <Button
+              fullWidth
+              variant="outlined"
+              color="primary"
+              startIcon={<DescriptionIcon />}
+              onClick={() => history.push(`/app/events/${id}/formulario`)}
+            >
+              {'Configurar Formul\u00E1rio'}
+            </Button>
+          </Grid>
+          <Grid item xs={12} sm={6} md="auto">
+            <Button
+              fullWidth
+              variant="contained"
+              color="inherit"
+              startIcon={<NotificationsIcon />}
+              onClick={() => history.push(`/app/events/${id}/notificacoes`)}
+            >
+              {'Notifica\u00E7\u00F5es'}
+            </Button>
+          </Grid>
+          <Grid item xs={12} sm={6} md="auto">
+            <Button
+              fullWidth
+              variant="outlined"
+              startIcon={<BedIcon />}
+              onClick={() => history.push(`/app/events/${id}/housing`)}
+            >
+              Hospedagem
+            </Button>
+          </Grid>
+          <Grid item xs={12} sm={6} md="auto">
+            <Button
+              fullWidth
+              variant="outlined"
+              startIcon={<GroupsIcon />}
+              onClick={() => history.push(`/app/events/${id}/teams`)}
+            >
+              Times
+            </Button>
+          </Grid>
+        </Grid>
       </PapperBlock>
 
       {/* Tabs */}
@@ -952,71 +1014,75 @@ function EventDetails() {
           </div>
 
           {lotesLoading ? (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell> </TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {skeletonRows}
-              </TableBody>
-            </Table>
+            <TableContainer sx={lotsTableContainerSx}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell> </TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {skeletonRows}
+                </TableBody>
+              </Table>
+            </TableContainer>
           ) : lotes.length === 0 ? (
             <Typography>Nenhum lote cadastrado</Typography>
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Nome</TableCell>
-                  <TableCell>Preço</TableCell>
-                  <TableCell>Confirmados / Vagas</TableCell>
-                  <TableCell>Período</TableCell>
-                  <TableCell align="center">Status</TableCell>
-                  <TableCell align="center">Ações</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {lotes.map((lote) => (
-                  <TableRow key={lote.id}>
-                    <TableCell>{lote.name}</TableCell>
-                    <TableCell>{formatarPreco(lote.price)}</TableCell>
-                    <TableCell>
-                      {Number(lote.inscritosConfirmados ?? lote.currentQuantity ?? 0)}
-                      {lote.maxQuantity && ` / ${lote.maxQuantity}`}
-                    </TableCell>
-                    <TableCell>
-                      {formatarData(lote.startDate)} - {formatarData(lote.endDate)}
-                    </TableCell>
-                    <TableCell align="center">
-                      <Chip
-                        label={lote.isActive ? 'Ativo' : 'Inativo'}
-                        color={lote.isActive ? 'primary' : 'default'}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell align="center">
-                      <Tooltip title="Editar">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleAbrirDialogLote(lote)}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title={lote.isActive ? 'Inativar Lote' : 'Reativar Lote'}>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleAlternarStatusLote(lote)}
-                        >
-                          <BlockIcon />
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
+            <TableContainer sx={lotsTableContainerSx}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Nome</TableCell>
+                    <TableCell>Preço</TableCell>
+                    <TableCell>Confirmados / Vagas</TableCell>
+                    <TableCell>Período</TableCell>
+                    <TableCell align="center">Status</TableCell>
+                    <TableCell align="center">Ações</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHead>
+                <TableBody>
+                  {lotes.map((lote) => (
+                    <TableRow key={lote.id}>
+                      <TableCell>{lote.name}</TableCell>
+                      <TableCell>{formatarPreco(lote.price)}</TableCell>
+                      <TableCell>
+                        {Number(lote.inscritosConfirmados ?? lote.currentQuantity ?? 0)}
+                        {lote.maxQuantity && ` / ${lote.maxQuantity}`}
+                      </TableCell>
+                      <TableCell>
+                        {formatarData(lote.startDate)} - {formatarData(lote.endDate)}
+                      </TableCell>
+                      <TableCell align="center">
+                        <Chip
+                          label={lote.isActive ? 'Ativo' : 'Inativo'}
+                          color={lote.isActive ? 'primary' : 'default'}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell align="center">
+                        <Tooltip title="Editar">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleAbrirDialogLote(lote)}
+                          >
+                            <EditIcon />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title={lote.isActive ? 'Inativar Lote' : 'Reativar Lote'}>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleAlternarStatusLote(lote)}
+                          >
+                            <BlockIcon />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
           )}
         </TabPanel>
 
@@ -1086,84 +1152,91 @@ function EventDetails() {
             </Grid>
           </Grid>
           {registrationsLoading ? (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell> </TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {skeletonRows}
-              </TableBody>
-            </Table>
+            <TableContainer sx={salesTableContainerSx}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell> </TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {skeletonRows}
+                </TableBody>
+              </Table>
+            </TableContainer>
           ) : inscricoes.length === 0 ? (
             <Typography>Nenhuma inscrição realizada</Typography>
           ) : (
             <>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Código</TableCell>
-                    <TableCell>Comprador</TableCell>
-                    <TableCell>Documento</TableCell>
-                    <TableCell>Quantidade</TableCell>
-                    <TableCell>Valor</TableCell>
-                    <TableCell>Forma de Pagamento</TableCell>
-                    <TableCell>Parcelas</TableCell>
-                    <TableCell>Data</TableCell>
-                    <TableCell align="center">Status</TableCell>
-                    <TableCell align="center">Ações</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {inscricoes.map((inscricao) => (
-                    <TableRow
-                      key={inscricao.id}
-                      hover
-                    >
-                      <TableCell>{inscricao.orderCode}</TableCell>
-                      <TableCell>{getBuyerName(inscricao)}</TableCell>
-                      <TableCell>{getBuyerDocument(inscricao)}</TableCell>
-                      <TableCell>{inscricao.quantity}</TableCell>
-                      <TableCell>{formatarPreco(inscricao.finalPrice)}</TableCell>
-                      <TableCell>{renderFormaPagamento(inscricao.paymentMethod)}</TableCell>
-                      <TableCell>{getInstallmentsLabel(inscricao)}</TableCell>
-                      <TableCell>{formatarDataHora(inscricao.createdAt)}</TableCell>
-                      <TableCell align="center">
-                        <Chip
-                          label={getPaymentStatusLabel(inscricao.paymentStatus)}
-                          sx={getPaymentStatusChipSx(inscricao.paymentStatus)}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell align="center">
-                        <Box display="flex" alignItems="center" justifyContent="center" gap={1}>
-                          <Tooltip title="Ver detalhes">
-                            <IconButton
-                              size="small"
-                              color="primary"
-                              onClick={() => history.push(`/app/events/registrations/${inscricao.id}`)}
-                            >
-                              <VisibilityIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          {!bannableStatuses.has(inscricao.paymentStatus) && (
-                            <Tooltip title="Cancelar inscrição">
+              <TableContainer sx={salesTableContainerSx}>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Código</TableCell>
+                      <TableCell>Comprador</TableCell>
+                      <TableCell>Documento</TableCell>
+                      <TableCell>Quantidade</TableCell>
+                      <TableCell>Valor</TableCell>
+                      <TableCell>Forma de Pagamento</TableCell>
+                      <TableCell>Parcelas</TableCell>
+                      <TableCell>Data</TableCell>
+                      <TableCell align="center">Status</TableCell>
+                      <TableCell align="center">Ações</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {inscricoes.map((inscricao) => (
+                      <TableRow
+                        key={inscricao.id}
+                        hover
+                      >
+                        <TableCell>{inscricao.orderCode}</TableCell>
+                        <TableCell>{getBuyerName(inscricao)}</TableCell>
+                        <TableCell>{getBuyerDocument(inscricao)}</TableCell>
+                        <TableCell>{inscricao.quantity}</TableCell>
+                        <TableCell>{formatarPreco(inscricao.finalPrice)}</TableCell>
+                        <TableCell>{renderFormaPagamento(inscricao.paymentMethod)}</TableCell>
+                        <TableCell>{getInstallmentsLabel(inscricao)}</TableCell>
+                        <TableCell>{formatarDataHora(inscricao.createdAt)}</TableCell>
+                        <TableCell align="center">
+                          <Chip
+                            label={getPaymentStatusLabel(inscricao.paymentStatus)}
+                            sx={getPaymentStatusChipSx(inscricao.paymentStatus)}
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell align="center">
+                          <Box display="flex" alignItems="center" justifyContent="center" gap={1}>
+                            <Tooltip title="Ver detalhes">
                               <IconButton
                                 size="small"
-                                color="error"
-                                onClick={() => abrirDialogCancelamento(inscricao.id, inscricao.orderCode)}
+                                color="primary"
+                                onClick={() => history.push(
+                                  `/app/events/registrations/${inscricao.id}`,
+                                  { pageTitle: inscricao.orderCode || 'Detalhes da Inscrição' }
+                                )}
                               >
-                                <CloseIcon fontSize="small" />
+                                <VisibilityIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
-                          )}
-                        </Box>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                            {!bannableStatuses.has(inscricao.paymentStatus) && (
+                              <Tooltip title="Cancelar inscrição">
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  onClick={() => abrirDialogCancelamento(inscricao.id, inscricao.orderCode)}
+                                >
+                                  <CloseIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
               <Typography variant="body2" color="textSecondary" style={{ marginTop: 8 }}>
                 Total de registros: {totalInscricoes}
               </Typography>
@@ -1221,38 +1294,42 @@ function EventDetails() {
             </Grid>
           </Grid>
           {confirmedAttendeesLoading ? (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell> </TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {skeletonRows}
-              </TableBody>
-            </Table>
+            <TableContainer sx={attendeesTableContainerSx}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell> </TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {skeletonRows}
+                </TableBody>
+              </Table>
+            </TableContainer>
           ) : inscritosConfirmados.length === 0 ? (
             <Typography>Nenhum inscrito confirmado encontrado</Typography>
           ) : (
             <>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Nome Completo</TableCell>
-                    <TableCell>Lote</TableCell>
-                    <TableCell>Código</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {inscritosConfirmados.map((inscrito) => (
-                    <TableRow key={inscrito.id}>
-                      <TableCell>{inscrito.nomeCompleto || '-'}</TableCell>
-                      <TableCell>{inscrito.lote || '-'}</TableCell>
-                      <TableCell>{inscrito.orderCode || '-'}</TableCell>
+              <TableContainer sx={attendeesTableContainerSx}>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Nome Completo</TableCell>
+                      <TableCell>Lote</TableCell>
+                      <TableCell>Código</TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHead>
+                  <TableBody>
+                    {inscritosConfirmados.map((inscrito) => (
+                      <TableRow key={inscrito.id}>
+                        <TableCell>{inscrito.nomeCompleto || '-'}</TableCell>
+                        <TableCell>{inscrito.lote || '-'}</TableCell>
+                        <TableCell>{inscrito.orderCode || '-'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
               <Typography variant="body2" color="textSecondary" style={{ marginTop: 8 }}>
                 Total de registros: {totalInscritosConfirmados}
               </Typography>
@@ -1283,76 +1360,80 @@ function EventDetails() {
           </div>
 
           {formasLoading ? (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell> </TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {skeletonRows}
-              </TableBody>
-            </Table>
+            <TableContainer sx={paymentMethodsTableContainerSx}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell> </TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {skeletonRows}
+                </TableBody>
+              </Table>
+            </TableContainer>
           ) : formasPagamento.length === 0 ? (
             <Typography variant="body2" color="textSecondary">
               Nenhuma forma de pagamento configurada ainda.
             </Typography>
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Tipo</TableCell>
-                  <TableCell>Parcelas</TableCell>
-                  <TableCell>Juros</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell align="right">Ações</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {formasPagamento.map((pagamento) => (
-                  <TableRow key={pagamento.id}>
-                    <TableCell>{traduzirTipoPagamento(pagamento.paymentType)}</TableCell>
-                    <TableCell>
-                      {pagamento.paymentType === 'credit_card'
-                        ? `Até ${pagamento.maxInstallments}x`
-                        : pagamento.paymentType === 'offline'
-                          ? 'Presencial'
-                          : 'À vista'}
-                    </TableCell>
-                    <TableCell>
-                      {pagamento.paymentType === 'credit_card'
-                        ? formatarJurosParcelados(pagamento)
-                        : 'Sem juros'}
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={pagamento.isActive ? 'Ativo' : 'Inativo'}
-                        color={pagamento.isActive ? 'primary' : 'default'}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell align="right">
-                      <Tooltip title="Editar">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleAbrirDialogPagamento(pagamento)}
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Deletar">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleDeletarPagamento(pagamento.id, traduzirTipoPagamento(pagamento.paymentType))}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
+            <TableContainer sx={paymentMethodsTableContainerSx}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Tipo</TableCell>
+                    <TableCell>Parcelas</TableCell>
+                    <TableCell>Juros</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell align="right">Ações</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHead>
+                <TableBody>
+                  {formasPagamento.map((pagamento) => (
+                    <TableRow key={pagamento.id}>
+                      <TableCell>{traduzirTipoPagamento(pagamento.paymentType)}</TableCell>
+                      <TableCell>
+                        {pagamento.paymentType === 'credit_card'
+                          ? `Até ${pagamento.maxInstallments}x`
+                          : pagamento.paymentType === 'offline'
+                            ? 'Presencial'
+                            : 'À vista'}
+                      </TableCell>
+                      <TableCell>
+                        {pagamento.paymentType === 'credit_card'
+                          ? formatarJurosParcelados(pagamento)
+                          : 'Sem juros'}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={pagamento.isActive ? 'Ativo' : 'Inativo'}
+                          color={pagamento.isActive ? 'primary' : 'default'}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        <Tooltip title="Editar">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleAbrirDialogPagamento(pagamento)}
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Deletar">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleDeletarPagamento(pagamento.id, traduzirTipoPagamento(pagamento.paymentType))}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
           )}
         </TabPanel>
       </Card>
