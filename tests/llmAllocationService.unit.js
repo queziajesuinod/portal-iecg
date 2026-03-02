@@ -5,7 +5,8 @@ const {
   inferFieldMappingFromAvailableFields,
   normalizeKey,
   violatesLeaderHardRule,
-  buildHousingFallbackByLeaderBlocks
+  buildHousingFallbackByLeaderBlocks,
+  shouldEnforceLeaderGroupingRule
 } = require('../server/services/llmAllocationService');
 
 function testInferLeaderFieldViaAvailableFields() {
@@ -82,10 +83,26 @@ function testFallbackByLeaderBlocksKeepsLeaderTogether() {
   );
 }
 
+function testLeaderHardRuleOnlyWhenCustomRuleIsWritten() {
+  assert.strictEqual(
+    shouldEnforceLeaderGroupingRule(''),
+    false
+  );
+  assert.strictEqual(
+    shouldEnforceLeaderGroupingRule('Separar por idade e cidade'),
+    false
+  );
+  assert.strictEqual(
+    shouldEnforceLeaderGroupingRule('Agrupar juntos por lider de celula no mesmo quarto'),
+    true
+  );
+}
+
 function run() {
   testInferLeaderFieldViaAvailableFields();
   testDetectLeaderViolationAcrossRooms();
   testFallbackByLeaderBlocksKeepsLeaderTogether();
+  testLeaderHardRuleOnlyWhenCustomRuleIsWritten();
   console.log('llmAllocationService.unit.js: all tests passed');
 }
 

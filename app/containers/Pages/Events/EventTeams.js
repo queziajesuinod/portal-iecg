@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import { useParams } from 'react-router-dom';
+import PropTypes from 'prop-types';
 import { PapperBlock, Notification } from 'dan-components';
 import {
   Grid,
@@ -24,6 +25,7 @@ import {
   ListItemAvatar,
   ListItemText,
   LinearProgress,
+  MenuItem,
 } from '@mui/material';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import SaveIcon from '@mui/icons-material/Save';
@@ -31,6 +33,7 @@ import GroupsIcon from '@mui/icons-material/Groups';
 import WarningIcon from '@mui/icons-material/Warning';
 import InfoIcon from '@mui/icons-material/Info';
 import PersonIcon from '@mui/icons-material/Person';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import brand from 'dan-api/dummy/brand';
 import {
   getTeamsConfig,
@@ -45,6 +48,16 @@ import {
 function TabPanel({ children, value, index }) {
   return value === index ? <Box sx={{ pt: 3 }}>{children}</Box> : null;
 }
+
+TabPanel.propTypes = {
+  children: PropTypes.node,
+  value: PropTypes.number.isRequired,
+  index: PropTypes.number.isRequired,
+};
+
+TabPanel.defaultProps = {
+  children: null,
+};
 
 // Paleta de cores para os times
 const TEAM_COLORS = [
@@ -75,14 +88,15 @@ export default function EventTeams() {
   // ── Geração ──
   const [generating, setGenerating] = useState(false);
   const [generationResult, setGenerationResult] = useState(null);
+  const [editableAllocation, setEditableAllocation] = useState([]);
 
   // ── Salvo ──
   const [savedAllocation, setSavedAllocation] = useState([]);
   const [savingAllocation, setSavingAllocation] = useState(false);
 
-  useEffect(() => {
-    carregarDados();
-  }, [eventId]);
+  function generateDefaultNames(count) {
+    return Array.from({ length: count }, (_item, i) => `Time ${String.fromCharCode(65 + i)}`);
+  }
 
   async function carregarDados() {
     try {
@@ -127,6 +141,10 @@ export default function EventTeams() {
     }
   }
 
+  useEffect(() => {
+    carregarDados();
+  }, [eventId]);
+
   function handleAddBatchReference(batch) {
     if (!batch) return;
     const ruleText = `Considerar lote "${batch.name}" (eventBatch.id=${batch.id}) nas regras de divisao.`;
@@ -134,10 +152,6 @@ export default function EventTeams() {
       const normalized = String(prev || '').trim();
       return normalized ? `${normalized}\n- ${ruleText}` : `- ${ruleText}`;
     });
-  }
-
-  function generateDefaultNames(count) {
-    return Array.from({ length: count }, (_, i) => `Time ${String.fromCharCode(65 + i)}`);
   }
 
   function handleTeamsCountChange(value) {
@@ -175,9 +189,13 @@ export default function EventTeams() {
     try {
       setGenerating(true);
       setGenerationResult(null);
-      await saveTeamsConfig(eventId, { teamsCount, playersPerTeam: playersPerTeam || null, teamNames, customRules });
+      await saveTeamsConfig(eventId, {
+        teamsCount, playersPerTeam: playersPerTeam || null, teamNames, customRules
+      });
       const result = await generateTeamsAllocation(eventId, customRules);
       setGenerationResult(result);
+      // eslint-disable-next-line no-use-before-define
+      setEditableAllocation(normalizeAllocationForEditing(result.allocation || []));
       setTab(1);
     } catch (err) {
       setNotification(err.message || 'Erro ao gerar times');
@@ -187,13 +205,21 @@ export default function EventTeams() {
   }
 
   async function handleSaveAllocation() {
-    if (!generationResult) return;
+    if (!generationResult || !editableAllocation.length) return;
+    // eslint-disable-next-line no-use-before-define
+    const overLimit = getTeamsOverLimit(editableAllocation);
+    if (overLimit.length > 0) {
+      const detail = overLimit.map((item) => `${item.teamName} (${item.used}/${item.limit})`).join(', ');
+      setNotification(`Nao foi possivel salvar: limite por time excedido - ${detail}`);
+      return;
+    }
     try {
       setSavingAllocation(true);
-      await saveTeamsAllocation(eventId, generationResult.allocation, generationResult.reasoning);
+      await saveTeamsAllocation(eventId, editableAllocation, generationResult.reasoning);
       setNotification('Divisão de times salva com sucesso!');
       await carregarDados();
       setGenerationResult(null);
+      setEditableAllocation([]);
       setTab(2);
     } catch (err) {
       setNotification(err.message || 'Erro ao salvar times');
@@ -213,6 +239,149 @@ export default function EventTeams() {
     return Object.values(groups).sort((a, b) => a.teamId.localeCompare(b.teamId));
   }
 
+  function getTeamDefinitions() {
+    const total = Math.max(2, Number.parseInt(teamsCount, 10) || 2);
+    return Array.from({ length: total }, (_item, index) => ({
+      teamId: String(index + 1),
+      teamName: teamNames[index] || `Time ${index + 1}`
+    }));
+  }
+
+  function getTeamById(teamId) {
+    return getTeamDefinitions().find((team) => String(team.teamId) === String(teamId)) || null;
+  }
+
+  function getPlayersPerTeamLimit(totalMembers = 0) {
+    const explicitLimit = Number.parseInt(playersPerTeam, 10);
+    if (Number.isFinite(explicitLimit) && explicitLimit > 0) return explicitLimit;
+    const count = Math.max(2, Number.parseInt(teamsCount, 10) || 2);
+    return Math.max(Math.ceil(totalMembers / count), 1);
+  }
+
+  function getTeamOccupancy(allocation = []) {
+    return allocation.reduce((acc, item) => {
+      const key = String(item.teamId || '');
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+  }
+
+  function getTeamsOverLimit(allocation = []) {
+    const occupancy = getTeamOccupancy(allocation);
+    const limit = getPlayersPerTeamLimit(allocation.length);
+    return getTeamDefinitions()
+      .map((team) => ({
+        teamId: team.teamId,
+        teamName: team.teamName,
+        used: occupancy[String(team.teamId)] || 0,
+        limit
+      }))
+      .filter((item) => item.used > item.limit);
+  }
+
+  function normalizeAllocationForEditing(allocation = []) {
+    const fallbackTeamId = '1';
+    return allocation.map((item) => {
+      const requestedTeamId = String(item.teamId || fallbackTeamId);
+      const team = getTeamById(requestedTeamId) || getTeamById(fallbackTeamId);
+      return {
+        ...item,
+        attendeeId: item.attendeeId || item.attendee?.id || item.id,
+        teamId: String(team?.teamId || fallbackTeamId),
+        teamName: item.teamName || team?.teamName || `Time ${requestedTeamId}`
+      };
+    });
+  }
+
+  function handleMoveMemberToTeam(attendeeId, destinationTeamId) {
+    setEditableAllocation((prev) => {
+      const next = [...prev];
+      const index = next.findIndex((item) => String(item.attendeeId || item.id) === String(attendeeId));
+      if (index < 0) return prev;
+
+      const currentTeamId = String(next[index].teamId || '');
+      const targetTeamId = String(destinationTeamId || '');
+      if (!targetTeamId || currentTeamId === targetTeamId) return prev;
+
+      const team = getTeamById(targetTeamId);
+      if (!team) return prev;
+
+      const occupancy = getTeamOccupancy(next);
+      const targetCount = occupancy[targetTeamId] || 0;
+      const limit = getPlayersPerTeamLimit(next.length);
+      if (targetCount >= limit) {
+        setNotification(`O ${team.teamName} atingiu o limite de ${limit} pessoa(s).`);
+        return prev;
+      }
+
+      next[index] = {
+        ...next[index],
+        teamId: targetTeamId,
+        teamName: team.teamName
+      };
+      return next;
+    });
+  }
+
+  function handleEditSavedAllocation() {
+    if (!savedAllocation.length) return;
+    const normalized = normalizeAllocationForEditing(savedAllocation);
+    setEditableAllocation(normalized);
+    setGenerationResult({
+      allocation: normalized,
+      teamsSummary: [],
+      warnings: [],
+      reasoning: 'Edicao manual dos times salvos.'
+    });
+    setTab(1);
+  }
+
+  function getIdadeMembro(item) {
+    return item.idade || item.attendee?.attendeeData?.idade || '-';
+  }
+
+  function getLiderMembro(item) {
+    return item.lider_de_celula || item.attendee?.attendeeData?.lider_de_celula || '-';
+  }
+
+  function escapeCsvValue(value) {
+    const normalized = String(value ?? '').replace(/"/g, '""');
+    return `"${normalized}"`;
+  }
+
+  function exportTeamsToExcel(allocation = [], filePrefix = 'times_alocados') {
+    if (!allocation.length) {
+      setNotification('Nao ha dados para exportar.');
+      return;
+    }
+    const groups = groupByTeam(allocation);
+    const rows = [['Time', 'Nome', 'Idade', 'Lider de celula', 'Sexo']];
+    groups.forEach((team) => {
+      team.members.forEach((member) => {
+        rows.push([
+          team.teamName || team.teamId,
+          // eslint-disable-next-line no-use-before-define
+          getNomeMembro(member),
+          getIdadeMembro(member),
+          getLiderMembro(member),
+          // eslint-disable-next-line no-use-before-define
+          getSexoMembro(member) || '-'
+        ]);
+      });
+    });
+    const csv = `\uFEFF${rows.map((row) => row.map(escapeCsvValue).join(';')).join('\r\n')}`;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `${filePrefix}_${date}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
   function getTeamColor(index) {
     return TEAM_COLORS[index % TEAM_COLORS.length];
   }
@@ -228,7 +397,30 @@ export default function EventTeams() {
     return item.attendee?.attendeeData?.sexo || item.sexo || '';
   }
 
-  const renderTeamsCards = (allocation, summaries = []) => {
+  function normalizeSexoForSort(item) {
+    const sexo = String(getSexoMembro(item) || '').trim().toLowerCase();
+    if (['f', 'feminino', 'female'].includes(sexo)) return 0;
+    if (['m', 'masculino', 'male'].includes(sexo)) return 1;
+    return 2;
+  }
+
+  function parseIdadeForSort(item) {
+    const idadeRaw = getIdadeMembro(item);
+    const idade = Number.parseInt(String(idadeRaw).replace(/[^\d-]/g, ''), 10);
+    return Number.isFinite(idade) ? idade : Number.MAX_SAFE_INTEGER;
+  }
+
+  function compareMembersBySexoAndIdade(a, b) {
+    const sexoDiff = normalizeSexoForSort(a) - normalizeSexoForSort(b);
+    if (sexoDiff !== 0) return sexoDiff;
+
+    const idadeDiff = parseIdadeForSort(a) - parseIdadeForSort(b);
+    if (idadeDiff !== 0) return idadeDiff;
+
+    return getNomeMembro(a).localeCompare(getNomeMembro(b), 'pt-BR');
+  }
+
+  const renderTeamsCards = (allocation, summaries = [], editable = false, sortBySexoAndIdade = false) => {
     const groups = groupByTeam(allocation);
     if (!groups.length) return <Typography color="textSecondary">Nenhuma divisão disponível.</Typography>;
 
@@ -261,7 +453,9 @@ export default function EventTeams() {
                     </Typography>
                   }
                   subheader={
-                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.5 }}>
+                    <Box sx={{
+                      display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.5
+                    }}>
                       <Chip size="small" label={`${team.members.length} pessoas`} />
                       {masc > 0 && <Chip size="small" label={`♂ ${masc}`} color="primary" variant="outlined" />}
                       {fem > 0 && <Chip size="small" label={`♀ ${fem}`} color="secondary" variant="outlined" />}
@@ -290,17 +484,36 @@ export default function EventTeams() {
                   )}
 
                   <List dense disablePadding>
-                    {team.members.map((member) => (
+                    {(sortBySexoAndIdade ? [...team.members].sort(compareMembersBySexoAndIdade) : team.members).map((member) => (
                       <ListItem key={member.attendeeId || member.id} disableGutters sx={{ py: 0.25 }}>
                         <ListItemAvatar sx={{ minWidth: 32 }}>
-                          <Avatar sx={{ width: 24, height: 24, bgcolor: color, fontSize: 11 }}>
+                          <Avatar sx={{
+                            width: 24, height: 24, bgcolor: color, fontSize: 11
+                          }}>
                             <PersonIcon sx={{ fontSize: 14 }} />
                           </Avatar>
                         </ListItemAvatar>
                         <ListItemText
                           primary={getNomeMembro(member)}
+                          secondary={`Idade: ${getIdadeMembro(member)} | Lider: ${getLiderMembro(member)} | Sexo: ${getSexoMembro(member) || '-'}`}
                           primaryTypographyProps={{ variant: 'body2', noWrap: true }}
+                          secondaryTypographyProps={{ variant: 'caption', color: 'textSecondary', noWrap: true }}
                         />
+                        {editable && (
+                          <TextField
+                            select
+                            size="small"
+                            value={String(member.teamId || '')}
+                            onChange={(event) => handleMoveMemberToTeam(member.attendeeId || member.id, event.target.value)}
+                            sx={{ minWidth: 130 }}
+                          >
+                            {getTeamDefinitions().map((teamOption) => (
+                              <MenuItem key={teamOption.teamId} value={teamOption.teamId}>
+                                {teamOption.teamName}
+                              </MenuItem>
+                            ))}
+                          </TextField>
+                        )}
                       </ListItem>
                     ))}
                   </List>
@@ -414,7 +627,7 @@ export default function EventTeams() {
                 multiline
                 rows={7}
                 label="Regras adicionais (linguagem natural)"
-                placeholder={`Exemplos:\n- Líderes distribuídos 1 por time\n- Crianças abaixo de 12 anos no Time A\n- Fulano e Ciclano não podem ser do mesmo time\n- Separar por cidade de origem`}
+                placeholder={'Exemplos:\n- Líderes distribuídos 1 por time\n- Crianças abaixo de 12 anos no Time A\n- Fulano e Ciclano não podem ser do mesmo time\n- Separar por cidade de origem'}
                 value={customRules}
                 onChange={(e) => setCustomRules(e.target.value)}
                 helperText="O LLM irá interpretar e aplicar respeitando os campos disponíveis nos inscritos."
@@ -534,11 +747,21 @@ export default function EventTeams() {
               )}
 
               <Grid item xs={12}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Box sx={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2
+                }}>
                   <Typography variant="subtitle1" fontWeight="bold">
-                    {generationResult.allocation?.length || 0} inscritos distribuídos em {teamsCount} times
+                    {editableAllocation.length || 0} inscritos distribuidos em {teamsCount} times
                   </Typography>
                   <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Button
+                      variant="outlined"
+                      startIcon={<FileDownloadIcon />}
+                      onClick={() => exportTeamsToExcel(editableAllocation, 'times_alocados_edicao')}
+                      disabled={!editableAllocation.length}
+                    >
+                      Exportar Excel
+                    </Button>
                     <Button variant="outlined" onClick={() => setTab(0)}>
                       Ajustar Configuração
                     </Button>
@@ -549,14 +772,16 @@ export default function EventTeams() {
                       onClick={handleSaveAllocation}
                       disabled={savingAllocation}
                     >
-                      {savingAllocation ? 'Salvando...' : 'Confirmar e Salvar'}
+                      {savingAllocation ? 'Salvando...' : 'Salvar Alocacao Editada'}
                     </Button>
                   </Box>
                 </Box>
 
                 {renderTeamsCards(
-                  generationResult.allocation || [],
-                  generationResult.teamsSummary || []
+                  editableAllocation || [],
+                  generationResult.teamsSummary || [],
+                  true,
+                  true
                 )}
               </Grid>
             </Grid>
@@ -572,15 +797,29 @@ export default function EventTeams() {
           ) : (
             <Grid container spacing={2}>
               <Grid item xs={12}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Box sx={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2
+                }}>
                   <Typography variant="subtitle1" fontWeight="bold">
                     {savedAllocation.length} inscritos nos times
                   </Typography>
-                  <Button variant="outlined" onClick={() => setTab(0)}>
-                    Regenerar
-                  </Button>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Button
+                      variant="outlined"
+                      startIcon={<FileDownloadIcon />}
+                      onClick={() => exportTeamsToExcel(savedAllocation, 'times_alocados_salvos')}
+                    >
+                      Exportar Excel
+                    </Button>
+                    <Button variant="outlined" onClick={handleEditSavedAllocation}>
+                      Editar Alocacao
+                    </Button>
+                    <Button variant="outlined" onClick={() => setTab(0)}>
+                      Regenerar
+                    </Button>
+                  </Box>
                 </Box>
-                {renderTeamsCards(savedAllocation)}
+                {renderTeamsCards(savedAllocation, [], false, true)}
               </Grid>
             </Grid>
           )}
