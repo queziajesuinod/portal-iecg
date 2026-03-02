@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PropTypes } from 'prop-types';
 import { makeStyles } from 'tss-react/mui';
 import { ThemeProvider } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
 import { CacheProvider } from '@emotion/react';
 import createCache from '@emotion/cache';
 import rtlPlugin from 'stylis-plugin-rtl';
@@ -97,6 +98,7 @@ function ThemeWrapper(props) {
   return (
     <CacheProvider value={theme.direction === 'rtl' ? cacheRTL : cacheLTR}>
       <ThemeProvider theme={muiTheme}>
+        <CssBaseline />
         <div className={classes.root}>
           <Loading
             variant="determinate"

@@ -8,6 +8,7 @@ import {
   Typography,
   Button,
   Table,
+  TableContainer,
   TableBody,
   TableCell,
   TableHead,
@@ -176,7 +177,7 @@ function EventList() {
     if (!total || total <= 0) return 0;
     return Math.max(0, Math.min(100, (Number(vendidos || 0) / Number(total)) * 100));
   };
- 
+
   const handleToggleStatus = async (evento) => {
     try {
       await atualizarEvento(evento.id, { isActive: !evento.isActive });
@@ -215,6 +216,18 @@ function EventList() {
   };
 
   const title = brand.name + ' - Eventos';
+  const eventsTableContainerSx = {
+    width: '100%',
+    overflowX: 'auto',
+    '& .MuiTable-root': { minWidth: 980 },
+    '& .MuiTableCell-root': { whiteSpace: 'nowrap' }
+  };
+  const ticketSummaryTableContainerSx = {
+    width: '100%',
+    overflowX: 'auto',
+    '& .MuiTable-root': { minWidth: 820 },
+    '& .MuiTableCell-root': { whiteSpace: 'nowrap' }
+  };
 
   const renderResumoIngressos = (eventId) => {
     const loadingResumo = Boolean(ticketsSummaryLoading[eventId]);
@@ -229,54 +242,56 @@ function EventList() {
     }
 
     return (
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell>Lote</TableCell>
-            <TableCell>Preço</TableCell>
-            <TableCell>Vendidos/Total</TableCell>
-            <TableCell><CreditCardIcon fontSize="small" /> Cartão</TableCell>
-            <TableCell><AccountBalanceWalletIcon fontSize="small" /> Pix</TableCell>
-            <TableCell><MoneyIcon fontSize="small" /> Outros</TableCell>
-            <TableCell align="right">Total</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {resumo.batches.map((row) => (
-            <TableRow key={row.batchId}>
-              <TableCell>{row.batchName}</TableCell>
-              <TableCell>{formatarPreco(row.price)}</TableCell>
-              <TableCell>
-                <div style={{ minWidth: 150 }}>
-                  <LinearProgress
-                    variant="determinate"
-                    value={calcularPercentualVendidos(row.sold, row.total)}
-                    style={{ height: 10, borderRadius: 6, marginBottom: 4 }}
-                  />
-                  <Typography variant="caption">
-                    {formatarVendidosTotal(row.sold, row.total)}
-                  </Typography>
-                </div>
-              </TableCell>
-              <TableCell>{formatarPreco(row.credit)}</TableCell>
-              <TableCell>{formatarPreco(row.pix)}</TableCell>
-              <TableCell>{formatarPreco(row.others)}</TableCell>
-              <TableCell align="right">{formatarPreco(row.totalPaid)}</TableCell>
+      <TableContainer sx={ticketSummaryTableContainerSx}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Lote</TableCell>
+              <TableCell>Preço</TableCell>
+              <TableCell>Vendidos/Total</TableCell>
+              <TableCell><CreditCardIcon fontSize="small" /> Cartão</TableCell>
+              <TableCell><AccountBalanceWalletIcon fontSize="small" /> Pix</TableCell>
+              <TableCell><MoneyIcon fontSize="small" /> Outros</TableCell>
+              <TableCell align="right">Total</TableCell>
             </TableRow>
-          ))}
-          <TableRow>
-            <TableCell><strong>TOTAL</strong></TableCell>
-            <TableCell>-</TableCell>
-            <TableCell>
-              <strong>{formatarVendidosTotal(resumo.totals?.sold || 0, resumo.totals?.total || 0)}</strong>
-            </TableCell>
-            <TableCell><strong>{formatarPreco(resumo.totals?.credit || 0)}</strong></TableCell>
-            <TableCell><strong>{formatarPreco(resumo.totals?.pix || 0)}</strong></TableCell>
-            <TableCell><strong>{formatarPreco(resumo.totals?.others || 0)}</strong></TableCell>
-            <TableCell align="right"><strong>{formatarPreco(resumo.totals?.totalPaid || 0)}</strong></TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
+          </TableHead>
+          <TableBody>
+            {resumo.batches.map((row) => (
+              <TableRow key={row.batchId}>
+                <TableCell>{row.batchName}</TableCell>
+                <TableCell>{formatarPreco(row.price)}</TableCell>
+                <TableCell>
+                  <div style={{ minWidth: 150 }}>
+                    <LinearProgress
+                      variant="determinate"
+                      value={calcularPercentualVendidos(row.sold, row.total)}
+                      style={{ height: 10, borderRadius: 6, marginBottom: 4 }}
+                    />
+                    <Typography variant="caption">
+                      {formatarVendidosTotal(row.sold, row.total)}
+                    </Typography>
+                  </div>
+                </TableCell>
+                <TableCell>{formatarPreco(row.credit)}</TableCell>
+                <TableCell>{formatarPreco(row.pix)}</TableCell>
+                <TableCell>{formatarPreco(row.others)}</TableCell>
+                <TableCell align="right">{formatarPreco(row.totalPaid)}</TableCell>
+              </TableRow>
+            ))}
+            <TableRow>
+              <TableCell><strong>TOTAL</strong></TableCell>
+              <TableCell>-</TableCell>
+              <TableCell>
+                <strong>{formatarVendidosTotal(resumo.totals?.sold || 0, resumo.totals?.total || 0)}</strong>
+              </TableCell>
+              <TableCell><strong>{formatarPreco(resumo.totals?.credit || 0)}</strong></TableCell>
+              <TableCell><strong>{formatarPreco(resumo.totals?.pix || 0)}</strong></TableCell>
+              <TableCell><strong>{formatarPreco(resumo.totals?.others || 0)}</strong></TableCell>
+              <TableCell align="right"><strong>{formatarPreco(resumo.totals?.totalPaid || 0)}</strong></TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </TableContainer>
     );
   };
 
@@ -413,101 +428,105 @@ function EventList() {
             {eventos.length === 0 ? 'Nenhum evento cadastrado' : 'Nenhum evento encontrado com os filtros aplicados'}
           </Typography>
         ) : (
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell width={40}> </TableCell>
-                <TableCell>Título</TableCell>
-                <TableCell>Data Início</TableCell>
-                <TableCell>Local</TableCell>
-                <TableCell>Tipo</TableCell>
-                <TableCell align="center">Inscrições</TableCell>
-                <TableCell align="center">Status</TableCell>
-                <TableCell align="center">Ações</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {eventosFiltrados.map((evento) => (
-                <React.Fragment key={evento.id}>
-                  <TableRow>
-                    <TableCell>
-                      <IconButton size="small" onClick={() => toggleEventSummary(evento.id)}>
-                        {expandedEvents[evento.id] ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                      </IconButton>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="subtitle2">{evento.title}</Typography>
-                    </TableCell>
-                    <TableCell>{formatarData(evento.startDate)}</TableCell>
-                    <TableCell>{evento.location || '-'}</TableCell>
-                    <TableCell>
-                      {EVENT_TYPE_LABELS[evento.eventType] || evento.eventType || '-'}
-                    </TableCell>
-                    <TableCell align="center">
-                      {evento.currentRegistrations || 0}
-                      {evento.maxRegistrations && ` / ${evento.maxRegistrations}`}
-                    </TableCell>
-                    <TableCell align="center">
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color={evento.isActive ? 'primary' : 'inherit'}
-                        onClick={() => handleToggleStatus(evento)}
-                      >
-                        {evento.isActive ? 'Ativo' : 'Inativo'}
-                      </Button>
-                    </TableCell>
-                    <TableCell align="center">
-                      <Tooltip title="Ver Detalhes">
-                        <IconButton
-                          size="small"
-                          onClick={() => history.push(`/app/events/${evento.id}`)}
-                        >
-                          <ViewIcon />
+          <TableContainer sx={eventsTableContainerSx}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell width={40}> </TableCell>
+                  <TableCell>Título</TableCell>
+                  <TableCell>Data Início</TableCell>
+                  <TableCell>Local</TableCell>
+                  <TableCell>Tipo</TableCell>
+                  <TableCell align="center">Inscrições</TableCell>
+                  <TableCell align="center">Status</TableCell>
+                  <TableCell align="center">Ações</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {eventosFiltrados.map((evento) => (
+                  <React.Fragment key={evento.id}>
+                    <TableRow>
+                      <TableCell>
+                        <IconButton size="small" onClick={() => toggleEventSummary(evento.id)}>
+                          {expandedEvents[evento.id] ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                         </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Editar">
-                        <IconButton
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="subtitle2">{evento.title}</Typography>
+                      </TableCell>
+                      <TableCell>{formatarData(evento.startDate)}</TableCell>
+                      <TableCell>{evento.location || '-'}</TableCell>
+                      <TableCell>
+                        {EVENT_TYPE_LABELS[evento.eventType] || evento.eventType || '-'}
+                      </TableCell>
+                      <TableCell align="center">
+                        {evento.currentRegistrations || 0}
+                        {evento.maxRegistrations && ` / ${evento.maxRegistrations}`}
+                      </TableCell>
+                      <TableCell align="center">
+                        <Button
                           size="small"
-                          onClick={() => history.push(`/app/events/${evento.id}/editar`)}
+                          variant="outlined"
+                          color={evento.isActive ? 'primary' : 'inherit'}
+                          onClick={() => handleToggleStatus(evento)}
                         >
-                          <EditIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Deletar">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleDeletar(evento.id, evento.title)}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Duplicar">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleDuplicar(evento)}
-                        >
-                          <DuplicateIcon />
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={8}>
-                      <Collapse in={Boolean(expandedEvents[evento.id])} timeout="auto" unmountOnExit>
-                        <div style={{ margin: '12px 0 16px 0', padding: 12, background: '#fafafa', borderRadius: 8 }}>
-                          <Typography variant="subtitle2" style={{ marginBottom: 10 }}>
+                          {evento.isActive ? 'Ativo' : 'Inativo'}
+                        </Button>
+                      </TableCell>
+                      <TableCell align="center">
+                        <Tooltip title="Ver Detalhes">
+                          <IconButton
+                            size="small"
+                            onClick={() => history.push(`/app/events/${evento.id}`, { pageTitle: evento.title })}
+                          >
+                            <ViewIcon />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Editar">
+                          <IconButton
+                            size="small"
+                            onClick={() => history.push(`/app/events/${evento.id}/editar`)}
+                          >
+                            <EditIcon />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Deletar">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleDeletar(evento.id, evento.title)}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Duplicar">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleDuplicar(evento)}
+                          >
+                            <DuplicateIcon />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={8}>
+                        <Collapse in={Boolean(expandedEvents[evento.id])} timeout="auto" unmountOnExit>
+                          <div style={{
+                            margin: '12px 0 16px 0', padding: 12, background: '#fafafa', borderRadius: 8
+                          }}>
+                            <Typography variant="subtitle2" style={{ marginBottom: 10 }}>
                             Ingressos
-                          </Typography>
-                          {renderResumoIngressos(evento.id)}
-                        </div>
-                      </Collapse>
-                    </TableCell>
-                  </TableRow>
-                </React.Fragment>
-              ))}
-            </TableBody>
-          </Table>
+                            </Typography>
+                            {renderResumoIngressos(evento.id)}
+                          </div>
+                        </Collapse>
+                      </TableCell>
+                    </TableRow>
+                  </React.Fragment>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
         )}
       </PapperBlock>
       <Notification message={notification} close={() => setNotification('')} />
