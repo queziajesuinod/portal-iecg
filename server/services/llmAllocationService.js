@@ -424,6 +424,22 @@ function shouldSequentialFillRooms(customRules = '') {
     || text.includes('só vai para o outro quarto quando completar o quarto atual');
 }
 
+function shouldEnforceLeaderGroupingRule(customRules = '') {
+  const text = normalizeRuleText(customRules);
+  if (!text) return false;
+  if (text.includes('regra 5')) return true;
+
+  const mentionsLeader = text.includes('lider');
+  if (!mentionsLeader) return false;
+
+  return text.includes('agrupar')
+    || text.includes('juntar')
+    || text.includes('juntos')
+    || text.includes('mesmo quarto')
+    || text.includes('nao separar')
+    || text.includes('nao dividir');
+}
+
 function attendeeIsMale(attendee = {}) {
   const byFlag = normalizeBooleanLike(
     attendee?.camposDinamicos?.['attendeeData.sexoMasculino']
@@ -1346,6 +1362,7 @@ async function generateHousingAllocation(rawAttendees, rooms, customRules = '') 
   const allowedAttendeesById = new Map(filteredAttendees.map((attendee) => [attendee.id, attendee]));
   const availableFields = extractAvailableFields(rawAttendees);
   const mapping = inferFieldMappingFromAvailableFields(availableFields, customRules);
+  const leaderHardEnabled = Boolean(mapping.leaderField && shouldEnforceLeaderGroupingRule(customRules));
   const fieldSelection = buildPromptFieldSelection(availableFields, customRules);
   const normalizedRooms = sanitizeRooms(rooms);
 
@@ -1376,7 +1393,7 @@ async function generateHousingAllocation(rawAttendees, rooms, customRules = '') 
   );
 
   const buildFallbackResult = () => {
-    if (mapping.leaderField) {
+    if (leaderHardEnabled) {
       return buildHousingFallbackByLeaderBlocks(rawAttendees, normalizedRooms, customRules, {
         sequentialFill: preFilterResult.sequentialFill,
         allowedAttendeeIds
@@ -1399,7 +1416,7 @@ async function generateHousingAllocation(rawAttendees, rooms, customRules = '') 
       normalizedRooms,
       mapping
     );
-    if (mapping.leaderField && violatesLeaderHardRule(
+    if (leaderHardEnabled && violatesLeaderHardRule(
       sanitizedAllocation.allocation,
       allowedAttendeesById,
       mapping.leaderField
@@ -1526,5 +1543,6 @@ module.exports = {
   isLeaderException,
   inferFieldMappingFromAvailableFields,
   violatesLeaderHardRule,
-  buildHousingFallbackByLeaderBlocks
+  buildHousingFallbackByLeaderBlocks,
+  shouldEnforceLeaderGroupingRule
 };

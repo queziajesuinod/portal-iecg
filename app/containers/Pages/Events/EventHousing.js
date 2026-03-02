@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import { useParams } from 'react-router-dom';
+import PropTypes from 'prop-types';
 import { PapperBlock, Notification } from 'dan-components';
 import {
   Grid,
@@ -24,6 +25,7 @@ import {
   Box,
   Tab,
   Tabs,
+  MenuItem,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -32,6 +34,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import BedIcon from '@mui/icons-material/KingBed';
 import WarningIcon from '@mui/icons-material/Warning';
 import InfoIcon from '@mui/icons-material/Info';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import brand from 'dan-api/dummy/brand';
 import {
   getHousingConfig,
@@ -46,6 +49,16 @@ import {
 function TabPanel({ children, value, index }) {
   return value === index ? <Box sx={{ pt: 3 }}>{children}</Box> : null;
 }
+
+TabPanel.propTypes = {
+  children: PropTypes.node,
+  value: PropTypes.number.isRequired,
+  index: PropTypes.number.isRequired,
+};
+
+TabPanel.defaultProps = {
+  children: null,
+};
 
 export default function EventHousing() {
   const { id: eventId } = useParams();
@@ -67,15 +80,11 @@ export default function EventHousing() {
   // ── Geração LLM ──
   const [generating, setGenerating] = useState(false);
   const [generationResult, setGenerationResult] = useState(null); // alocação temporária não salva
+  const [editableAllocation, setEditableAllocation] = useState([]);
 
   // ── Alocação salva ──
   const [savedAllocation, setSavedAllocation] = useState([]);
   const [savingAllocation, setSavingAllocation] = useState(false);
-  const [loadingAllocation, setLoadingAllocation] = useState(false);
-
-  useEffect(() => {
-    carregarDados();
-  }, [eventId]);
 
   async function carregarDados() {
     try {
@@ -119,6 +128,10 @@ export default function EventHousing() {
     }
   }
 
+  useEffect(() => {
+    carregarDados();
+  }, [eventId]);
+
   function handleAddBatchReference(batch) {
     if (!batch) return;
     const ruleText = `Considerar lote "${batch.name}" (eventBatch.id=${batch.id}) nas regras de alocacao.`;
@@ -135,9 +148,9 @@ export default function EventHousing() {
   }
 
   function updateRoom(index, field, value) {
-    setRooms((prev) =>
-      prev.map((r, i) => (i === index ? { ...r, [field]: field === 'capacity' ? parseInt(value, 10) || 1 : value } : r))
-    );
+    setRooms((prev) => prev.map((r, i) => (
+      i === index ? { ...r, [field]: field === 'capacity' ? parseInt(value, 10) || 1 : value } : r
+    )));
   }
 
   function removeRoom(index) {
@@ -167,6 +180,7 @@ export default function EventHousing() {
       await saveHousingConfig(eventId, { rooms, customRules });
       const result = await generateHousingAllocation(eventId, customRules);
       setGenerationResult(result);
+      setEditableAllocation(result.allocation || []);
       setTab(1); // vai para aba de resultado
     } catch (err) {
       setNotification(err.message || 'Erro ao gerar alocação');
@@ -177,13 +191,40 @@ export default function EventHousing() {
 
   // ── Salvar alocação final ──
   async function handleSaveAllocation() {
-    if (!generationResult) return;
+    if (!generationResult || !editableAllocation.length) return;
+    const occupancy = editableAllocation.reduce((acc, item) => {
+      const roomId = String(item.roomId || '');
+      acc[roomId] = (acc[roomId] || 0) + 1;
+      return acc;
+    }, {});
+    const overloadedRooms = rooms
+      .map((room) => {
+        const roomId = String(room.id);
+        const used = occupancy[roomId] || 0;
+        const capacity = Number(room.capacity || 0);
+        return {
+          roomName: room.name || `Quarto ${roomId}`,
+          used,
+          capacity
+        };
+      })
+      .filter((room) => room.capacity > 0 && room.used > room.capacity);
+
+    if (overloadedRooms.length > 0) {
+      const detail = overloadedRooms
+        .map((room) => `${room.roomName} (${room.used}/${room.capacity})`)
+        .join(', ');
+      setNotification(`Nao foi possivel salvar: quarto(s) lotado(s) - ${detail}`);
+      return;
+    }
+
     try {
       setSavingAllocation(true);
-      await saveHousingAllocation(eventId, generationResult.allocation, generationResult.reasoning);
+      await saveHousingAllocation(eventId, editableAllocation, generationResult.reasoning);
       setNotification('Alocação de hospedagem salva com sucesso!');
       await carregarDados();
       setGenerationResult(null);
+      setEditableAllocation([]);
       setTab(2); // vai para aba de visualização salva
     } catch (err) {
       setNotification(err.message || 'Erro ao salvar alocação');
@@ -193,23 +234,151 @@ export default function EventHousing() {
   }
 
   // ── Agrupamento para exibição ──
+  function getRoomById(roomId) {
+    return rooms.find((room) => String(room.id) === String(roomId)) || null;
+  }
+
+  function recalculateSlotLabels(allocation = []) {
+    const ordered = [...allocation].sort((a, b) => (
+      String(a.roomId).localeCompare(String(b.roomId), 'pt-BR', { numeric: true })
+      || String(a.slotLabel || '').localeCompare(String(b.slotLabel || ''), 'pt-BR', { numeric: true })
+      || String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR', { sensitivity: 'base' })
+    ));
+    const counters = {};
+    return ordered.map((item) => {
+      const roomId = String(item.roomId);
+      counters[roomId] = (counters[roomId] || 0) + 1;
+      return {
+        ...item,
+        slotLabel: `${roomId}.${counters[roomId]}`
+      };
+    });
+  }
+
+  function normalizeAllocationForEditing(allocation = []) {
+    const fallbackRoomId = rooms[0]?.id ? String(rooms[0].id) : '1';
+    const normalized = allocation.map((item) => {
+      const requestedRoomId = String(item.roomId || fallbackRoomId);
+      const room = getRoomById(requestedRoomId) || getRoomById(fallbackRoomId);
+      const roomId = String(room?.id || fallbackRoomId);
+      return {
+        ...item,
+        attendeeId: item.attendeeId || item.attendee?.id || item.id,
+        roomId,
+        roomName: item.roomName || room?.name || `Quarto ${roomId}`
+      };
+    });
+    return recalculateSlotLabels(normalized);
+  }
+
+  function handleMoveAllocationItem(attendeeId, targetRoomId) {
+    setEditableAllocation((prev) => {
+      const next = [...prev];
+      const index = next.findIndex((item) => String(item.attendeeId || item.id) === String(attendeeId));
+      if (index < 0) return prev;
+
+      const currentRoomId = String(next[index].roomId || '');
+      const destinationRoomId = String(targetRoomId || '');
+      if (!destinationRoomId || currentRoomId === destinationRoomId) return prev;
+
+      const room = getRoomById(destinationRoomId);
+      if (!room) return prev;
+
+      next[index] = {
+        ...next[index],
+        roomId: destinationRoomId,
+        roomName: room.name || `Quarto ${destinationRoomId}`
+      };
+      return recalculateSlotLabels(next);
+    });
+  }
+
+  function handleEditSavedAllocation() {
+    if (!savedAllocation.length) return;
+    const normalizedSaved = normalizeAllocationForEditing(savedAllocation);
+    setEditableAllocation(normalizedSaved);
+    setGenerationResult({
+      allocation: normalizedSaved,
+      warnings: [],
+      reasoning: 'Edição manual da alocação salva.',
+      totalAttendees: normalizedSaved.length
+    });
+    setTab(1);
+  }
+
+  function escapeCsvValue(value) {
+    const normalized = String(value ?? '').replace(/"/g, '""');
+    return `"${normalized}"`;
+  }
+
+  function exportAllocationToExcel(allocation = [], filePrefix = 'alocacao_hospedagem') {
+    if (!allocation.length) {
+      setNotification('Não há dados para exportar.');
+      return;
+    }
+
+    const groups = {};
+    allocation.forEach((item) => {
+      const key = String(item.roomId || item.roomName);
+      if (!groups[key]) {
+        groups[key] = {
+          roomName: item.roomName || key,
+          items: []
+        };
+      }
+      groups[key].items.push(item);
+    });
+    const groupedList = Object.values(groups).sort((left, right) => String(left.roomName).localeCompare(String(right.roomName), 'pt-BR', { sensitivity: 'base' }));
+    const rows = [['Quarto', 'Cama', 'Nome', 'Idade', 'Lider de celula', 'Sexo']];
+    groupedList.forEach((group) => {
+      group.items.forEach((item) => {
+        const nome = item.nome
+          || item.attendee?.attendeeData?.nome_completo
+          || item.attendee?.attendeeData?.nome
+          || '-';
+        const idade = item.idade || item.attendee?.attendeeData?.idade || '-';
+        const liderDeCelula = item.lider_de_celula || item.attendee?.attendeeData?.lider_de_celula || '-';
+        const sexo = item.attendee?.attendeeData?.sexo || '-';
+        rows.push([group.roomName, item.slotLabel || '-', nome, idade, liderDeCelula, sexo]);
+      });
+    });
+
+    const csv = `\uFEFF${rows.map((row) => row.map(escapeCsvValue).join(';')).join('\r\n')}`;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `${filePrefix}_${date}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
   function groupByRoom(allocation) {
     const groups = {};
     allocation.forEach((item) => {
-      const key = item.roomId || item.roomName;
-      if (!groups[key]) groups[key] = { roomName: item.roomName || item.roomId, items: [] };
+      const key = String(item.roomId || item.roomName);
+      if (!groups[key]) {
+        const room = getRoomById(key);
+        groups[key] = {
+          roomId: key,
+          roomName: item.roomName || room?.name || key,
+          items: []
+        };
+      }
       groups[key].items.push(item);
     });
-    // Ordena camas por slotLabel
-    Object.values(groups).forEach((g) => {
-      g.items.sort((a, b) => a.slotLabel?.localeCompare(b.slotLabel));
+    Object.values(groups).forEach((group) => {
+      group.items.sort((left, right) => String(left.slotLabel || '').localeCompare(String(right.slotLabel || ''), 'pt-BR', { numeric: true }));
     });
-    return Object.values(groups);
+    return Object.values(groups).sort((left, right) => String(left.roomId).localeCompare(String(right.roomId), 'pt-BR', { numeric: true }));
   }
 
   const totalSlots = rooms.reduce((sum, r) => sum + (r.capacity || 0), 0);
 
-  const renderAllocationTable = (allocation, source = 'generated') => {
+  const renderAllocationTable = (allocation, source = 'generated', editable = false) => {
     const groups = groupByRoom(allocation);
     if (!groups.length) return <Typography variant="body2" color="textSecondary">Nenhuma alocação disponível.</Typography>;
 
@@ -227,6 +396,7 @@ export default function EventHousing() {
               <TableCell>Nome</TableCell>
               <TableCell>Idade</TableCell>
               <TableCell>Lider de celula</TableCell>
+              {editable && <TableCell width={220}>Mover para</TableCell>}
               {source === 'saved' && <TableCell>Sexo</TableCell>}
             </TableRow>
           </TableHead>
@@ -251,6 +421,23 @@ export default function EventHousing() {
                   <TableCell>{nome}</TableCell>
                   <TableCell>{idade}</TableCell>
                   <TableCell>{liderDeCelula}</TableCell>
+                  {editable && (
+                    <TableCell>
+                      <TextField
+                        select
+                        size="small"
+                        fullWidth
+                        value={String(item.roomId || '')}
+                        onChange={(event) => handleMoveAllocationItem(item.attendeeId || item.id, event.target.value)}
+                      >
+                        {rooms.map((room) => (
+                          <MenuItem key={room.id} value={String(room.id)}>
+                            {room.name}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    </TableCell>
+                  )}
                   {source === 'saved' && <TableCell>{sexo}</TableCell>}
                 </TableRow>
               );
@@ -359,7 +546,7 @@ export default function EventHousing() {
                 multiline
                 rows={6}
                 label="Regras adicionais (linguagem natural)"
-                placeholder={`Exemplos:\n- Líderes de célula no quarto 1\n- Menores de 14 anos separados\n- Fulana e Ciclana não podem ficar juntas`}
+                placeholder={'Exemplos:\n- Líderes de célula no quarto 1\n- Menores de 14 anos separados\n- Fulana e Ciclana não podem ficar juntas'}
                 value={customRules}
                 onChange={(e) => setCustomRules(e.target.value)}
                 helperText="Escreva em português. O LLM irá interpretar e aplicar."
@@ -482,14 +669,24 @@ export default function EventHousing() {
 
               {/* Tabela por quarto */}
               <Grid item xs={12}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Box sx={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2
+                }}>
                   <Typography variant="subtitle1" fontWeight="bold">
-                    Resultado — {generationResult.allocation?.length || 0} inscritos alocados
+                    Resultado - {editableAllocation.length || 0} inscritos alocados
                     {generationResult.totalAttendees && ` de ${generationResult.totalAttendees}`}
                   </Typography>
                   <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Button
+                      variant="outlined"
+                      startIcon={<FileDownloadIcon />}
+                      onClick={() => exportAllocationToExcel(editableAllocation, 'alocacao_hospedagem_ajuste')}
+                      disabled={!editableAllocation.length}
+                    >
+                      Exportar Excel
+                    </Button>
                     <Button variant="outlined" onClick={() => setTab(0)}>
-                      Ajustar Configuração
+                      Ajustar Configuracao
                     </Button>
                     <Button
                       variant="contained"
@@ -498,12 +695,12 @@ export default function EventHousing() {
                       onClick={handleSaveAllocation}
                       disabled={savingAllocation}
                     >
-                      {savingAllocation ? 'Salvando...' : 'Confirmar e Salvar'}
+                      {savingAllocation ? 'Salvando...' : 'Salvar Alocacao Editada'}
                     </Button>
                   </Box>
                 </Box>
 
-                {renderAllocationTable(generationResult.allocation || [], 'generated')}
+                {renderAllocationTable(editableAllocation || [], 'generated', true)}
               </Grid>
             </Grid>
           )}
@@ -518,13 +715,27 @@ export default function EventHousing() {
           ) : (
             <Grid container spacing={2}>
               <Grid item xs={12}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Box sx={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2
+                }}>
                   <Typography variant="subtitle1" fontWeight="bold">
-                    Alocação Atual — {savedAllocation.length} inscritos
+                    Alocacao Atual - {savedAllocation.length} inscritos
                   </Typography>
-                  <Button variant="outlined" onClick={() => setTab(0)}>
-                    Regenerar
-                  </Button>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Button
+                      variant="outlined"
+                      startIcon={<FileDownloadIcon />}
+                      onClick={() => exportAllocationToExcel(savedAllocation, 'alocacao_hospedagem_salva')}
+                    >
+                      Exportar Excel
+                    </Button>
+                    <Button variant="outlined" onClick={handleEditSavedAllocation}>
+                      Editar Alocacao
+                    </Button>
+                    <Button variant="outlined" onClick={() => setTab(0)}>
+                      Regenerar
+                    </Button>
+                  </Box>
                 </Box>
                 {renderAllocationTable(savedAllocation, 'saved')}
               </Grid>
