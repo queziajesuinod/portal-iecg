@@ -39,6 +39,14 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(20),
         allowNull: false,
       },
+      idade: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+      },
+      lider_de_celula: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
       llmReasoning: {
         type: DataTypes.TEXT,
         allowNull: true,

@@ -39,7 +39,6 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import brand from 'dan-api/dummy/brand';
 import { listarEventos } from '../../../api/eventsApi';
-import { getPaymentStatusChipSx, getPaymentStatusLabel } from '../../../constants/paymentStatus';
 import {
   atualizarSaidaFinanceira,
   atualizarConfiguracaoTaxasFinanceiras,
@@ -520,8 +519,11 @@ function FinancialPage() {
         <Grid item xs={12} sm={6} md={2}>
           <Card>
             <CardContent>
-              <Typography variant="body2" color="textSecondary">Taxas</Typography>
+              <Typography variant="body2" color="textSecondary">Taxa Lojista</Typography>
               <Typography variant="h6">{formatCurrency(summary.totalFees || summary.cieloFees)}</Typography>
+              <Typography variant="caption" display="block" color="textSecondary">
+                Taxa bruta (cartao/PIX): {formatCurrency(summary.processorFees || summary.cieloFees)}
+              </Typography>
               <ReceiptIcon color="warning" />
             </CardContent>
           </Card>
@@ -664,11 +666,12 @@ function FinancialPage() {
                   <TableCell>Codigo</TableCell>
                   <TableCell>Evento</TableCell>
                   <TableCell>Forma</TableCell>
-                  <TableCell>Status</TableCell>
                   <TableCell>Bandeira</TableCell>
                   <TableCell>Parcelas</TableCell>
                   <TableCell>Bruto</TableCell>
-                  <TableCell>Taxa</TableCell>
+                  <TableCell>Taxa Cartao/PIX</TableCell>
+                  <TableCell>Taxa paga pelo cliente</TableCell>
+                  <TableCell>Taxa paga pelo lojista</TableCell>
                   <TableCell>Liquido</TableCell>
                   <TableCell>Data</TableCell>
                 </TableRow>
@@ -679,13 +682,6 @@ function FinancialPage() {
                     <TableCell>{entry.orderCode}</TableCell>
                     <TableCell>{entry.eventTitle}</TableCell>
                     <TableCell>{getPaymentMethodLabel(entry.paymentMethod)}</TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        label={getPaymentStatusLabel(entry.paymentStatus)}
-                        sx={getPaymentStatusChipSx(entry.paymentStatus)}
-                      />
-                    </TableCell>
                     <TableCell>{renderCardBrand(entry)}</TableCell>
                     <TableCell>{entry.installments ? `${entry.installments}x` : '-'}</TableCell>
                     <TableCell>{formatCurrency(entry.grossAmount)}</TableCell>
@@ -697,6 +693,8 @@ function FinancialPage() {
                         </Typography>
                       )}
                     </TableCell>
+                    <TableCell>{formatCurrency(entry.customerFeeAmount)}</TableCell>
+                    <TableCell>{formatCurrency(entry.merchantFeeAmount)}</TableCell>
                     <TableCell>{formatCurrency(entry.netAmount)}</TableCell>
                     <TableCell>{formatDateTime(entry.createdAt)}</TableCell>
                   </TableRow>

@@ -1,51 +1,51 @@
-/**
- * housingTeamsApi.js
- * Funções axios para os módulos de Hospedagem e Times.
- * Seguindo o padrão do projeto (igual eventsApi.js).
- */
-
 import axios from 'axios';
 
-const BASE = '/api/events';
+const resolveApiUrl = () => {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL.replace(/\/$/, '');
+  }
+  const { protocol, hostname, port } = window.location;
+  if (port === '3005') {
+    return `${protocol}//${hostname}:3005`;
+  }
+  return `${protocol}//${hostname}${port ? `:${port}` : ''}`;
+};
 
-// ─── HOSPEDAGEM ───────────────────────────────────────────────────────────────
+const API_URL = resolveApiUrl();
+const BASE = `${API_URL}/api/admin/events`;
 
-export const getHousingConfig = (eventId) =>
-  axios.get(`${BASE}/${eventId}/housing/config`).then((r) => r.data);
+const getAuthHeader = () => {
+  const token = localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
-export const saveHousingConfig = (eventId, data) =>
-  axios.post(`${BASE}/${eventId}/housing/config`, data).then((r) => r.data);
+const request = (method, url, data) => axios({
+  method,
+  url,
+  data,
+  headers: getAuthHeader()
+}).then((response) => response.data);
 
-export const generateHousingAllocation = (eventId, customRules = '') =>
-  axios
-    .post(`${BASE}/${eventId}/housing/generate`, { customRules })
-    .then((r) => r.data);
+export const getHousingConfig = (eventId) => request('get', `${BASE}/${eventId}/housing/config`);
+export const getHousingAvailableFields = (eventId) => request('get', `${BASE}/${eventId}/housing/available-fields`);
 
-export const getHousingAllocation = (eventId) =>
-  axios.get(`${BASE}/${eventId}/housing/allocation`).then((r) => r.data);
+export const saveHousingConfig = (eventId, data) => request('post', `${BASE}/${eventId}/housing/config`, data);
 
-export const saveHousingAllocation = (eventId, allocation, reasoning = '') =>
-  axios
-    .put(`${BASE}/${eventId}/housing/allocation`, { allocation, reasoning })
-    .then((r) => r.data);
+export const generateHousingAllocation = (eventId, customRules = '') => request('post', `${BASE}/${eventId}/housing/generate`, { customRules });
 
-// ─── TIMES ────────────────────────────────────────────────────────────────────
+export const getHousingAllocation = (eventId) => request('get', `${BASE}/${eventId}/housing/allocation`);
 
-export const getTeamsConfig = (eventId) =>
-  axios.get(`${BASE}/${eventId}/teams/config`).then((r) => r.data);
+export const saveHousingAllocation = (eventId, allocation, reasoning = '') => request('put', `${BASE}/${eventId}/housing/allocation`, { allocation, reasoning });
 
-export const saveTeamsConfig = (eventId, data) =>
-  axios.post(`${BASE}/${eventId}/teams/config`, data).then((r) => r.data);
+export const getEventBatches = (eventId) => request('get', `${BASE}/${eventId}/batches`);
 
-export const generateTeamsAllocation = (eventId, customRules = '') =>
-  axios
-    .post(`${BASE}/${eventId}/teams/generate`, { customRules })
-    .then((r) => r.data);
+export const getTeamsConfig = (eventId) => request('get', `${BASE}/${eventId}/teams/config`);
+export const getTeamsAvailableFields = (eventId) => request('get', `${BASE}/${eventId}/teams/available-fields`);
 
-export const getTeamsAllocation = (eventId) =>
-  axios.get(`${BASE}/${eventId}/teams/allocation`).then((r) => r.data);
+export const saveTeamsConfig = (eventId, data) => request('post', `${BASE}/${eventId}/teams/config`, data);
 
-export const saveTeamsAllocation = (eventId, allocation, reasoning = '') =>
-  axios
-    .put(`${BASE}/${eventId}/teams/allocation`, { allocation, reasoning })
-    .then((r) => r.data);
+export const generateTeamsAllocation = (eventId, customRules = '') => request('post', `${BASE}/${eventId}/teams/generate`, { customRules });
+
+export const getTeamsAllocation = (eventId) => request('get', `${BASE}/${eventId}/teams/allocation`);
+
+export const saveTeamsAllocation = (eventId, allocation, reasoning = '') => request('put', `${BASE}/${eventId}/teams/allocation`, { allocation, reasoning });

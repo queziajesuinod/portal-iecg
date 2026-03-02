@@ -74,6 +74,7 @@ router.get('/:eventId/tickets-summary', eventController.resumoIngressos);
 
 // ============= HOSPEDAGEM =============
 router.get('/:eventId/housing/config', housingController.getConfig);
+router.get('/:eventId/housing/available-fields', housingController.getAvailableFields);
 router.post('/:eventId/housing/config', housingController.saveConfig);
 router.post('/:eventId/housing/generate', housingController.generate);
 router.get('/:eventId/housing/allocation', housingController.getAllocation);
@@ -81,6 +82,7 @@ router.put('/:eventId/housing/allocation', housingController.saveAllocation);
 
 // ============= TIMES =============
 router.get('/:eventId/teams/config', teamsController.getConfig);
+router.get('/:eventId/teams/available-fields', teamsController.getAvailableFields);
 router.post('/:eventId/teams/config', teamsController.saveConfig);
 router.post('/:eventId/teams/generate', teamsController.generate);
 router.get('/:eventId/teams/allocation', teamsController.getAllocation);
