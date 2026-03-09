@@ -47,6 +47,14 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(255),
         allowNull: true,
       },
+      batchId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      batchName: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
       llmReasoning: {
         type: DataTypes.TEXT,
         allowNull: true,

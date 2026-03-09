@@ -42,6 +42,7 @@ import {
   getEventBatches,
   saveHousingConfig,
   improveHousingInstructions,
+  saveHousingGenerationFeedback,
   generateHousingAllocation,
   getHousingAllocation,
   saveHousingAllocation,
@@ -61,13 +62,7 @@ TabPanel.defaultProps = {
   children: null,
 };
 
-const DEFAULT_HOUSING_RULES = [
-  '- Priorize alocar o maximo de inscritos possivel respeitando a capacidade de cada quarto.',
-  '- Nunca repita attendeeId. Cada inscrito deve aparecer no maximo uma vez no resultado.',
-  '- Use apenas roomId existentes na estrutura de quartos.',
-  '- Quando nao houver vagas para todos, explique em warnings quem ficou sem alocacao.',
-  '- Se houver conflito de regra, priorize regras de capacidade e consistencia dos dados.'
-].join('\n');
+const DEFAULT_HOUSING_RULES = '';
 
 function normalizeRuleLines(value = '') {
   return String(value || '')
@@ -90,27 +85,18 @@ function mergeRules(baseValue = '', extraLines = []) {
 
 function buildRulesFromWarnings(result = null) {
   const warnings = Array.isArray(result?.warnings)
-    ? result.warnings.map((item) => String(item || '').toLowerCase())
+    ? result.warnings.map((item) => String(item || '').trim()).filter(Boolean)
     : [];
 
   const suggestions = [];
-  if (warnings.some((warning) => warning.includes('duplicado'))) {
-    suggestions.push('- Nao gere registros duplicados do mesmo attendeeId.');
-  }
-  if (warnings.some((warning) => warning.includes('quarto invalido'))) {
-    suggestions.push('- Nao usar roomId inexistente; usar somente ids da lista de quartos enviada.');
-  }
-  if (warnings.some((warning) => warning.includes('parcial') || warning.includes('cobertura insuficiente'))) {
-    suggestions.push('- Garanta cobertura maxima e aloque todos os elegiveis ate o limite total de vagas.');
-  }
-  if (warnings.some((warning) => warning.includes('sem vagas'))) {
-    suggestions.push('- Priorize encaixe por capacidade e mantenha grupos juntos somente quando houver espaco.');
-  }
-  if (warnings.some((warning) => warning.includes('misto'))) {
-    suggestions.push('- Evite quarto misto quando houver dados de sexo disponiveis.');
+  if (warnings.length > 0) {
+    suggestions.push('- Ajustar as instrucoes deste evento para evitar os problemas abaixo:');
+    warnings.forEach((warning) => {
+      suggestions.push(`- ${warning}`);
+    });
   }
   if (!suggestions.length) {
-    suggestions.push('- Reavalie a distribuicao final para evitar duplicidade, quarto invalido e falta de cobertura.');
+    suggestions.push('- Refinar as instrucoes especificas deste evento com mais detalhes de distribuicao.');
   }
   return suggestions;
 }
@@ -133,7 +119,10 @@ export default function EventHousing() {
   const [savingConfig, setSavingConfig] = useState(false);
   const [customRulesVersion, setCustomRulesVersion] = useState(1);
   const [customRulesHistory, setCustomRulesHistory] = useState([]);
+  const [generationFeedbackHistory, setGenerationFeedbackHistory] = useState([]);
   const [improvingRules, setImprovingRules] = useState(false);
+  const [generationFeedbackNotes, setGenerationFeedbackNotes] = useState('');
+  const [savingGenerationFeedback, setSavingGenerationFeedback] = useState(false);
 
   // ── Geração LLM ──
   const [generating, setGenerating] = useState(false);
@@ -158,10 +147,12 @@ export default function EventHousing() {
         setCustomRules(config.customRules || DEFAULT_HOUSING_RULES);
         setCustomRulesVersion(Number(config.customRulesVersion || 1));
         setCustomRulesHistory(Array.isArray(config.customRulesHistory) ? config.customRulesHistory : []);
+        setGenerationFeedbackHistory(Array.isArray(config.generationFeedbackHistory) ? config.generationFeedbackHistory : []);
       } else {
         setCustomRules(DEFAULT_HOUSING_RULES);
         setCustomRulesVersion(1);
         setCustomRulesHistory([]);
+        setGenerationFeedbackHistory([]);
       }
       setSavedAllocation(allocation || []);
       setEventBatches(Array.isArray(batchesResponse) ? batchesResponse : []);
@@ -206,7 +197,8 @@ export default function EventHousing() {
   }
 
   function handleApplyInitialRules() {
-    setCustomRules((prev) => mergeRules(prev, normalizeRuleLines(DEFAULT_HOUSING_RULES)));
+    setCustomRules(DEFAULT_HOUSING_RULES);
+    setNotification('Editor limpo. Ficarao ativas somente as regras basicas do sistema.');
   }
 
   function handleUseHistoricalInstruction(historyItem) {
@@ -246,6 +238,27 @@ export default function EventHousing() {
       setNotification(error.message || 'Nao foi possivel aprimorar no servidor; aplicadas sugestoes locais.');
     } finally {
       setImprovingRules(false);
+    }
+  }
+
+  async function handleSaveGenerationFeedback(valid) {
+    if (!generationResult) return;
+    try {
+      setSavingGenerationFeedback(true);
+      const response = await saveHousingGenerationFeedback(eventId, {
+        valid,
+        notes: generationFeedbackNotes,
+        customRulesVersion,
+        auditSummary: generationResult.audit?.summary || null,
+        allocationCount: editableAllocation.length || generationResult.allocation?.length || 0
+      });
+      setGenerationFeedbackHistory(Array.isArray(response?.generationFeedbackHistory) ? response.generationFeedbackHistory : []);
+      setNotification(valid ? 'Geracao marcada como valida.' : 'Geracao marcada como invalida.');
+      setGenerationFeedbackNotes('');
+    } catch (error) {
+      setNotification(error.message || 'Erro ao salvar validacao da geracao.');
+    } finally {
+      setSavingGenerationFeedback(false);
     }
   }
 
@@ -460,7 +473,7 @@ export default function EventHousing() {
       groups[key].items.push(item);
     });
     const groupedList = Object.values(groups).sort((left, right) => String(left.roomName).localeCompare(String(right.roomName), 'pt-BR', { sensitivity: 'base' }));
-    const rows = [['Quarto', 'Cama', 'Nome', 'Idade', 'Lider de celula', 'Sexo']];
+    const rows = [['Quarto', 'Cama', 'Nome', 'Idade', 'Lider de celula', 'Lote', 'Sexo']];
     groupedList.forEach((group) => {
       group.items.forEach((item) => {
         const nome = item.nome
@@ -469,8 +482,9 @@ export default function EventHousing() {
           || '-';
         const idade = item.idade || item.attendee?.attendeeData?.idade || '-';
         const liderDeCelula = item.lider_de_celula || item.attendee?.attendeeData?.lider_de_celula || '-';
+        const lote = item.batchName || item.batchId || '-';
         const sexo = item.attendee?.attendeeData?.sexo || '-';
-        rows.push([group.roomName, item.slotLabel || '-', nome, idade, liderDeCelula, sexo]);
+        rows.push([group.roomName, item.slotLabel || '-', nome, idade, liderDeCelula, lote, sexo]);
       });
     });
 
@@ -509,6 +523,7 @@ export default function EventHousing() {
 
   const totalSlots = rooms.reduce((sum, r) => sum + (r.capacity || 0), 0);
   const recentRulesHistory = [...customRulesHistory].slice(-5).reverse();
+  const recentGenerationFeedbackHistory = [...generationFeedbackHistory].slice(-5).reverse();
 
   const renderAllocationTable = (allocation, source = 'generated', editable = false) => {
     const groups = groupByRoom(allocation);
@@ -528,6 +543,7 @@ export default function EventHousing() {
               <TableCell>Nome</TableCell>
               <TableCell>Idade</TableCell>
               <TableCell>Lider de celula</TableCell>
+              <TableCell>Lote</TableCell>
               {editable && <TableCell width={220}>Mover para</TableCell>}
               {source === 'saved' && <TableCell>Sexo</TableCell>}
             </TableRow>
@@ -544,6 +560,7 @@ export default function EventHousing() {
               const liderDeCelula = item.lider_de_celula
                 || item.attendee?.attendeeData?.lider_de_celula
                 || '-';
+              const lote = item.batchName || item.batchId || '-';
               const sexo = item.attendee?.attendeeData?.sexo || '';
               return (
                 <TableRow key={item.attendeeId || item.id}>
@@ -553,6 +570,7 @@ export default function EventHousing() {
                   <TableCell>{nome}</TableCell>
                   <TableCell>{idade}</TableCell>
                   <TableCell>{liderDeCelula}</TableCell>
+                  <TableCell>{lote}</TableCell>
                   {editable && (
                     <TableCell>
                       <TextField
@@ -579,6 +597,45 @@ export default function EventHousing() {
       </Box>
     ));
   };
+
+  const renderAuditTable = (title, rows = [], emptyText = 'Nenhum registro.') => (
+    <Card variant="outlined">
+      <CardContent>
+        <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+          {title}
+          <Chip size="small" label={rows.length} sx={{ ml: 1 }} />
+        </Typography>
+        {rows.length === 0 ? (
+          <Typography variant="body2" color="textSecondary">
+            {emptyText}
+          </Typography>
+        ) : (
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Nome</TableCell>
+                <TableCell>Lider</TableCell>
+                <TableCell>Lote</TableCell>
+                <TableCell>Sexo</TableCell>
+                <TableCell>OrderCode</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {rows.map((item) => (
+                <TableRow key={`${item.attendeeId || item.nome}-${item.orderCode || ''}`}>
+                  <TableCell>{item.nome || '-'}</TableCell>
+                  <TableCell>{item.leader || '-'}</TableCell>
+                  <TableCell>{item.batchName || item.batchId || '-'}</TableCell>
+                  <TableCell>{item.sexo || '-'}</TableCell>
+                  <TableCell>{item.orderCode || '-'}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
 
   return (
     <div>
@@ -670,18 +727,19 @@ export default function EventHousing() {
                 <AlertTitle>Regras automáticas já aplicadas</AlertTitle>
                   ✅ Numeração: 1.1, 1.2, 2.1...<br />
                   ✅ Pessoas do mesmo sexo no mesmo quarto<br />
-                  (Ajuste as regras abaixo quando o resultado vier errado e gere novamente)
+                  ✅ Nunca ultrapassar a capacidade do quarto<br />
+                  (Abaixo ficam somente as instrucoes especificas deste evento)
               </Alert>
 
               <TextField
                 fullWidth
                 multiline
                 rows={6}
-                label="Regras adicionais (linguagem natural)"
+                label="Instrucoes especificas do evento"
                 placeholder={'Exemplos:\n- Líderes de célula no quarto 1\n- Menores de 14 anos separados\n- Fulana e Ciclana não podem ficar juntas'}
                 value={customRules}
                 onChange={(e) => setCustomRules(e.target.value)}
-                helperText="Você pode editar a instrução inicial e salvar. Se a geração ficar ruim, clique em melhorar instrução."
+                helperText="Escreva aqui somente as regras deste evento. As regras basicas do sistema ja sao aplicadas automaticamente."
               />
               <Box
                 sx={{
@@ -692,7 +750,7 @@ export default function EventHousing() {
                 }}
               >
                 <Button size="small" variant="outlined" onClick={handleApplyInitialRules}>
-                  Aplicar instrução inicial
+                  Usar somente regras basicas
                 </Button>
               </Box>
               <Box sx={{ mt: 1.5 }}>
@@ -732,6 +790,41 @@ export default function EventHousing() {
                 ) : (
                   <Typography variant="caption" color="textSecondary">
                     Ainda não há histórico de instruções.
+                  </Typography>
+                )}
+              </Box>
+              <Box sx={{ mt: 1.5 }}>
+                <Typography variant="caption" color="textSecondary" display="block" sx={{ mb: 0.75 }}>
+                  Historico de validacao das geracoes
+                </Typography>
+                {recentGenerationFeedbackHistory.length > 0 ? (
+                  <Box sx={{ display: 'flex', gap: 0.75, flexDirection: 'column' }}>
+                    {recentGenerationFeedbackHistory.map((item) => (
+                      <Box
+                        key={item.id || `${item.createdAt}-${item.valid}`}
+                        sx={{
+                          border: '1px solid rgba(0,0,0,0.12)',
+                          borderRadius: 1,
+                          p: 1
+                        }}
+                      >
+                        <Typography variant="caption" color="textSecondary" display="block">
+                          {item.valid ? 'Valida' : 'Invalida'} · v{item.customRulesVersion || '?'}
+                        </Typography>
+                        <Typography variant="caption" display="block" sx={{ mt: 0.25 }}>
+                          {item.createdAt ? new Date(item.createdAt).toLocaleString('pt-BR') : 'Data nao informada'}
+                        </Typography>
+                        {item.notes && (
+                          <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+                            {item.notes}
+                          </Typography>
+                        )}
+                      </Box>
+                    ))}
+                  </Box>
+                ) : (
+                  <Typography variant="caption" color="textSecondary">
+                    Ainda não há validacoes registradas.
                   </Typography>
                 )}
               </Box>
@@ -858,6 +951,126 @@ export default function EventHousing() {
                     <AlertTitle>Raciocínio da IA</AlertTitle>
                     {generationResult.reasoning}
                   </Alert>
+                </Grid>
+              )}
+
+              <Grid item xs={12}>
+                <Card variant="outlined">
+                  <CardContent>
+                    <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+                      Validar geracao
+                    </Typography>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={2}
+                      label="Observacao da validacao"
+                      value={generationFeedbackNotes}
+                      onChange={(event) => setGenerationFeedbackNotes(event.target.value)}
+                      helperText="Registre porque a geracao foi valida ou invalida. Isso fica no historico para refino."
+                    />
+                    <Box
+                      sx={{
+                        mt: 2,
+                        display: 'flex',
+                        gap: 1,
+                        flexWrap: 'wrap'
+                      }}
+                    >
+                      <Button
+                        variant="contained"
+                        color="success"
+                        onClick={() => handleSaveGenerationFeedback(true)}
+                        disabled={savingGenerationFeedback}
+                      >
+                        Marcar como valida
+                      </Button>
+                      <Button
+                        variant="contained"
+                        color="error"
+                        onClick={() => handleSaveGenerationFeedback(false)}
+                        disabled={savingGenerationFeedback}
+                      >
+                        Marcar como invalida
+                      </Button>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {generationResult.audit?.summary && (
+                <Grid item xs={12}>
+                  <Grid container spacing={2}>
+                    <Grid item xs={6} md={2}>
+                      <Card variant="outlined">
+                        <CardContent>
+                          <Typography variant="caption" color="textSecondary">Entrada</Typography>
+                          <Typography variant="h6">{generationResult.audit.summary.totalInput || 0}</Typography>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                    <Grid item xs={6} md={2}>
+                      <Card variant="outlined">
+                        <CardContent>
+                          <Typography variant="caption" color="textSecondary">Elegiveis</Typography>
+                          <Typography variant="h6">{generationResult.audit.summary.totalEligible || 0}</Typography>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                    <Grid item xs={6} md={2}>
+                      <Card variant="outlined">
+                        <CardContent>
+                          <Typography variant="caption" color="textSecondary">Fora do lote</Typography>
+                          <Typography variant="h6">{generationResult.audit.summary.totalRemovedByBatch || 0}</Typography>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                    <Grid item xs={6} md={2}>
+                      <Card variant="outlined">
+                        <CardContent>
+                          <Typography variant="caption" color="textSecondary">Fora por sexo</Typography>
+                          <Typography variant="h6">{generationResult.audit.summary.totalRemovedBySexo || 0}</Typography>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                    <Grid item xs={6} md={2}>
+                      <Card variant="outlined">
+                        <CardContent>
+                          <Typography variant="caption" color="textSecondary">Alocados</Typography>
+                          <Typography variant="h6">{generationResult.audit.summary.totalAllocated || 0}</Typography>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                    <Grid item xs={6} md={2}>
+                      <Card variant="outlined">
+                        <CardContent>
+                          <Typography variant="caption" color="textSecondary">Elegiveis sem vaga</Typography>
+                          <Typography variant="h6">{generationResult.audit.summary.totalNotAllocatedEligible || 0}</Typography>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                    <Grid item xs={12}>
+                      {renderAuditTable(
+                        'Removidos por lote',
+                        generationResult.audit.removedByBatch || [],
+                        'Nenhum inscrito removido por lote.'
+                      )}
+                    </Grid>
+                    <Grid item xs={12}>
+                      {renderAuditTable(
+                        'Removidos por sexo',
+                        generationResult.audit.removedBySexo || [],
+                        'Nenhum inscrito removido por sexo.'
+                      )}
+                    </Grid>
+                    <Grid item xs={12}>
+                      {renderAuditTable(
+                        'Elegiveis sem vaga',
+                        generationResult.audit.notAllocatedEligible || [],
+                        'Todos os elegiveis foram alocados.'
+                      )}
+                    </Grid>
+                  </Grid>
                 </Grid>
               )}
 

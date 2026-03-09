@@ -31,6 +31,7 @@ export const getHousingAvailableFields = (eventId) => request('get', `${BASE}/${
 
 export const saveHousingConfig = (eventId, data) => request('post', `${BASE}/${eventId}/housing/config`, data);
 export const improveHousingInstructions = (eventId, data) => request('post', `${BASE}/${eventId}/housing/instructions/improve`, data);
+export const saveHousingGenerationFeedback = (eventId, data) => request('post', `${BASE}/${eventId}/housing/generation-feedback`, data);
 
 export const generateHousingAllocation = (eventId, customRules = '') => request('post', `${BASE}/${eventId}/housing/generate`, { customRules });
 

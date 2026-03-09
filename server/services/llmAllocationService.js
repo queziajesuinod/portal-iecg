@@ -1,4 +1,4 @@
-const axios = require('axios');
+﻿const axios = require('axios');
 
 function isObjectRecord(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -164,6 +164,25 @@ function sanitizeWarnings(warnings) {
   return warnings
     .map((warning) => String(warning || '').trim())
     .filter(Boolean);
+}
+
+function summarizeAuditAttendee(attendee = {}) {
+  return {
+    attendeeId: attendee?.id || null,
+    nome: attendee?.nome || null,
+    registrationId: attendee?.registrationId || null,
+    orderCode: attendee?.registrationData?.orderCode || attendee?.camposDinamicos?.['registration.orderCode'] || null,
+    batchId: attendee?.camposDinamicos?.['registrationAttendee.batchId']
+      || attendee?.camposDinamicos?.['registration.batchId']
+      || attendee?.eventBatchData?.id
+      || null,
+    batchName: attendee?.eventBatchData?.name || attendee?.camposDinamicos?.['eventBatch.name'] || null,
+    sexo: attendee?.camposDinamicos?.['attendeeData.sexo'] || attendee?.sexo || null,
+    leader: getLeaderValueFromAttendee(attendee, {}) || null,
+    invitedBy: attendee?.camposDinamicos?.['attendeeData.quem_te_convidou'] || null,
+    isGuest: attendee?.camposDinamicos?.['attendeeData.convidado'] || null,
+    paymentStatus: attendee?.registrationData?.paymentStatus || attendee?.camposDinamicos?.['registration.paymentStatus'] || null
+  };
 }
 
 function sanitizeText(value) {
@@ -366,27 +385,37 @@ function normalizeRuleText(customRules = '') {
     .toLowerCase();
 }
 
+function hasBatchFieldReference(customRules = '') {
+  const text = String(customRules || '');
+  return /(?:eventBatch\.id|registrationAttendee\.batchId|registration\.batchId)/i.test(text);
+}
+
 function extractReferencedBatchIds(customRules = '') {
-  const matches = String(customRules || '').match(/eventBatch\.id\s*[:=]\s*([a-f0-9-]{36})/gi) || [];
-  const ids = matches
-    .map((match) => {
-      const capture = String(match).match(/([a-f0-9-]{36})/i);
-      return capture ? capture[1].toLowerCase() : null;
-    })
+  const text = String(customRules || '');
+  const explicitMatches = [
+    ...text.matchAll(/\b(?:eventBatch\.id|registrationAttendee\.batchId|registration\.batchId)\s*[:=]\s*["'`]?([a-f0-9-]{36})["'`]?/gi),
+    ...text.matchAll(/\b(?:eventBatch\.id|registrationAttendee\.batchId|registration\.batchId)\b[\s\S]{0,160}?["'`]?([a-f0-9-]{36})["'`]?/gi)
+  ];
+  const ids = explicitMatches
+    .map((match) => (match?.[1] ? String(match[1]).toLowerCase() : null))
     .filter(Boolean);
+
+  // Fallback for structured instructions where the batch field is cited and the UUID
+  // appears later in the same rule block without ":" or "=".
+  if (!ids.length && hasBatchFieldReference(text)) {
+    const allUuids = [
+      ...text.matchAll(/\b([a-f0-9-]{36})\b/gi)
+    ]
+      .map((match) => (match?.[1] ? String(match[1]).toLowerCase() : null))
+      .filter(Boolean);
+    ids.push(...allUuids);
+  }
+
   return Array.from(new Set(ids));
 }
 
 function shouldFilterOnlyReferencedBatches(customRules = '', referencedBatchIds = []) {
-  if (!referencedBatchIds.length) return false;
-  const text = normalizeRuleText(customRules);
-  return text.includes('somente lote')
-    || text.includes('apenas lote')
-    || text.includes('so lote')
-    || text.includes('so pode ser alocado')
-    || text.includes('so pode ser alocada')
-    || text.includes('so podem ser alocados')
-    || text.includes('so podem ser alocadas');
+  return referencedBatchIds.length > 0;
 }
 
 function shouldEnforceFemaleOnlyHousing(customRules = '') {
@@ -455,40 +484,63 @@ function applyHousingRulePreFilters(attendees = [], customRules = '') {
   let filteredAttendees = [...attendees];
   const sequentialFill = shouldSequentialFillRooms(customRules);
   const referencedBatchIds = extractReferencedBatchIds(customRules);
+  const removedByBatch = [];
+  const removedBySexo = [];
 
   if (shouldFilterOnlyReferencedBatches(customRules, referencedBatchIds)) {
     const allowedBatches = new Set(referencedBatchIds.map((batchId) => String(batchId).toLowerCase()));
-    const beforeCount = filteredAttendees.length;
     filteredAttendees = filteredAttendees.filter((attendee) => {
-      const batchId = String(attendee?.eventBatchData?.id || '').toLowerCase();
-      return batchId && allowedBatches.has(batchId);
+      const candidateBatchIds = [
+        attendee?.camposDinamicos?.['registrationAttendee.batchId'],
+        attendee?.camposDinamicos?.['registration.batchId'],
+        attendee?.eventBatchData?.id
+      ]
+        .map((value) => String(value || '').toLowerCase().trim())
+        .filter(Boolean);
+      const keep = candidateBatchIds.some((batchId) => allowedBatches.has(batchId));
+      if (!keep) {
+        removedByBatch.push(attendee);
+      }
+      return keep;
     });
-    const removed = beforeCount - filteredAttendees.length;
-    warnings.push(`Regra aplicada: lote(s) restrito(s) (${referencedBatchIds.join(', ')}); ${removed} inscrito(s) fora do lote removidos.`);
+    const removed = removedByBatch.length;
+    warnings.push(`filtrados_por_lote: ${removed} inscrito(s) removidos por lote diferente.`);
   }
 
   if (shouldEnforceFemaleOnlyHousing(customRules)) {
-    const beforeCount = filteredAttendees.length;
-    filteredAttendees = filteredAttendees.filter((attendee) => attendee?.sexo === 'F');
-    const removed = beforeCount - filteredAttendees.length;
-    if (removed > 0) {
-      warnings.push(`Regra aplicada: somente meninas; ${removed} inscrito(s) removidos por sexo.`);
-    }
+    filteredAttendees = filteredAttendees.filter((attendee) => {
+      const keep = attendee?.sexo === 'F';
+      if (!keep) {
+        removedBySexo.push(attendee);
+      }
+      return keep;
+    });
+    const removed = removedBySexo.length;
+    warnings.push(`filtrados_por_sexo: ${removed} inscrito(s) removidos por sexo.`);
   }
 
   if (shouldExcludeMaleFromHousing(customRules)) {
-    const beforeCount = filteredAttendees.length;
-    filteredAttendees = filteredAttendees.filter((attendee) => !attendeeIsMale(attendee));
-    const removed = beforeCount - filteredAttendees.length;
-    if (removed > 0) {
-      warnings.push(`Regra aplicada: ${removed} inscrito(s) masculinos removidos da hospedagem.`);
-    }
+    filteredAttendees = filteredAttendees.filter((attendee) => {
+      const keep = !attendeeIsMale(attendee);
+      if (!keep) {
+        removedBySexo.push(attendee);
+      }
+      return keep;
+    });
+    const removed = removedBySexo.length;
+    warnings.push(`filtrados_por_sexo: ${removed} inscrito(s) removidos por sexo.`);
   }
 
   return {
     attendees: filteredAttendees,
     warnings,
-    sequentialFill
+    sequentialFill,
+    audit: {
+      referencedBatchIds,
+      removedByBatch: removedByBatch.map((attendee) => summarizeAuditAttendee(attendee)),
+      removedBySexo: removedBySexo.map((attendee) => summarizeAuditAttendee(attendee)),
+      eligible: filteredAttendees.map((attendee) => summarizeAuditAttendee(attendee))
+    }
   };
 }
 
@@ -536,6 +588,11 @@ function sanitizeHousingAllocation(allocation, allowedAttendeesById, rooms = [],
       roomId,
       roomName: sanitizeAllocationValue(item?.roomName) || room.name,
       slotLabel: sanitizeAllocationValue(item?.slotLabel) || fallbackSlotLabel,
+      batchId: sanitizeAllocationValue(attendee?.camposDinamicos?.['registrationAttendee.batchId'])
+        || sanitizeAllocationValue(attendee?.camposDinamicos?.['registration.batchId'])
+        || sanitizeAllocationValue(attendee?.eventBatchData?.id),
+      batchName: sanitizeAllocationValue(attendee?.eventBatchData?.name)
+        || sanitizeAllocationValue(attendee?.camposDinamicos?.['eventBatch.name']),
       idade: sanitizeAllocationValue(item?.idade)
         || sanitizeAllocationValue(attendee?.camposDinamicos?.['attendeeData.idade'])
         || sanitizeAllocationValue(attendee?.idade),
@@ -703,6 +760,56 @@ function buildCompactPromptAttendees(attendees = [], selectedFields = []) {
   });
 }
 
+function ensureNormalizedAttendees(attendees = []) {
+  if (!Array.isArray(attendees)) return [];
+  if (!attendees.length) return [];
+  const first = attendees[0];
+  const alreadyNormalized = first
+    && Object.prototype.hasOwnProperty.call(first, 'camposDinamicos')
+    && Object.prototype.hasOwnProperty.call(first, 'nome');
+  return alreadyNormalized ? attendees : normalizeAttendees(attendees);
+}
+
+function buildHousingAuditResult(allAttendees = [], preFilterAudit = {}, finalAllocation = []) {
+  const normalizedAll = ensureNormalizedAttendees(allAttendees);
+  const allocationList = Array.isArray(finalAllocation) ? finalAllocation : [];
+  const allocatedIds = new Set(
+    allocationList
+      .map((item) => String(item?.attendeeId || '').trim())
+      .filter(Boolean)
+  );
+  const eligibleList = Array.isArray(preFilterAudit?.eligible) ? preFilterAudit.eligible : [];
+  const removedByBatch = Array.isArray(preFilterAudit?.removedByBatch) ? preFilterAudit.removedByBatch : [];
+  const removedBySexo = Array.isArray(preFilterAudit?.removedBySexo) ? preFilterAudit.removedBySexo : [];
+  const eligibleIds = new Set(eligibleList.map((item) => String(item?.attendeeId || '').trim()).filter(Boolean));
+  const notAllocatedEligible = normalizedAll
+    .filter((attendee) => eligibleIds.has(String(attendee?.id || '')) && !allocatedIds.has(String(attendee?.id || '')))
+    .map((attendee) => summarizeAuditAttendee(attendee));
+
+  return {
+    summary: {
+      totalInput: normalizedAll.length,
+      totalEligible: eligibleList.length,
+      totalRemovedByBatch: removedByBatch.length,
+      totalRemovedBySexo: removedBySexo.length,
+      totalAllocated: allocationList.length,
+      totalNotAllocatedEligible: notAllocatedEligible.length
+    },
+    referencedBatchIds: Array.isArray(preFilterAudit?.referencedBatchIds) ? preFilterAudit.referencedBatchIds : [],
+    eligible: eligibleList,
+    removedByBatch,
+    removedBySexo,
+    notAllocatedEligible,
+    allocated: allocationList.map((item) => ({
+      attendeeId: item?.attendeeId || null,
+      nome: item?.nome || null,
+      roomId: item?.roomId || null,
+      roomName: item?.roomName || null,
+      slotLabel: item?.slotLabel || null
+    }))
+  };
+}
+
 function reducePromptAttendeesIfNeeded(attendees = []) {
   const withBatchAndStatus = attendees.map((attendee) => ({
     id: attendee.id,
@@ -811,9 +918,9 @@ async function requestOpenAIJson(prompt) {
   const response = await axios.post(
     'https://api.openai.com/v1/chat/completions',
     {
-      model: 'gpt-4.1-mini',
+      model: 'gpt-5.4',
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 8192,
+      max_completion_tokens: 8192,
       response_format: { type: 'json_object' }
     },
     {
@@ -836,11 +943,9 @@ async function requestOpenAIJson(prompt) {
   }
 }
 
-function buildHousingFallback(rawAttendees, rooms, customRules = '', options = {}) {
-  const allowedIds = options.allowedAttendeeIds || null;
+function buildHousingFallback(attendeesInput, rooms, customRules = '', options = {}) {
   const sequentialFill = options.sequentialFill || false;
-  const attendees = normalizeAttendees(rawAttendees)
-    .filter((attendee) => !allowedIds || allowedIds.has(attendee.id));
+  const attendees = ensureNormalizedAttendees(attendeesInput);
   const normalizedRooms = sanitizeRooms(rooms);
   const groups = groupByRegistration(attendees).sort((left, right) => (
     right.size - left.size
@@ -973,6 +1078,11 @@ function buildHousingFallback(rawAttendees, rooms, customRules = '', options = {
         roomId: room.roomId,
         roomName: room.roomName,
         slotLabel: member.slotLabel,
+        batchId: sanitizeAllocationValue(member?.camposDinamicos?.['registrationAttendee.batchId'])
+          || sanitizeAllocationValue(member?.camposDinamicos?.['registration.batchId'])
+          || sanitizeAllocationValue(member?.eventBatchData?.id),
+        batchName: sanitizeAllocationValue(member?.eventBatchData?.name)
+          || sanitizeAllocationValue(member?.camposDinamicos?.['eventBatch.name']),
         idade: sanitizeAllocationValue(member?.camposDinamicos?.['attendeeData.idade'])
           || sanitizeAllocationValue(member?.idade),
         lider_de_celula: sanitizeAllocationValue(member?.camposDinamicos?.['attendeeData.lider_de_celula'])
@@ -1003,11 +1113,9 @@ function inferGroupSexoHint(members = []) {
   return known.every((sexo) => sexo === first) ? first : 'U';
 }
 
-function buildHousingFallbackByLeaderBlocks(rawAttendees, rooms, customRules = '', options = {}, mapping = {}) {
-  const allowedIds = options.allowedAttendeeIds || null;
+function buildHousingFallbackByLeaderBlocks(attendeesInput, rooms, customRules = '', options = {}, mapping = {}) {
   const sequentialFill = options.sequentialFill || false;
-  const attendees = normalizeAttendees(rawAttendees)
-    .filter((attendee) => !allowedIds || allowedIds.has(attendee.id));
+  const attendees = ensureNormalizedAttendees(attendeesInput);
   const normalizedRooms = sanitizeRooms(rooms);
 
   const roomStates = normalizedRooms.map((room) => ({
@@ -1135,6 +1243,11 @@ function buildHousingFallbackByLeaderBlocks(rawAttendees, rooms, customRules = '
         roomId: room.roomId,
         roomName: room.roomName,
         slotLabel: member.slotLabel,
+        batchId: sanitizeAllocationValue(member?.camposDinamicos?.['registrationAttendee.batchId'])
+          || sanitizeAllocationValue(member?.camposDinamicos?.['registration.batchId'])
+          || sanitizeAllocationValue(member?.eventBatchData?.id),
+        batchName: sanitizeAllocationValue(member?.eventBatchData?.name)
+          || sanitizeAllocationValue(member?.camposDinamicos?.['eventBatch.name']),
         idade: sanitizeAllocationValue(member?.camposDinamicos?.['attendeeData.idade'])
           || sanitizeAllocationValue(member?.idade),
         lider_de_celula: sanitizeAllocationValue(getLeaderValueFromAttendee(member, mapping))
@@ -1280,21 +1393,11 @@ ${omittedFieldsCount > 0 ? `\n(Foram omitidos ${omittedFieldsCount} campos menos
 
 ## Regras base do sistema (sempre ativas)
 1. Slot de cama no formato roomId.numero (ex: 1.1, 1.2, 2.1).
-2. Cada attendeeId pode aparecer no maximo uma vez.
-3. Use apenas roomId existentes na estrutura de quartos.
-4. Nunca ultrapasse a capacidade de cada quarto.
-5. Evite quarto misto quando sexo estiver disponivel.
-6. Se faltar vaga, priorize cobertura maxima e explique em warnings.
+2. So pode pessoas do mesmo sexo no mesmo quarto.
+3. Nunca ultrapasse a capacidade de cada quarto.
 
 ## Regras adicionais do usuario
-${customRules || 'Sem regras adicionais. Siga estritamente as regras base do sistema.'}
-
-## Checklist obrigatorio antes de responder
-1. Verifique duplicidade de attendeeId.
-2. Verifique capacidade por quarto.
-3. Verifique se todos os roomId existem.
-4. Verifique consistencia do slotLabel com roomId.
-5. Retorne somente JSON valido no formato solicitado.
+${customRules || 'Nenhuma instrucao especifica do evento informada.'}
 
 ## Inscritos
 ${JSON.stringify(attendees, null, 2)}
@@ -1368,7 +1471,6 @@ async function generateHousingAllocation(rawAttendees, rooms, customRules = '') 
   const normalizedAttendees = normalizeAttendees(rawAttendees);
   const preFilterResult = applyHousingRulePreFilters(normalizedAttendees, customRules);
   const filteredAttendees = preFilterResult.attendees;
-  const allowedAttendeeIds = new Set(filteredAttendees.map((attendee) => attendee.id));
   const allowedAttendeesById = new Map(filteredAttendees.map((attendee) => [attendee.id, attendee]));
   const availableFields = extractAvailableFields(rawAttendees);
   const mapping = inferFieldMappingFromAvailableFields(availableFields, customRules);
@@ -1404,16 +1506,26 @@ async function generateHousingAllocation(rawAttendees, rooms, customRules = '') 
 
   const buildFallbackResult = () => {
     if (leaderHardEnabled) {
-      return buildHousingFallbackByLeaderBlocks(rawAttendees, normalizedRooms, customRules, {
-        sequentialFill: preFilterResult.sequentialFill,
-        allowedAttendeeIds
-      }, mapping);
+      return buildHousingFallbackByLeaderBlocks(
+        filteredAttendees,
+        normalizedRooms,
+        customRules,
+        {
+          sequentialFill: preFilterResult.sequentialFill
+        },
+        mapping
+      );
     }
-    return buildHousingFallback(rawAttendees, normalizedRooms, customRules, {
-      sequentialFill: preFilterResult.sequentialFill,
-      allowedAttendeeIds
-    });
+    return buildHousingFallback(
+      filteredAttendees,
+      normalizedRooms,
+      customRules,
+      {
+        sequentialFill: preFilterResult.sequentialFill
+      }
+    );
   };
+  const buildAudit = (allocation) => buildHousingAuditResult(normalizedAttendees, preFilterResult.audit, allocation);
 
   try {
     const llmResult = await requestOpenAIJson(prompt);
@@ -1431,10 +1543,15 @@ async function generateHousingAllocation(rawAttendees, rooms, customRules = '') 
       allowedAttendeesById,
       mapping.leaderField
     )) {
-      const fallbackByLeader = buildHousingFallbackByLeaderBlocks(rawAttendees, normalizedRooms, customRules, {
-        sequentialFill: preFilterResult.sequentialFill,
-        allowedAttendeeIds
-      }, mapping);
+      const fallbackByLeader = buildHousingFallbackByLeaderBlocks(
+        filteredAttendees,
+        normalizedRooms,
+        customRules,
+        {
+          sequentialFill: preFilterResult.sequentialFill
+        },
+        mapping
+      );
       return {
         allocation: fallbackByLeader.allocation,
         warnings: [
@@ -1444,7 +1561,8 @@ async function generateHousingAllocation(rawAttendees, rooms, customRules = '') 
           'Regra 5 violada pela IA; alocacao corrigida por algoritmo local (lider como bloco).',
           ...fallbackByLeader.warnings
         ],
-        reasoning: `${sanitizeText(llmResult.reasoning)} Resultado final ajustado por algoritmo local para garantir regra de lider.`
+        reasoning: `${sanitizeText(llmResult.reasoning)} Resultado final ajustado por algoritmo local para garantir regra de lider.`,
+        audit: buildAudit(fallbackByLeader.allocation)
       };
     }
 
@@ -1465,7 +1583,8 @@ async function generateHousingAllocation(rawAttendees, rooms, customRules = '') 
             `IA retornou cobertura insuficiente (${llmCoverage}/${expectedAllocations}); alocacao substituida por algoritmo local.`,
             ...fallback.warnings
           ],
-          reasoning: `${sanitizeText(llmResult.reasoning)} Resultado final ajustado por algoritmo local para maximizar cobertura.`
+          reasoning: `${sanitizeText(llmResult.reasoning)} Resultado final ajustado por algoritmo local para maximizar cobertura.`,
+          audit: buildAudit(fallback.allocation)
         };
       }
     }
@@ -1477,7 +1596,8 @@ async function generateHousingAllocation(rawAttendees, rooms, customRules = '') 
         ...sanitizeWarnings(llmResult.warnings),
         ...sanitizedAllocation.warnings
       ],
-      reasoning: sanitizeText(llmResult.reasoning)
+      reasoning: sanitizeText(llmResult.reasoning),
+      audit: buildAudit(sanitizedAllocation.allocation)
     };
   } catch (error) {
     const fallback = buildFallbackResult();
@@ -1487,7 +1607,8 @@ async function generateHousingAllocation(rawAttendees, rooms, customRules = '') 
         ...preFilterResult.warnings,
         `IA indisponivel (${getOpenAIErrorMessage(error)}). Resultado gerado por algoritmo local.`,
         ...fallback.warnings
-      ]
+      ],
+      audit: buildAudit(fallback.allocation)
     };
   }
 }

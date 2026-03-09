@@ -77,6 +77,7 @@ router.get('/:eventId/housing/config', housingController.getConfig);
 router.get('/:eventId/housing/available-fields', housingController.getAvailableFields);
 router.post('/:eventId/housing/config', housingController.saveConfig);
 router.post('/:eventId/housing/instructions/improve', housingController.improveInstructions);
+router.post('/:eventId/housing/generation-feedback', housingController.saveGenerationFeedback);
 router.post('/:eventId/housing/generate', housingController.generate);
 router.get('/:eventId/housing/allocation', housingController.getAllocation);
 router.put('/:eventId/housing/allocation', housingController.saveAllocation);
