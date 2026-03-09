@@ -29,6 +29,12 @@ const EVENT_BATCH_LLM_ATTRIBUTES = [
   'isActive',
   'order'
 ];
+const BASE_HOUSING_RULES = [
+  'Regras basicas obrigatorias do sistema:',
+  '1. So pode pessoas do mesmo sexo no mesmo quarto.',
+  '2. A distribuicao das camas deve seguir o formato roomId.numero, por exemplo 1.1, 1.2, 1.3.',
+  '3. Nunca ultrapassar a capacidade configurada de cada quarto.'
+].join('\n');
 
 function sanitizeSnapshotValue(value) {
   if (value === undefined || value === null) return null;
@@ -77,28 +83,16 @@ function mergeRuleLines(baseRules = '', additionalRules = []) {
 }
 
 function suggestionLinesFromWarnings(warnings = []) {
-  const normalizedWarnings = normalizeWarnings(warnings).map((item) => item.toLowerCase());
   const suggestions = [];
-  if (normalizedWarnings.some((item) => item.includes('duplicado'))) {
-    suggestions.push('- Nao duplicar attendeeId no resultado.');
-  }
-  if (normalizedWarnings.some((item) => item.includes('quarto invalido'))) {
-    suggestions.push('- Usar somente roomId existentes na estrutura de quartos.');
-  }
-  if (normalizedWarnings.some((item) => item.includes('parcial') || item.includes('cobertura insuficiente'))) {
-    suggestions.push('- Priorizar cobertura maxima e alocar todos os elegiveis ate o limite de vagas.');
-  }
-  if (normalizedWarnings.some((item) => item.includes('sem vagas'))) {
-    suggestions.push('- Quando faltar vaga, priorizar melhor encaixe por capacidade antes de dividir grupos.');
-  }
-  if (normalizedWarnings.some((item) => item.includes('misto'))) {
-    suggestions.push('- Evitar quarto misto quando houver sexo informado.');
-  }
-  if (normalizedWarnings.some((item) => item.includes('lider') && item.includes('violada'))) {
-    suggestions.push('- Respeitar a regra de lider_de_celula como bloco quando esta regra estiver ativa.');
+  const normalizedWarnings = normalizeWarnings(warnings);
+  if (normalizedWarnings.length > 0) {
+    suggestions.push('- Ajustar as instrucoes especificas do evento para evitar os problemas abaixo:');
+    normalizedWarnings.forEach((warning) => {
+      suggestions.push(`- ${warning}`);
+    });
   }
   if (!suggestions.length) {
-    suggestions.push('- Revisar alocacao para evitar inconsistencias de roomId, duplicidade e baixa cobertura.');
+    suggestions.push('- Refinar as instrucoes especificas deste evento com mais detalhes sobre a distribuicao esperada.');
   }
   return suggestions;
 }
@@ -110,6 +104,14 @@ function improveRulesFromContext(baseRules = '', warnings = [], reasoning = '') 
     additions.push(`- Contexto da ultima geracao: ${normalizedReasoning.slice(0, 280)}`);
   }
   return mergeRuleLines(baseRules, additions).join('\n');
+}
+
+function buildEffectiveHousingRules(customRules = '') {
+  const normalizedCustomRules = normalizeRulesText(customRules);
+  if (!normalizedCustomRules) {
+    return BASE_HOUSING_RULES;
+  }
+  return `${BASE_HOUSING_RULES}\n\nInstrucoes especificas do evento:\n${normalizedCustomRules}`;
 }
 
 function applyRulesVersionUpdate(config, payload = {}) {
@@ -157,6 +159,7 @@ function serializeConfig(config) {
   if (!config) return null;
   const payload = config.toJSON ? config.toJSON() : { ...config };
   payload.customRulesHistory = toHistoryArray(payload.customRulesHistory);
+  payload.generationFeedbackHistory = toHistoryArray(payload.generationFeedbackHistory);
   payload.customRulesVersion = toRulesVersion(payload.customRulesVersion);
   payload.customRules = payload.customRules || '';
   return payload;
@@ -262,6 +265,9 @@ async function saveConfig(req, res) {
       if (!Array.isArray(latestConfig.customRulesHistory)) {
         latestConfig.customRulesHistory = [];
       }
+      if (!Array.isArray(latestConfig.generationFeedbackHistory)) {
+        latestConfig.generationFeedbackHistory = [];
+      }
       if (hasCustomRules) {
         applyRulesVersionUpdate(latestConfig, {
           nextRules: normalizedRules,
@@ -288,7 +294,8 @@ async function saveConfig(req, res) {
       rooms: normalizedRooms,
       customRules: hasCustomRules ? (normalizedRules || null) : null,
       customRulesVersion: 1,
-      customRulesHistory: []
+      customRulesHistory: [],
+      generationFeedbackHistory: []
     });
 
     return res.status(201).json(serializeConfig(createdConfig));
@@ -318,6 +325,9 @@ async function improveInstructions(req, res) {
     if (!Array.isArray(config.customRulesHistory)) {
       config.customRulesHistory = [];
     }
+    if (!Array.isArray(config.generationFeedbackHistory)) {
+      config.generationFeedbackHistory = [];
+    }
 
     const base = normalizeRulesText(baseRules || config.customRules || '');
     const improvedRules = improveRulesFromContext(base, warnings, reasoning);
@@ -343,6 +353,47 @@ async function improveInstructions(req, res) {
   } catch (error) {
     console.error('housingController.improveInstructions:', error);
     return res.status(500).json({ error: 'Erro ao aprimorar instrucoes de hospedagem' });
+  }
+}
+
+async function saveGenerationFeedback(req, res) {
+  try {
+    const { eventId } = req.params;
+    const { valid, notes, customRulesVersion, auditSummary, allocationCount } = req.body || {};
+
+    if (typeof valid !== 'boolean') {
+      return res.status(400).json({ error: 'Informe se a geracao foi valida ou invalida.' });
+    }
+
+    const config = await db.EventHousingConfig.findOne({
+      where: { eventId },
+      order: [['updatedAt', 'DESC'], ['createdAt', 'DESC'], ['id', 'DESC']]
+    });
+
+    if (!config) {
+      return res.status(400).json({ error: 'Configuracao de hospedagem nao encontrada para registrar validacao.' });
+    }
+
+    const feedbackHistory = toHistoryArray(config.generationFeedbackHistory);
+    feedbackHistory.push({
+      id: uuidv4(),
+      valid,
+      notes: String(notes || '').trim() || null,
+      customRulesVersion: toRulesVersion(customRulesVersion || config.customRulesVersion),
+      auditSummary: auditSummary && typeof auditSummary === 'object' ? auditSummary : null,
+      allocationCount: Number.isFinite(Number(allocationCount)) ? Number(allocationCount) : null,
+      createdAt: new Date().toISOString()
+    });
+
+    config.generationFeedbackHistory = feedbackHistory.slice(-100);
+    await config.save();
+
+    return res.json({
+      generationFeedbackHistory: toHistoryArray(config.generationFeedbackHistory)
+    });
+  } catch (error) {
+    console.error('housingController.saveGenerationFeedback:', error);
+    return res.status(500).json({ error: 'Erro ao salvar validacao da geracao de hospedagem' });
   }
 }
 
@@ -398,17 +449,19 @@ async function generate(req, res) {
       batch: attendee.batch ? attendee.batch.toJSON() : null
     }));
 
-    const rulesToUse = customRules || config.customRules || '';
-    const result = await generateHousingAllocation(rawAttendees, config.rooms, rulesToUse);
+    const customRulesToUse = normalizeRulesText(customRules || config.customRules || '');
+    const effectiveRules = buildEffectiveHousingRules(customRulesToUse);
+    const result = await generateHousingAllocation(rawAttendees, config.rooms, effectiveRules);
 
     return res.json({
       allocation: result.allocation,
       warnings: result.warnings || [],
       reasoning: result.reasoning || '',
+      audit: result.audit || null,
       totalAttendees: attendees.length,
       totalSlots: (config.rooms || []).reduce((sum, room) => sum + Number(room.capacity || 0), 0),
       customRulesVersion: toRulesVersion(config.customRulesVersion),
-      customRulesUsed: rulesToUse
+      customRulesUsed: customRulesToUse
     });
   } catch (error) {
     console.error('housingController.generate:', error);
@@ -459,6 +512,8 @@ async function saveAllocation(req, res) {
         slotLabel: item.slotLabel,
         idade: sanitizeSnapshotValue(attendeeData.idade),
         lider_de_celula: sanitizeSnapshotValue(attendeeData.lider_de_celula),
+        batchId: item.batchId || null,
+        batchName: sanitizeSnapshotValue(item.batchName),
         llmReasoning: reasoning || null,
         generatedAt: now,
         createdAt: now,
@@ -503,6 +558,7 @@ module.exports = {
   getAvailableFields,
   saveConfig,
   improveInstructions,
+  saveGenerationFeedback,
   generate,
   saveAllocation,
   getAllocation

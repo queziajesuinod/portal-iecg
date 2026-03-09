@@ -38,6 +38,11 @@ module.exports = (sequelize) => {
         allowNull: false,
         defaultValue: [],
       },
+      generationFeedbackHistory: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+      },
     },
     {
       sequelize,
