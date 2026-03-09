@@ -60,3 +60,42 @@ export const atualizarMembro = (id, dados) => fetchWithAuth(`${API_URL}/api/admi
 export const deletarMembro = (id) => fetchWithAuth(`${API_URL}/api/admin/members/${id}`, {
   method: 'DELETE',
 });
+
+export const registrarAtividadeMembro = (id, dados) => fetchWithAuth(`${API_URL}/api/admin/members/${id}/activities`, {
+  method: 'POST',
+  body: JSON.stringify(dados),
+});
+
+export const excluirAtividadeMembro = (id, activityId) => fetchWithAuth(`${API_URL}/api/admin/members/${id}/activities/${activityId}`, {
+  method: 'DELETE',
+});
+
+export const registrarMarcoMembro = (id, dados) => fetchWithAuth(`${API_URL}/api/admin/members/${id}/milestones`, {
+  method: 'POST',
+  body: JSON.stringify(dados),
+});
+
+export const atualizarJornadaMembro = (id, dados) => fetchWithAuth(`${API_URL}/api/admin/members/${id}/journey`, {
+  method: 'PATCH',
+  body: JSON.stringify(dados),
+});
+
+export const listarTiposAtividadeMembro = (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  return fetchWithAuth(`${API_URL}/api/admin/members/activity-types${query ? `?${query}` : ''}`);
+};
+
+export const criarTipoAtividadeMembro = (dados) => fetchWithAuth(`${API_URL}/api/admin/members/activity-types`, {
+  method: 'POST',
+  body: JSON.stringify(dados),
+});
+
+export const atualizarTipoAtividadeMembro = (typeId, dados) => fetchWithAuth(`${API_URL}/api/admin/members/activity-types/${typeId}`, {
+  method: 'PUT',
+  body: JSON.stringify(dados),
+});
+
+export const atualizarStatusTipoAtividadeMembro = (typeId, isActive) => fetchWithAuth(`${API_URL}/api/admin/members/activity-types/${typeId}/active`, {
+  method: 'PATCH',
+  body: JSON.stringify({ isActive }),
+});

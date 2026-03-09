@@ -154,6 +154,17 @@ class CheckInController {
     }
   }
 
+  async obterConfiguracaoPublica(req, res) {
+    try {
+      const { eventId } = req.params;
+      const configuracao = await checkInService.obterConfiguracaoPublica(eventId);
+      return res.status(200).json(configuracao);
+    } catch (error) {
+      console.error('Erro ao obter configuracao publica de check-in:', error);
+      return res.status(400).json({ erro: error.message });
+    }
+  }
+
   async validarCodigo(req, res) {
     try {
       const { orderCode } = req.params;

@@ -562,6 +562,55 @@ class CheckInService {
   }
 
   /**
+   * Obter configuração pública de check-in de um evento
+   */
+  async obterConfiguracaoPublica(eventId) {
+    if (!eventId) {
+      throw new Error('eventId é obrigatório');
+    }
+
+    const event = await Event.findByPk(eventId, {
+      attributes: ['id', 'title', 'isActive']
+    });
+
+    if (!event) {
+      throw new Error('Evento não encontrado');
+    }
+
+    if (!event.isActive) {
+      throw new Error('Evento não está ativo');
+    }
+
+    const [scheduleAtivo, estacoes] = await Promise.all([
+      this.verificarAgendamentoAtivo(eventId),
+      EventCheckInStation.findAll({
+        where: {
+          eventId,
+          isActive: true
+        },
+        attributes: ['id', 'name', 'latitude', 'longitude', 'nfcTagId'],
+        order: [['name', 'ASC']]
+      })
+    ]);
+
+    return {
+      event: {
+        id: event.id,
+        title: event.title
+      },
+      schedule: scheduleAtivo
+        ? {
+          id: scheduleAtivo.id,
+          name: scheduleAtivo.name,
+          startTime: scheduleAtivo.startTime,
+          endTime: scheduleAtivo.endTime
+        }
+        : null,
+      stations: estacoes
+    };
+  }
+
+  /**
    * Validar código de inscrição (para QR Code scanner)
    */
   async validarCodigo(orderCode) {
