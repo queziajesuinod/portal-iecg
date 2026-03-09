@@ -27,6 +27,15 @@ module.exports = (sequelize) => {
           as: 'celula' 
         });
       }
+
+      // Relacionamento logico com tipo cadastrado (via code)
+      if (models.MemberActivityType) {
+        MemberActivity.belongsTo(models.MemberActivityType, {
+          foreignKey: 'activityType',
+          targetKey: 'code',
+          as: 'activityTypeRef'
+        });
+      }
     }
     
     // Métodos de instância
@@ -69,24 +78,11 @@ module.exports = (sequelize) => {
     },
     
     activityType: {
-      type: DataTypes.ENUM(
-        'CULTO_PRESENCA',
-        'CELULA_PRESENCA',
-        'EVENTO_INSCRICAO',
-        'EVENTO_PRESENCA',
-        'CURSO_INICIO',
-        'CURSO_CONCLUSAO',
-        'DOACAO',
-        'DIZIMO',
-        'VOLUNTARIADO',
-        'PEDIDO_ORACAO',
-        'TESTEMUNHO',
-        'BATISMO',
-        'CEIA',
-        'MINISTERIO_INGRESSO',
-        'LIDERANCA_INICIO'
-      ),
-      allowNull: false
+      type: DataTypes.STRING(80),
+      allowNull: false,
+      validate: {
+        notEmpty: true
+      }
     },
     
     activityDate: {

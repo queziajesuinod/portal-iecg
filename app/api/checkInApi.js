@@ -123,6 +123,13 @@ export const validarCodigo = async (orderCode) => {
 
 // ========== CHECK-IN PÚBLICO (QR CODE / NFC) ==========
 
+export const obterConfiguracaoCheckInPublico = async (eventId) => {
+  const response = await axios.get(
+    `${API_URL}/api/public/checkin/events/${eventId}/config`
+  );
+  return response.data;
+};
+
 export const realizarCheckInQRCode = async (dados) => {
   const response = await axios.post(
     `${API_URL}/api/public/checkin/qrcode`,

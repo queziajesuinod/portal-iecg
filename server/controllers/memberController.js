@@ -42,6 +42,85 @@ function sanitizeMemberPayload(payload = {}) {
   }, {});
 }
 
+function sanitizeActivityPayload(payload = {}) {
+  const allowedFields = [
+    'activityType',
+    'activityTypeId',
+    'activityDate',
+    'points',
+    'metadata',
+    'eventId',
+    'celulaId',
+    'courseId'
+  ];
+
+  return allowedFields.reduce((acc, field) => {
+    if (Object.prototype.hasOwnProperty.call(payload, field)) {
+      acc[field] = payload[field];
+    }
+    return acc;
+  }, {});
+}
+
+function sanitizeMilestonePayload(payload = {}) {
+  const allowedFields = [
+    'milestoneTypeId',
+    'milestoneType',
+    'achievedDate',
+    'description',
+    'certificateUrl'
+  ];
+
+  return allowedFields.reduce((acc, field) => {
+    if (Object.prototype.hasOwnProperty.call(payload, field)) {
+      acc[field] = payload[field];
+    }
+    return acc;
+  }, {});
+}
+
+function sanitizeJourneyPayload(payload = {}) {
+  const allowedFields = [
+    'currentStage',
+    'stageChangedAt',
+    'engagementScore',
+    'lastActivityDate',
+    'daysInactive',
+    'healthStatus',
+    'suggestedNextSteps',
+    'alerts',
+    'interests',
+    'spiritualGifts'
+  ];
+
+  return allowedFields.reduce((acc, field) => {
+    if (Object.prototype.hasOwnProperty.call(payload, field)) {
+      acc[field] = payload[field];
+    }
+    return acc;
+  }, {});
+}
+
+function sanitizeActivityTypePayload(payload = {}) {
+  const allowedFields = [
+    'code',
+    'name',
+    'description',
+    'category',
+    'defaultPoints',
+    'isSystem',
+    'isActive',
+    'sortOrder'
+  ];
+
+  return allowedFields.reduce((acc, field) => {
+    if (Object.prototype.hasOwnProperty.call(payload, field)) {
+      acc[field] = payload[field];
+    }
+    return acc;
+  }, {});
+}
+
 async function list(req, res) {
   try {
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
@@ -112,11 +191,106 @@ async function stats(req, res) {
   }
 }
 
+async function addActivity(req, res) {
+  try {
+    const createdBy = req.user?.userId || req.user?.id || null;
+    const payload = sanitizeActivityPayload(req.body);
+    const activity = await memberService.addActivity(req.params.id, payload, createdBy);
+    res.status(201).json(activity);
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Erro ao registrar atividade' });
+  }
+}
+
+async function deleteActivity(req, res) {
+  try {
+    await memberService.deleteActivity(req.params.id, req.params.activityId);
+    res.status(204).send();
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Erro ao excluir atividade' });
+  }
+}
+
+async function addMilestone(req, res) {
+  try {
+    const createdBy = req.user?.userId || req.user?.id || null;
+    const payload = sanitizeMilestonePayload(req.body);
+    const milestone = await memberService.addMilestone(req.params.id, payload, createdBy);
+    res.status(201).json(milestone);
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Erro ao registrar marco' });
+  }
+}
+
+async function updateJourney(req, res) {
+  try {
+    const payload = sanitizeJourneyPayload(req.body);
+    const journey = await memberService.updateJourney(req.params.id, payload);
+    res.status(200).json(journey);
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Erro ao atualizar jornada' });
+  }
+}
+
+async function listActivityTypes(req, res) {
+  try {
+    const activityTypes = await memberService.listActivityTypes({
+      includeInactive: req.query.includeInactive
+    });
+    res.status(200).json(activityTypes);
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Erro ao listar tipos de atividade' });
+  }
+}
+
+async function createActivityType(req, res) {
+  try {
+    const createdBy = req.user?.userId || req.user?.id || null;
+    const payload = sanitizeActivityTypePayload(req.body);
+    const activityType = await memberService.createActivityType(payload, createdBy);
+    res.status(201).json(activityType);
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Erro ao criar tipo de atividade' });
+  }
+}
+
+async function updateActivityType(req, res) {
+  try {
+    const payload = sanitizeActivityTypePayload(req.body);
+    const activityType = await memberService.updateActivityType(req.params.typeId, payload);
+    res.status(200).json(activityType);
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Erro ao atualizar tipo de atividade' });
+  }
+}
+
+async function setActivityTypeActive(req, res) {
+  try {
+    const isActive = req.body?.isActive;
+    if (typeof isActive !== 'boolean') {
+      res.status(400).json({ message: 'Campo isActive deve ser booleano' });
+      return;
+    }
+    const activityType = await memberService.setActivityTypeActive(req.params.typeId, isActive);
+    res.status(200).json(activityType);
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Erro ao atualizar status do tipo de atividade' });
+  }
+}
+
 module.exports = {
   list,
   getById,
   create,
   update,
   remove,
-  stats
+  stats,
+  addActivity,
+  deleteActivity,
+  addMilestone,
+  updateJourney,
+  listActivityTypes,
+  createActivityType,
+  updateActivityType,
+  setActivityTypeActive
 };

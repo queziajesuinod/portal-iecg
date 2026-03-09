@@ -233,7 +233,8 @@
     "tunnel-agent": "^0.6.0",
     "url-loader": "^4.1.1",
     "warning": "4.0.2",
-    "workbox-webpack-plugin": "^6.5.4"
+    "workbox-webpack-plugin": "^6.5.4",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@babel/cli": "7.17.6",

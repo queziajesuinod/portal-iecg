@@ -259,14 +259,22 @@ function calcularResumoPagamentos(registration, payments = []) {
   const totalPago = normalizarValor(paidTotal);
   const precoFinal = normalizarValor(registration.finalPrice || 0);
   const remaining = normalizarValor(Math.max(0, precoFinal - totalPago));
+  const hasPending = payments.some(payment => ['pending', 'authorized'].includes(payment.status));
   const hasDenied = payments.some(payment => payment.status === 'denied');
-  const derivedStatus = hasDenied
-    ? 'denied'
-    : remaining <= 0 && precoFinal > 0
+  const hasExpired = payments.some(payment => payment.status === 'expired');
+  const derivedStatus = precoFinal <= 0
+    ? 'confirmed'
+    : remaining <= 0
       ? 'confirmed'
-      : totalPago > 0
-        ? 'partial'
-        : 'pending';
+      : hasPending
+        ? (totalPago > 0 ? 'partial' : 'pending')
+        : hasDenied && totalPago <= 0
+          ? 'denied'
+          : hasExpired && totalPago <= 0
+            ? 'expired'
+            : totalPago > 0
+              ? 'partial'
+              : 'pending';
 
   return {
     paidTotal: totalPago,
@@ -433,9 +441,6 @@ async function atualizarStatusPagamentoPorPagamentos(registration, options = {})
   await sincronizarPagamentosCielo(registration, options);
   const resumo = await anexarResumoPagamentos(registration, options);
   if (!resumo) return null;
-  if (resumo.derivedStatus === 'denied') {
-    return resumo;
-  }
 
   if (registration.paymentStatus !== resumo.derivedStatus) {
     /* eslint-disable no-param-reassign */
@@ -1134,7 +1139,8 @@ async function listarInscritosConfirmadosPorEvento(eventId, options = {}) {
       id: attendee.id,
       orderCode: attendee.registration?.orderCode || '-',
       lote: attendee.batch?.name || '-',
-      nomeCompleto: attendeeData.nome_completo || attendeeData.nome || attendeeData.name || '-'
+      nomeCompleto: attendeeData.nome_completo || attendeeData.nome || attendeeData.name || '-',
+      attendeeData
     };
   });
 
@@ -1579,12 +1585,16 @@ async function removerPagamento(registrationId, paymentId, userId) {
   if (!payment) {
     throw new Error('Pagamento nao encontrado para esta inscricao');
   }
-  if (payment.status !== 'pending') {
-    throw new Error('Somente pagamentos pendentes podem ser excluidos');
+  if (!['pending', 'expired'].includes(payment.status)) {
+    throw new Error('Somente pagamentos pendentes ou expirados podem ser cancelados');
   }
 
   return sequelize.transaction(async (transaction) => {
-    await payment.destroy({ transaction });
+    payment.status = 'cancelled';
+    payment.notes = payment.notes
+      ? `${payment.notes} | Cancelado manualmente no painel`
+      : 'Cancelado manualmente no painel';
+    await payment.save({ transaction });
     await atualizarStatusPagamentoPorPagamentos(registration, { transaction });
     return { success: true };
   });

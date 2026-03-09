@@ -4,6 +4,9 @@ const checkInController = require('../controllers/checkInController');
 
 // ========== ROTAS PÚBLICAS (sem autenticação) ==========
 
+// Configuracao publica para app/kiosk de check-in
+router.get('/events/:eventId/config', checkInController.obterConfiguracaoPublica);
+
 // Check-in via QR Code
 router.post('/qrcode', checkInController.realizarCheckInQRCode);
 

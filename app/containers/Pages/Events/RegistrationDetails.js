@@ -61,6 +61,7 @@ const OFFLINE_CARD_BRANDS = [
 ];
 
 const OFFLINE_INSTALLMENT_OPTIONS = Array.from({ length: 12 }, (_value, index) => index + 1);
+const PAYMENT_STATUSES_ALLOWED_FOR_CANCELLATION = ['pending', 'expired'];
 
 function RegistrationDetails() {
   const history = useHistory();
@@ -296,22 +297,22 @@ function RegistrationDetails() {
     }
   };
 
-  const handleExcluirPagamento = async (payment) => {
+  const handleCancelarPagamento = async (payment) => {
     if (!payment?.id) return;
-    if (payment.status !== 'pending') {
-      setNotification('Somente pagamentos pendentes podem ser excluídos.');
+    if (!PAYMENT_STATUSES_ALLOWED_FOR_CANCELLATION.includes(payment.status)) {
+      setNotification('Somente pagamentos pendentes ou expirados podem ser cancelados.');
       return;
     }
-    if (!window.confirm('Deseja excluir este pagamento pendente?')) {
+    if (!window.confirm('Deseja cancelar este pagamento?')) {
       return;
     }
     try {
       await deletarPagamentoInscricao(id, payment.id);
-      setNotification('Pagamento pendente excluído com sucesso!');
+      setNotification('Pagamento cancelado com sucesso!');
       carregarInscricao();
     } catch (error) {
-      console.error('Erro ao excluir pagamento:', error);
-      setNotification(error.response?.data?.message || error.message || 'Erro ao excluir pagamento');
+      console.error('Erro ao cancelar pagamento:', error);
+      setNotification(error.response?.data?.message || error.message || 'Erro ao cancelar pagamento');
     }
   };
 
@@ -628,9 +629,9 @@ function RegistrationDetails() {
                                 </IconButton>
                               </Tooltip>
                             )}
-                            {canRegisterOffline && payment.status === 'pending' && (
-                              <Tooltip title="Excluir pagamento pendente">
-                                <IconButton size="small" onClick={() => handleExcluirPagamento(payment)}>
+                            {canRegisterOffline && PAYMENT_STATUSES_ALLOWED_FOR_CANCELLATION.includes(payment.status) && (
+                              <Tooltip title="Cancelar pagamento pendente ou expirado">
+                                <IconButton size="small" onClick={() => handleCancelarPagamento(payment)}>
                                   <DeleteIcon fontSize="small" />
                                 </IconButton>
                               </Tooltip>

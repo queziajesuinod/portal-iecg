@@ -60,21 +60,7 @@ module.exports = (sequelize) => {
     },
     
     milestoneType: {
-      type: DataTypes.ENUM(
-        'PRIMEIRA_VISITA',
-        'DECISAO_FE',
-        'BATISMO',
-        'MEMBRO_OFICIAL',
-        'PRIMEIRA_CELULA',
-        'LIDER_CELULA',
-        'VOLUNTARIO_MINISTERIO',
-        'LIDER_MINISTERIO',
-        'CURSO_CONCLUIDO',
-        'DIZIMISTA_FIEL',
-        'CASAMENTO',
-        'DEDICACAO_FILHO',
-        'ANIVERSARIO_CONVERSAO'
-      ),
+      type: DataTypes.STRING(80),
       allowNull: false
     },
     

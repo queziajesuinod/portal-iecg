@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { Registration, RegistrationPayment, Event } = require('../models');
+const { Registration, RegistrationPayment } = require('../models');
 const registrationService = require('../services/registrationService');
 
 const parsedThreshold = Number(process.env.PIX_PENDING_TIMEOUT_MINUTES);
@@ -28,11 +28,6 @@ async function checkPixPendingRegistrations() {
       {
         model: RegistrationPayment,
         as: 'payments'
-      },
-      {
-        model: Event,
-        as: 'event',
-        attributes: ['id', 'registrationPaymentMode']
       }
     ],
     order: [['createdAt', 'ASC']]
@@ -70,37 +65,11 @@ async function checkPixPendingRegistrations() {
         }
       );
     }
+    await registration.reload({ include: [{ model: RegistrationPayment, as: 'payments' }] });
+    await registrationService.atualizarStatusPagamentoPorPagamentos(registration);
+    await registration.reload({ include: [{ model: RegistrationPayment, as: 'payments' }] });
 
-    const updatedPayments = await RegistrationPayment.findAll({
-      where: { registrationId: registration.id }
-    });
-    const activeStatuses = new Set(['pending', 'authorized', 'confirmed', 'partial']);
-    const hasActivePayment = updatedPayments.some((payment) => activeStatuses.has(payment.status));
-
-    const paymentMode = (registration.event?.registrationPaymentMode || 'SINGLE').toUpperCase();
-    const isSinglePayment = paymentMode === 'SINGLE';
-
-    if (!hasActivePayment) {
-      const statusAnterior = registration.paymentStatus;
-      registration.set('paymentStatus', 'expired');
-      await registration.save();
-      await registrationService.ajustarContadoresDeStatus(registration, statusAnterior);
-
-      console.info(`[pixPendingJob] Inscrição ${registration.orderCode} expirada automaticamente após ${PIX_PENDING_TIMEOUT_MINUTES} minutos pendente`);
-      return;
-    }
-
-    if (!isSinglePayment) {
-      console.info(`[pixPendingJob] Inscrição ${registration.orderCode} permanece ativa (modo ${paymentMode}); apenas expira o pagamento PIX pendente`);
-      return;
-    }
-
-    const statusAnterior = registration.paymentStatus;
-    registration.set('paymentStatus', 'expired');
-    await registration.save();
-    await registrationService.ajustarContadoresDeStatus(registration, statusAnterior);
-
-    console.info(`[pixPendingJob] Inscrição ${registration.orderCode} expirada automaticamente após ${PIX_PENDING_TIMEOUT_MINUTES} minutos pendente`);
+    console.info(`[pixPendingJob] Inscrição ${registration.orderCode} recalculada para ${registration.paymentStatus} após expiração de PIX pendente`);
   }));
 }
 

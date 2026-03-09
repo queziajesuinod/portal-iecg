@@ -49,7 +49,9 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import CloseIcon from '@mui/icons-material/Close';
 import BedIcon from '@mui/icons-material/KingBed';
 import GroupsIcon from '@mui/icons-material/Groups';
+import DownloadIcon from '@mui/icons-material/Download';
 import { useHistory, useParams } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import brand from 'dan-api/dummy/brand';
 import {
   buscarEvento,
@@ -105,6 +107,8 @@ function EventDetails() {
   const [formasLoading, setFormasLoading] = useState(false);
   const [registrationsLoading, setRegistrationsLoading] = useState(false);
   const [confirmedAttendeesLoading, setConfirmedAttendeesLoading] = useState(false);
+  const [exportingSales, setExportingSales] = useState(false);
+  const [exportingConfirmed, setExportingConfirmed] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalInscricoes, setTotalInscricoes] = useState(0);
@@ -615,6 +619,301 @@ function EventDetails() {
 
   const handleConfirmedFilterChange = (field, value) => {
     setConfirmedFilters((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const sanitizeFileName = (value) => {
+    if (!value) return 'evento';
+    return String(value)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9-_]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .toLowerCase();
+  };
+
+  const formatarValorExportacao = (value, fieldName = '') => {
+    if (value === null || value === undefined || value === '') return '';
+    if (typeof value === 'boolean') return value ? 'Sim' : 'Nao';
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => formatarValorExportacao(item, fieldName))
+        .join(' | ');
+    }
+    if (typeof value === 'object') {
+      try {
+        return JSON.stringify(value);
+      } catch (error) {
+        return String(value);
+      }
+    }
+
+    if (fieldName === 'method' || fieldName.endsWith('.method')) {
+      return traduzirTipoPagamento(value);
+    }
+    if (fieldName === 'status' || fieldName.endsWith('.status') || fieldName === 'paymentStatus') {
+      return getPaymentStatusLabel(value);
+    }
+    if (fieldName === 'amount' || fieldName === 'finalPrice' || fieldName.endsWith('.amount') || fieldName.endsWith('.price')) {
+      return formatarPreco(value);
+    }
+    if (fieldName === 'installments' || fieldName.endsWith('.installments')) {
+      return `${Number(value) || 1}x`;
+    }
+    if (/(At|Date)$/i.test(fieldName)) {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        return formatarDataHora(value);
+      }
+    }
+
+    return String(value);
+  };
+
+  const exportarVendasExcel = async () => {
+    if (!id) return;
+    setExportingSales(true);
+
+    try {
+      const perPage = 100;
+      const fetchAllSalesPages = async (page = 1, acc = []) => {
+        const response = await listarInscricoesPorEvento(id, {
+          page,
+          perPage,
+          orderCode: filters.orderCode || undefined,
+          buyerName: filters.buyerName || undefined,
+          buyerDocument: filters.buyerDocument || undefined,
+          paymentStatus: filters.paymentStatus || undefined,
+          dateFrom: filters.dateFrom || undefined,
+          dateTo: filters.dateTo || undefined
+        });
+
+        const records = Array.isArray(response?.records) ? response.records : [];
+        const total = Number(response?.total || 0);
+        const nextAcc = [...acc, ...records];
+
+        if (!records.length || nextAcc.length >= total) {
+          return nextAcc;
+        }
+        return fetchAllSalesPages(page + 1, nextAcc);
+      };
+
+      const allSales = await fetchAllSalesPages();
+      if (!allSales.length) {
+        setNotification('Nao ha vendas para exportar com os filtros atuais.');
+        return;
+      }
+
+      const buyerKeys = new Set();
+      const attendeeKeys = new Set();
+      const attendeeBatchKeys = new Set();
+      const paymentKeys = new Set();
+
+      allSales.forEach((sale) => {
+        const buyerData = sale?.buyerData && typeof sale.buyerData === 'object' ? sale.buyerData : {};
+        Object.keys(buyerData).forEach((key) => buyerKeys.add(key));
+
+        const attendees = Array.isArray(sale?.attendees) ? sale.attendees : [];
+        attendees.forEach((attendee) => {
+          const attendeeData = attendee?.attendeeData && typeof attendee.attendeeData === 'object'
+            ? attendee.attendeeData
+            : {};
+          Object.keys(attendeeData).forEach((key) => attendeeKeys.add(key));
+
+          const batch = attendee?.batch && typeof attendee.batch === 'object' ? attendee.batch : {};
+          Object.keys(batch).forEach((key) => attendeeBatchKeys.add(key));
+        });
+
+        const payments = Array.isArray(sale?.payments) ? sale.payments : [];
+        payments.forEach((payment) => {
+          Object.keys(payment || {}).forEach((key) => {
+            if (key !== 'registrationId') {
+              paymentKeys.add(key);
+            }
+          });
+        });
+      });
+
+      const sortedBuyerKeys = Array.from(buyerKeys).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+      const sortedAttendeeKeys = Array.from(attendeeKeys).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+      const sortedAttendeeBatchKeys = Array.from(attendeeBatchKeys).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+      const sortedPaymentKeys = Array.from(paymentKeys).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+      const baseColumns = [
+        'orderCode',
+        'registrationId',
+        'statusInscricao',
+        'formaPagamentoInscricao',
+        'quantidade',
+        'valorFinal',
+        'dataInscricao'
+      ];
+      const buyerColumns = sortedBuyerKeys.map((key) => `comprador.${key}`);
+      const attendeeColumns = ['inscrito.id', 'inscrito.numero'].concat(
+        sortedAttendeeBatchKeys.map((key) => `inscrito.lote.${key}`),
+        sortedAttendeeKeys.map((key) => `inscrito.dados.${key}`)
+      );
+      const paymentColumns = sortedPaymentKeys.map((key) => `pagamento.${key}`);
+      const headers = [...baseColumns, ...buyerColumns, ...attendeeColumns, ...paymentColumns];
+
+      const rows = [];
+      allSales.forEach((sale) => {
+        const buyerData = sale?.buyerData && typeof sale.buyerData === 'object' ? sale.buyerData : {};
+        const attendees = Array.isArray(sale?.attendees) && sale.attendees.length ? sale.attendees : [null];
+        const payments = Array.isArray(sale?.payments) && sale.payments.length ? sale.payments : [null];
+
+        attendees.forEach((attendee) => {
+          payments.forEach((payment) => {
+            const attendeeData = attendee?.attendeeData && typeof attendee.attendeeData === 'object'
+              ? attendee.attendeeData
+              : {};
+            const attendeeBatch = attendee?.batch && typeof attendee.batch === 'object' ? attendee.batch : {};
+
+            const row = {
+              orderCode: sale?.orderCode || '',
+              registrationId: sale?.id || '',
+              statusInscricao: formatarValorExportacao(sale?.paymentStatus, 'paymentStatus'),
+              formaPagamentoInscricao: formatarValorExportacao(sale?.paymentMethod, 'method'),
+              quantidade: sale?.quantity ?? '',
+              valorFinal: formatarValorExportacao(sale?.finalPrice, 'finalPrice'),
+              dataInscricao: formatarValorExportacao(sale?.createdAt, 'createdAt'),
+              'inscrito.id': attendee?.id || '',
+              'inscrito.numero': attendee?.attendeeNumber ?? ''
+            };
+
+            sortedBuyerKeys.forEach((key) => {
+              row[`comprador.${key}`] = formatarValorExportacao(buyerData[key], key);
+            });
+
+            sortedAttendeeBatchKeys.forEach((key) => {
+              row[`inscrito.lote.${key}`] = formatarValorExportacao(attendeeBatch[key], `batch.${key}`);
+            });
+            sortedAttendeeKeys.forEach((key) => {
+              row[`inscrito.dados.${key}`] = formatarValorExportacao(attendeeData[key], key);
+            });
+
+            sortedPaymentKeys.forEach((key) => {
+              row[`pagamento.${key}`] = formatarValorExportacao(payment?.[key], key);
+            });
+
+            rows.push(row);
+          });
+        });
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(rows, { header: headers });
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Vendas');
+      const workbookBytes = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob(
+        [workbookBytes],
+        { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
+      );
+
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      const dateTag = new Date().toISOString().slice(0, 10);
+      const fileName = `vendas_${sanitizeFileName(evento?.title || 'evento')}_${dateTag}.xlsx`;
+
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      setNotification(`Exportacao concluida com ${rows.length} linha(s).`);
+    } catch (error) {
+      console.error('Erro ao exportar vendas:', error);
+      setNotification(error.message || 'Erro ao exportar vendas.');
+    } finally {
+      setExportingSales(false);
+    }
+  };
+
+  const exportarInscritosConfirmadosExcel = async () => {
+    if (!id) return;
+    setExportingConfirmed(true);
+    try {
+      const perPage = 100;
+      const fetchAllConfirmedPages = async (page = 1, acc = []) => {
+        const response = await listarInscritosConfirmadosPorEvento(id, {
+          page,
+          perPage,
+          lote: confirmedFilters.lote || undefined,
+          orderCode: confirmedFilters.orderCode || undefined,
+          nomeCompleto: confirmedFilters.nomeCompleto || undefined
+        });
+
+        const records = Array.isArray(response?.records) ? response.records : [];
+        const total = Number(response?.total || 0);
+        const nextAcc = [...acc, ...records];
+
+        if (!records.length || nextAcc.length >= total) {
+          return nextAcc;
+        }
+
+        return fetchAllConfirmedPages(page + 1, nextAcc);
+      };
+
+      const allRecords = await fetchAllConfirmedPages();
+
+      if (!allRecords.length) {
+        setNotification('Nao ha inscritos para exportar com os filtros atuais.');
+        return;
+      }
+
+      const dynamicKeys = new Set();
+      allRecords.forEach((record) => {
+        const attendeeData = record?.attendeeData && typeof record.attendeeData === 'object'
+          ? record.attendeeData
+          : {};
+        Object.keys(attendeeData).forEach((key) => dynamicKeys.add(key));
+      });
+
+      const dynamicColumns = Array.from(dynamicKeys).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+      const headers = ['nomeCompleto', 'lote', 'orderCode', ...dynamicColumns];
+      const sheetRows = allRecords.map((record) => {
+        const attendeeData = record?.attendeeData && typeof record.attendeeData === 'object'
+          ? record.attendeeData
+          : {};
+        return {
+          nomeCompleto: record?.nomeCompleto || '-',
+          lote: record?.lote || '-',
+          orderCode: record?.orderCode || '-',
+          ...dynamicColumns.reduce((acc, column) => {
+            acc[column] = attendeeData[column] ?? '';
+            return acc;
+          }, {})
+        };
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(sheetRows, { header: headers });
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Inscritos');
+      const workbookBytes = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob(
+        [workbookBytes],
+        { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
+      );
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      const dateTag = new Date().toISOString().slice(0, 10);
+      const fileName = `inscritos_${sanitizeFileName(evento?.title || 'evento')}_${dateTag}.xlsx`;
+
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      setNotification(`Exportacao concluida com ${allRecords.length} inscrito(s).`);
+    } catch (error) {
+      console.error('Erro ao exportar inscritos:', error);
+      setNotification(error.message || 'Erro ao exportar inscritos.');
+    } finally {
+      setExportingConfirmed(false);
+    }
   };
 
   const abrirDialogCancelamento = async (inscricaoId, orderCode) => {
@@ -1150,6 +1449,18 @@ function EventDetails() {
                 onChange={(event) => handleFilterChange('dateTo', event.target.value)}
               />
             </Grid>
+            <Grid item xs={12}>
+              <Box display="flex" justifyContent="flex-end">
+                <Button
+                  variant="outlined"
+                  startIcon={<DownloadIcon />}
+                  onClick={exportarVendasExcel}
+                  disabled={registrationsLoading || exportingSales}
+                >
+                  {exportingSales ? 'Exportando...' : 'Exportar Excel'}
+                </Button>
+              </Box>
+            </Grid>
           </Grid>
           {registrationsLoading ? (
             <TableContainer sx={salesTableContainerSx}>
@@ -1291,6 +1602,18 @@ function EventDetails() {
                 value={confirmedFilters.nomeCompleto}
                 onChange={(event) => handleConfirmedFilterChange('nomeCompleto', event.target.value)}
               />
+            </Grid>
+            <Grid item xs={12} sm={6} md={12}>
+              <Box display="flex" justifyContent="flex-end">
+                <Button
+                  variant="outlined"
+                  startIcon={<DownloadIcon />}
+                  onClick={exportarInscritosConfirmadosExcel}
+                  disabled={confirmedAttendeesLoading || exportingConfirmed}
+                >
+                  {exportingConfirmed ? 'Exportando...' : 'Exportar Excel'}
+                </Button>
+              </Box>
             </Grid>
           </Grid>
           {confirmedAttendeesLoading ? (

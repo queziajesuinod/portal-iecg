@@ -7,7 +7,7 @@ const SINGLE_PAYMENT_STATUS_CHECK_INTERVAL_MS = Number.isFinite(parsedInterval) 
   ? parsedInterval
   : 5 * 60 * 1000;
 const TARGET_PAYMENT_STATUSES = ['expired', 'denied'];
-const FINAL_REGISTRATION_STATUSES = new Set(['expired', 'denied', 'cancelled', 'refunded']);
+const FINAL_REGISTRATION_STATUSES = new Set(['cancelled', 'refunded']);
 
 async function checkSinglePaymentStatus() {
   const payments = await RegistrationPayment.findAll({
@@ -63,17 +63,12 @@ async function checkSinglePaymentStatus() {
     return;
   }
 
-  await Promise.all([...uniqueRegistrations.values()].map(async ({ registration, payment }) => {
-    const targetStatus = payment.status;
-    if (registration.paymentStatus === targetStatus) {
-      return;
-    }
-
+  await Promise.all([...uniqueRegistrations.values()].map(async ({ registration }) => {
     const statusAnterior = registration.paymentStatus;
-    registration.paymentStatus = targetStatus;
-    await registration.save();
-    await registrationService.ajustarContadoresDeStatus(registration, statusAnterior);
-    console.info(`[singlePaymentStatusJob] Inscrição ${registration.orderCode} atualizada para ${targetStatus}`);
+    await registrationService.atualizarStatusPagamentoPorPagamentos(registration);
+    if (registration.paymentStatus !== statusAnterior) {
+      console.info(`[singlePaymentStatusJob] Inscrição ${registration.orderCode} recalculada para ${registration.paymentStatus}`);
+    }
   }));
 }
 
