@@ -5,6 +5,7 @@ import brand from 'dan-api/dummy/brand';
 import { LoginForm } from 'dan-components';
 import useStyles from 'dan-components/Forms/user-jss';
 import dummyContents from 'dan-api/dummy/dummyContents';
+import { isStoredTokenValid } from '../../../utils/authSession';
 
 function decodeJwt(token) {
   try {
@@ -101,7 +102,27 @@ function Login({ setIsAuthenticated = () => {} }) {
       history.push('/app');
     } catch (error) {
       console.error('Erro ao fazer login:', error);
-      // Mesmo em erro, garanta que flag de auth volte para falso
+      const isOfflineError = !navigator.onLine
+        || /failed to fetch|networkerror|load failed/i.test(String(error?.message || ''));
+
+      if (isOfflineError && isStoredTokenValid()) {
+        try {
+          const storedUser = localStorage.getItem('user');
+          if (storedUser) {
+            dummyContents.user = JSON.parse(storedUser);
+          }
+        } catch (e) {
+          console.warn('Falha ao carregar usuario salvo para login offline', e);
+        }
+
+        localStorage.setItem('isAuthenticated', 'true');
+        setIsAuthenticated(true);
+        history.push('/app');
+        return;
+      }
+
+      // Mesmo em erro sem sessao local valida, garanta que flag de auth volte para falso
+      localStorage.setItem('isAuthenticated', 'false');
       setIsAuthenticated(false);
     }
   };

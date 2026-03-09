@@ -88,6 +88,38 @@ function CheckInList({ eventId }) {
     return colors[metodo] || 'default';
   };
 
+  const getNomesInscritos = (checkIn) => {
+    const nomeDoAttendeeCheckIn =
+      checkIn.attendee?.attendeeData?.nome_completo
+      || checkIn.attendee?.attendeeData?.name
+      || checkIn.attendee?.attendeeData?.nome;
+
+    if (nomeDoAttendeeCheckIn) {
+      return [nomeDoAttendeeCheckIn];
+    }
+
+    const attendees = Array.isArray(checkIn.registration?.attendees)
+      ? checkIn.registration.attendees
+      : [];
+
+    const nomes = attendees
+      .map((attendee) => attendee?.attendeeData?.nome_completo || attendee?.attendeeData?.name || attendee?.attendeeData?.nome)
+      .filter(Boolean);
+
+    const nomesUnicos = [...new Set(nomes)];
+    if (nomesUnicos.length > 0) {
+      return nomesUnicos;
+    }
+
+    const fallbackNome =
+      checkIn.registration?.buyerData?.nome_completo
+      || checkIn.registration?.buyerData?.buyer_name
+      || checkIn.registration?.buyerData?.name
+      || checkIn.registration?.buyerData?.nome;
+
+    return fallbackNome ? [fallbackNome] : [];
+  };
+
   return (
     <>
       {/* Filtros */}
@@ -192,32 +224,44 @@ function CheckInList({ eventId }) {
                   </TableCell>
                 </TableRow>
               ) : (
-                checkIns.map((checkIn) => (
-                  <TableRow key={checkIn.id}>
-                    <TableCell>{formatarData(checkIn.checkInAt)}</TableCell>
-                    <TableCell>
-                      <Typography variant="body2" style={{ fontFamily: 'monospace' }}>
-                        {checkIn.registration?.orderCode}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      {checkIn.registration?.buyerData?.name || 'N/A'}
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={getMetodoLabel(checkIn.checkInMethod)}
-                        color={getMetodoColor(checkIn.checkInMethod)}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      {checkIn.schedule?.name || '-'}
-                    </TableCell>
-                    <TableCell>
-                      {checkIn.station?.name || '-'}
-                    </TableCell>
-                  </TableRow>
-                ))
+                checkIns.map((checkIn) => {
+                  const nomesInscritos = getNomesInscritos(checkIn);
+
+                  return (
+                    <TableRow key={checkIn.id}>
+                      <TableCell>{formatarData(checkIn.checkInAt)}</TableCell>
+                      <TableCell>
+                        <Typography variant="body2" style={{ fontFamily: 'monospace' }}>
+                          {checkIn.registration?.orderCode}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        {nomesInscritos.length > 0 ? (
+                          <Box display="flex" flexDirection="column" gap={0.5}>
+                            {nomesInscritos.map((nome, idx) => (
+                              <Typography key={`${checkIn.id}-nome-${idx}`} variant="body2">
+                                {nome}
+                              </Typography>
+                            ))}
+                          </Box>
+                        ) : 'N/A'}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={getMetodoLabel(checkIn.checkInMethod)}
+                          color={getMetodoColor(checkIn.checkInMethod)}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        {checkIn.schedule?.name || '-'}
+                      </TableCell>
+                      <TableCell>
+                        {checkIn.station?.name || '-'}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>

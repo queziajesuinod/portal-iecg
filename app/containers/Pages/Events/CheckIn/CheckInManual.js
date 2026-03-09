@@ -9,7 +9,11 @@ import {
   CircularProgress,
   Box,
   Chip,
-  Alert
+  Alert,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
 import CheckIcon from '@mui/icons-material/CheckCircle';
 import SearchIcon from '@mui/icons-material/Search';
@@ -20,12 +24,41 @@ function CheckInManual({ eventId }) {
   const [codigo, setCodigo] = useState('');
   const [loading, setLoading] = useState(false);
   const [inscricao, setInscricao] = useState(null);
+  const [attendeeSelecionadoId, setAttendeeSelecionadoId] = useState('');
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState('');
+  const [aviso, setAviso] = useState('');
+
+  const getNomeInscrito = (attendee, index) => (
+    attendee?.attendeeName
+    || attendee?.attendeeData?.nome_completo
+    || attendee?.attendeeData?.name
+    || attendee?.attendeeData?.nome
+    || `Inscrito ${index + 1}`
+  );
+
+  const getProximoAttendeePendente = (attendees = []) => attendees.find(
+    (attendee) => !attendee?.jaFezCheckInNoAgendamento
+  ) || attendees[0] || null;
+
+  const atualizarAvisoPorPendencia = (attendees = [], totalCheckInsNoAgendamento = 0) => {
+    const totalPendentes = attendees.filter((attendee) => !attendee?.jaFezCheckInNoAgendamento).length;
+    if (totalPendentes === 0) {
+      setAviso('Todos os inscritos desta compra ja fizeram check-in neste agendamento.');
+      return;
+    }
+
+    if (totalCheckInsNoAgendamento > 0) {
+      setAviso('Alguns inscritos ja fizeram check-in. Selecione um inscrito pendente para continuar.');
+      return;
+    }
+
+    setAviso('');
+  };
 
   const handleBuscar = async () => {
     if (!codigo.trim()) {
-      setErro('Digite um código de inscrição');
+      setErro('Digite um codigo de inscricao');
       return;
     }
 
@@ -33,46 +66,93 @@ function CheckInManual({ eventId }) {
       setLoading(true);
       setErro('');
       setSucesso('');
+      setAviso('');
       setInscricao(null);
+      setAttendeeSelecionadoId('');
 
       const resultado = await validarCodigo(codigo.trim());
 
       if (!resultado.valido) {
-        setErro(resultado.mensagem || 'Código inválido');
+        setErro(resultado.mensagem || 'Codigo invalido');
         return;
       }
 
-      setInscricao(resultado.registration);
-
-      if (resultado.jaFezCheckIn) {
-        setErro(`Check-in já realizado em ${new Date(resultado.checkInAt).toLocaleString('pt-BR')}`);
+      if (String(resultado.registration?.eventId) !== String(eventId)) {
+        setErro('Codigo de inscricao nao pertence a este evento');
+        return;
       }
+
+      const registration = resultado.registration;
+      const attendees = Array.isArray(registration?.attendees) ? registration.attendees : [];
+
+      if (attendees.length === 0) {
+        setErro('Nenhum inscrito encontrado nesta inscricao');
+        return;
+      }
+
+      const proximoAttendee = getProximoAttendeePendente(attendees);
+      setInscricao(registration);
+      setAttendeeSelecionadoId(proximoAttendee?.id || '');
+      atualizarAvisoPorPendencia(attendees, resultado.totalCheckInsNoAgendamento || 0);
     } catch (error) {
-      console.error('Erro ao validar código:', error);
-      setErro(error.response?.data?.erro || 'Erro ao validar código');
+      console.error('Erro ao validar codigo:', error);
+      setErro(error.response?.data?.erro || 'Erro ao validar codigo');
     } finally {
       setLoading(false);
     }
   };
 
   const handleRealizarCheckIn = async () => {
+    if (!inscricao) {
+      setErro('Busque uma inscricao primeiro');
+      return;
+    }
+
+    if (!attendeeSelecionadoId) {
+      setErro('Selecione o inscrito para realizar o check-in');
+      return;
+    }
+
+    const attendeeSelecionado = inscricao.attendees?.find(
+      (attendee) => String(attendee.id) === String(attendeeSelecionadoId)
+    );
+
+    if (!attendeeSelecionado) {
+      setErro('Inscrito selecionado e invalido');
+      return;
+    }
+
+    if (attendeeSelecionado.jaFezCheckInNoAgendamento) {
+      setErro('Este inscrito ja fez check-in neste agendamento');
+      return;
+    }
+
     try {
       setLoading(true);
       setErro('');
+      setSucesso('');
+      setAviso('');
 
       await realizarCheckInManual({
-        registrationId: inscricao.id,
-        eventId: inscricao.eventId
+        orderCode: inscricao.orderCode,
+        event_id: inscricao.eventId,
+        attendeeId: attendeeSelecionadoId
       });
 
       setSucesso('Check-in realizado com sucesso!');
-      
-      // Limpar formulário após 2 segundos
-      setTimeout(() => {
-        setCodigo('');
-        setInscricao(null);
-        setSucesso('');
-      }, 2000);
+
+      const resultadoAtualizado = await validarCodigo(inscricao.orderCode);
+      if (resultadoAtualizado?.valido) {
+        const registrationAtualizada = resultadoAtualizado.registration;
+        const attendeesAtualizados = Array.isArray(registrationAtualizada?.attendees)
+          ? registrationAtualizada.attendees
+          : [];
+
+        const proximoAttendee = getProximoAttendeePendente(attendeesAtualizados);
+        setInscricao(registrationAtualizada);
+        setAttendeeSelecionadoId(proximoAttendee?.id || '');
+        atualizarAvisoPorPendencia(attendeesAtualizados, resultadoAtualizado.totalCheckInsNoAgendamento || 0);
+      }
     } catch (error) {
       console.error('Erro ao realizar check-in:', error);
       setErro(error.response?.data?.erro || 'Erro ao realizar check-in');
@@ -81,20 +161,24 @@ function CheckInManual({ eventId }) {
     }
   };
 
+  const attendeeSelecionado = inscricao?.attendees?.find(
+    (attendee) => String(attendee.id) === String(attendeeSelecionadoId)
+  );
+  const attendeeJaFezCheckIn = !!attendeeSelecionado?.jaFezCheckInNoAgendamento;
+
   return (
     <Grid container spacing={3}>
-      {/* Formulário de Busca */}
       <Grid item xs={12} md={6}>
         <Card>
           <CardContent>
             <Typography variant="h6" gutterBottom>
-              <SearchIcon /> Buscar Inscrição
+              <SearchIcon /> Buscar Inscricao
             </Typography>
 
             <Box mt={2}>
               <TextField
                 fullWidth
-                label="Código de Inscrição"
+                label="Codigo de Inscricao"
                 placeholder="REG-20260204-XXXXXX"
                 value={codigo}
                 onChange={(e) => setCodigo(e.target.value.toUpperCase())}
@@ -128,22 +212,27 @@ function CheckInManual({ eventId }) {
                 <Alert severity="success">{sucesso}</Alert>
               </Box>
             )}
+
+            {aviso && (
+              <Box mt={2}>
+                <Alert severity="warning">{aviso}</Alert>
+              </Box>
+            )}
           </CardContent>
         </Card>
       </Grid>
 
-      {/* Informações da Inscrição */}
       {inscricao && (
         <Grid item xs={12} md={6}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                <PersonIcon /> Dados da Inscrição
+                <PersonIcon /> Dados da Inscricao
               </Typography>
 
               <Box mt={2}>
                 <Typography variant="body2" color="textSecondary">
-                  Código
+                  Codigo
                 </Typography>
                 <Typography variant="body1" gutterBottom>
                   <strong>{inscricao.orderCode}</strong>
@@ -153,7 +242,7 @@ function CheckInManual({ eventId }) {
                   Nome do Comprador
                 </Typography>
                 <Typography variant="body1" gutterBottom>
-                  {inscricao.buyerData?.name || 'N/A'}
+                  {inscricao.buyerData?.name || inscricao.buyerData?.buyer_name || 'N/A'}
                 </Typography>
 
                 <Typography variant="body2" color="textSecondary" style={{ marginTop: 16 }}>
@@ -170,12 +259,29 @@ function CheckInManual({ eventId }) {
                     </Typography>
                     {inscricao.attendees.map((attendee, index) => (
                       <Chip
-                        key={index}
-                        label={attendee.attendeeData?.name || `Inscrito ${index + 1}`}
+                        key={attendee.id || index}
+                        label={`${getNomeInscrito(attendee, index)}${attendee.jaFezCheckInNoAgendamento ? ' - Check-in realizado' : ''}`}
+                        color={attendee.jaFezCheckInNoAgendamento ? 'success' : 'default'}
                         style={{ margin: 4 }}
                         size="small"
                       />
                     ))}
+
+                    <FormControl fullWidth style={{ marginTop: 16 }}>
+                      <InputLabel id="attendee-select-label">Inscrito para check-in</InputLabel>
+                      <Select
+                        labelId="attendee-select-label"
+                        value={attendeeSelecionadoId}
+                        label="Inscrito para check-in"
+                        onChange={(e) => setAttendeeSelecionadoId(e.target.value)}
+                      >
+                        {inscricao.attendees.map((attendee, index) => (
+                          <MenuItem key={attendee.id || index} value={attendee.id}>
+                            {getNomeInscrito(attendee, index)}{attendee.jaFezCheckInNoAgendamento ? ' (ja fez check-in)' : ''}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
                   </>
                 )}
               </Box>
@@ -187,10 +293,10 @@ function CheckInManual({ eventId }) {
                   color="primary"
                   size="large"
                   onClick={handleRealizarCheckIn}
-                  disabled={loading}
+                  disabled={loading || !attendeeSelecionadoId || attendeeJaFezCheckIn}
                   startIcon={<CheckIcon />}
                 >
-                  Realizar Check-in
+                  {attendeeJaFezCheckIn ? 'Inscrito ja fez check-in' : 'Realizar Check-in'}
                 </Button>
               </Box>
             </CardContent>

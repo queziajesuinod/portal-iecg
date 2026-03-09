@@ -1278,13 +1278,23 @@ ${attendees.length > totalSlots ? `ATENCAO: existem mais inscritos (${attendees.
 ${availableFields.join(', ')}
 ${omittedFieldsCount > 0 ? `\n(Foram omitidos ${omittedFieldsCount} campos menos relevantes para reduzir tamanho do prompt.)` : ''}
 
-## Regras obrigatorias
-
+## Regras base do sistema (sempre ativas)
 1. Slot de cama no formato roomId.numero (ex: 1.1, 1.2, 2.1).
-2. Só pode pessoas no mesmo sexo no quarto.
+2. Cada attendeeId pode aparecer no maximo uma vez.
+3. Use apenas roomId existentes na estrutura de quartos.
+4. Nunca ultrapasse a capacidade de cada quarto.
+5. Evite quarto misto quando sexo estiver disponivel.
+6. Se faltar vaga, priorize cobertura maxima e explique em warnings.
 
-## Regras adicionais
-${customRules || 'Nenhuma regra adicional.'}
+## Regras adicionais do usuario
+${customRules || 'Sem regras adicionais. Siga estritamente as regras base do sistema.'}
+
+## Checklist obrigatorio antes de responder
+1. Verifique duplicidade de attendeeId.
+2. Verifique capacidade por quarto.
+3. Verifique se todos os roomId existem.
+4. Verifique consistencia do slotLabel com roomId.
+5. Retorne somente JSON valido no formato solicitado.
 
 ## Inscritos
 ${JSON.stringify(attendees, null, 2)}

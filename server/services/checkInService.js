@@ -1,4 +1,4 @@
-const {
+﻿const {
   EventCheckIn,
   EventCheckInSchedule,
   EventCheckInStation,
@@ -13,8 +13,43 @@ const moment = require('moment-timezone');
 
 // Timezone de Campo Grande, MS
 const TIMEZONE = 'America/Campo_Grande';
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 class CheckInService {
+  obterEventId(payload = {}) {
+    return payload.eventId || payload.event_id || null;
+  }
+
+  obterNomeAttendee(attendee, fallback = 'Inscrito') {
+    const attendeeData = attendee?.attendeeData || {};
+    return attendeeData.nome_completo
+      || attendeeData.name
+      || attendeeData.nome
+      || fallback;
+  }
+
+  resolverAttendeeParaCheckIn(registration, attendeeId) {
+    const attendees = Array.isArray(registration?.attendees) ? registration.attendees : [];
+
+    if (attendees.length === 0) {
+      throw new Error('Nenhum inscrito encontrado para esta inscricao');
+    }
+
+    if (!attendeeId) {
+      if (attendees.length === 1) {
+        return attendees[0];
+      }
+      throw new Error('attendeeId e obrigatorio para esta inscricao');
+    }
+
+    const attendee = attendees.find((item) => String(item.id) === String(attendeeId));
+    if (!attendee) {
+      throw new Error('Inscrito nao encontrado nesta inscricao');
+    }
+
+    return attendee;
+  }
+
   /**
    * Criar agendamento de check-in
    */
@@ -22,13 +57,13 @@ class CheckInService {
     const { eventId, name, startTime, endTime, isActive = true } = dados;
 
     if (!eventId || !name || !startTime || !endTime) {
-      throw new Error('Campos obrigatórios: eventId, name, startTime, endTime');
+      throw new Error('Campos obrigatÃ³rios: eventId, name, startTime, endTime');
     }
 
     // Verificar se o evento existe
     const event = await Event.findByPk(eventId);
     if (!event) {
-      throw new Error('Evento não encontrado');
+      throw new Error('Evento nÃ£o encontrado');
     }
 
     // Validar datas
@@ -36,7 +71,7 @@ class CheckInService {
     const end = moment.tz(endTime, TIMEZONE);
 
     if (end.isBefore(start)) {
-      throw new Error('Data de fim deve ser posterior à data de início');
+      throw new Error('Data de fim deve ser posterior Ã  data de inÃ­cio');
     }
 
     return EventCheckInSchedule.create({
@@ -64,7 +99,7 @@ class CheckInService {
   async atualizarAgendamento(id, dados) {
     const schedule = await EventCheckInSchedule.findByPk(id);
     if (!schedule) {
-      throw new Error('Agendamento não encontrado');
+      throw new Error('Agendamento nÃ£o encontrado');
     }
 
     const updates = { ...dados };
@@ -82,7 +117,7 @@ class CheckInService {
     const end = moment.tz(updates.endTime || schedule.endTime, TIMEZONE);
 
     if (end.isBefore(start)) {
-      throw new Error('Data de fim deve ser posterior à data de início');
+      throw new Error('Data de fim deve ser posterior Ã  data de inÃ­cio');
     }
 
     return schedule.update(updates);
@@ -94,7 +129,7 @@ class CheckInService {
   async deletarAgendamento(id) {
     const schedule = await EventCheckInSchedule.findByPk(id);
     if (!schedule) {
-      throw new Error('Agendamento não encontrado');
+      throw new Error('Agendamento nÃ£o encontrado');
     }
 
     await schedule.destroy();
@@ -102,22 +137,22 @@ class CheckInService {
   }
 
   /**
-   * Criar estação de check-in
+   * Criar estaÃ§Ã£o de check-in
    */
   async criarEstacao(dados) {
     const { eventId, name, latitude, longitude, nfcTagId, isActive = true } = dados;
 
     if (!eventId || !name) {
-      throw new Error('Campos obrigatórios: eventId, name');
+      throw new Error('Campos obrigatÃ³rios: eventId, name');
     }
 
     // Verificar se o evento existe
     const event = await Event.findByPk(eventId);
     if (!event) {
-      throw new Error('Evento não encontrado');
+      throw new Error('Evento nÃ£o encontrado');
     }
 
-    // Se tem NFC, verificar se já não está em uso
+    // Se tem NFC, verificar se jÃ¡ nÃ£o estÃ¡ em uso
     if (nfcTagId) {
       const existing = await EventCheckInStation.findOne({
         where: {
@@ -128,7 +163,7 @@ class CheckInService {
       });
 
       if (existing) {
-        throw new Error('Esta tag NFC já está em uso em outra estação');
+        throw new Error('Esta tag NFC jÃ¡ estÃ¡ em uso em outra estaÃ§Ã£o');
       }
     }
 
@@ -143,7 +178,7 @@ class CheckInService {
   }
 
   /**
-   * Listar estações de um evento
+   * Listar estaÃ§Ãµes de um evento
    */
   async listarEstacoes(eventId) {
     return EventCheckInStation.findAll({
@@ -153,15 +188,15 @@ class CheckInService {
   }
 
   /**
-   * Atualizar estação
+   * Atualizar estaÃ§Ã£o
    */
   async atualizarEstacao(id, dados) {
     const station = await EventCheckInStation.findByPk(id);
     if (!station) {
-      throw new Error('Estação não encontrada');
+      throw new Error('EstaÃ§Ã£o nÃ£o encontrada');
     }
 
-    // Se está atualizando NFC, verificar se já não está em uso
+    // Se estÃ¡ atualizando NFC, verificar se jÃ¡ nÃ£o estÃ¡ em uso
     if (dados.nfcTagId && dados.nfcTagId !== station.nfcTagId) {
       const existing = await EventCheckInStation.findOne({
         where: {
@@ -172,7 +207,7 @@ class CheckInService {
       });
 
       if (existing) {
-        throw new Error('Esta tag NFC já está em uso em outra estação');
+        throw new Error('Esta tag NFC jÃ¡ estÃ¡ em uso em outra estaÃ§Ã£o');
       }
     }
 
@@ -180,20 +215,20 @@ class CheckInService {
   }
 
   /**
-   * Deletar estação
+   * Deletar estaÃ§Ã£o
    */
   async deletarEstacao(id) {
     const station = await EventCheckInStation.findByPk(id);
     if (!station) {
-      throw new Error('Estação não encontrada');
+      throw new Error('EstaÃ§Ã£o nÃ£o encontrada');
     }
 
     await station.destroy();
-    return { message: 'Estação deletada com sucesso' };
+    return { message: 'EstaÃ§Ã£o deletada com sucesso' };
   }
 
   /**
-   * Verificar se há agendamento ativo no momento
+   * Verificar se hÃ¡ agendamento ativo no momento
    */
   async verificarAgendamentoAtivo(eventId) {
     const agora = moment.tz(TIMEZONE).toDate();
@@ -204,97 +239,115 @@ class CheckInService {
         isActive: true,
         startTime: { [Op.lte]: agora },
         endTime: { [Op.gte]: agora }
-      }
+      },
+      order: [['startTime', 'ASC'], ['createdAt', 'ASC']]
     });
 
     return schedule;
   }
 
   /**
-   * Verificar se já existe check-in recente (evitar duplicação)
+   * Verificar se jÃ¡ existe check-in recente (evitar duplicaÃ§Ã£o)
    */
-  async verificarCheckInRecente(registrationId, attendeeId = null, minutos = 5) {
-    const tempoLimite = moment.tz(TIMEZONE).subtract(minutos, 'minutes').toDate();
-
+  async verificarCheckInNoAgendamento(registrationId, scheduleId, attendeeId = null, eventId = null) {
     const where = {
       registrationId,
-      checkInAt: { [Op.gte]: tempoLimite }
+      scheduleId
     };
 
-    if (attendeeId) {
-      where.attendeeId = attendeeId;
+    if (eventId) {
+      where.eventId = eventId;
     }
 
-    const checkInRecente = await EventCheckIn.findOne({
+    if (attendeeId) {
+      // Compatibilidade com registros antigos sem attendeeId:
+      // se já existe check-in null para a mesma inscrição/agendamento, também bloqueia.
+      where[Op.or] = [
+        { attendeeId },
+        { attendeeId: null }
+      ];
+    }
+
+    const checkInExistente = await EventCheckIn.findOne({
       where,
       order: [['checkInAt', 'DESC']]
     });
 
-    return checkInRecente;
+    return checkInExistente;
   }
-
   /**
    * Realizar check-in manual (por staff)
    */
   async realizarCheckInManual(dados, userId) {
     const {
       registrationId,
+      orderCode,
       attendeeId,
-      eventId,
       stationId,
       notes
     } = dados;
+    const eventId = this.obterEventId(dados);
 
-    // Validações
-    if (!registrationId || !eventId) {
-      throw new Error('Campos obrigatórios: registrationId, eventId');
+    if ((!registrationId && !orderCode) || !eventId) {
+      throw new Error('Campos obrigatorios: registrationId ou orderCode, eventId/event_id');
     }
 
-    // Verificar se a inscrição existe e está confirmada
-    const registration = await Registration.findByPk(registrationId, {
-      include: [
-        { model: Event, as: 'event' },
-        { model: RegistrationAttendee, as: 'attendees' }
-      ]
-    });
+    const includeRegistration = [
+      { model: Event, as: 'event' },
+      { model: RegistrationAttendee, as: 'attendees' }
+    ];
+
+    const registrationIdentifier = String(registrationId || '').trim();
+    const orderCodeIdentifier = String(orderCode || '').trim() || (!UUID_REGEX.test(registrationIdentifier) ? registrationIdentifier : '');
+
+    let registration = null;
+    if (registrationIdentifier && UUID_REGEX.test(registrationIdentifier)) {
+      registration = await Registration.findByPk(registrationIdentifier, {
+        include: includeRegistration
+      });
+    } else if (orderCodeIdentifier) {
+      registration = await Registration.findOne({
+        where: { orderCode: orderCodeIdentifier },
+        include: includeRegistration
+      });
+    }
 
     if (!registration) {
-      throw new Error('Inscrição não encontrada');
+      throw new Error('Inscricao nao encontrada');
+    }
+
+    if (registration.eventId !== eventId) {
+      throw new Error('Codigo de inscricao nao pertence a este evento');
     }
 
     if (registration.paymentStatus !== 'confirmed') {
-      throw new Error('Inscrição não está confirmada. Status: ' + registration.paymentStatus);
+      throw new Error('Inscricao nao esta confirmada. Status: ' + registration.paymentStatus);
     }
 
-    // Verificar se o evento está ativo
     if (!registration.event.isActive) {
-      throw new Error('Evento não está ativo');
+      throw new Error('Evento nao esta ativo');
     }
 
-    // Verificar se há agendamento ativo
     const scheduleAtivo = await this.verificarAgendamentoAtivo(eventId);
     if (!scheduleAtivo) {
-      throw new Error('Não há agendamento de check-in ativo no momento');
+      throw new Error('Nao ha agendamento de check-in ativo no momento');
     }
 
-    // Verificar check-in duplicado
-    const checkInRecente = await this.verificarCheckInRecente(registrationId, attendeeId);
-    if (checkInRecente) {
-      throw new Error('Check-in já realizado recentemente');
+    const attendee = this.resolverAttendeeParaCheckIn(registration, attendeeId);
+
+    const checkInNoAgendamento = await this.verificarCheckInNoAgendamento(
+      registration.id,
+      scheduleAtivo.id,
+      attendee.id,
+      eventId
+    );
+    if (checkInNoAgendamento) {
+      throw new Error('Check-in ja realizado neste agendamento');
     }
 
-    // Se especificou attendeeId, verificar se pertence a esta inscrição
-    if (attendeeId) {
-      const attendee = registration.attendees.find(a => a.id === attendeeId);
-      if (!attendee) {
-        throw new Error('Inscrito não encontrado nesta inscrição');
-      }
-    }
-
-    // Criar check-in
     return EventCheckIn.create({
-      registrationId,
-      attendeeId,
+      registrationId: registration.id,
+      attendeeId: attendee.id,
       eventId,
       scheduleId: scheduleAtivo.id,
       stationId,
@@ -304,7 +357,6 @@ class CheckInService {
       notes
     });
   }
-
   /**
    * Realizar check-in via QR Code
    */
@@ -312,18 +364,17 @@ class CheckInService {
     const {
       orderCode,
       attendeeId,
-      eventId,
       stationId,
       latitude,
       longitude,
       deviceInfo
     } = dados;
+    const eventId = this.obterEventId(dados);
 
     if (!orderCode || !eventId) {
-      throw new Error('Campos obrigatórios: orderCode, eventId');
+      throw new Error('Campos obrigatorios: orderCode, eventId/event_id');
     }
 
-    // Buscar inscrição pelo código
     const registration = await Registration.findOne({
       where: { orderCode },
       include: [
@@ -333,33 +384,37 @@ class CheckInService {
     });
 
     if (!registration) {
-      throw new Error('Inscrição não encontrada');
+      throw new Error('Inscricao nao encontrada');
     }
 
     if (registration.eventId !== eventId) {
-      throw new Error('Código de inscrição não pertence a este evento');
+      throw new Error('Codigo de inscricao nao pertence a este evento');
     }
 
     if (registration.paymentStatus !== 'confirmed') {
-      throw new Error('Inscrição não está confirmada');
+      throw new Error('Inscricao nao esta confirmada');
     }
 
-    // Verificar agendamento ativo
+    const attendee = this.resolverAttendeeParaCheckIn(registration, attendeeId);
+
     const scheduleAtivo = await this.verificarAgendamentoAtivo(eventId);
     if (!scheduleAtivo) {
-      throw new Error('Não há agendamento de check-in ativo no momento');
+      throw new Error('Nao ha agendamento de check-in ativo no momento');
     }
 
-    // Verificar duplicação
-    const checkInRecente = await this.verificarCheckInRecente(registration.id, attendeeId);
-    if (checkInRecente) {
-      throw new Error('Check-in já realizado recentemente');
+    const checkInNoAgendamento = await this.verificarCheckInNoAgendamento(
+      registration.id,
+      scheduleAtivo.id,
+      attendee.id,
+      eventId
+    );
+    if (checkInNoAgendamento) {
+      throw new Error('Check-in ja realizado neste agendamento');
     }
 
-    // Criar check-in
     return EventCheckIn.create({
       registrationId: registration.id,
-      attendeeId,
+      attendeeId: attendee.id,
       eventId,
       scheduleId: scheduleAtivo.id,
       stationId,
@@ -370,7 +425,6 @@ class CheckInService {
       deviceInfo
     });
   }
-
   /**
    * Realizar check-in via NFC
    */
@@ -385,22 +439,20 @@ class CheckInService {
     } = dados;
 
     if (!nfcTagId || !orderCode) {
-      throw new Error('Campos obrigatórios: nfcTagId, orderCode');
+      throw new Error('Campos obrigatorios: nfcTagId, orderCode');
     }
 
-    // Buscar estação pela tag NFC
     const station = await EventCheckInStation.findOne({
       where: { nfcTagId, isActive: true },
       include: [{ model: Event, as: 'event' }]
     });
 
     if (!station) {
-      throw new Error('Tag NFC não encontrada ou inativa');
+      throw new Error('Tag NFC nao encontrada ou inativa');
     }
 
     const eventId = station.eventId;
 
-    // Buscar inscrição
     const registration = await Registration.findOne({
       where: { orderCode },
       include: [
@@ -410,33 +462,37 @@ class CheckInService {
     });
 
     if (!registration) {
-      throw new Error('Inscrição não encontrada');
+      throw new Error('Inscricao nao encontrada');
     }
 
     if (registration.eventId !== eventId) {
-      throw new Error('Código de inscrição não pertence a este evento');
+      throw new Error('Codigo de inscricao nao pertence a este evento');
     }
 
     if (registration.paymentStatus !== 'confirmed') {
-      throw new Error('Inscrição não está confirmada');
+      throw new Error('Inscricao nao esta confirmada');
     }
 
-    // Verificar agendamento ativo
+    const attendee = this.resolverAttendeeParaCheckIn(registration, attendeeId);
+
     const scheduleAtivo = await this.verificarAgendamentoAtivo(eventId);
     if (!scheduleAtivo) {
-      throw new Error('Não há agendamento de check-in ativo no momento');
+      throw new Error('Nao ha agendamento de check-in ativo no momento');
     }
 
-    // Verificar duplicação (para NFC, usar janela menor - 2 minutos)
-    const checkInRecente = await this.verificarCheckInRecente(registration.id, attendeeId, 2);
-    if (checkInRecente) {
-      throw new Error('Check-in já realizado recentemente');
+    const checkInNoAgendamento = await this.verificarCheckInNoAgendamento(
+      registration.id,
+      scheduleAtivo.id,
+      attendee.id,
+      eventId
+    );
+    if (checkInNoAgendamento) {
+      throw new Error('Check-in ja realizado neste agendamento');
     }
 
-    // Criar check-in
     return EventCheckIn.create({
       registrationId: registration.id,
-      attendeeId,
+      attendeeId: attendee.id,
       eventId,
       scheduleId: scheduleAtivo.id,
       stationId: station.id,
@@ -447,7 +503,6 @@ class CheckInService {
       deviceInfo
     });
   }
-
   /**
    * Listar check-ins de um evento
    */
@@ -482,7 +537,14 @@ class CheckInService {
         {
           model: Registration,
           as: 'registration',
-          attributes: ['id', 'orderCode', 'buyerData']
+          attributes: ['id', 'orderCode', 'buyerData'],
+          include: [
+            {
+              model: RegistrationAttendee,
+              as: 'attendees',
+              attributes: ['id', 'attendeeData']
+            }
+          ]
         },
         {
           model: RegistrationAttendee,
@@ -510,7 +572,7 @@ class CheckInService {
   }
 
   /**
-   * Obter estatísticas de check-in de um evento
+   * Obter estatÃ­sticas de check-in de um evento
    */
   async obterEstatisticas(eventId) {
     const totalCheckIns = await EventCheckIn.count({ where: { eventId } });
@@ -562,11 +624,11 @@ class CheckInService {
   }
 
   /**
-   * Obter configuração pública de check-in de um evento
+   * Obter configuraÃ§Ã£o pÃºblica de check-in de um evento
    */
   async obterConfiguracaoPublica(eventId) {
     if (!eventId) {
-      throw new Error('eventId é obrigatório');
+      throw new Error('eventId Ã© obrigatÃ³rio');
     }
 
     const event = await Event.findByPk(eventId, {
@@ -574,11 +636,11 @@ class CheckInService {
     });
 
     if (!event) {
-      throw new Error('Evento não encontrado');
+      throw new Error('Evento nÃ£o encontrado');
     }
 
     if (!event.isActive) {
-      throw new Error('Evento não está ativo');
+      throw new Error('Evento nÃ£o estÃ¡ ativo');
     }
 
     const [scheduleAtivo, estacoes] = await Promise.all([
@@ -610,8 +672,40 @@ class CheckInService {
     };
   }
 
+  async listarAttendeesPublico({ orderCode, eventId } = {}) {
+    const codigo = String(orderCode || '').trim();
+    const idEvento = String(eventId || '').trim();
+
+    if (!codigo) {
+      throw new Error('orderCode e obrigatorio');
+    }
+
+    const resultado = await this.validarCodigo(codigo);
+    if (!resultado?.valido) {
+      throw new Error(resultado?.mensagem || 'Codigo de inscricao invalido');
+    }
+
+    if (idEvento && String(resultado.registration?.eventId) !== idEvento) {
+      throw new Error('Codigo de inscricao nao pertence a este evento');
+    }
+
+    const attendees = Array.isArray(resultado.registration?.attendees)
+      ? resultado.registration.attendees
+      : [];
+
+    return {
+      valido: true,
+      orderCode: resultado.registration?.orderCode,
+      eventId: resultado.registration?.eventId,
+      eventTitle: resultado.registration?.eventTitle,
+      totalAttendees: attendees.length,
+      totalCheckInsNoAgendamento: resultado.totalCheckInsNoAgendamento || 0,
+      attendees,
+      registration: resultado.registration
+    };
+  }
   /**
-   * Validar código de inscrição (para QR Code scanner)
+   * Validar cÃ³digo de inscriÃ§Ã£o (para QR Code scanner)
    */
   async validarCodigo(orderCode) {
     const registration = await Registration.findOne({
@@ -625,14 +719,14 @@ class CheckInService {
     if (!registration) {
       return {
         valido: false,
-        mensagem: 'Código de inscrição não encontrado'
+        mensagem: 'Codigo de inscricao nao encontrado'
       };
     }
 
     if (registration.paymentStatus !== 'confirmed') {
       return {
         valido: false,
-        mensagem: 'Inscrição não está confirmada',
+        mensagem: 'Inscricao nao esta confirmada',
         registration: {
           orderCode: registration.orderCode,
           status: registration.paymentStatus
@@ -640,26 +734,72 @@ class CheckInService {
       };
     }
 
-    // Verificar se já fez check-in
-    const checkIn = await EventCheckIn.findOne({
+    const ultimoCheckIn = await EventCheckIn.findOne({
       where: { registrationId: registration.id },
       order: [['checkInAt', 'DESC']]
     });
 
+    const scheduleAtivo = await this.verificarAgendamentoAtivo(registration.eventId);
+    const checkInsNoAgendamentoAtual = scheduleAtivo
+      ? await EventCheckIn.findAll({
+        where: {
+          registrationId: registration.id,
+          scheduleId: scheduleAtivo.id
+        },
+        attributes: ['id', 'attendeeId', 'checkInAt'],
+        order: [['checkInAt', 'DESC']]
+      })
+      : [];
+
+    const checkInByAttendeeId = checkInsNoAgendamentoAtual.reduce((acc, checkIn) => {
+      if (!checkIn.attendeeId) {
+        return acc;
+      }
+
+      const key = String(checkIn.attendeeId);
+      if (!acc[key]) {
+        acc[key] = checkIn;
+      }
+      return acc;
+    }, {});
+
+    const attendeesDetalhados = (registration.attendees || []).map((attendee, index) => {
+      const key = String(attendee.id);
+      const checkInAttendee = checkInByAttendeeId[key] || null;
+      const attendeeJson = attendee.toJSON ? attendee.toJSON() : attendee;
+
+      return {
+        ...attendeeJson,
+        attendeeName: this.obterNomeAttendee(attendee, `Inscrito ${index + 1}`),
+        jaFezCheckInNoAgendamento: !!checkInAttendee,
+        checkInAt: checkInAttendee ? checkInAttendee.checkInAt : null
+      };
+    });
+
+    const totalCheckInsNoAgendamento = attendeesDetalhados.filter(
+      (attendee) => attendee.jaFezCheckInNoAgendamento
+    ).length;
+    const checkInMaisRecenteNoAgendamento = checkInsNoAgendamentoAtual[0] || null;
+
     return {
       valido: true,
-      jaFezCheckIn: !!checkIn,
-      checkInAt: checkIn ? checkIn.checkInAt : null,
+      jaFezCheckIn: totalCheckInsNoAgendamento > 0,
+      checkInAt: checkInMaisRecenteNoAgendamento ? checkInMaisRecenteNoAgendamento.checkInAt : null,
+      jaFezCheckInHistorico: !!ultimoCheckIn,
+      ultimoCheckInAt: ultimoCheckIn ? ultimoCheckIn.checkInAt : null,
+      totalAttendees: attendeesDetalhados.length,
+      totalCheckInsNoAgendamento,
       registration: {
         id: registration.id,
         orderCode: registration.orderCode,
         eventId: registration.eventId,
         eventTitle: registration.event.title,
         buyerData: registration.buyerData,
-        attendees: registration.attendees
+        attendees: attendeesDetalhados
       }
     };
   }
 }
 
 module.exports = new CheckInService();
+
