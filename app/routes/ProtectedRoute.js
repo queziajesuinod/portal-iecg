@@ -1,9 +1,8 @@
 import React from 'react';
 import { Route, Redirect } from 'react-router-dom';
-import { jwtDecode } from 'jwt-decode';
+import { isStoredTokenValid } from '../utils/authSession';
 
 const ProtectedRoute = ({ component: Component, isAuthenticated, requiredPermission, ...rest }) => {
-  const token = localStorage.getItem('token');
   const storedPermissions = (() => {
     try {
       const raw = localStorage.getItem('permissions');
@@ -13,20 +12,6 @@ const ProtectedRoute = ({ component: Component, isAuthenticated, requiredPermiss
       return [];
     }
   })();
-
-  // Validação de token
-  const isTokenValid = () => {
-    if (!token) return false;
-
-    try {
-      const decoded = jwtDecode(token);
-      const now = Date.now() / 1000;
-      return decoded.exp && decoded.exp > now;
-    } catch (err) {
-      console.error('Erro ao decodificar o token:', err);
-      return false;
-    }
-  };
 
   const hasPermission = () => {
     if (!requiredPermission) return true;
@@ -41,7 +26,7 @@ const ProtectedRoute = ({ component: Component, isAuthenticated, requiredPermiss
     <Route
       {...rest}
       render={props =>
-        isAuthenticated && isTokenValid() && hasPermission() ? (
+        (isAuthenticated || isStoredTokenValid()) && hasPermission() ? (
           <Component {...props} />
         ) : (
           <Redirect to="/login" />

@@ -175,6 +175,18 @@ class CheckInController {
       return res.status(400).json({ erro: error.message });
     }
   }
+
+  async listarAttendeesPublico(req, res) {
+    try {
+      const orderCode = req.query.orderCode || req.params.orderCode;
+      const eventId = req.query.eventId || req.query.event_id || req.params.eventId;
+      const resultado = await checkInService.listarAttendeesPublico({ orderCode, eventId });
+      return res.status(200).json(resultado);
+    } catch (error) {
+      console.error('Erro ao listar attendees de check-in:', error);
+      return res.status(400).json({ erro: error.message });
+    }
+  }
 }
 
 module.exports = new CheckInController();

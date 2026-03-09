@@ -28,6 +28,16 @@ module.exports = (sequelize) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      customRulesVersion: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 1,
+      },
+      customRulesHistory: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+      },
     },
     {
       sequelize,

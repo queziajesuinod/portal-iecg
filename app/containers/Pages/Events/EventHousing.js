@@ -41,6 +41,7 @@ import {
   getHousingAvailableFields,
   getEventBatches,
   saveHousingConfig,
+  improveHousingInstructions,
   generateHousingAllocation,
   getHousingAllocation,
   saveHousingAllocation,
@@ -60,6 +61,60 @@ TabPanel.defaultProps = {
   children: null,
 };
 
+const DEFAULT_HOUSING_RULES = [
+  '- Priorize alocar o maximo de inscritos possivel respeitando a capacidade de cada quarto.',
+  '- Nunca repita attendeeId. Cada inscrito deve aparecer no maximo uma vez no resultado.',
+  '- Use apenas roomId existentes na estrutura de quartos.',
+  '- Quando nao houver vagas para todos, explique em warnings quem ficou sem alocacao.',
+  '- Se houver conflito de regra, priorize regras de capacidade e consistencia dos dados.'
+].join('\n');
+
+function normalizeRuleLines(value = '') {
+  return String(value || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function mergeRules(baseValue = '', extraLines = []) {
+  const merged = [...normalizeRuleLines(baseValue), ...normalizeRuleLines(extraLines.join('\n'))];
+  const seen = new Set();
+  const unique = merged.filter((line) => {
+    const key = line.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return unique.join('\n');
+}
+
+function buildRulesFromWarnings(result = null) {
+  const warnings = Array.isArray(result?.warnings)
+    ? result.warnings.map((item) => String(item || '').toLowerCase())
+    : [];
+
+  const suggestions = [];
+  if (warnings.some((warning) => warning.includes('duplicado'))) {
+    suggestions.push('- Nao gere registros duplicados do mesmo attendeeId.');
+  }
+  if (warnings.some((warning) => warning.includes('quarto invalido'))) {
+    suggestions.push('- Nao usar roomId inexistente; usar somente ids da lista de quartos enviada.');
+  }
+  if (warnings.some((warning) => warning.includes('parcial') || warning.includes('cobertura insuficiente'))) {
+    suggestions.push('- Garanta cobertura maxima e aloque todos os elegiveis ate o limite total de vagas.');
+  }
+  if (warnings.some((warning) => warning.includes('sem vagas'))) {
+    suggestions.push('- Priorize encaixe por capacidade e mantenha grupos juntos somente quando houver espaco.');
+  }
+  if (warnings.some((warning) => warning.includes('misto'))) {
+    suggestions.push('- Evite quarto misto quando houver dados de sexo disponiveis.');
+  }
+  if (!suggestions.length) {
+    suggestions.push('- Reavalie a distribuicao final para evitar duplicidade, quarto invalido e falta de cobertura.');
+  }
+  return suggestions;
+}
+
 export default function EventHousing() {
   const { id: eventId } = useParams();
   const [tab, setTab] = useState(0);
@@ -76,6 +131,9 @@ export default function EventHousing() {
   });
   const [eventBatches, setEventBatches] = useState([]);
   const [savingConfig, setSavingConfig] = useState(false);
+  const [customRulesVersion, setCustomRulesVersion] = useState(1);
+  const [customRulesHistory, setCustomRulesHistory] = useState([]);
+  const [improvingRules, setImprovingRules] = useState(false);
 
   // ── Geração LLM ──
   const [generating, setGenerating] = useState(false);
@@ -97,7 +155,13 @@ export default function EventHousing() {
 
       if (config) {
         setRooms(config.rooms || []);
-        setCustomRules(config.customRules || '');
+        setCustomRules(config.customRules || DEFAULT_HOUSING_RULES);
+        setCustomRulesVersion(Number(config.customRulesVersion || 1));
+        setCustomRulesHistory(Array.isArray(config.customRulesHistory) ? config.customRulesHistory : []);
+      } else {
+        setCustomRules(DEFAULT_HOUSING_RULES);
+        setCustomRulesVersion(1);
+        setCustomRulesHistory([]);
       }
       setSavedAllocation(allocation || []);
       setEventBatches(Array.isArray(batchesResponse) ? batchesResponse : []);
@@ -141,6 +205,50 @@ export default function EventHousing() {
     });
   }
 
+  function handleApplyInitialRules() {
+    setCustomRules((prev) => mergeRules(prev, normalizeRuleLines(DEFAULT_HOUSING_RULES)));
+  }
+
+  function handleUseHistoricalInstruction(historyItem) {
+    if (!historyItem) return;
+    const restored = String(historyItem.nextRules || '').trim();
+    if (!restored) return;
+    setCustomRules(restored);
+    setNotification('Versao historica carregada no editor. Clique em salvar configuracao para aplicar.');
+  }
+
+  async function handleImproveRulesFromLastGeneration() {
+    if (!generationResult) return;
+    try {
+      setImprovingRules(true);
+      const response = await improveHousingInstructions(eventId, {
+        baseRules: customRules,
+        warnings: generationResult?.warnings || [],
+        reasoning: generationResult?.reasoning || ''
+      });
+      const improvedRules = String(response?.customRules || '').trim();
+      if (improvedRules) {
+        setCustomRules(improvedRules);
+      } else {
+        const improvementRules = buildRulesFromWarnings(generationResult);
+        setCustomRules((prev) => mergeRules(prev, improvementRules));
+      }
+      setCustomRulesVersion(Number(response?.customRulesVersion || customRulesVersion));
+      setCustomRulesHistory((prev) => (
+        Array.isArray(response?.customRulesHistory) ? response.customRulesHistory : prev
+      ));
+      setTab(0);
+      setNotification('Instrucao aprimorada e versao anterior registrada no historico.');
+    } catch (error) {
+      const improvementRules = buildRulesFromWarnings(generationResult);
+      setCustomRules((prev) => mergeRules(prev, improvementRules));
+      setTab(0);
+      setNotification(error.message || 'Nao foi possivel aprimorar no servidor; aplicadas sugestoes locais.');
+    } finally {
+      setImprovingRules(false);
+    }
+  }
+
   // ── Gerenciar quartos ──
   function addRoom() {
     const nextId = String(rooms.length + 1);
@@ -162,7 +270,17 @@ export default function EventHousing() {
   async function handleSaveConfig() {
     try {
       setSavingConfig(true);
-      await saveHousingConfig(eventId, { rooms, customRules });
+      const savedConfig = await saveHousingConfig(eventId, {
+        rooms,
+        customRules,
+        rulesMeta: {
+          source: 'manual_edit'
+        }
+      });
+      setCustomRulesVersion(Number(savedConfig?.customRulesVersion || customRulesVersion));
+      setCustomRulesHistory((prev) => (
+        Array.isArray(savedConfig?.customRulesHistory) ? savedConfig.customRulesHistory : prev
+      ));
       setNotification('Configuração de quartos salva com sucesso!');
     } catch (err) {
       setNotification(err.message || 'Erro ao salvar configuração');
@@ -177,9 +295,22 @@ export default function EventHousing() {
       setGenerating(true);
       setGenerationResult(null);
       // Salva config automaticamente antes de gerar
-      await saveHousingConfig(eventId, { rooms, customRules });
+      const savedConfig = await saveHousingConfig(eventId, {
+        rooms,
+        customRules,
+        rulesMeta: {
+          source: 'pre_generation'
+        }
+      });
+      setCustomRulesVersion(Number(savedConfig?.customRulesVersion || customRulesVersion));
+      setCustomRulesHistory((prev) => (
+        Array.isArray(savedConfig?.customRulesHistory) ? savedConfig.customRulesHistory : prev
+      ));
       const result = await generateHousingAllocation(eventId, customRules);
       setGenerationResult(result);
+      if (result?.customRulesVersion) {
+        setCustomRulesVersion(Number(result.customRulesVersion));
+      }
       setEditableAllocation(result.allocation || []);
       setTab(1); // vai para aba de resultado
     } catch (err) {
@@ -377,6 +508,7 @@ export default function EventHousing() {
   }
 
   const totalSlots = rooms.reduce((sum, r) => sum + (r.capacity || 0), 0);
+  const recentRulesHistory = [...customRulesHistory].slice(-5).reverse();
 
   const renderAllocationTable = (allocation, source = 'generated', editable = false) => {
     const groups = groupByRoom(allocation);
@@ -538,7 +670,7 @@ export default function EventHousing() {
                 <AlertTitle>Regras automáticas já aplicadas</AlertTitle>
                   ✅ Numeração: 1.1, 1.2, 2.1...<br />
                   ✅ Pessoas do mesmo sexo no mesmo quarto<br />
-                  (O LLM irá interpretar e aplicar essas regras obrigatórias além das suas regras adicionais)
+                  (Ajuste as regras abaixo quando o resultado vier errado e gere novamente)
               </Alert>
 
               <TextField
@@ -549,8 +681,60 @@ export default function EventHousing() {
                 placeholder={'Exemplos:\n- Líderes de célula no quarto 1\n- Menores de 14 anos separados\n- Fulana e Ciclana não podem ficar juntas'}
                 value={customRules}
                 onChange={(e) => setCustomRules(e.target.value)}
-                helperText="Escreva em português. O LLM irá interpretar e aplicar."
+                helperText="Você pode editar a instrução inicial e salvar. Se a geração ficar ruim, clique em melhorar instrução."
               />
+              <Box
+                sx={{
+                  mt: 1,
+                  display: 'flex',
+                  gap: 1,
+                  flexWrap: 'wrap'
+                }}
+              >
+                <Button size="small" variant="outlined" onClick={handleApplyInitialRules}>
+                  Aplicar instrução inicial
+                </Button>
+              </Box>
+              <Box sx={{ mt: 1.5 }}>
+                <Typography variant="caption" color="textSecondary" display="block" sx={{ mb: 0.75 }}>
+                  Versão atual da instrução: v{customRulesVersion}
+                </Typography>
+                {recentRulesHistory.length > 0 ? (
+                  <Box sx={{ display: 'flex', gap: 0.75, flexDirection: 'column' }}>
+                    {recentRulesHistory.map((historyItem) => (
+                      <Box
+                        key={historyItem.id || `${historyItem.fromVersion}-${historyItem.toVersion}-${historyItem.createdAt}`}
+                        sx={{
+                          border: '1px solid rgba(0,0,0,0.12)',
+                          borderRadius: 1,
+                          p: 1
+                        }}
+                      >
+                        <Typography variant="caption" color="textSecondary" display="block">
+                          v{historyItem.fromVersion || '?'} → v{historyItem.toVersion || '?'} ({historyItem.source || 'manual'})
+                        </Typography>
+                        <Typography variant="caption" display="block" sx={{ mt: 0.25 }}>
+                          {historyItem.createdAt ? new Date(historyItem.createdAt).toLocaleString('pt-BR') : 'Data nao informada'}
+                        </Typography>
+                        <Box sx={{ mt: 0.75 }}>
+                          <Button
+                            size="small"
+                            variant="text"
+                            onClick={() => handleUseHistoricalInstruction(historyItem)}
+                            disabled={!historyItem.nextRules}
+                          >
+                            Usar esta versão
+                          </Button>
+                        </Box>
+                      </Box>
+                    ))}
+                  </Box>
+                ) : (
+                  <Typography variant="caption" color="textSecondary">
+                    Ainda não há histórico de instruções.
+                  </Typography>
+                )}
+              </Box>
               <Box sx={{ mt: 2 }}>
                 <Typography variant="caption" color="textSecondary" display="block" sx={{ mb: 1 }}>
                   Lotes do evento (clique para inserir referencia no texto livre):
@@ -653,6 +837,16 @@ export default function EventHousing() {
                   <Alert severity="warning" icon={<WarningIcon />}>
                     <AlertTitle>Avisos da IA</AlertTitle>
                     {generationResult.warnings.map((w, i) => <div key={i}>⚠️ {w}</div>)}
+                    <Box sx={{ mt: 1 }}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={handleImproveRulesFromLastGeneration}
+                        disabled={improvingRules}
+                      >
+                        {improvingRules ? 'Aprimorando instrução...' : 'Melhorar instrução e voltar para configuração'}
+                      </Button>
+                    </Box>
                   </Alert>
                 </Grid>
               )}

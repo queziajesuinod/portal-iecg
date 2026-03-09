@@ -37,13 +37,14 @@ import RegistrationDetails from '../Pages/Events/RegistrationDetails';
 import EventHousing from '../Pages/Events/EventHousing';
 import EventTeams from '../Pages/Events/EventTeams';
 import FinancialPage from '../Pages/Financial/FinancialPage';
+import { isStoredTokenValid } from '../../utils/authSession';
 
 function Application({ history }) {
   const changeMode = useContext(ThemeContext);
 
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    const storedAuth = localStorage.getItem('isAuthenticated');
-    return storedAuth === 'true';
+    const storedAuth = localStorage.getItem('isAuthenticated') === 'true';
+    return storedAuth || isStoredTokenValid();
   });
 
   const storedUser = localStorage.getItem('user');
@@ -52,7 +53,8 @@ function Application({ history }) {
   }
 
   useEffect(() => {
-    localStorage.setItem('isAuthenticated', isAuthenticated);
+    const tokenIsValid = isStoredTokenValid();
+    localStorage.setItem('isAuthenticated', (isAuthenticated || tokenIsValid).toString());
   }, [isAuthenticated]);
 
   return (
