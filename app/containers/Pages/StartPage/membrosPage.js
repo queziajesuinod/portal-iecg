@@ -245,12 +245,12 @@ const buildPayloadFromForm = (form) => ({
   status: form.status || 'MEMBRO',
   statusReason: form.statusReason || null,
   campusId: form.campusId || null,
-  spouseMemberId: form.spouseMemberId || null,
+  spouseMemberId: form.estado_civil === 'Casado' ? (form.spouseMemberId || null) : null,
   photoUrl: form.photoUrl || null,
   notes: JSON.stringify({
     legacy: {
       escolaridade: form.escolaridade || null,
-      nome_esposo: form.nome_esposo || null,
+      nome_esposo: form.estado_civil === 'Casado' ? (form.nome_esposo || null) : null,
       profissao: form.profissao || null,
       frequenta_celula: Boolean(form.frequenta_celula),
       batizado: Boolean(form.batizado),
@@ -362,7 +362,17 @@ const MembrosPage = () => {
   };
 
   const handleFormChange = (field, value) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
+    setForm((prev) => {
+      if (field === 'estado_civil' && value !== 'Casado') {
+        return {
+          ...prev,
+          estado_civil: value,
+          spouseMemberId: '',
+          nome_esposo: ''
+        };
+      }
+      return { ...prev, [field]: value };
+    });
   };
 
   const toWebpDataUrl = async (file) => {
@@ -692,21 +702,33 @@ const MembrosPage = () => {
                   </TextField>
                 </Grid>
 
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    select
-                    label="Conjuge (membro)"
-                    value={form.spouseMemberId}
-                    onChange={(event) => handleSpouseChange(event.target.value)}
-                    fullWidth
-                  >
-                    <MenuItem value="">Nenhum</MenuItem>
-                    {spouseOptions.map((option) => (
-                      <MenuItem key={option.id} value={option.id}>{option.fullName}</MenuItem>
-                    ))}
-                  </TextField>
-                </Grid>
-                <Grid item xs={12} md={4}><TextField label="Nome do conjuge" value={form.nome_esposo} onChange={(event) => handleFormChange('nome_esposo', event.target.value)} helperText="Preencha manualmente quando o conjuge nao e membro" fullWidth /></Grid>
+                {form.estado_civil === 'Casado' && (
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      select
+                      label="Conjuge (membro)"
+                      value={form.spouseMemberId}
+                      onChange={(event) => handleSpouseChange(event.target.value)}
+                      fullWidth
+                    >
+                      <MenuItem value="">Nenhum</MenuItem>
+                      {spouseOptions.map((option) => (
+                        <MenuItem key={option.id} value={option.id}>{option.fullName}</MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+                )}
+                {form.estado_civil === 'Casado' && (
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      label="Nome do conjuge"
+                      value={form.nome_esposo}
+                      onChange={(event) => handleFormChange('nome_esposo', event.target.value)}
+                      helperText="Preencha manualmente quando o conjuge nao e membro"
+                      fullWidth
+                    />
+                  </Grid>
+                )}
                 <Grid item xs={12} md={4}><TextField label="Profissao" value={form.profissao} onChange={(event) => handleFormChange('profissao', event.target.value)} fullWidth /></Grid>
 
                 <Grid item xs={12} md={4}>

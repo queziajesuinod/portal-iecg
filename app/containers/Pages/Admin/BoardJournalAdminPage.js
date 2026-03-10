@@ -339,17 +339,41 @@ function BoardJournalAdminPage() {
     () => (!hasBoardAdminPermission ? journals[0]?.id || '' : ''),
     [hasBoardAdminPermission, journals]
   );
+  const unavailableManagerUserIds = useMemo(
+    () => new Set(
+      journals
+        .filter((journal) => journal.isActive !== false)
+        .filter((journal) => String(journal.id || '') !== String(journalForm.id || ''))
+        .map((journal) => journal.managerUserId)
+        .filter(Boolean)
+    ),
+    [journals, journalForm.id]
+  );
   const eligibleManagerUsers = useMemo(
     () => managerUsers.filter((user) => {
       if (user?.active === false) return false;
+      if (unavailableManagerUserIds.has(user.id)) return false;
       const profileNames = extractUserProfileNames(user);
       const permissionNames = extractUserPermissionNames(user);
       const hasValidProfile = profileNames.some((profileName) => VALID_MANAGER_PROFILE_NAMES.includes(profileName));
       const hasValidPermission = permissionNames.some((permissionName) => VALID_MANAGER_PERMISSION_NAMES.includes(permissionName));
       return hasValidProfile || hasValidPermission;
     }),
-    [managerUsers]
+    [managerUsers, unavailableManagerUserIds]
   );
+  const activeJournals = useMemo(
+    () => journals.filter((journal) => journal.isActive !== false),
+    [journals]
+  );
+  const defaultActiveJournalId = useMemo(() => {
+    if (!hasBoardAdminPermission) {
+      return managerLockedJournalId;
+    }
+    if (activeJournals.some((journal) => String(journal.id) === String(selectedJournalId))) {
+      return selectedJournalId;
+    }
+    return activeJournals[0]?.id || '';
+  }, [activeJournals, hasBoardAdminPermission, managerLockedJournalId, selectedJournalId]);
   const formPreviewFields = useMemo(() => serializeFormFields(challengeForm.formFields || []), [challengeForm.formFields]);
   const pendingJournalMembers = useMemo(() => journalMembers.filter((item) => item.status === 'pending'), [journalMembers]);
   const approvedJournalMembers = useMemo(() => journalMembers.filter((item) => item.status === 'approved'), [journalMembers]);
@@ -469,19 +493,19 @@ function BoardJournalAdminPage() {
   };
 
   const resetCategory = () => {
-    setCategoryForm({ ...emptyCategory, journalId: selectedJournalId || '' });
+    setCategoryForm({ ...emptyCategory, journalId: defaultActiveJournalId || '' });
     setCategoryOpen(false);
   };
 
   const resetBadge = () => {
-    setBadgeForm({ ...emptyBadge, journalId: selectedJournalId || '' });
+    setBadgeForm({ ...emptyBadge, journalId: defaultActiveJournalId || '' });
     setBadgeOpen(false);
   };
 
   const resetChallenge = () => {
     setChallengeForm({
       ...emptyChallenge,
-      journalId: selectedJournalId || '',
+      journalId: defaultActiveJournalId || '',
       formFields: [buildFormField('text', 0)]
     });
     setLessonEditorState(EditorState.createEmpty());
@@ -1066,7 +1090,7 @@ function BoardJournalAdminPage() {
             <CardContent>
               <Stack direction="row" justifyContent="space-between" sx={{ mb: 2 }}>
                 <Typography variant="h6">Categorias</Typography>
-                <Button variant="contained" onClick={() => { setCategoryForm({ ...emptyCategory, journalId: selectedJournalId || '' }); setCategoryOpen(true); }}>Nova</Button>
+                <Button variant="contained" onClick={() => { setCategoryForm({ ...emptyCategory, journalId: defaultActiveJournalId || '' }); setCategoryOpen(true); }}>Nova</Button>
               </Stack>
               <Table size="small">
                 <TableHead>
@@ -1111,7 +1135,7 @@ function BoardJournalAdminPage() {
               <Stack direction="row" justifyContent="space-between" sx={{ mb: 2 }}>
                 <Typography variant="h6">Desafios</Typography>
                 <Button variant="contained" onClick={() => {
-                  setChallengeForm({ ...emptyChallenge, journalId: selectedJournalId || '', formFields: [buildFormField('text', 0)] });
+                  setChallengeForm({ ...emptyChallenge, journalId: defaultActiveJournalId || '', formFields: [buildFormField('text', 0)] });
                   setLessonEditorState(EditorState.createEmpty());
                   setChallengeOpen(true);
                 }}>Novo</Button>
@@ -1264,7 +1288,7 @@ function BoardJournalAdminPage() {
             <CardContent>
               <Stack direction="row" justifyContent="space-between" sx={{ mb: 2 }}>
                 <Typography variant="h6">Badges</Typography>
-                <Button variant="contained" onClick={() => { setBadgeForm({ ...emptyBadge, journalId: selectedJournalId || '' }); setBadgeOpen(true); }}>Novo</Button>
+                <Button variant="contained" onClick={() => { setBadgeForm({ ...emptyBadge, journalId: defaultActiveJournalId || '' }); setBadgeOpen(true); }}>Novo</Button>
               </Stack>
               <Table size="small">
                 <TableHead>
@@ -1404,6 +1428,11 @@ function BoardJournalAdminPage() {
                 Nenhum usuario com perfil valido para gestor foi encontrado.
               </Typography>
             )}
+            {hasBoardAdminPermission && eligibleManagerUsers.length > 0 && (
+              <Typography variant="caption" color="textSecondary">
+                A lista administrativa mostra apenas usuarios elegiveis e sem outro diario ativo atribuido.
+              </Typography>
+            )}
             <FormControlLabel control={<Switch checked={journalForm.isActive} onChange={(e) => setJournalForm((prev) => ({ ...prev, isActive: e.target.checked }))} />} label="Diario ativo" />
           </Stack>
         </DialogContent>
@@ -1421,7 +1450,7 @@ function BoardJournalAdminPage() {
               <FormControl fullWidth>
                 <InputLabel>Diario</InputLabel>
                 <Select value={categoryForm.journalId || ''} label="Diario" onChange={(e) => setCategoryForm((prev) => ({ ...prev, journalId: e.target.value }))}>
-                  {journals.map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
+                  {activeJournals.map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
                 </Select>
               </FormControl>
             ) : (
@@ -1491,7 +1520,7 @@ function BoardJournalAdminPage() {
               <FormControl fullWidth>
                 <InputLabel>Diario</InputLabel>
                 <Select value={badgeForm.journalId || ''} label="Diario" onChange={(e) => setBadgeForm((prev) => ({ ...prev, journalId: e.target.value }))}>
-                  {journals.map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
+                  {activeJournals.map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
                 </Select>
               </FormControl>
             ) : (
@@ -1547,7 +1576,7 @@ function BoardJournalAdminPage() {
                     label="Diario"
                     onChange={(e) => setChallengeForm((prev) => ({ ...prev, journalId: e.target.value, categoryId: '' }))}
                   >
-                    {journals.map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
+                    {activeJournals.map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
                   </Select>
                 </FormControl>
               ) : (

@@ -101,6 +101,39 @@ function sanitizeJourneyPayload(payload = {}) {
   }, {});
 }
 
+function sanitizeOwnProfilePayload(payload = {}) {
+  const allowedFields = [
+    'fullName',
+    'preferredName',
+    'birthDate',
+    'gender',
+    'maritalStatus',
+    'phone',
+    'whatsapp',
+    'email',
+    'zipCode',
+    'street',
+    'number',
+    'complement',
+    'neighborhood',
+    'city',
+    'state',
+    'country',
+    'spouseMemberId',
+    'baptismDate',
+    'baptismPlace',
+    'conversionDate',
+    'photoUrl'
+  ];
+
+  return allowedFields.reduce((acc, field) => {
+    if (Object.prototype.hasOwnProperty.call(payload, field)) {
+      acc[field] = payload[field];
+    }
+    return acc;
+  }, {});
+}
+
 function sanitizeActivityTypePayload(payload = {}) {
   const allowedFields = [
     'code',
@@ -150,6 +183,26 @@ async function getById(req, res) {
   }
 }
 
+async function getMe(req, res) {
+  try {
+    const userId = req.user?.userId || req.user?.id || null;
+    const member = await memberService.getMemberByUserId(userId);
+    res.status(200).json(member);
+  } catch (error) {
+    res.status(404).json({ message: error.message || 'Membro nao encontrado' });
+  }
+}
+
+async function listMySpouseCandidates(req, res) {
+  try {
+    const userId = req.user?.userId || req.user?.id || null;
+    const candidates = await memberService.listSpouseCandidatesByUserId(userId);
+    res.status(200).json(candidates);
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Erro ao listar possiveis conjuges' });
+  }
+}
+
 async function create(req, res) {
   try {
     const createdBy = req.user?.userId || req.user?.id || null;
@@ -169,6 +222,17 @@ async function update(req, res) {
     res.status(200).json(member);
   } catch (error) {
     res.status(400).json({ message: error.message || 'Erro ao atualizar membro' });
+  }
+}
+
+async function updateMyProfile(req, res) {
+  try {
+    const userId = req.user?.userId || req.user?.id || null;
+    const payload = sanitizeOwnProfilePayload(req.body);
+    const member = await memberService.updateOwnProfileByUserId(userId, payload);
+    res.status(200).json(member);
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Erro ao atualizar perfil do membro' });
   }
 }
 
@@ -281,8 +345,11 @@ async function setActivityTypeActive(req, res) {
 module.exports = {
   list,
   getById,
+  getMe,
+  listMySpouseCandidates,
   create,
   update,
+  updateMyProfile,
   remove,
   stats,
   addActivity,

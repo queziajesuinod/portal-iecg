@@ -6,7 +6,7 @@ const parsedInterval = Number(process.env.SINGLE_PAYMENT_STATUS_CHECK_INTERVAL_M
 const SINGLE_PAYMENT_STATUS_CHECK_INTERVAL_MS = Number.isFinite(parsedInterval) && parsedInterval > 0
   ? parsedInterval
   : 5 * 60 * 1000;
-const TARGET_PAYMENT_STATUSES = ['expired', 'denied'];
+const TARGET_PAYMENT_STATUSES = ['expired'];
 const FINAL_REGISTRATION_STATUSES = new Set(['cancelled', 'refunded']);
 
 async function checkSinglePaymentStatus() {
@@ -39,13 +39,8 @@ async function checkSinglePaymentStatus() {
   const uniqueRegistrations = new Map();
 
   payments.forEach((payment) => {
-    const registration = payment.registration;
+    const { registration } = payment;
     if (!registration) {
-      return;
-    }
-
-    const eventMode = (registration.event?.registrationPaymentMode || 'SINGLE').toUpperCase();
-    if (eventMode !== 'SINGLE') {
       return;
     }
 

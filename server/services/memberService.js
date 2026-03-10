@@ -99,6 +99,252 @@ class MemberService {
     }
   }
 
+  normalizeSpousePayload(payload = {}, currentMaritalStatus = null) {
+    const nextPayload = { ...payload };
+    const effectiveMaritalStatus = Object.prototype.hasOwnProperty.call(nextPayload, 'maritalStatus')
+      ? nextPayload.maritalStatus
+      : currentMaritalStatus;
+
+    if (effectiveMaritalStatus !== 'CASADO') {
+      nextPayload.spouseMemberId = null;
+    }
+
+    return nextPayload;
+  }
+
+  getMemberDetailInclude() {
+    return [
+      { model: User, as: 'user', attributes: ['id', 'name', 'email', 'perfilId', 'active'] },
+      { model: Campus, as: 'campus' },
+      { model: Celula, as: 'celula' },
+      {
+        model: Celula,
+        as: 'liderancaCelulas',
+        attributes: [
+          'id',
+          'celula',
+          'rede',
+          'bairro',
+          'dia',
+          'horario',
+          'ativo',
+          'campusId'
+        ],
+        include: [
+          {
+            model: Campus,
+            as: 'campusRef',
+            attributes: ['id', 'nome']
+          }
+        ]
+      },
+      {
+        model: Member,
+        as: 'spouse',
+        attributes: ['id', 'fullName', 'preferredName', 'photoUrl', 'status', 'userId']
+      },
+      {
+        model: MemberJourney,
+        as: 'journey'
+      },
+      {
+        model: MemberActivity,
+        as: 'activities',
+        limit: 50,
+        order: [['activityDate', 'DESC']],
+        include: [
+          {
+            model: MemberActivityType,
+            as: 'activityTypeRef',
+            attributes: ['id', 'code', 'name', 'category'],
+            required: false
+          }
+        ]
+      },
+      {
+        model: MemberMilestone,
+        as: 'milestones',
+        order: [['achievedDate', 'DESC']]
+      },
+      {
+        model: MIA,
+        as: 'miaRecord',
+        include: [
+          { model: User, as: 'responsiblePastor', attributes: ['id', 'name', 'email'] },
+          { model: User, as: 'responsibleLeader', attributes: ['id', 'name', 'email'] }
+        ]
+      }
+    ];
+  }
+
+  async getMemberWithDetails(where = {}) {
+    const member = await Member.findOne({
+      where,
+      include: this.getMemberDetailInclude()
+    });
+
+    if (!member) {
+      throw new Error('Membro nao encontrado');
+    }
+
+    const updatedJourney = await this.recalculateJourneyFromActivities(member.id, {
+      member,
+      journey: member.journey || undefined
+    });
+    if (!member.journey) {
+      member.setDataValue('journey', updatedJourney);
+    }
+
+    await this.enrichMemberTimelineLabels(member);
+
+    return member;
+  }
+
+  async enrichMemberTimelineLabels(member) {
+    if (!member) return;
+
+    const activities = Array.isArray(member.activities) ? member.activities : [];
+    const milestones = Array.isArray(member.milestones) ? member.milestones : [];
+
+    const codes = Array.from(new Set([
+      ...activities.map((activity) => activity?.activityType).filter(Boolean),
+      ...milestones.map((milestone) => milestone?.milestoneType).filter(Boolean)
+    ]));
+
+    if (!codes.length) return;
+
+    const refs = await MemberActivityType.findAll({
+      where: {
+        code: {
+          [Op.in]: codes
+        }
+      },
+      attributes: ['code', 'name']
+    });
+
+    const namesByCode = refs.reduce((acc, item) => {
+      acc[item.code] = item.name || item.code;
+      return acc;
+    }, {});
+
+    activities.forEach((activity) => {
+      const fallback = activity?.activityTypeRef?.name || activity?.activityType;
+      if (typeof activity?.setDataValue === 'function') {
+        activity.setDataValue('displayLabel', namesByCode[activity.activityType] || fallback || activity.activityType);
+      }
+    });
+
+    milestones.forEach((milestone) => {
+      const fallback = milestone?.milestoneType;
+      if (typeof milestone?.setDataValue === 'function') {
+        milestone.setDataValue('displayLabel', namesByCode[milestone.milestoneType] || fallback);
+      }
+    });
+  }
+
+  async syncLinkedUserFromMember(userId, payload = {}, transaction = null) {
+    if (!userId) return;
+
+    const user = await User.findByPk(userId, { transaction });
+    if (!user) return;
+
+    const updates = {};
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'fullName')) {
+      updates.name = payload.fullName || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'email')) {
+      updates.email = payload.email || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'photoUrl')) {
+      updates.image = payload.photoUrl || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'birthDate')) {
+      updates.data_nascimento = payload.birthDate || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'street')) {
+      updates.endereco = payload.street || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'neighborhood')) {
+      updates.bairro = payload.neighborhood || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'number')) {
+      updates.numero = payload.number || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'zipCode')) {
+      updates.cep = payload.zipCode || null;
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(payload, 'phone')
+      || Object.prototype.hasOwnProperty.call(payload, 'whatsapp')
+    ) {
+      updates.telefone = sanitizePhone(payload.phone || payload.whatsapp) || null;
+    }
+
+    if (Object.keys(updates).length) {
+      await user.update(updates, { transaction });
+    }
+  }
+
+  async ensureBaptismMilestone(memberId, baptismDate, createdBy = null, transaction = null) {
+    return this.ensureDatedMilestone(
+      memberId,
+      'BATISMO',
+      baptismDate,
+      'Batismo nas aguas',
+      createdBy,
+      transaction
+    );
+  }
+
+  async ensureConversionMilestone(memberId, conversionDate, createdBy = null, transaction = null) {
+    return this.ensureDatedMilestone(
+      memberId,
+      'DECISAO_FE',
+      conversionDate,
+      'Apelo registrado',
+      createdBy,
+      transaction
+    );
+  }
+
+  async ensureDatedMilestone(memberId, milestoneType, dateValue, description, createdBy = null, transaction = null) {
+    if (!memberId || !dateValue) {
+      return null;
+    }
+
+    const achievedDate = String(dateValue).slice(0, 10);
+    const milestone = await MemberMilestone.findOne({
+      where: {
+        memberId,
+        milestoneType
+      },
+      transaction
+    });
+
+    if (milestone) {
+      const nextValues = {};
+      if (String(milestone.achievedDate) !== achievedDate) {
+        nextValues.achievedDate = achievedDate;
+      }
+      if (description && milestone.description !== description) {
+        nextValues.description = description;
+      }
+      if (Object.keys(nextValues).length) {
+        await milestone.update(nextValues, { transaction });
+      }
+      return milestone;
+    }
+
+    return MemberMilestone.create({
+      memberId,
+      milestoneType,
+      achievedDate,
+      description: description || null,
+      createdBy
+    }, { transaction });
+  }
+
   async resolveMilestoneType(data = {}) {
     const hasTypeId = Boolean(data.milestoneTypeId);
     const normalizedCode = this.normalizeActivityTypeCode(data.milestoneType);
@@ -348,11 +594,13 @@ class MemberService {
     return spouse;
   }
 
-  async syncSpouseLink(memberId, spouseMemberId) {
+  async syncSpouseLink(memberId, spouseMemberId, previousSpouseMemberId = undefined) {
     const member = await Member.findByPk(memberId);
     if (!member) return;
 
-    const currentSpouseId = member.spouseMemberId || null;
+    const currentSpouseId = typeof previousSpouseMemberId === 'undefined'
+      ? (member.spouseMemberId || null)
+      : (previousSpouseMemberId || null);
     const nextSpouseId = spouseMemberId || null;
 
     if (currentSpouseId === nextSpouseId) {
@@ -396,44 +644,81 @@ class MemberService {
     }
   }
 
+  async listSpouseCandidatesByUserId(userId) {
+    if (!userId) {
+      throw new Error('Usuario autenticado nao informado');
+    }
+
+    const member = await Member.findOne({
+      where: { userId },
+      attributes: ['id']
+    });
+    if (!member) {
+      throw new Error('Membro nao encontrado');
+    }
+
+    const candidates = await Member.findAll({
+      where: {
+        id: { [Op.ne]: member.id },
+        [Op.or]: [
+          { spouseMemberId: null },
+          { spouseMemberId: member.id }
+        ]
+      },
+      attributes: ['id', 'fullName', 'preferredName', 'photoUrl', 'status', 'userId'],
+      order: [['fullName', 'ASC']]
+    });
+
+    return candidates.map((candidate) => ({
+      id: candidate.id,
+      fullName: candidate.fullName,
+      preferredName: candidate.preferredName || null,
+      photoUrl: candidate.photoUrl || null,
+      status: candidate.status || null,
+      userId: candidate.userId || null,
+      hasLinkedUser: Boolean(candidate.userId)
+    }));
+  }
+
   /**
    * Criar novo membro
    */
   async createMember(data, createdBy) {
     try {
-      this.validateGender(data.gender);
+      const payload = this.normalizeSpousePayload(data);
+      this.validateGender(payload.gender);
       const transaction = await sequelize.transaction();
       let member;
 
       try {
         const salt = crypto.randomBytes(16).toString('hex');
-        const defaultPassword = (data.cpf || '').replace(/\D/g, '') || crypto.randomBytes(8).toString('hex');
+        const defaultPassword = (payload.cpf || '').replace(/\D/g, '') || crypto.randomBytes(8).toString('hex');
         const passwordHash = hashSHA256WithSalt(defaultPassword, salt);
 
         const user = await User.create({
-          name: data.fullName,
-          email: data.email || null,
-          telefone: sanitizePhone(data.phone || data.whatsapp),
-          image: data.photoUrl || null,
-          username: buildUsername(data.fullName, data.email),
-          cpf: data.cpf || null,
-          data_nascimento: data.birthDate || null,
-          endereco: data.street || null,
-          bairro: data.neighborhood || null,
-          numero: data.number || null,
-          cep: data.zipCode || null,
-          active: !['INATIVO', 'MIA', 'TRANSFERIDO', 'FALECIDO'].includes(data.status || 'MEMBRO'),
+          name: payload.fullName,
+          email: payload.email || null,
+          telefone: sanitizePhone(payload.phone || payload.whatsapp),
+          image: payload.photoUrl || null,
+          username: buildUsername(payload.fullName, payload.email),
+          cpf: payload.cpf || null,
+          data_nascimento: payload.birthDate || null,
+          endereco: payload.street || null,
+          bairro: payload.neighborhood || null,
+          numero: payload.number || null,
+          cep: payload.zipCode || null,
+          active: !['INATIVO', 'MIA', 'TRANSFERIDO', 'FALECIDO'].includes(payload.status || 'MEMBRO'),
           perfilId: DEFAULT_MEMBER_PERFIL_ID,
           passwordHash,
           salt
         }, { transaction });
 
-        if (data.spouseMemberId) {
-          await this.validateSpouseMember(data.spouseMemberId);
+        if (payload.spouseMemberId) {
+          await this.validateSpouseMember(payload.spouseMemberId);
         }
 
         member = await Member.create({
-          ...data,
+          ...payload,
           userId: user.id,
           createdBy,
           statusChangeDate: new Date()
@@ -444,6 +729,9 @@ class MemberService {
           currentStage: this.mapStatusToStage(member.status),
           lastActivityDate: new Date()
         }, { transaction });
+
+        await this.ensureBaptismMilestone(member.id, member.baptismDate, createdBy, transaction);
+        await this.ensureConversionMilestone(member.id, member.conversionDate, createdBy, transaction);
 
         if (member.status === 'VISITANTE') {
           await MemberMilestone.create({
@@ -468,8 +756,8 @@ class MemberService {
         throw error;
       }
 
-      if (data.spouseMemberId) {
-        await this.syncSpouseLink(member.id, data.spouseMemberId || null);
+      if (payload.spouseMemberId) {
+        await this.syncSpouseLink(member.id, payload.spouseMemberId || null);
       }
 
       // Invalidar cache
@@ -486,80 +774,19 @@ class MemberService {
    */
   async getMemberById(id) {
     try {
-      const member = await Member.findByPk(id, {
-        include: [
-          { model: User, as: 'user', attributes: ['id', 'name', 'email', 'perfilId', 'active'] },
-          { model: Campus, as: 'campus' },
-          { model: Celula, as: 'celula' },
-          {
-            model: Celula,
-            as: 'liderancaCelulas',
-            attributes: [
-              'id',
-              'celula',
-              'rede',
-              'bairro',
-              'dia',
-              'horario',
-              'ativo',
-              'campusId'
-            ],
-            include: [
-              {
-                model: Campus,
-                as: 'campusRef',
-                attributes: ['id', 'nome']
-              }
-            ]
-          },
-          { model: Member, as: 'spouse', attributes: ['id', 'fullName', 'photoUrl'] },
-          {
-            model: MemberJourney,
-            as: 'journey'
-          },
-          {
-            model: MemberActivity,
-            as: 'activities',
-            limit: 50,
-            order: [['activityDate', 'DESC']],
-            include: [
-              {
-                model: MemberActivityType,
-                as: 'activityTypeRef',
-                attributes: ['id', 'code', 'category'],
-                required: false
-              }
-            ]
-          },
-          {
-            model: MemberMilestone,
-            as: 'milestones',
-            order: [['achievedDate', 'DESC']]
-          },
-          {
-            model: MIA,
-            as: 'miaRecord',
-            include: [
-              { model: User, as: 'responsiblePastor', attributes: ['id', 'name', 'email'] },
-              { model: User, as: 'responsibleLeader', attributes: ['id', 'name', 'email'] }
-            ]
-          }
-        ]
-      });
+      return await this.getMemberWithDetails({ id });
+    } catch (error) {
+      throw new Error(`Erro ao buscar membro: ${error.message}`);
+    }
+  }
 
-      if (!member) {
-        throw new Error('Membro nao encontrado');
+  async getMemberByUserId(userId) {
+    try {
+      if (!userId) {
+        throw new Error('Usuario autenticado nao informado');
       }
 
-      const updatedJourney = await this.recalculateJourneyFromActivities(member.id, {
-        member,
-        journey: member.journey || undefined
-      });
-      if (!member.journey) {
-        member.setDataValue('journey', updatedJourney);
-      }
-
-      return member;
+      return await this.getMemberWithDetails({ userId });
     } catch (error) {
       throw new Error(`Erro ao buscar membro: ${error.message}`);
     }
@@ -621,14 +848,16 @@ class MemberService {
    */
   async updateMember(id, data, updatedBy) {
     try {
-      const payload = { ...data };
-      this.validateGender(payload.gender);
       const member = await Member.findByPk(id);
       if (!member) {
         throw new Error('Membro nao encontrado');
       }
 
-      if (Object.prototype.hasOwnProperty.call(payload, 'spouseMemberId')) {
+      const previousSpouseMemberId = member.spouseMemberId || null;
+      const payload = this.normalizeSpousePayload(data, member.maritalStatus);
+      this.validateGender(payload.gender);
+
+      if (Object.prototype.hasOwnProperty.call(payload, 'spouseMemberId') && payload.spouseMemberId) {
         await this.validateSpouseMember(payload.spouseMemberId, id);
       }
 
@@ -652,9 +881,12 @@ class MemberService {
       }
 
       await member.update(payload);
+      await this.syncLinkedUserFromMember(member.userId, payload);
+      await this.ensureBaptismMilestone(member.id, member.baptismDate, updatedBy);
+      await this.ensureConversionMilestone(member.id, member.conversionDate, updatedBy);
 
       if (Object.prototype.hasOwnProperty.call(payload, 'spouseMemberId')) {
-        await this.syncSpouseLink(id, payload.spouseMemberId || null);
+        await this.syncSpouseLink(id, payload.spouseMemberId || null, previousSpouseMemberId);
       }
 
       // Invalidar cache
@@ -664,6 +896,60 @@ class MemberService {
       return await this.getMemberById(id);
     } catch (error) {
       throw new Error(`Erro ao atualizar membro: ${error.message}`);
+    }
+  }
+
+  async updateOwnProfileByUserId(userId, data = {}) {
+    try {
+      if (!userId) {
+        throw new Error('Usuario autenticado nao informado');
+      }
+
+      const member = await Member.findOne({ where: { userId } });
+      if (!member) {
+        throw new Error('Membro nao encontrado');
+      }
+
+      const previousSpouseMemberId = member.spouseMemberId || null;
+      const payload = this.normalizeSpousePayload(data, member.maritalStatus);
+      this.validateGender(payload.gender);
+
+      if (Object.prototype.hasOwnProperty.call(payload, 'spouseMemberId') && payload.spouseMemberId) {
+        await this.validateSpouseMember(payload.spouseMemberId, member.id);
+      }
+
+      const transaction = await sequelize.transaction();
+      try {
+        await member.update(payload, { transaction });
+        await this.syncLinkedUserFromMember(member.userId, payload, transaction);
+        await this.ensureBaptismMilestone(
+          member.id,
+          Object.prototype.hasOwnProperty.call(payload, 'baptismDate') ? payload.baptismDate : member.baptismDate,
+          userId,
+          transaction
+        );
+        await this.ensureConversionMilestone(
+          member.id,
+          Object.prototype.hasOwnProperty.call(payload, 'conversionDate') ? payload.conversionDate : member.conversionDate,
+          userId,
+          transaction
+        );
+        await transaction.commit();
+      } catch (error) {
+        await transaction.rollback();
+        throw error;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(payload, 'spouseMemberId')) {
+        await this.syncSpouseLink(member.id, payload.spouseMemberId || null, previousSpouseMemberId);
+      }
+
+      await cache.del(`member:${member.id}`);
+      await cache.del('members:all');
+
+      return await this.getMemberByUserId(userId);
+    } catch (error) {
+      throw new Error(`Erro ao atualizar perfil do membro: ${error.message}`);
     }
   }
 

@@ -47,6 +47,10 @@ export const listarMembros = (params = {}) => {
 
 export const buscarMembro = (id) => fetchWithAuth(`${API_URL}/api/admin/members/${id}`);
 
+export const buscarMeuMembro = () => fetchWithAuth(`${API_URL}/api/admin/members/me`);
+
+export const listarPossiveisConjugesMeuMembro = () => fetchWithAuth(`${API_URL}/api/admin/members/me/spouse-candidates`);
+
 export const criarMembro = (dados) => fetchWithAuth(`${API_URL}/api/admin/members`, {
   method: 'POST',
   body: JSON.stringify(dados),
@@ -54,6 +58,11 @@ export const criarMembro = (dados) => fetchWithAuth(`${API_URL}/api/admin/member
 
 export const atualizarMembro = (id, dados) => fetchWithAuth(`${API_URL}/api/admin/members/${id}`, {
   method: 'PUT',
+  body: JSON.stringify(dados),
+});
+
+export const atualizarMeuPerfilMembro = (dados) => fetchWithAuth(`${API_URL}/api/admin/members/me/profile`, {
+  method: 'PATCH',
   body: JSON.stringify(dados),
 });
 
