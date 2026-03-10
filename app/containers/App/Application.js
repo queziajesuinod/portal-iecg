@@ -14,6 +14,7 @@ import ApelosDirecionadosPage from '../Pages/StartPage/ApelosDirecionadosPage';
 import FilaApelosPage from '../Pages/StartPage/FilaApelosPage';
 import MembrosPage from '../Pages/StartPage/membrosPage';
 import MembroDetailsPage from '../Pages/StartPage/MembroDetailsPage';
+import MinhaJornadaPage from '../Pages/StartPage/MinhaJornadaPage';
 import ApeloPublicPage from '../Pages/Public/ApeloPublicPage';
 import ProfilePage from '../Pages/Users/Profile';
 import WebhooksPage from '../Pages/Webhooks/WebhooksPage';
@@ -77,6 +78,7 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/mia/listas-presenca" component={AttendanceListPage} isAuthenticated={isAuthenticated} requiredPermission="MIA_LISTAR" />
             <ProtectedRoute exact path="/app/mia/listas-presenca/:id" component={AttendanceDetailPage} isAuthenticated={isAuthenticated} requiredPermission="MIA_LISTAR" />
             <ProtectedRoute exact path="/app/profile" component={ProfilePage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/minha-jornada" component={MinhaJornadaPage} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/diario-bordo" component={BoardJournalPage} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/start/celulas" component={ListagemCelulasPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
             <ProtectedRoute exact path="/app/start/celulas/cadastrar" component={CadastrarCelula} isAuthenticated={isAuthenticated} requiredPermission="CELULA_CADASTRAR" />

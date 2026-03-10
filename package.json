@@ -34,6 +34,7 @@
     "seed:admin": "node ./server/scripts/seedAdmin.js",
     "seed:campus": "node ./server/scripts/seedCampus.js",
     "seed:celulas:campus": "node ./server/scripts/seedCelulaCampus.js",
+    "backfill:user-passwords-from-member-phone": "node ./server/scripts/backfillUserPasswordsFromMemberPhone.js",
     "backfill:card-brand": "node ./server/scripts/backfillRegistrationPaymentCardBrand.js",
     "backfill:cancelled-payments": "node ./server/scripts/backfillCancelledRegistrationPayments.js",
     "migrate:celula-leaders": "node ./server/scripts/migrateCelulaLeaders.js",

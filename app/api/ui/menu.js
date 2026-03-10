@@ -40,6 +40,12 @@ module.exports = [
         permission: 'CELULA_LISTAR'
       },
       {
+        key: 'minhaJornada',
+        name: 'Minha Jornada',
+        link: '/app/minha-jornada',
+        icon: 'ion-ios-pulse'
+      },
+      {
         key: 'apelosDirecionados',
         name: 'Apelos Direcionados',
         link: '/app/start/direcionamentos',

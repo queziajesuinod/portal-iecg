@@ -65,6 +65,7 @@ const UsersListPage = () => {
   const [filterPerfil, setFilterPerfil] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterNome, setFilterNome] = useState('');
+  const [syncingUserId, setSyncingUserId] = useState('');
 
   const loadData = async () => {
     setLoading(true);
@@ -167,6 +168,57 @@ const UsersListPage = () => {
     }
   };
 
+  const handleSyncUserMember = async (user) => {
+    try {
+      setLoading(true);
+      setSyncingUserId(user.id);
+      const response = await fetch(`${API_URL}/users/${user.id}/sync-member`, {
+        method: 'POST',
+        headers: headersAuth,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.message || 'Erro ao sincronizar membro do usuario');
+      }
+
+      if (payload.status === 'linked') {
+        setMessage(`Usuario vinculado ao membro ${payload.member?.fullName || ''} via ${payload.matchedBy}.`.trim());
+      } else if (payload.status === 'already_linked') {
+        setMessage(`Usuario ja estava vinculado ao membro ${payload.member?.fullName || ''}.`.trim());
+      } else {
+        setMessage('Nenhum membro correspondente foi encontrado para este usuario.');
+      }
+
+      await loadData();
+    } catch (err) {
+      setMessage(err.message || 'Erro ao sincronizar membro do usuario');
+    } finally {
+      setSyncingUserId('');
+      setLoading(false);
+    }
+  };
+
+  const handleSyncAllMembers = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_URL}/users/sync-members`, {
+        method: 'POST',
+        headers: headersAuth,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.message || 'Erro ao sincronizar membros dos usuarios');
+      }
+
+      setMessage(`Sincronizacao concluida. Vinculados: ${payload.linked || 0}, ja vinculados: ${payload.alreadyLinked || 0}, sem correspondencia: ${payload.notFound || 0}, falhas: ${payload.failed || 0}.`);
+      await loadData();
+    } catch (err) {
+      setMessage(err.message || 'Erro ao sincronizar membros dos usuarios');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const updateField = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));
   };
@@ -225,7 +277,12 @@ const UsersListPage = () => {
       <Helmet><title>Usuarios</title></Helmet>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
         {message && <Typography color="primary">{message}</Typography>}
-        {loading && <CircularProgress size={20} />}
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Button variant="outlined" onClick={handleSyncAllMembers} disabled={loading}>
+            Sincronizar membros
+          </Button>
+          {loading && <CircularProgress size={20} />}
+        </Stack>
       </Stack>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} mb={2}>
         <TextField
@@ -264,6 +321,7 @@ const UsersListPage = () => {
             <TableCell>Nome</TableCell>
             <TableCell>Email</TableCell>
             <TableCell>Perfil</TableCell>
+            <TableCell>Membro</TableCell>
             <TableCell>Status</TableCell>
             <TableCell align="right">Ações</TableCell>
           </TableRow>
@@ -275,10 +333,30 @@ const UsersListPage = () => {
               <TableCell>{u.email}</TableCell>
               <TableCell>{u.Perfil?.descricao || u.perfil?.descricao || '-'}</TableCell>
               <TableCell>
+                {u.linkedMember ? (
+                  <Stack spacing={0.5}>
+                    <Chip color="primary" label="Vinculado" size="small" />
+                    <Typography variant="caption" color="textSecondary">
+                      {u.linkedMember.fullName}
+                    </Typography>
+                  </Stack>
+                ) : (
+                  <Chip color="warning" variant="outlined" label="Sem membro" size="small" />
+                )}
+              </TableCell>
+              <TableCell>
                 <Chip color={u.active ? 'success' : 'default'} label={u.active ? 'Ativo' : 'Inativo'} size="small" />
               </TableCell>
               <TableCell align="right">
                 <Stack direction="row" spacing={1} justifyContent="flex-end">
+                  <Button
+                    size="small"
+                    variant="text"
+                    onClick={() => handleSyncUserMember(u)}
+                    disabled={loading || syncingUserId === u.id}
+                  >
+                    {syncingUserId === u.id ? 'Sincronizando...' : 'Sincronizar'}
+                  </Button>
                   <Button size="small" variant="outlined" onClick={() => handleEdit(u)}>Editar</Button>
                   <Button size="small" variant="text" onClick={() => handleToggleActive(u)}>
                     {u.active ? 'Inativar' : 'Reativar'}
@@ -287,6 +365,22 @@ const UsersListPage = () => {
               </TableCell>
             </TableRow>
           ))}
+          {!pagedUsers.length && !loading && (
+            <TableRow>
+              <TableCell colSpan={6}>
+                <Typography color="textSecondary">Nenhum usuario encontrado.</Typography>
+              </TableCell>
+            </TableRow>
+          )}
+          {loading && (
+            <TableRow>
+              <TableCell colSpan={6}>
+                <Box display="flex" justifyContent="center" py={2}>
+                  <CircularProgress size={24} />
+                </Box>
+              </TableCell>
+            </TableRow>
+          )}
         </TableBody>
       </Table>
       <TablePagination

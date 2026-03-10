@@ -26,6 +26,7 @@ const pageTitles = {
   'app/start/fila-apelos': 'Fila de Apelos',
   'app/start/membros': 'Membros',
   'app/start/membros/detalhes': 'Detalhes do Membro',
+  'app/minha-jornada': 'Minha Jornada',
 
   // Administração
   'app/admin': 'Administração',
@@ -55,6 +56,7 @@ const pageTitles = {
   direcionamentos: 'Apelos Direcionados',
   'fila-apelos': 'Fila de Apelos',
   membros: 'Membros',
+  'minha-jornada': 'Minha Jornada',
   perfis: 'Perfis e Permissões',
   usuarios: 'Usuários',
   webhooks: 'Webhooks',

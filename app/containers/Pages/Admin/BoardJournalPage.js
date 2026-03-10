@@ -708,30 +708,7 @@ function BoardJournalPage() {
                   <Typography variant="body1" sx={{ maxWidth: 620, color: COLORS.ink }}>
                     {journalDescription}
                   </Typography>
-                  <Box
-                    sx={{
-                      maxWidth: 700,
-                      p: 2,
-                      borderRadius: 3,
-                      backgroundColor: 'rgba(255,255,255,0.88)',
-                      border: '1px solid rgba(21,48,74,0.08)'
-                    }}
-                  >
-                    <Typography variant="overline" sx={{ color: COLORS.amber, letterSpacing: '0.12em' }}>
-                      INSTRUÇÕES DO DIARIO
-                    </Typography>
-                    <Box
-                      sx={{
-                        mt: 0.75,
-                        color: COLORS.ink,
-                        lineHeight: 1.7,
-                        '& p': { my: 0 },
-                        '& ul, & ol': { pl: 3, my: 0.75 },
-                        '& a': { color: COLORS.navy, fontWeight: 700 }
-                      }}
-                      dangerouslySetInnerHTML={sanitizeRichHtml(journalInstructions)}
-                    />
-                  </Box>
+      
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25} useFlexGap flexWrap="wrap">
                     <Chip label={`${availableChallenges} desafios pendentes`} sx={{ backgroundColor: '#EFF4F8', color: COLORS.navy }} />
                     <Chip label={myRankPosition ? `Posicao atual #${myRankPosition}` : 'Ranking em andamento'} sx={{ backgroundColor: '#EFF4F8', color: COLORS.navy }} />
