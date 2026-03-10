@@ -12,7 +12,6 @@ const {
   PaymentTransaction,
   User,
   Perfil,
-  Permissao,
   sequelize
 } = require('../models');
 const { Op } = require('sequelize');
@@ -25,6 +24,7 @@ const paymentService = require('./paymentService');
 const efiService = require('./efiService');
 const eventService = require('./eventService');
 const webhookEmitter = require('./webhookEmitter');
+const { getUserPermissionNames } = require('./permissionResolver');
 
 const OFFLINE_PAYMENT_METHODS = ['cash', 'pos', 'transfer', 'manual', 'pix', 'credit_card'];
 
@@ -462,11 +462,12 @@ async function usuarioPodeRegistrarPagamentoOffline(userId) {
   const usuario = await User.findByPk(userId, {
     include: [{
       model: Perfil,
-      include: [{ model: Permissao, as: 'permissoes', through: { attributes: [] } }]
+      required: false,
+      attributes: ['descricao']
     }]
   });
   if (!usuario) return false;
-  const permissoes = usuario.Perfil?.permissoes?.map((perm) => perm.nome) || [];
+  const permissoes = await getUserPermissionNames(userId);
   if (permissoes.includes('ADMIN_FULL_ACCESS')) return true;
   return (usuario.Perfil?.descricao || '').toLowerCase().includes('admin');
 }

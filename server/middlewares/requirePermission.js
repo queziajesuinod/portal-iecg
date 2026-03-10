@@ -1,4 +1,5 @@
-const { User, Perfil, Permissao } = require('../models');
+const { User } = require('../models');
+const { buildPermissionInclude, extractPermissionNames } = require('../services/permissionResolver');
 
 function normalizePermissionList(requiredPermissions) {
   if (!requiredPermissions) {
@@ -24,21 +25,14 @@ function requirePermission(requiredPermissions) {
     }
 
     const usuario = await User.findByPk(userId, {
-      include: [{
-        model: Perfil,
-        include: [{
-          model: Permissao,
-          as: 'permissoes',
-          through: { attributes: [] }
-        }]
-      }]
+      include: buildPermissionInclude()
     });
 
     if (!usuario) {
       return res.status(401).json({ message: 'Usuário não encontrado.' });
     }
 
-    const permissoes = (usuario.Perfil?.permissoes || []).map((perm) => perm.nome);
+    const permissoes = extractPermissionNames(usuario);
     if (permissoes.includes('ADMIN_FULL_ACCESS')) {
       return next();
     }

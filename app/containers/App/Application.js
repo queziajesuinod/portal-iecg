@@ -23,6 +23,8 @@ import AttendanceListPage from '../Pages/MiaPage/AttendanceListPage';
 import AttendanceDetailPage from '../Pages/MiaPage/AttendanceDetailPage';
 import Login from '../Pages/Users/Login';
 import ProtectedRoute from '../../routes/ProtectedRoute';
+import BoardJournalAdminPage from '../Pages/Admin/BoardJournalAdminPage';
+import BoardJournalPage from '../Pages/Admin/BoardJournalPage';
 import PerfilPermissaoPage from '../Pages/Admin/PerfilPermissaoPage';
 import UserCreatePage from '../Pages/Admin/UserCreatePage';
 import UsersListPage from '../Pages/Admin/UsersListPage';
@@ -75,6 +77,7 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/mia/listas-presenca" component={AttendanceListPage} isAuthenticated={isAuthenticated} requiredPermission="MIA_LISTAR" />
             <ProtectedRoute exact path="/app/mia/listas-presenca/:id" component={AttendanceDetailPage} isAuthenticated={isAuthenticated} requiredPermission="MIA_LISTAR" />
             <ProtectedRoute exact path="/app/profile" component={ProfilePage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/diario-bordo" component={BoardJournalPage} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/start/celulas" component={ListagemCelulasPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
             <ProtectedRoute exact path="/app/start/celulas/cadastrar" component={CadastrarCelula} isAuthenticated={isAuthenticated} requiredPermission="CELULA_CADASTRAR" />
             <ProtectedRoute exact path="/app/start/celulas/detalhes" component={BlankPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
@@ -84,6 +87,7 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/start/membros" component={MembrosPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
             <ProtectedRoute exact path="/app/start/membros/detalhes" component={MembroDetailsPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
             <ProtectedRoute exact path="/app/admin/perfis" component={PerfilPermissaoPage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_PERFIS" />
+            <ProtectedRoute exact path="/app/admin/diario-bordo" component={BoardJournalAdminPage} isAuthenticated={isAuthenticated} requiredPermission={['DIARIO_BORDO_ADMIN', 'DIARIO_BORDO_MANAGER']} />
             <ProtectedRoute exact path="/app/admin/usuarios/novo" component={UserCreatePage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_USUARIOS" />
             <ProtectedRoute exact path="/app/admin/usuarios" component={UsersListPage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_USUARIOS" />
             <ProtectedRoute exact path="/app/admin/webhooks" component={WebhooksPage} isAuthenticated={isAuthenticated} requiredPermission="WEBHOOKS_VIEW" />

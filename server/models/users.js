@@ -11,6 +11,12 @@ module.exports = (sequelize) => {
       foreignKey: 'userId',
       otherKey: 'perfilId'
     });
+    User.belongsToMany(models.Permissao, {
+      through: models.UserPermissao,
+      as: 'permissoesDiretas',
+      foreignKey: 'userId',
+      otherKey: 'permissaoId'
+    });
     User.hasOne(models.Aposentado, { foreignKey: 'user_id', as: 'aposentado' });
     User.belongsTo(models.User, { as: 'conjuge', foreignKey: 'conjuge_id' });
     User.hasMany(models.User, { as: 'conjugeDe', foreignKey: 'conjuge_id' });
@@ -39,6 +45,11 @@ module.exports = (sequelize) => {
     salt: DataTypes.STRING,
     image: DataTypes.STRING,
     username: DataTypes.STRING,
+    points: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0
+    },
   
     // 🔽 Adicione aqui os novos campos vindos do Aposentado:
     data_nascimento: {

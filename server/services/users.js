@@ -1,4 +1,5 @@
 const { User, Perfil, Permissao } = require('../models');
+const { buildPermissionInclude } = require('./permissionResolver');
 const { Op } = require('sequelize');
 const crypto = require('crypto');
 const uuid = require('uuid');
@@ -22,6 +23,23 @@ async function syncUserPerfis(user, perfilIds = []) {
     user.perfilId = perfis[0].id;
     await user.save();
   }
+}
+
+async function syncUserPermissoes(user, permissaoIds = []) {
+  if (!user || !Array.isArray(permissaoIds)) {
+    return;
+  }
+  const uniqueIds = Array.from(new Set(permissaoIds.filter(Boolean)));
+  if (!uniqueIds.length) {
+    await user.setPermissoesDiretas([]);
+    return;
+  }
+  const permissoes = await Permissao.findAll({
+    where: {
+      id: uniqueIds
+    }
+  });
+  await user.setPermissoesDiretas(permissoes);
 }
 
 const sanitizePhone = (value) => {
@@ -64,11 +82,7 @@ function buildUserWithSpouse(user) {
 async function getTodosUsers() {
   const users = await User.findAll({
     include: [
-      {
-        model: Perfil,
-        required: false,
-        include: [{ model: Permissao, as: 'permissoes', through: { attributes: [] } }]
-      },
+      ...buildPermissionInclude(),
       {
         model: Perfil,
         as: 'perfis',
@@ -144,18 +158,16 @@ async function updateUser(id, updateData) {
   if (Array.isArray(updateData.perfilIds)) {
     await syncUserPerfis(user, updateData.perfilIds);
   }
-
-  return user;
+  if (Array.isArray(updateData.permissaoIds)) {
+    await syncUserPermissoes(user, updateData.permissaoIds);
+  }
+  return getUserById(id);
 }
 
 async function getUserById(id) {
   const user = await User.findByPk(id, {
     include: [
-      {
-        model: Perfil,
-        required: false,
-        include: [{ model: Permissao, as: 'permissoes', through: { attributes: [] } }]
-      },
+      ...buildPermissionInclude(),
       {
         model: Perfil,
         as: 'perfis',
@@ -195,11 +207,7 @@ async function getUserById(id) {
 async function getUserWithSpouse(id) {
   const user = await User.findByPk(id, {
     include: [
-      {
-        model: Perfil,
-        required: false,
-        include: [{ model: Permissao, as: 'permissoes', through: { attributes: [] } }]
-      },
+      ...buildPermissionInclude(),
       {
         model: Perfil,
         as: 'perfis',
@@ -256,11 +264,7 @@ async function findUserWithSpouseByContact({ email, telefone }) {
       [Op.or]: clauses
     },
     include: [
-      {
-        model: Perfil,
-        required: false,
-        include: [{ model: Permissao, as: 'permissoes', through: { attributes: [] } }]
-      },
+      ...buildPermissionInclude(),
       {
         model: Perfil,
         as: 'perfis',
@@ -309,7 +313,8 @@ async function createUser(body) {
     cep,
     escolaridade,
     nome_esposo,
-    perfilIds = []
+    perfilIds = [],
+    permissaoIds = []
   } = body;
   const safePassword = password || crypto.randomBytes(8).toString('hex');
   const salt = crypto.randomBytes(16).toString('hex');
@@ -335,7 +340,10 @@ async function createUser(body) {
   });
   const finalPerfilIds = Array.isArray(perfilIds) && perfilIds.length ? perfilIds : perfilId ? [perfilId] : [];
   await syncUserPerfis(newUser, finalPerfilIds);
-  return newUser;
+  if (Array.isArray(permissaoIds)) {
+    await syncUserPermissoes(newUser, permissaoIds);
+  }
+  return getUserById(newUser.id);
 }
 
 module.exports = {

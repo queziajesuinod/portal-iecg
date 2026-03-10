@@ -32,9 +32,26 @@ const isMember = (user) => {
   return hasMainPerfil || hasJoinedPerfil;
 };
 
+const hasKpiAccessProfile = (user) => {
+  const normalize = (value) => String(value || '').trim().toUpperCase();
+  const mainPerfil = normalize(user?.Perfil?.descricao || user?.perfil?.descricao);
+  const joinedPerfis = Array.isArray(user?.perfis) ? user.perfis : [];
+  const allowedPerfis = new Set(['START', 'ADMIN', 'ADMINISTRADOR']);
+  const mainHasAccess = allowedPerfis.has(mainPerfil);
+  const joinedHasAccess = joinedPerfis.some((perfil) => allowedPerfis.has(normalize(perfil?.descricao)));
+  const directPermissions = Array.isArray(user?.permissoesDiretas) ? user.permissoesDiretas : [];
+  const inheritedPermissions = Array.isArray(user?.Perfil?.permissoes) ? user.Perfil.permissoes : [];
+  const effectivePermissionNames = [...directPermissions, ...inheritedPermissions]
+    .map((perm) => normalize(perm?.nome))
+    .filter(Boolean);
+
+  return mainHasAccess || joinedHasAccess || effectivePermissionNames.includes('ADMIN_FULL_ACCESS');
+};
+
 const WelcomePage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [canViewKpis, setCanViewKpis] = useState(false);
   const [kpis, setKpis] = useState({
     activeCells: 0,
     encaminhamentosAno: 0,
@@ -43,6 +60,14 @@ const WelcomePage = () => {
   });
 
   const currentYear = new Date().getFullYear();
+  const currentUserId = useMemo(() => {
+    try {
+      const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+      return storedUser?.id || null;
+    } catch (_error) {
+      return null;
+    }
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -52,6 +77,19 @@ const WelcomePage = () => {
       try {
         setLoading(true);
         setError('');
+
+        if (!currentUserId) {
+          setCanViewKpis(false);
+          return;
+        }
+
+        const currentUser = await fetchJson(`${API_URL}/users/${currentUserId}`, headers);
+        const userCanViewKpis = hasKpiAccessProfile(currentUser);
+        setCanViewKpis(userCanViewKpis);
+
+        if (!userCanViewKpis) {
+          return;
+        }
 
         const [
           celulasResponse,
@@ -85,16 +123,16 @@ const WelcomePage = () => {
     };
 
     loadKpis();
-  }, [currentYear]);
+  }, [currentUserId, currentYear]);
 
   const cards = useMemo(() => ([
     {
-      title: 'Células ativas',
+      title: 'Celulas ativas',
       value: kpis.activeCells,
       subtitle: 'Total atual'
     },
     {
-      title: 'Encaminhamento de células',
+      title: 'Encaminhamento de celulas',
       value: kpis.encaminhamentosAno,
       subtitle: `Ano vigente (${currentYear})`
     },
@@ -117,55 +155,65 @@ const WelcomePage = () => {
         <meta name="description" content="KPIs da pagina inicial do sistema" />
       </Helmet>
 
-      <PapperBlock title="Painel inicial" desc="Indicadores gerais do Start">
-        {error && (
-          <Box mb={2}>
-            <Typography color="error" variant="body2">{error}</Typography>
-          </Box>
-        )}
+      <PapperBlock title="Painel inicial" desc="Portal de Gestao da Igreja Evangelica Comunidade Global">
+        {canViewKpis ? (
+          <>
+            {error && (
+              <Box mb={2}>
+                <Typography color="error" variant="body2">{error}</Typography>
+              </Box>
+            )}
 
-        <Grid container spacing={2} alignItems="stretch">
-          {cards.map((card, index) => (
-            <Grid item xs={12} sm={6} md={3} key={card.title}>
-              <Paper
-                elevation={2}
-                sx={{
-                  p: 2,
-                  color: '#fff',
-                  borderRadius: 2,
-                  background: cardStyles[index]?.bg || cardStyles[0].bg,
-                  height: 168,
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between'
-                }}
-              >
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="h4" sx={{ fontWeight: 700, lineHeight: 1.1 }}>
-                    {loading ? '-' : card.value}
-                  </Typography>
-                  <Typography
-                    variant="body1"
+            <Grid container spacing={2} alignItems="stretch">
+              {cards.map((card, index) => (
+                <Grid item xs={12} sm={6} md={3} key={card.title}>
+                  <Paper
+                    elevation={2}
                     sx={{
-                      mt: 1,
-                      fontWeight: 600,
-                      minHeight: 48
+                      p: 2,
+                      color: '#fff',
+                      borderRadius: 2,
+                      background: cardStyles[index]?.bg || cardStyles[0].bg,
+                      height: 168,
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
                     }}
                   >
-                    {card.title}
-                  </Typography>
-                  <Typography variant="caption" sx={{ opacity: 0.9 }}>
-                    {card.subtitle}
-                  </Typography>
-                </Box>
-                <Box sx={{ opacity: 0.85, fontSize: 38, ml: 1 }}>
-                  <i className={cardStyles[index]?.icon || 'ion-ios-stats-outline'} />
-                </Box>
-              </Paper>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="h4" sx={{ fontWeight: 700, lineHeight: 1.1 }}>
+                        {loading ? '-' : card.value}
+                      </Typography>
+                      <Typography
+                        variant="body1"
+                        sx={{
+                          mt: 1,
+                          fontWeight: 600,
+                          minHeight: 48
+                        }}
+                      >
+                        {card.title}
+                      </Typography>
+                      <Typography variant="caption" sx={{ opacity: 0.9 }}>
+                        {card.subtitle}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ opacity: 0.85, fontSize: 38, ml: 1 }}>
+                      <i className={cardStyles[index]?.icon || 'ion-ios-stats-outline'} />
+                    </Box>
+                  </Paper>
+                </Grid>
+              ))}
             </Grid>
-          ))}
-        </Grid>
+          </>
+        ) : (
+          !loading && (
+            <Typography variant="body2">
+              Seja Bem-vindo ao Portal IECG
+            </Typography>
+          )
+        )}
       </PapperBlock>
     </div>
   );

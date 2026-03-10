@@ -12,6 +12,14 @@ module.exports = (sequelize) => {
           as: 'perfis',
         });
       }
+      if (models.User) {
+        Permissao.belongsToMany(models.User, {
+          through: models.UserPermissao,
+          foreignKey: 'permissaoId',
+          otherKey: 'userId',
+          as: 'usuariosComPermissaoDireta',
+        });
+      }
     }
   }
 

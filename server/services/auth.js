@@ -1,8 +1,9 @@
 const { sign } = require('jsonwebtoken');
-const { User, Perfil, Permissao } = require('../models');
+const { User } = require('../models');
 const crypto = require('crypto');
 const dotenv = require('dotenv');
 const fs = require('fs');
+const { buildPermissionInclude, extractPermissionNames } = require('./permissionResolver');
 const env = dotenv.parse(fs.readFileSync('.env'));
 
 class AuthService {
@@ -11,10 +12,7 @@ class AuthService {
     const usuario = await User.findOne({
       attributes: ['id', 'name', 'username', 'passwordHash', 'salt', 'perfilId'],
       where: { email: dto.email },
-      include: [{
-        model: Perfil,
-        include: [{ model: Permissao, as: 'permissoes', through: { attributes: [] } }]
-      }]
+      include: buildPermissionInclude()
     });
 
     if (!usuario) {
@@ -51,7 +49,7 @@ class AuthService {
       { expiresIn: '60m' }
     );
 
-    const permissoesNomes = usuario.Perfil?.permissoes?.map((p) => p.nome) || [];
+    const permissoesNomes = extractPermissionNames(usuario);
 
     return { accessToken, permissoes: permissoesNomes };
   }

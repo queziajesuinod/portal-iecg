@@ -23,7 +23,8 @@ export const filterMenuByPermissions = (menu = [], permissions = []) => {
   const filterItems = (items) => items.reduce((acc, item) => {
     const children = item.child ? filterItems(item.child) : undefined;
     const requiresPermission = Boolean(item.permission);
-    const isAllowed = !requiresPermission || allowed.has(item.permission);
+    const requiredPermissions = Array.isArray(item.permission) ? item.permission : [item.permission];
+    const isAllowed = !requiresPermission || requiredPermissions.some((permission) => allowed.has(permission));
 
     if (!isAllowed) return acc;
 
