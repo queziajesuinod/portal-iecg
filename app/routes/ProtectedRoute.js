@@ -15,23 +15,22 @@ const ProtectedRoute = ({ component: Component, isAuthenticated, requiredPermiss
 
   const hasPermission = () => {
     if (!requiredPermission) return true;
-    // Se permissão ADMIN_FULL_ACCESS presente, libera tudo
+    const requiredPermissions = Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission];
     if (storedPermissions.includes('ADMIN_FULL_ACCESS')) return true;
-    // Sem permissões carregadas ainda, não bloqueia
     if (!storedPermissions.length) return true;
-    return storedPermissions.includes(requiredPermission);
+    return requiredPermissions.some((permission) => storedPermissions.includes(permission));
   };
 
   return (
     <Route
       {...rest}
-      render={props =>
+      render={(props) => (
         (isAuthenticated || isStoredTokenValid()) && hasPermission() ? (
           <Component {...props} />
         ) : (
           <Redirect to="/login" />
         )
-      }
+      )}
     />
   );
 };

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+import PropTypes from 'prop-types';
 import { Helmet } from 'react-helmet';
 import { useHistory } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
@@ -14,7 +15,7 @@ function decodeJwt(token) {
     const jsonPayload = decodeURIComponent(
       atob(base64)
         .split('')
-        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .map((c) => `%${(`00${c.charCodeAt(0).toString(16)}`).slice(-2)}`)
         .join('')
     );
     return JSON.parse(jsonPayload);
@@ -25,7 +26,6 @@ function decodeJwt(token) {
 }
 
 function Login({ setIsAuthenticated = () => {} }) {
-  const [valueForm, setValueForm] = useState(null); // Mantido para compatibilidade
   const { classes } = useStyles();
   const history = useHistory();
   const fallbackHost = `${window.location.protocol}//${window.location.host}`;
@@ -46,7 +46,7 @@ function Login({ setIsAuthenticated = () => {} }) {
       }
 
       const data = await response.json();
-      const token = data.accessToken;
+      const { accessToken: token, permissoes: loginPermissions = [] } = data;
       localStorage.setItem('token', token);
       localStorage.setItem('isAuthenticated', 'true');
       setIsAuthenticated(true);
@@ -54,9 +54,9 @@ function Login({ setIsAuthenticated = () => {} }) {
       const decodedToken = decodeJwt(token);
       if (!decodedToken) throw new Error('Token invalido');
 
-      const userId = decodedToken.userId;
+      const { userId, perfilId, nome } = decodedToken;
       let userDetails = {};
-      let permissions = data?.permissoes || [];
+      let permissions = loginPermissions;
 
       if (userId) {
         try {
@@ -79,16 +79,22 @@ function Login({ setIsAuthenticated = () => {} }) {
       }
 
       if (!permissions.length) {
-        permissions =
-          userDetails?.Perfil?.permissoes?.map((p) => p.nome) ||
-          userDetails?.perfil?.permissoes?.map((p) => p.nome) ||
-          [];
+        const inheritedPermissions = (
+          userDetails?.Perfil?.permissoes?.map((perm) => perm.nome)
+          || userDetails?.perfil?.permissoes?.map((perm) => perm.nome)
+          || []
+        );
+        const directPermissions = userDetails?.permissoesDiretas?.map((perm) => perm.nome) || [];
+        permissions = Array.from(new Set([
+          ...inheritedPermissions,
+          ...directPermissions,
+        ].filter(Boolean)));
       }
 
       const userData = {
-        name: userDetails.name || decodedToken?.nome || 'Usuario',
+        name: userDetails.name || nome || 'Usuario',
         id: userDetails.id || userId || 'user',
-        perfilId: userDetails.perfilId || decodedToken?.perfilId,
+        perfilId: userDetails.perfilId || perfilId,
         title: 'Usuario Autenticado',
         avatar: userDetails.image || 'default-avatar.png',
         status: 'online',
@@ -121,13 +127,12 @@ function Login({ setIsAuthenticated = () => {} }) {
         return;
       }
 
-      // Mesmo em erro sem sessao local valida, garanta que flag de auth volte para falso
       localStorage.setItem('isAuthenticated', 'false');
       setIsAuthenticated(false);
     }
   };
 
-  const title = brand.name + ' - Login';
+  const title = `${brand.name} - Login`;
   const description = brand.desc;
 
   return (
@@ -144,5 +149,9 @@ function Login({ setIsAuthenticated = () => {} }) {
     </div>
   );
 }
+
+Login.propTypes = {
+  setIsAuthenticated: PropTypes.func,
+};
 
 export default Login;
