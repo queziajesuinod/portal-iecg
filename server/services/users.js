@@ -8,6 +8,7 @@ const {
   Member
 } = require('../models');
 const { buildPermissionInclude } = require('./permissionResolver');
+const { normalizeCpf } = require('../utils/cpf');
 
 async function syncUserPerfis(user, perfilIds = []) {
   if (!user || !Array.isArray(perfilIds)) {
@@ -179,7 +180,7 @@ function buildUserWithSpouse(user) {
 async function findMemberCandidateByUser(user) {
   if (!user) return { member: null, matchedBy: null };
 
-  const rawCpf = String(user.cpf || '').trim();
+  const rawCpf = normalizeCpf(user.cpf);
   if (rawCpf) {
     const memberByCpf = await Member.findOne({
       where: {
@@ -303,6 +304,7 @@ async function updateUser(id, updateData) {
     'bairro',
     'numero',
     'cep',
+    'cpf',
     'escolaridade',
     'nome_esposo'
   ];
@@ -446,6 +448,7 @@ async function createUser(body) {
     bairro,
     numero,
     cep,
+    cpf,
     escolaridade,
     nome_esposo: nomeEsposo,
     perfilIds = [],
@@ -470,6 +473,7 @@ async function createUser(body) {
     bairro,
     cep,
     numero,
+    cpf,
     escolaridade,
     nome_esposo: nomeEsposo
   });

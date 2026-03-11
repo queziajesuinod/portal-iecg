@@ -1,4 +1,4 @@
-/* eslint-disable class-methods-use-this */
+/* eslint-disable class-methods-use-this, no-await-in-loop, no-restricted-syntax, no-continue */
 const crypto = require('crypto');
 const { Op } = require('sequelize');
 const {
@@ -8,12 +8,16 @@ const {
   MemberActivity,
   MemberActivityType,
   MemberMilestone,
+  MemberDuplicateDismissal,
   MIA,
   User,
   Campus,
   Celula
 } = require('../models');
 const cache = require('../utils/cache');
+const { syncUserFromMemberRecord } = require('../utils/memberUserSync');
+const { normalizeCpf } = require('../utils/cpf');
+const { parseLegacyNotes } = require('../utils/memberUserSync');
 
 const DEFAULT_MEMBER_PERFIL_ID = process.env.DEFAULT_MEMBER_PERFIL_ID || '7d47d03a-a7aa-4907-b8b9-8fcf87bd52dc';
 const ALLOWED_GENDERS = ['MASCULINO', 'FEMININO'];
@@ -45,11 +49,41 @@ const MILESTONE_TYPES = [
   'ANIVERSARIO_CONVERSAO'
 ];
 const ACTIVITY_CODE_REGEX = /^[A-Z0-9_]+$/;
+const STATUS_PRIORITY = {
+  VISITANTE: 1,
+  CONGREGADO: 2,
+  MEMBRO: 3,
+  INATIVO: 0,
+  MIA: 0,
+  TRANSFERIDO: 0,
+  FALECIDO: 0
+};
 
 const sanitizePhone = (value) => {
   if (!value) return null;
   const digits = String(value).replace(/\D/g, '');
   return digits || null;
+};
+
+const normalizeEmail = (value) => {
+  if (!value) return '';
+  return String(value).trim().toLowerCase();
+};
+
+const normalizeText = (value = '') => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9\s]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const pickLongerString = (currentValue, candidateValue) => {
+  const current = String(currentValue || '').trim();
+  const next = String(candidateValue || '').trim();
+  if (!next) return current || null;
+  if (!current) return next;
+  return next.length > current.length ? next : current;
 };
 
 const hashSHA256WithSalt = (password, salt) => crypto.createHmac('sha256', salt).update(password).digest('hex');
@@ -97,6 +131,149 @@ class MemberService {
     if (!HEALTH_STATUSES.includes(status)) {
       throw new Error('Status de saude invalido');
     }
+  }
+
+  normalizeMemberNameForCompare(value = '') {
+    return normalizeText(value);
+  }
+
+  areNamesSimilar(nameA = '', nameB = '') {
+    const a = this.normalizeMemberNameForCompare(nameA);
+    const b = this.normalizeMemberNameForCompare(nameB);
+
+    if (!a || !b) return false;
+    if (a === b) return true;
+    if (a.includes(b) || b.includes(a)) return true;
+
+    const tokensA = a.split(' ').filter((token) => token.length >= 2);
+    const tokensB = b.split(' ').filter((token) => token.length >= 2);
+    if (!tokensA.length || !tokensB.length) return false;
+
+    if (tokensA[0] !== tokensB[0]) return false;
+
+    const setB = new Set(tokensB);
+    const shared = tokensA.filter((token) => setB.has(token));
+    const ratioA = shared.length / tokensA.length;
+    const ratioB = shared.length / tokensB.length;
+
+    return (shared.length >= 2 && ratioA >= 0.5 && ratioB >= 0.4)
+      || (ratioA >= 0.75 && ratioB >= 0.75);
+  }
+
+  buildDuplicateReasons(primary, duplicate) {
+    const reasons = [];
+    const primaryCpf = normalizeCpf(primary?.cpf);
+    const duplicateCpf = normalizeCpf(duplicate?.cpf);
+    const primaryEmail = normalizeEmail(primary?.email);
+    const duplicateEmail = normalizeEmail(duplicate?.email);
+    const primaryPhone = sanitizePhone(primary?.phone || primary?.whatsapp);
+    const duplicatePhone = sanitizePhone(duplicate?.phone || duplicate?.whatsapp);
+
+    if (primaryCpf && duplicateCpf && primaryCpf === duplicateCpf) {
+      reasons.push({ type: 'cpf', label: 'Mesmo documento' });
+    }
+    if (primaryEmail && duplicateEmail && primaryEmail === duplicateEmail) {
+      reasons.push({ type: 'email', label: 'Mesmo e-mail' });
+    }
+    if (primaryPhone && duplicatePhone && primaryPhone === duplicatePhone) {
+      reasons.push({ type: 'phone', label: 'Mesmo telefone' });
+    }
+    if (this.areNamesSimilar(primary?.fullName, duplicate?.fullName)) {
+      reasons.push({ type: 'name', label: 'Nome parecido' });
+    }
+
+    return reasons;
+  }
+
+  scoreDuplicateReasons(reasons = []) {
+    return reasons.reduce((total, reason) => {
+      if (reason.type === 'cpf') return total + 100;
+      if (reason.type === 'email') return total + 80;
+      if (reason.type === 'phone') return total + 70;
+      if (reason.type === 'name') return total + 45;
+      return total;
+    }, 0);
+  }
+
+  serializeDuplicateSuggestion(primary, duplicate, reasons = []) {
+    return {
+      keepMemberId: primary.id,
+      removeMemberId: duplicate.id,
+      score: this.scoreDuplicateReasons(reasons),
+      reasons,
+      olderMember: {
+        id: primary.id,
+        fullName: primary.fullName,
+        email: primary.email,
+        phone: primary.phone,
+        whatsapp: primary.whatsapp,
+        cpf: primary.cpf,
+        status: primary.status,
+        photoUrl: primary.photoUrl || null,
+        createdAt: primary.createdAt,
+        userId: primary.userId || null
+      },
+      newerMember: {
+        id: duplicate.id,
+        fullName: duplicate.fullName,
+        email: duplicate.email,
+        phone: duplicate.phone,
+        whatsapp: duplicate.whatsapp,
+        cpf: duplicate.cpf,
+        status: duplicate.status,
+        photoUrl: duplicate.photoUrl || null,
+        createdAt: duplicate.createdAt,
+        userId: duplicate.userId || null
+      }
+    };
+  }
+
+  normalizeDuplicatePair(memberIdA, memberIdB) {
+    const ids = [String(memberIdA || ''), String(memberIdB || '')].filter(Boolean).sort();
+    if (ids.length !== 2 || ids[0] === ids[1]) {
+      throw new Error('Informe dois membros diferentes para esta operacao');
+    }
+    return {
+      firstMemberId: ids[0],
+      secondMemberId: ids[1]
+    };
+  }
+
+  mergeNotesValues(baseNotes, duplicateNotes, differences = {}) {
+    const baseLegacy = parseLegacyNotes(baseNotes);
+    const duplicateLegacy = parseLegacyNotes(duplicateNotes);
+
+    const mergedLegacy = {
+      ...duplicateLegacy,
+      ...baseLegacy,
+      escolas: Array.from(new Set([
+        ...((Array.isArray(baseLegacy.escolas) ? baseLegacy.escolas : [])),
+        ...((Array.isArray(duplicateLegacy.escolas) ? duplicateLegacy.escolas : [])
+        )
+      ].filter(Boolean)))
+    };
+
+    const mergedAudit = {
+      duplicatesMerged: [
+        ...((typeof baseNotes === 'string' && baseNotes ? (() => {
+          try {
+            const parsed = JSON.parse(baseNotes);
+            return Array.isArray(parsed.duplicatesMerged) ? parsed.duplicatesMerged : [];
+          } catch (error) {
+            return [];
+          }
+        })() : [])),
+        {
+          mergedAt: new Date().toISOString(),
+          differences
+        }
+      ]
+    };
+
+    return JSON.stringify({
+      legacy: mergedLegacy,
+      ...mergedAudit
+    });
   }
 
   normalizeSpousePayload(payload = {}, currentMaritalStatus = null) {
@@ -242,48 +419,16 @@ class MemberService {
     });
   }
 
-  async syncLinkedUserFromMember(userId, payload = {}, transaction = null) {
+  async syncLinkedUserFromMember(userId, transaction = null) {
     if (!userId) return;
 
-    const user = await User.findByPk(userId, { transaction });
-    if (!user) return;
+    const member = await Member.findOne({ where: { userId }, transaction });
+    if (!member) return;
 
-    const updates = {};
-
-    if (Object.prototype.hasOwnProperty.call(payload, 'fullName')) {
-      updates.name = payload.fullName || null;
-    }
-    if (Object.prototype.hasOwnProperty.call(payload, 'email')) {
-      updates.email = payload.email || null;
-    }
-    if (Object.prototype.hasOwnProperty.call(payload, 'photoUrl')) {
-      updates.image = payload.photoUrl || null;
-    }
-    if (Object.prototype.hasOwnProperty.call(payload, 'birthDate')) {
-      updates.data_nascimento = payload.birthDate || null;
-    }
-    if (Object.prototype.hasOwnProperty.call(payload, 'street')) {
-      updates.endereco = payload.street || null;
-    }
-    if (Object.prototype.hasOwnProperty.call(payload, 'neighborhood')) {
-      updates.bairro = payload.neighborhood || null;
-    }
-    if (Object.prototype.hasOwnProperty.call(payload, 'number')) {
-      updates.numero = payload.number || null;
-    }
-    if (Object.prototype.hasOwnProperty.call(payload, 'zipCode')) {
-      updates.cep = payload.zipCode || null;
-    }
-    if (
-      Object.prototype.hasOwnProperty.call(payload, 'phone')
-      || Object.prototype.hasOwnProperty.call(payload, 'whatsapp')
-    ) {
-      updates.telefone = sanitizePhone(payload.phone || payload.whatsapp) || null;
-    }
-
-    if (Object.keys(updates).length) {
-      await user.update(updates, { transaction });
-    }
+    await syncUserFromMemberRecord(member, {
+      transaction,
+      models: sequelize.models
+    });
   }
 
   async ensureBaptismMilestone(memberId, baptismDate, createdBy = null, transaction = null) {
@@ -843,6 +988,357 @@ class MemberService {
     }
   }
 
+  async listPossibleDuplicates() {
+    try {
+      const dismissals = await MemberDuplicateDismissal.findAll({
+        attributes: ['firstMemberId', 'secondMemberId']
+      });
+      const dismissedPairs = new Set(
+        dismissals.map((row) => `${row.firstMemberId}:${row.secondMemberId}`)
+      );
+
+      const members = await Member.findAll({
+        attributes: [
+          'id',
+          'fullName',
+          'email',
+          'phone',
+          'whatsapp',
+          'cpf',
+          'status',
+          'photoUrl',
+          'userId',
+          'createdAt'
+        ],
+        order: [['createdAt', 'ASC']]
+      });
+
+      const suggestions = [];
+      const seenPairs = new Set();
+
+      for (let index = 0; index < members.length; index += 1) {
+        const current = members[index];
+        for (let compareIndex = index + 1; compareIndex < members.length; compareIndex += 1) {
+          const candidate = members[compareIndex];
+          const [older, newer] = new Date(current.createdAt) <= new Date(candidate.createdAt)
+            ? [current, candidate]
+            : [candidate, current];
+
+          const pairKey = `${older.id}:${newer.id}`;
+          const normalizedPair = this.normalizeDuplicatePair(older.id, newer.id);
+          const normalizedPairKey = `${normalizedPair.firstMemberId}:${normalizedPair.secondMemberId}`;
+
+          if (seenPairs.has(pairKey) || dismissedPairs.has(normalizedPairKey)) {
+            continue;
+          }
+
+          const reasons = this.buildDuplicateReasons(older, newer);
+          const hasStrongMatch = reasons.some((reason) => ['cpf', 'email', 'phone'].includes(reason.type));
+          const hasNameOnlyMatch = reasons.length === 1 && reasons[0].type === 'name';
+
+          if (!reasons.length || hasNameOnlyMatch || (!hasStrongMatch && reasons.length < 2)) {
+            continue;
+          }
+
+          seenPairs.add(pairKey);
+          suggestions.push(this.serializeDuplicateSuggestion(older, newer, reasons));
+        }
+      }
+
+      suggestions.sort((a, b) => {
+        if (b.score !== a.score) {
+          return b.score - a.score;
+        }
+        return new Date(a.olderMember.createdAt) - new Date(b.olderMember.createdAt);
+      });
+
+      return suggestions;
+    } catch (error) {
+      throw new Error(`Erro ao listar membros duplicados: ${error.message}`);
+    }
+  }
+
+  buildMemberMergePayload(olderMember, newerMember) {
+    const payload = {};
+    const differences = {};
+
+    const copyIfEmpty = (field) => {
+      const currentValue = olderMember[field];
+      const nextValue = newerMember[field];
+      const hasCurrent = currentValue !== null && currentValue !== undefined && String(currentValue).trim() !== '';
+      const hasNext = nextValue !== null && nextValue !== undefined && String(nextValue).trim() !== '';
+
+      if (!hasCurrent && hasNext) {
+        payload[field] = nextValue;
+      } else if (hasCurrent && hasNext && String(currentValue) !== String(nextValue)) {
+        differences[field] = { kept: currentValue, newer: nextValue };
+      }
+    };
+
+    [
+      'preferredName',
+      'email',
+      'phone',
+      'whatsapp',
+      'cpf',
+      'rg',
+      'birthDate',
+      'gender',
+      'maritalStatus',
+      'zipCode',
+      'street',
+      'number',
+      'complement',
+      'neighborhood',
+      'city',
+      'state',
+      'country',
+      'membershipDate',
+      'baptismDate',
+      'baptismPlace',
+      'conversionDate',
+      'statusReason',
+      'campusId',
+      'celulaId',
+      'spouseMemberId',
+      'photoUrl'
+    ].forEach(copyIfEmpty);
+
+    if (newerMember.fullName) {
+      const preferredFullName = pickLongerString(olderMember.fullName, newerMember.fullName);
+      if (preferredFullName && preferredFullName !== olderMember.fullName) {
+        payload.fullName = preferredFullName;
+      }
+      if (
+        olderMember.fullName
+        && newerMember.fullName
+        && olderMember.fullName !== newerMember.fullName
+        && preferredFullName === olderMember.fullName
+      ) {
+        differences.fullName = { kept: olderMember.fullName, newer: newerMember.fullName };
+      }
+    }
+
+    const olderStatusPriority = STATUS_PRIORITY[olderMember.status] || 0;
+    const newerStatusPriority = STATUS_PRIORITY[newerMember.status] || 0;
+    if (newerStatusPriority > olderStatusPriority) {
+      payload.status = newerMember.status;
+    } else if (olderMember.status && newerMember.status && olderMember.status !== newerMember.status) {
+      differences.status = { kept: olderMember.status, newer: newerMember.status };
+    }
+
+    payload.notes = this.mergeNotesValues(olderMember.notes, newerMember.notes, differences);
+
+    return { payload, differences };
+  }
+
+  async mergeDuplicateMembers(memberIdA, memberIdB, mergedBy = null) {
+    try {
+      const normalizedPair = this.normalizeDuplicatePair(memberIdA, memberIdB);
+
+      const members = await Member.findAll({
+        where: {
+          id: {
+            [Op.in]: [normalizedPair.firstMemberId, normalizedPair.secondMemberId]
+          }
+        }
+      });
+
+      if (members.length !== 2) {
+        throw new Error('Os membros informados nao foram encontrados');
+      }
+
+      const [olderMember, newerMember] = [...members].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+      const transaction = await sequelize.transaction();
+
+      try {
+        const older = await Member.findByPk(olderMember.id, { transaction });
+        const newer = await Member.findByPk(newerMember.id, { transaction });
+
+        if (!older || !newer) {
+          throw new Error('Os membros informados nao foram encontrados');
+        }
+
+        const { payload } = this.buildMemberMergePayload(older, newer);
+        const transferredUserId = newer.userId || null;
+        const shouldDeleteNewerUser = Boolean(
+          older.userId
+          && newer.userId
+          && String(older.userId) !== String(newer.userId)
+        );
+
+        if (!older.userId && transferredUserId) {
+          await newer.update({ userId: null }, { transaction, skipLinkedUserSync: true });
+          payload.userId = transferredUserId;
+        }
+
+        if (Object.keys(payload).length) {
+          await older.update(payload, { transaction });
+        }
+
+        await MemberActivity.update(
+          { memberId: older.id },
+          { where: { memberId: newer.id }, transaction }
+        );
+
+        const newerMilestones = await MemberMilestone.findAll({
+          where: { memberId: newer.id },
+          transaction
+        });
+
+        for (const milestone of newerMilestones) {
+          const existing = await MemberMilestone.findOne({
+            where: {
+              memberId: older.id,
+              milestoneType: milestone.milestoneType
+            },
+            transaction
+          });
+
+          if (!existing) {
+            await milestone.update({ memberId: older.id }, { transaction });
+            continue;
+          }
+
+          const nextValues = {};
+          if (String(milestone.achievedDate || '') < String(existing.achievedDate || '')) {
+            nextValues.achievedDate = milestone.achievedDate;
+          }
+          if (!existing.description && milestone.description) {
+            nextValues.description = milestone.description;
+          }
+          if (!existing.certificateUrl && milestone.certificateUrl) {
+            nextValues.certificateUrl = milestone.certificateUrl;
+          }
+          if (Object.keys(nextValues).length) {
+            await existing.update(nextValues, { transaction });
+          }
+          await milestone.destroy({ transaction });
+        }
+
+        const olderJourney = await MemberJourney.findOne({ where: { memberId: older.id }, transaction });
+        const newerJourney = await MemberJourney.findOne({ where: { memberId: newer.id }, transaction });
+
+        if (!olderJourney && newerJourney) {
+          await newerJourney.update({ memberId: older.id }, { transaction });
+        } else if (olderJourney && newerJourney) {
+          await olderJourney.update({
+            currentStage: STATUS_PRIORITY[newer.status] > STATUS_PRIORITY[older.status]
+              ? this.mapStatusToStage(newer.status)
+              : olderJourney.currentStage,
+            engagementScore: Math.max(Number(olderJourney.engagementScore || 0), Number(newerJourney.engagementScore || 0)),
+            daysInactive: Math.min(Number(olderJourney.daysInactive || 0), Number(newerJourney.daysInactive || 0)),
+            lastActivityDate: olderJourney.lastActivityDate || newerJourney.lastActivityDate,
+            suggestedNextSteps: Array.from(new Set([...(olderJourney.suggestedNextSteps || []), ...(newerJourney.suggestedNextSteps || [])])),
+            alerts: Array.from(new Set([...(olderJourney.alerts || []), ...(newerJourney.alerts || [])])),
+            interests: Array.from(new Set([...(olderJourney.interests || []), ...(newerJourney.interests || [])])),
+            spiritualGifts: Array.from(new Set([...(olderJourney.spiritualGifts || []), ...(newerJourney.spiritualGifts || [])]))
+          }, { transaction });
+          await newerJourney.destroy({ transaction });
+        }
+
+        const olderMia = await MIA.findOne({ where: { memberId: older.id }, transaction });
+        const newerMia = await MIA.findOne({ where: { memberId: newer.id }, transaction });
+        if (!olderMia && newerMia) {
+          await newerMia.update({ memberId: older.id }, { transaction });
+        } else if (olderMia && newerMia) {
+          await newerMia.destroy({ transaction });
+        }
+
+        await Member.update(
+          { spouseMemberId: older.id },
+          {
+            where: { spouseMemberId: newer.id },
+            transaction,
+            individualHooks: false
+          }
+        );
+
+        await Celula.update(
+          { liderMemberId: older.id },
+          { where: { liderMemberId: newer.id }, transaction }
+        );
+
+        await newer.update({
+          userId: null,
+          spouseMemberId: null
+        }, { transaction, skipLinkedUserSync: true });
+
+        if (shouldDeleteNewerUser) {
+          await User.destroy({
+            where: { id: transferredUserId },
+            transaction
+          });
+        }
+
+        await MemberDuplicateDismissal.destroy({
+          where: normalizedPair,
+          transaction
+        });
+
+        await newer.destroy({ transaction });
+
+        await transaction.commit();
+
+        await this.recalculateJourneyFromActivities(older.id);
+        await cache.del(`member:${older.id}`);
+        await cache.del(`member:${newer.id}`);
+        await cache.del('members:all');
+
+        return {
+          keptMemberId: older.id,
+          removedMemberId: newer.id,
+          keptMember: await this.getMemberById(older.id),
+          mergedBy
+        };
+      } catch (error) {
+        await transaction.rollback();
+        throw error;
+      }
+    } catch (error) {
+      throw new Error(`Erro ao fundir membros duplicados: ${error.message}`);
+    }
+  }
+
+  async dismissDuplicateSuggestion(memberIdA, memberIdB, dismissedBy = null) {
+    try {
+      const normalizedPair = this.normalizeDuplicatePair(memberIdA, memberIdB);
+
+      const members = await Member.findAll({
+        where: {
+          id: {
+            [Op.in]: [normalizedPair.firstMemberId, normalizedPair.secondMemberId]
+          }
+        },
+        attributes: ['id', 'fullName', 'email', 'phone', 'whatsapp', 'cpf', 'status', 'photoUrl', 'userId', 'createdAt']
+      });
+
+      if (members.length !== 2) {
+        throw new Error('Os membros informados nao foram encontrados');
+      }
+
+      const [firstMember, secondMember] = members.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+      const reasons = this.buildDuplicateReasons(firstMember, secondMember);
+
+      await MemberDuplicateDismissal.findOrCreate({
+        where: normalizedPair,
+        defaults: {
+          ...normalizedPair,
+          dismissedBy,
+          reasonSnapshot: reasons
+        }
+      });
+
+      return {
+        success: true,
+        ...normalizedPair
+      };
+    } catch (error) {
+      throw new Error(`Erro ao desconsiderar sugestao de duplicidade: ${error.message}`);
+    }
+  }
+
   /**
    * Atualizar membro
    */
@@ -881,7 +1377,6 @@ class MemberService {
       }
 
       await member.update(payload);
-      await this.syncLinkedUserFromMember(member.userId, payload);
       await this.ensureBaptismMilestone(member.id, member.baptismDate, updatedBy);
       await this.ensureConversionMilestone(member.id, member.conversionDate, updatedBy);
 
@@ -921,7 +1416,6 @@ class MemberService {
       const transaction = await sequelize.transaction();
       try {
         await member.update(payload, { transaction });
-        await this.syncLinkedUserFromMember(member.userId, payload, transaction);
         await this.ensureBaptismMilestone(
           member.id,
           Object.prototype.hasOwnProperty.call(payload, 'baptismDate') ? payload.baptismDate : member.baptismDate,

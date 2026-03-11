@@ -1,16 +1,89 @@
+/* eslint-disable class-methods-use-this */
 // Service: services/ApeloDirecionadoCelulaService.js
 const axios = require('axios');
-const { ApeloDirecionadoCelula, ApeloDirecionadoHistorico, Celula, Sequelize } = require('../models');
 const { Op } = require('sequelize');
+const {
+  ApeloDirecionadoCelula,
+  ApeloDirecionadoHistorico,
+  Celula,
+  Campus,
+  Member,
+  MemberJourney,
+  MemberActivity,
+  MemberMilestone,
+  MemberActivityType,
+  Sequelize
+} = require('../models');
 
-const GOOGLE_GEOCODE_KEY = process.env.GOOGLE_GEOCODE_KEY;
+const { GOOGLE_GEOCODE_KEY } = process.env;
 const GEO_TIMEOUT_MS = 5000;
 const geocodeCache = new Map();
+const STATE_UF_BY_NAME = {
+  ACRE: 'AC',
+  ALAGOAS: 'AL',
+  AMAPA: 'AP',
+  AMAZONAS: 'AM',
+  BAHIA: 'BA',
+  CEARA: 'CE',
+  'DISTRITO FEDERAL': 'DF',
+  'ESPIRITO SANTO': 'ES',
+  GOIAS: 'GO',
+  MARANHAO: 'MA',
+  'MATO GROSSO': 'MT',
+  'MATO GROSSO DO SUL': 'MS',
+  'MINAS GERAIS': 'MG',
+  PARA: 'PA',
+  PARAIBA: 'PB',
+  PARANA: 'PR',
+  PERNAMBUCO: 'PE',
+  PIAUI: 'PI',
+  'RIO DE JANEIRO': 'RJ',
+  'RIO GRANDE DO NORTE': 'RN',
+  'RIO GRANDE DO SUL': 'RS',
+  RONDONIA: 'RO',
+  RORAIMA: 'RR',
+  'SANTA CATARINA': 'SC',
+  'SAO PAULO': 'SP',
+  SERGIPE: 'SE',
+  TOCANTINS: 'TO'
+};
 
 function normalizeCep(value) {
   const digits = String(value || '').replace(/\D/g, '');
   if (digits.length !== 8) return null;
   return digits;
+}
+
+function normalizeStateUf(value) {
+  const normalized = String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+
+  if (!normalized) return null;
+  if (normalized.length === 2) return normalized;
+  return STATE_UF_BY_NAME[normalized] || null;
+}
+
+function toDateOnly(value) {
+  if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  const normalized = String(value).trim();
+  if (!normalized) return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(normalized)) {
+    return normalized.slice(0, 10);
+  }
+
+  const parsed = new Date(normalized);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+
+  return null;
 }
 
 function getComponentValue(components, requiredTypes) {
@@ -41,7 +114,7 @@ async function geocodeAddress(query) {
       language: 'pt-BR'
     });
 
-    const response = await axios.get(
+    const { data } = await axios.get(
       `https://maps.googleapis.com/maps/api/geocode/json?${params.toString()}`,
       {
         timeout: GEO_TIMEOUT_MS,
@@ -49,13 +122,12 @@ async function geocodeAddress(query) {
       }
     );
 
-    const data = response.data;
     if (!data || data.status !== 'OK' || !Array.isArray(data.results) || data.results.length === 0) {
       geocodeCache.set(normalizedQuery, null);
       return null;
     }
 
-    const result = data.results[0];
+    const [result] = data.results;
     const location = result.geometry?.location;
     if (!location || !Number.isFinite(Number(location.lat)) || !Number.isFinite(Number(location.lng))) {
       geocodeCache.set(normalizedQuery, null);
@@ -236,6 +308,235 @@ class ApeloDirecionadoCelulaService {
     return false;
   }
 
+  _normalizarCampusComparacao(value = '') {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  _resolverTipoAtividadePorDecisao(decisao = '') {
+    const normalized = this._normalizarTextoExato(decisao);
+    if (!normalized) return null;
+    if (normalized === 'encaminhamento_celula') return 'ENCAMINHAMENTO_CELULA';
+    if (normalized === 'apelo_volta' || normalized === 'apelo_decisao') return 'APELO';
+    return null;
+  }
+
+  async _resolverCampusId(campusNome, transaction) {
+    const normalizedCampus = this._normalizarCampusComparacao(campusNome);
+    if (!normalizedCampus) {
+      return null;
+    }
+
+    const campuses = await Campus.findAll({
+      attributes: ['id', 'nome'],
+      transaction
+    });
+
+    const exactMatch = campuses.find((campus) => (
+      this._normalizarCampusComparacao(campus.nome) === normalizedCampus
+    ));
+    if (exactMatch) {
+      return exactMatch.id;
+    }
+
+    const partialMatch = campuses.find((campus) => {
+      const normalizedName = this._normalizarCampusComparacao(campus.nome);
+      return normalizedName.includes(normalizedCampus) || normalizedCampus.includes(normalizedName);
+    });
+
+    return partialMatch?.id || null;
+  }
+
+  async _buscarMembroPorTelefone(telefone, transaction, nome = '') {
+    const telefoneNormalizado = this._normalizarWhatsappComparacao(telefone);
+    if (!telefoneNormalizado) {
+      return null;
+    }
+
+    const sufixosTelefone = this._sufixosWhatsapp(telefoneNormalizado);
+    if (!sufixosTelefone.length) {
+      return null;
+    }
+
+    const buildPhoneCondition = (columnName, sufixo) => Sequelize.where(
+      Sequelize.fn(
+        'regexp_replace',
+        Sequelize.fn('coalesce', Sequelize.col(columnName), ''),
+        '\\D',
+        '',
+        'g'
+      ),
+      { [Op.like]: `%${sufixo}` }
+    );
+
+    const candidates = await Member.findAll({
+      where: {
+        [Op.or]: sufixosTelefone.flatMap((sufixo) => ([
+          buildPhoneCondition('phone', sufixo),
+          buildPhoneCondition('whatsapp', sufixo)
+        ]))
+      },
+      order: [['updatedAt', 'DESC']],
+      transaction
+    });
+
+    return candidates.find((member) => (
+      this._whatsappIgual(telefoneNormalizado, member.phone)
+      || this._whatsappIgual(telefoneNormalizado, member.whatsapp)
+    )) || candidates.find((member) => this._nomeParecido(nome, member.fullName)) || null;
+  }
+
+  async _ensureMemberJourney(memberId, transaction) {
+    if (!memberId) return null;
+
+    const existing = await MemberJourney.findOne({
+      where: { memberId },
+      transaction
+    });
+    if (existing) {
+      return existing;
+    }
+
+    return MemberJourney.create({
+      memberId,
+      currentStage: 'VISITANTE',
+      stageChangedAt: new Date(),
+      lastActivityDate: new Date()
+    }, { transaction });
+  }
+
+  async _resolveActivityPoints(activityType, transaction) {
+    if (!activityType) {
+      return 0;
+    }
+
+    const activityTypeRef = await MemberActivityType.findOne({
+      where: { code: activityType },
+      attributes: ['defaultPoints'],
+      transaction
+    });
+
+    return Number(activityTypeRef?.defaultPoints || 0);
+  }
+
+  async _ensureMemberMilestone(memberId, milestoneType, achievedDate, description, transaction) {
+    if (!memberId || !milestoneType || !achievedDate) {
+      return null;
+    }
+
+    const milestoneDate = toDateOnly(achievedDate);
+    if (!milestoneDate) {
+      return null;
+    }
+    const existing = await MemberMilestone.findOne({
+      where: { memberId, milestoneType },
+      transaction
+    });
+
+    if (existing) {
+      await existing.update({
+        achievedDate: milestoneDate,
+        description: description || existing.description || null
+      }, { transaction });
+      return existing;
+    }
+
+    return MemberMilestone.create({
+      memberId,
+      milestoneType,
+      achievedDate: milestoneDate,
+      description: description || null
+    }, { transaction });
+  }
+
+  async _ensureMemberForApelo(apeloData, transaction) {
+    const telefoneBase = apeloData?.whatsapp || apeloData?.telefone || apeloData?.phone || null;
+    const existingMember = await this._buscarMembroPorTelefone(telefoneBase, transaction, apeloData?.nome);
+    const campusId = await this._resolverCampusId(apeloData?.campus_iecg, transaction);
+
+    if (existingMember) {
+      const nextPayload = {};
+
+      if (!existingMember.fullName && apeloData?.nome) nextPayload.fullName = apeloData.nome;
+      if (!existingMember.phone && telefoneBase) nextPayload.phone = telefoneBase;
+      if (!existingMember.whatsapp && apeloData?.whatsapp) nextPayload.whatsapp = apeloData.whatsapp;
+      if (!existingMember.zipCode && apeloData?.cep_apelo) nextPayload.zipCode = apeloData.cep_apelo;
+      if (!existingMember.neighborhood && apeloData?.bairro_apelo) nextPayload.neighborhood = apeloData.bairro_apelo;
+      if (!existingMember.city && apeloData?.cidade_apelo) nextPayload.city = apeloData.cidade_apelo;
+      if (!existingMember.state && normalizeStateUf(apeloData?.estado_apelo)) {
+        nextPayload.state = normalizeStateUf(apeloData?.estado_apelo);
+      }
+      if (!existingMember.campusId && campusId) nextPayload.campusId = campusId;
+
+      if (Object.keys(nextPayload).length) {
+        await existingMember.update(nextPayload, { transaction });
+      }
+
+      await this._ensureMemberJourney(existingMember.id, transaction);
+      return existingMember;
+    }
+
+    const member = await Member.create({
+      fullName: apeloData?.nome || 'Visitante sem nome',
+      preferredName: null,
+      status: 'VISITANTE',
+      phone: telefoneBase || null,
+      whatsapp: apeloData?.whatsapp || telefoneBase || null,
+      zipCode: apeloData?.cep_apelo || null,
+      neighborhood: apeloData?.bairro_apelo || null,
+      city: apeloData?.cidade_apelo || null,
+      state: normalizeStateUf(apeloData?.estado_apelo),
+      country: 'Brasil',
+      campusId,
+      statusChangeDate: new Date()
+    }, { transaction });
+
+    await this._ensureMemberJourney(member.id, transaction);
+    return member;
+  }
+
+  async _registrarAtividadeDoApelo(memberId, apelo, transaction) {
+    const activityType = this._resolverTipoAtividadePorDecisao(apelo?.decisao);
+    if (!memberId || !activityType) {
+      return null;
+    }
+
+    const points = await this._resolveActivityPoints(activityType, transaction);
+    return MemberActivity.create({
+      memberId,
+      activityType,
+      activityDate: new Date(),
+      points,
+      metadata: {
+        apeloId: apelo.id,
+        decisao: apelo.decisao || null,
+        source: 'apelo_direcionado'
+      }
+    }, { transaction });
+  }
+
+  async _processarIntegracaoMembroNaCriacao(apelo, transaction) {
+    const member = await this._ensureMemberForApelo(apelo, transaction);
+    await this._registrarAtividadeDoApelo(member.id, apelo, transaction);
+    return member;
+  }
+
+  async _processarConsolidacaoDoApelo(apelo, transaction) {
+    const member = await this._ensureMemberForApelo(apelo, transaction);
+    await this._ensureMemberMilestone(
+      member.id,
+      'CONSOLIDADO_CELULA',
+      new Date(),
+      'Consolidado via apelo direcionado',
+      transaction
+    );
+    return member;
+  }
+
   async _buscarRegistroExistenteParaRecadastro(dadosNormalizados, transaction) {
     const whatsappNormalizado = this._normalizarWhatsappComparacao(dadosNormalizados.whatsapp);
     const redeNormalizada = this._normalizarTextoComparacao(dadosNormalizados.rede);
@@ -281,11 +582,11 @@ class ApeloDirecionadoCelulaService {
 
     if (!Object.prototype.hasOwnProperty.call(payload, 'whatsapp')) {
       const aliases = ['telefone', 'phone', 'celular', 'cel'];
-      for (const alias of aliases) {
-        if (Object.prototype.hasOwnProperty.call(payload, alias) && payload[alias]) {
-          payload.whatsapp = payload[alias];
-          break;
-        }
+      const aliasEncontrado = aliases.find((alias) => (
+        Object.prototype.hasOwnProperty.call(payload, alias) && payload[alias]
+      ));
+      if (aliasEncontrado) {
+        payload.whatsapp = payload[aliasEncontrado];
       }
     }
 
@@ -307,6 +608,14 @@ class ApeloDirecionadoCelulaService {
         payload.estado_apelo = payload.estado;
       } else if (Object.prototype.hasOwnProperty.call(payload, 'uf')) {
         payload.estado_apelo = payload.uf;
+      }
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(payload, 'campus_iecg')) {
+      if (Object.prototype.hasOwnProperty.call(payload, 'campus')) {
+        payload.campus_iecg = payload.campus;
+      } else if (Object.prototype.hasOwnProperty.call(payload, 'campusIecg')) {
+        payload.campus_iecg = payload.campusIecg;
       }
     }
 
@@ -387,36 +696,38 @@ class ApeloDirecionadoCelulaService {
       return payload;
     }
 
+    const nextPayload = { ...payload };
+
     const camposLocalizacao = ['cep_apelo', 'cep', 'bairro_apelo', 'cidade_apelo', 'estado_apelo', 'lat_apelo', 'lon_apelo'];
     const alterandoLocalizacao = camposLocalizacao
-      .some((field) => Object.prototype.hasOwnProperty.call(payload, field));
+      .some((field) => Object.prototype.hasOwnProperty.call(nextPayload, field));
     const jaPossuiCoordenadas = itemAtual
       && Number.isFinite(Number(itemAtual.lat_apelo))
       && Number.isFinite(Number(itemAtual.lon_apelo));
 
     if (itemAtual && !alterandoLocalizacao && jaPossuiCoordenadas) {
-      return payload;
+      return nextPayload;
     }
 
     const cep = normalizeCep(
-      payload.cep_apelo
+      nextPayload.cep_apelo
       || itemAtual?.cep_apelo
     );
 
-    const bairro = payload.bairro_apelo || itemAtual?.bairro_apelo || '';
-    const cidade = payload.cidade_apelo || itemAtual?.cidade_apelo || '';
-    const estado = payload.estado_apelo || itemAtual?.estado_apelo || '';
+    const bairro = nextPayload.bairro_apelo || itemAtual?.bairro_apelo || '';
+    const cidade = nextPayload.cidade_apelo || itemAtual?.cidade_apelo || '';
+    const estado = nextPayload.estado_apelo || itemAtual?.estado_apelo || '';
     const queryFallback = [bairro, cidade, estado, 'Brasil'].filter(Boolean).join(', ');
 
     if (!cep && !queryFallback) {
       if (strictCep) {
         throw new Error('CEP do apelo e obrigatorio para encaminhamento de celula');
       }
-      return payload;
+      return nextPayload;
     }
 
     if (cep) {
-      payload.cep_apelo = cep;
+      nextPayload.cep_apelo = cep;
     }
 
     const geocodeQuery = cep ? `${cep}, Brasil` : queryFallback;
@@ -425,26 +736,26 @@ class ApeloDirecionadoCelulaService {
       if (strictCep) {
         throw new Error('Nao foi possivel geolocalizar os dados de endereco informados');
       }
-      return payload;
+      return nextPayload;
     }
 
-    payload.lat_apelo = geocodeData.lat;
-    payload.lon_apelo = geocodeData.lon;
-    payload.bairro_apelo = geocodeData.bairro || payload.bairro_apelo || itemAtual?.bairro_apelo || null;
-    payload.cidade_apelo = geocodeData.cidade || payload.cidade_apelo || itemAtual?.cidade_apelo || null;
-    payload.estado_apelo = geocodeData.uf || geocodeData.estado || payload.estado_apelo || itemAtual?.estado_apelo || null;
-    payload.cep_apelo = geocodeData.cepEncontrado || payload.cep_apelo || null;
+    nextPayload.lat_apelo = geocodeData.lat;
+    nextPayload.lon_apelo = geocodeData.lon;
+    nextPayload.bairro_apelo = geocodeData.bairro || nextPayload.bairro_apelo || itemAtual?.bairro_apelo || null;
+    nextPayload.cidade_apelo = geocodeData.cidade || nextPayload.cidade_apelo || itemAtual?.cidade_apelo || null;
+    nextPayload.estado_apelo = geocodeData.uf || geocodeData.estado || nextPayload.estado_apelo || itemAtual?.estado_apelo || null;
+    nextPayload.cep_apelo = geocodeData.cepEncontrado || nextPayload.cep_apelo || null;
 
-    return payload;
+    return nextPayload;
   }
 
   async criar(dados) {
     const payloadEntrada = this._extrairPayloadEntrada(dados);
-    const dadosNormalizados = this._normalizarCampos(payloadEntrada);
+    let dadosNormalizados = this._normalizarCampos(payloadEntrada);
     const exigirCep = dadosNormalizados.decisao === 'encaminhamento_celula';
-    await this._enriquecerEnderecoPorCep(dadosNormalizados, null, { strictCep: exigirCep });
+    dadosNormalizados = await this._enriquecerEnderecoPorCep(dadosNormalizados, null, { strictCep: exigirCep });
     const direcionarCelulaEmBranco = dadosNormalizados.direcionado_celula === null || dadosNormalizados.direcionado_celula === undefined;
-    const decisao = dadosNormalizados.decisao;
+    const { decisao } = dadosNormalizados;
     if (direcionarCelulaEmBranco && decisao !== 'encaminhamento_celula' && !dadosNormalizados.status) {
       dadosNormalizados.status = 'NAO_HAVERAR_DIRECIONAMENTO';
     }
@@ -453,7 +764,9 @@ class ApeloDirecionadoCelulaService {
       const existente = await this._buscarRegistroExistenteParaRecadastro(dadosNormalizados, transaction);
 
       if (!existente) {
-        return ApeloDirecionadoCelula.create(dadosNormalizados, { transaction });
+        const created = await ApeloDirecionadoCelula.create(dadosNormalizados, { transaction });
+        await this._processarIntegracaoMembroNaCriacao(created, transaction);
+        return created;
       }
 
       const statusAnterior = existente.status || null;
@@ -479,6 +792,7 @@ class ApeloDirecionadoCelulaService {
         motivo: ' Procurou novamente o start - Cadastro '
       }, { transaction });
 
+      await this._processarIntegracaoMembroNaCriacao(existente, transaction);
       return existente;
     });
   }
@@ -560,26 +874,32 @@ class ApeloDirecionadoCelulaService {
   async atualizar(id, dados = {}) {
     const item = await this.buscarPorId(id);
     const payloadEntrada = this._extrairPayloadEntrada(dados);
-    const { motivo_status, ...dadosAtualizar } = this._normalizarCampos(payloadEntrada);
-    await this._enriquecerEnderecoPorCep(dadosAtualizar, item, { strictCep: false });
+    const { motivo_status: motivoStatus, ...dadosNormalizados } = this._normalizarCampos(payloadEntrada);
+    const dadosAtualizar = await this._enriquecerEnderecoPorCep(dadosNormalizados, item, { strictCep: false });
     const statusEnviado = Object.prototype.hasOwnProperty.call(dadosAtualizar, 'status');
     const statusAnterior = item.status;
     const statusNovo = dadosAtualizar.status;
 
-    const atualizado = await item.update(dadosAtualizar);
+    return ApeloDirecionadoCelula.sequelize.transaction(async (transaction) => {
+      const atualizado = await item.update(dadosAtualizar, { transaction });
 
-    if (statusEnviado && statusNovo !== statusAnterior) {
-      await ApeloDirecionadoHistorico.create({
-        apelo_id: item.id,
-        status_anterior: statusAnterior || null,
-        status_novo: statusNovo || null,
-        data_movimento: new Date(),
-        tipo_evento: 'STATUS',
-        motivo: motivo_status || null
-      });
-    }
+      if (statusEnviado && statusNovo !== statusAnterior) {
+        await ApeloDirecionadoHistorico.create({
+          apelo_id: item.id,
+          status_anterior: statusAnterior || null,
+          status_novo: statusNovo || null,
+          data_movimento: new Date(),
+          tipo_evento: 'STATUS',
+          motivo: motivoStatus || null
+        }, { transaction });
 
-    return atualizado;
+        if (statusNovo === 'CONSOLIDADO_CELULA') {
+          await this._processarConsolidacaoDoApelo(atualizado, transaction);
+        }
+      }
+
+      return atualizado;
+    });
   }
 
   async deletar(id) {
@@ -592,7 +912,7 @@ class ApeloDirecionadoCelulaService {
     if (!celulaId) {
       return [];
     }
-    return await ApeloDirecionadoCelula.findAll({
+    return ApeloDirecionadoCelula.findAll({
       where: { celula_id: celulaId },
       order: [['createdAt', 'DESC']]
     });
@@ -660,7 +980,7 @@ class ApeloDirecionadoCelulaService {
   }
 
   async historico(apeloId) {
-    return await ApeloDirecionadoHistorico.findAll({
+    return ApeloDirecionadoHistorico.findAll({
       where: { apelo_id: apeloId },
       order: [['data_movimento', 'DESC']],
       include: [

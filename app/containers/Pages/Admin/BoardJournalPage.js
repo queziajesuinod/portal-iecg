@@ -61,6 +61,31 @@ function formatDate(dateValue) {
   return parsed.toLocaleDateString('pt-BR');
 }
 
+function getStartOfDay(dateValue) {
+  if (!dateValue) return null;
+  const parsed = new Date(dateValue);
+  if (Number.isNaN(parsed.getTime())) return null;
+  parsed.setHours(0, 0, 0, 0);
+  return parsed;
+}
+
+function getEndOfDay(dateValue) {
+  if (!dateValue) return null;
+  const parsed = new Date(dateValue);
+  if (Number.isNaN(parsed.getTime())) return null;
+  parsed.setHours(23, 59, 59, 999);
+  return parsed;
+}
+
+function isChallengeWithinSchedule(challenge, referenceDate = new Date()) {
+  const startDate = getStartOfDay(challenge?.startDate);
+  const endDate = getEndOfDay(challenge?.endDate);
+
+  if (startDate && startDate.getTime() > referenceDate.getTime()) return false;
+  if (endDate && endDate.getTime() < referenceDate.getTime()) return false;
+  return true;
+}
+
 function getStatusMeta(status) {
   if (status === 'approved') {
     return {
@@ -182,7 +207,8 @@ function BoardJournalPage() {
   const canRespondToChallenge = (challenge) => {
     const submission = myByChallenge[challenge.id];
     if (!challenge?.isActive) return false;
-    if (challenge?.dueDate && new Date(challenge.dueDate).getTime() < Date.now()) return false;
+    if (!isChallengeWithinSchedule(challenge)) return false;
+    if (challenge?.dueDate && getEndOfDay(challenge.dueDate)?.getTime() < Date.now()) return false;
     if (!submission) return true;
     if (submission.status === 'approved' || submission.status === 'pending') return false;
     if (submission.status === 'rejected') {
@@ -708,7 +734,7 @@ function BoardJournalPage() {
                   <Typography variant="body1" sx={{ maxWidth: 620, color: COLORS.ink }}>
                     {journalDescription}
                   </Typography>
-      
+
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25} useFlexGap flexWrap="wrap">
                     <Chip label={`${availableChallenges} desafios pendentes`} sx={{ backgroundColor: '#EFF4F8', color: COLORS.navy }} />
                     <Chip label={myRankPosition ? `Posicao atual #${myRankPosition}` : 'Ranking em andamento'} sx={{ backgroundColor: '#EFF4F8', color: COLORS.navy }} />
@@ -1010,6 +1036,13 @@ function BoardJournalPage() {
                                       }}
                                     />
                                     <Chip size="small" variant="outlined" label={getChallengeTypeLabel(challenge.challengeType)} />
+                                    <Chip
+                                      size="small"
+                                      variant="outlined"
+                                      label={[challenge.startDate ? formatDate(challenge.startDate) : null, challenge.endDate ? formatDate(challenge.endDate) : null]
+                                        .filter(Boolean)
+                                        .join(' ate ') || 'Sempre visivel'}
+                                    />
                                     {challenge.allowSecondChance && (
                                       <Chip
                                         size="small"
@@ -1051,6 +1084,14 @@ function BoardJournalPage() {
                                 }}
                               >
                                 <Grid container spacing={2}>
+                                  <Grid item xs={12} sm={4}>
+                                    <Typography variant="caption" color="textSecondary">Programacao</Typography>
+                                    <Typography variant="body1" sx={{ mt: 0.5, fontWeight: 700, color: COLORS.ink }}>
+                                      {[challenge.startDate ? formatDate(challenge.startDate) : null, challenge.endDate ? formatDate(challenge.endDate) : null]
+                                        .filter(Boolean)
+                                        .join(' ate ') || 'Sempre visivel'}
+                                    </Typography>
+                                  </Grid>
                                   <Grid item xs={12} sm={4}>
                                     <Typography variant="caption" color="textSecondary">Prazo</Typography>
                                     <Typography variant="body1" sx={{ mt: 0.5, fontWeight: 700, color: COLORS.ink }}>
@@ -1320,6 +1361,13 @@ function BoardJournalPage() {
                                       }}
                                     />
                                     <Chip size="small" variant="outlined" label={getChallengeTypeLabel(challenge.challengeType)} />
+                                    <Chip
+                                      size="small"
+                                      variant="outlined"
+                                      label={[challenge.startDate ? formatDate(challenge.startDate) : null, challenge.endDate ? formatDate(challenge.endDate) : null]
+                                        .filter(Boolean)
+                                        .join(' ate ') || 'Sempre visivel'}
+                                    />
                                     {statusMeta && statusChip(submission.status)}
                                   </Stack>
                                   <Typography variant="h5" sx={{ color: COLORS.navy, fontWeight: 800 }}>
@@ -1340,6 +1388,14 @@ function BoardJournalPage() {
                                 }}
                               >
                                 <Grid container spacing={2}>
+                                  <Grid item xs={12} sm={3}>
+                                    <Typography variant="caption" color="textSecondary">Programacao</Typography>
+                                    <Typography variant="body1" sx={{ mt: 0.5, fontWeight: 700, color: COLORS.ink }}>
+                                      {[challenge.startDate ? formatDate(challenge.startDate) : null, challenge.endDate ? formatDate(challenge.endDate) : null]
+                                        .filter(Boolean)
+                                        .join(' ate ') || 'Sempre visivel'}
+                                    </Typography>
+                                  </Grid>
                                   <Grid item xs={12} sm={3}>
                                     <Typography variant="caption" color="textSecondary">Prazo</Typography>
                                     <Typography variant="body1" sx={{ mt: 0.5, fontWeight: 700, color: COLORS.ink }}>
@@ -1833,6 +1889,13 @@ function BoardJournalPage() {
                   <Chip size="small" label={`${submissionTarget?.points || 0} pts`} />
                   {submissionTarget?.category?.name && <Chip size="small" label={submissionTarget.category.name} />}
                   <Chip size="small" variant="outlined" label={getChallengeTypeLabel(submissionTarget?.challengeType)} />
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={[submissionTarget?.startDate ? formatDate(submissionTarget.startDate) : null, submissionTarget?.endDate ? formatDate(submissionTarget.endDate) : null]
+                      .filter(Boolean)
+                      .join(' ate ') || 'Sempre visivel'}
+                  />
                 </Stack>
                 {renderSubmissionFields()}
               </Box>

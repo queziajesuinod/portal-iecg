@@ -45,6 +45,18 @@ export const listarMembros = (params = {}) => {
   return fetchWithAuth(url);
 };
 
+export const listarMembrosDuplicados = () => fetchWithAuth(`${API_URL}/api/admin/members/duplicates`);
+
+export const fundirMembrosDuplicados = (memberIdA, memberIdB) => fetchWithAuth(`${API_URL}/api/admin/members/duplicates/merge`, {
+  method: 'POST',
+  body: JSON.stringify({ memberIdA, memberIdB }),
+});
+
+export const desconsiderarMembrosDuplicados = (memberIdA, memberIdB) => fetchWithAuth(`${API_URL}/api/admin/members/duplicates/dismiss`, {
+  method: 'POST',
+  body: JSON.stringify({ memberIdA, memberIdB }),
+});
+
 export const buscarMembro = (id) => fetchWithAuth(`${API_URL}/api/admin/members/${id}`);
 
 export const buscarMeuMembro = () => fetchWithAuth(`${API_URL}/api/admin/members/me`);

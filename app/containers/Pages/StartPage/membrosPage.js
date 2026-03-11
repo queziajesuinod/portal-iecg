@@ -18,6 +18,8 @@ import {
   TableCell,
   TableBody,
   TablePagination,
+  Tabs,
+  Tab,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -46,9 +48,12 @@ import { useHistory } from 'react-router-dom';
 import { fetchGeocode } from '../../../utils/googleGeocode';
 import {
   listarMembros,
+  listarMembrosDuplicados,
   criarMembro,
   atualizarMembro,
-  deletarMembro
+  deletarMembro,
+  fundirMembrosDuplicados,
+  desconsiderarMembrosDuplicados
 } from '../../../api/membersApi';
 
 const ESCOLARIDADE_OPTIONS = [
@@ -195,7 +200,7 @@ const toFormFromMember = (member) => {
     estado: member.state || '',
     country: member.country || 'Brasil',
     cep: member.zipCode || '',
-    cpf: member.cpf || '',
+    cpf: formatCPF(member.cpf || ''),
     rg: member.rg || '',
     data_nascimento: member.birthDate || '',
     gender: member.gender || '',
@@ -273,9 +278,13 @@ const isValidEmail = (email = '') => {
 const MembrosPage = () => {
   const history = useHistory();
   const [members, setMembers] = useState([]);
+  const [duplicateSuggestions, setDuplicateSuggestions] = useState([]);
   const [campi, setCampi] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [duplicatesLoading, setDuplicatesLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [message, setMessage] = useState('');
@@ -286,17 +295,49 @@ const MembrosPage = () => {
   const [updatingMemberId, setUpdatingMemberId] = useState('');
   const [memberEdicao, setMemberEdicao] = useState(null);
   const [showWebcam, setShowWebcam] = useState(false);
+  const [mergingPairKey, setMergingPairKey] = useState('');
+  const [dismissingPairKey, setDismissingPairKey] = useState('');
   const webcamRef = useRef(null);
 
   const loadMembers = async () => {
     setLoading(true);
     try {
-      const response = await listarMembros({ page: 1, limit: 1000 });
-      setMembers(Array.isArray(response?.members) ? response.members : []);
+      const limit = 5000;
+      const firstResponse = await listarMembros({ page: 1, limit });
+      const firstMembers = Array.isArray(firstResponse?.members) ? firstResponse.members : [];
+      const totalPages = Math.max(Number(firstResponse?.totalPages) || 1, 1);
+
+      if (totalPages <= 1) {
+        setMembers(firstMembers);
+        return;
+      }
+
+      const remainingResponses = await Promise.all(
+        Array.from({ length: totalPages - 1 }, (_item, index) => listarMembros({ page: index + 2, limit }))
+      );
+
+      const remainingMembers = remainingResponses.flatMap((response) => (
+        Array.isArray(response?.members) ? response.members : []
+      ));
+
+      setMembers([...firstMembers, ...remainingMembers]);
     } catch (err) {
       setMessage(err.message || 'Erro ao carregar membros');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadDuplicateSuggestions = async () => {
+    setDuplicatesLoading(true);
+    try {
+      const payload = await listarMembrosDuplicados();
+      setDuplicateSuggestions(Array.isArray(payload) ? payload : []);
+    } catch (err) {
+      setDuplicateSuggestions([]);
+      setMessage(err.message || 'Erro ao carregar duplicados');
+    } finally {
+      setDuplicatesLoading(false);
     }
   };
 
@@ -317,6 +358,7 @@ const MembrosPage = () => {
 
   useEffect(() => {
     loadMembers();
+    loadDuplicateSuggestions();
     loadCampi();
   }, []);
 
@@ -326,13 +368,16 @@ const MembrosPage = () => {
 
   const filteredMembers = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return sortedMembers;
     return sortedMembers.filter((member) => {
+      if (statusFilter && member.status !== statusFilter) {
+        return false;
+      }
+      if (!query) return true;
       const name = (member.fullName || '').toLowerCase();
       const email = (member.email || '').toLowerCase();
       return name.includes(query) || email.includes(query);
     });
-  }, [sortedMembers, search]);
+  }, [sortedMembers, search, statusFilter]);
 
   const spouseOptions = useMemo(() => (
     sortedMembers.filter((member) => member.id !== memberEdicao?.id)
@@ -448,6 +493,7 @@ const MembrosPage = () => {
       setDialogOpen(false);
       resetForm();
       await loadMembers();
+      await loadDuplicateSuggestions();
     } catch (error) {
       setMessage(error.message || 'Erro ao salvar membro');
     } finally {
@@ -463,8 +509,45 @@ const MembrosPage = () => {
       await deletarMembro(member.id);
       setMessage('Membro excluido com sucesso');
       await loadMembers();
+      await loadDuplicateSuggestions();
     } catch (error) {
       setMessage(error.message || 'Erro ao excluir membro');
+    }
+  };
+
+  const handleMergeDuplicates = async (suggestion) => {
+    const keepName = suggestion?.olderMember?.fullName || 'Cadastro antigo';
+    const removeName = suggestion?.newerMember?.fullName || 'Cadastro recente';
+    const confirmed = window.confirm(`Fundir "${removeName}" em "${keepName}"?\n\nO cadastro mais antigo sera mantido e o mais recente sera excluido.`);
+    if (!confirmed) return;
+
+    const pairKey = `${suggestion.keepMemberId}:${suggestion.removeMemberId}`;
+    setMergingPairKey(pairKey);
+    setMessage('');
+    try {
+      await fundirMembrosDuplicados(suggestion.keepMemberId, suggestion.removeMemberId);
+      setMessage('Membros fundidos com sucesso');
+      await loadMembers();
+      await loadDuplicateSuggestions();
+    } catch (error) {
+      setMessage(error.message || 'Erro ao fundir membros duplicados');
+    } finally {
+      setMergingPairKey('');
+    }
+  };
+
+  const handleDismissDuplicate = async (suggestion) => {
+    const pairKey = `${suggestion.keepMemberId}:${suggestion.removeMemberId}`;
+    setDismissingPairKey(pairKey);
+    setMessage('');
+    try {
+      await desconsiderarMembrosDuplicados(suggestion.keepMemberId, suggestion.removeMemberId);
+      setDuplicateSuggestions((prev) => prev.filter((item) => `${item.keepMemberId}:${item.removeMemberId}` !== pairKey));
+      setMessage('Sugestao desconsiderada com sucesso');
+    } catch (error) {
+      setMessage(error.message || 'Erro ao desconsiderar sugestao');
+    } finally {
+      setDismissingPairKey('');
     }
   };
 
@@ -531,16 +614,148 @@ const MembrosPage = () => {
         <title>Membros</title>
       </Helmet>
 
-      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" mb={2} spacing={2}>
-        <TextField fullWidth label="Pesquisar por nome ou e-mail" value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} />
-        <Button variant="contained" color="primary" startIcon={<AddIcon />} onClick={handleOpenCreate}>
-          Cadastrar membro
-        </Button>
-      </Stack>
+      <Paper variant="outlined" sx={{ mb: 2 }}>
+        <Tabs
+          value={activeTab}
+          onChange={(_event, nextTab) => setActiveTab(nextTab)}
+          variant="fullWidth"
+        >
+          <Tab label={`Lista de membros (${filteredMembers.length})`} />
+          <Tab label={`Possiveis duplicados (${duplicateSuggestions.length})`} />
+        </Tabs>
+      </Paper>
+
+      {activeTab === 0 && (
+        <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" mb={2} spacing={2}>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ flex: 1 }}>
+            <TextField fullWidth label="Pesquisar por nome ou e-mail" value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} />
+            <TextField
+              select
+              label="Status"
+              value={statusFilter}
+              onChange={(event) => {
+                setStatusFilter(event.target.value);
+                setPage(0);
+              }}
+              sx={{ minWidth: { xs: '100%', md: 220 } }}
+            >
+              <MenuItem value="">Todos</MenuItem>
+              {STATUS_OPTIONS.map((option) => (
+                <MenuItem key={option} value={option}>{option}</MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+          <Button variant="contained" color="primary" startIcon={<AddIcon />} onClick={handleOpenCreate}>
+            Cadastrar membro
+          </Button>
+        </Stack>
+      )}
+
+      {activeTab === 1 && (
+        <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" mb={2} spacing={2}>
+          <Box>
+            <Typography variant="h6">Possiveis dados duplicados</Typography>
+            <Typography variant="body2" color="textSecondary">
+              Comparacao por nome parecido, e-mail, documento e telefone. A fusao mantem o cadastro mais antigo.
+            </Typography>
+          </Box>
+          <Button variant="outlined" onClick={loadDuplicateSuggestions} disabled={duplicatesLoading}>
+            {duplicatesLoading ? 'Analisando duplicados...' : 'Atualizar duplicados'}
+          </Button>
+        </Stack>
+      )}
 
       {message && <Box mb={2}><Typography color="primary">{message}</Typography></Box>}
 
-      <Table size="small">
+      {activeTab === 1 && (
+        <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: 'background.default' }}>
+          <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }} spacing={1.5} mb={duplicateSuggestions.length ? 2 : 0}>
+            <Typography variant="body2" color="textSecondary">
+              Revise cada sugestao antes de fundir. Se desconsiderar, esse par nao volta a aparecer.
+            </Typography>
+            <Chip color={duplicateSuggestions.length ? 'warning' : 'success'} label={duplicateSuggestions.length ? `${duplicateSuggestions.length} sugestoes` : 'Nenhuma sugestao'} />
+          </Stack>
+
+          {duplicatesLoading && (
+            <Box py={2} display="flex" justifyContent="center">
+              <CircularProgress size={22} />
+            </Box>
+          )}
+
+          {!duplicatesLoading && !duplicateSuggestions.length && (
+            <Typography color="textSecondary">Nenhum possivel duplicado encontrado no momento.</Typography>
+          )}
+
+          {!duplicatesLoading && duplicateSuggestions.length > 0 && (
+            <Stack spacing={1.5}>
+              {duplicateSuggestions.map((suggestion) => {
+                const pairKey = `${suggestion.keepMemberId}:${suggestion.removeMemberId}`;
+                return (
+                  <Paper key={pairKey} variant="outlined" sx={{ p: 1.5 }}>
+                    <Grid container spacing={2} alignItems="center">
+                      <Grid item xs={12} md={4}>
+                        <Typography variant="caption" color="textSecondary">Manter cadastro antigo</Typography>
+                        <Stack direction="row" spacing={1.25} alignItems="center" mt={0.5}>
+                          <Avatar src={suggestion.olderMember.photoUrl || ''} alt={suggestion.olderMember.fullName} />
+                          <Box>
+                            <Typography variant="body2" sx={{ fontWeight: 600 }}>{suggestion.olderMember.fullName}</Typography>
+                            <Typography variant="caption" color="textSecondary">
+                              {suggestion.olderMember.email || suggestion.olderMember.phone || suggestion.olderMember.whatsapp || '-'}
+                            </Typography>
+                          </Box>
+                        </Stack>
+                      </Grid>
+                      <Grid item xs={12} md={4}>
+                        <Typography variant="caption" color="textSecondary">Excluir cadastro mais recente</Typography>
+                        <Stack direction="row" spacing={1.25} alignItems="center" mt={0.5}>
+                          <Avatar src={suggestion.newerMember.photoUrl || ''} alt={suggestion.newerMember.fullName} />
+                          <Box>
+                            <Typography variant="body2" sx={{ fontWeight: 600 }}>{suggestion.newerMember.fullName}</Typography>
+                            <Typography variant="caption" color="textSecondary">
+                              {suggestion.newerMember.email || suggestion.newerMember.phone || suggestion.newerMember.whatsapp || '-'}
+                            </Typography>
+                          </Box>
+                        </Stack>
+                      </Grid>
+                      <Grid item xs={12} md={2}>
+                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                          {suggestion.reasons.map((reason) => (
+                            <Chip key={`${pairKey}-${reason.type}`} size="small" variant="outlined" label={reason.label} />
+                          ))}
+                        </Stack>
+                      </Grid>
+                      <Grid item xs={12} md={2}>
+                        <Stack spacing={1}>
+                          <Button
+                            fullWidth
+                            variant="contained"
+                            color="warning"
+                            onClick={() => handleMergeDuplicates(suggestion)}
+                            disabled={mergingPairKey === pairKey || dismissingPairKey === pairKey}
+                          >
+                            {mergingPairKey === pairKey ? 'Fundindo...' : 'Fundir'}
+                          </Button>
+                          <Button
+                            fullWidth
+                            variant="text"
+                            color="inherit"
+                            onClick={() => handleDismissDuplicate(suggestion)}
+                            disabled={dismissingPairKey === pairKey || mergingPairKey === pairKey}
+                          >
+                            {dismissingPairKey === pairKey ? 'Desconsiderando...' : 'Desconsiderar'}
+                          </Button>
+                        </Stack>
+                      </Grid>
+                    </Grid>
+                  </Paper>
+                );
+              })}
+            </Stack>
+          )}
+        </Paper>
+      )}
+
+      {activeTab === 0 && <Table size="small">
         <TableHead>
           <TableRow>
             <TableCell />
@@ -579,9 +794,9 @@ const MembrosPage = () => {
           {!pagedMembers.length && !loading && <TableRow><TableCell colSpan={6}><Typography color="textSecondary">Nenhum membro encontrado.</Typography></TableCell></TableRow>}
           {loading && <TableRow><TableCell colSpan={6}><Box display="flex" justifyContent="center" py={2}><CircularProgress size={24} /></Box></TableCell></TableRow>}
         </TableBody>
-      </Table>
+      </Table>}
 
-      <TablePagination
+      {activeTab === 0 && <TablePagination
         component="div"
         count={filteredMembers.length}
         page={page}
@@ -592,7 +807,7 @@ const MembrosPage = () => {
           setPage(0);
         }}
         rowsPerPageOptions={[5, 10, 20]}
-      />
+      />}
 
       <Dialog fullWidth maxWidth="lg" open={dialogOpen} onClose={() => setDialogOpen(false)}>
         <DialogTitle>{memberEdicao ? 'Editar membro' : 'Cadastrar membro'}</DialogTitle>

@@ -331,7 +331,7 @@ function EventDetails() {
       setLoteEdicao(lote);
       setFormLote({
         name: lote.name,
-        price: lote.price,
+        price: evento?.requiresPayment === false ? '0' : String(lote.price ?? ''),
         maxQuantity: lote.maxQuantity || '',
         startDate: lote.startDate ? lote.startDate.substring(0, 16) : '',
         endDate: lote.endDate ? lote.endDate.substring(0, 16) : '',
@@ -342,7 +342,7 @@ function EventDetails() {
       setLoteEdicao(null);
       setFormLote({
         name: '',
-        price: '',
+        price: evento?.requiresPayment === false ? '0' : '',
         maxQuantity: '',
         startDate: '',
         endDate: '',
@@ -363,7 +363,7 @@ function EventDetails() {
       const dados = {
         ...formLote,
         eventId: id,
-        price: parseFloat(formLote.price),
+        price: evento?.requiresPayment === false ? 0 : parseFloat(formLote.price),
         maxQuantity: formLote.maxQuantity ? parseInt(formLote.maxQuantity, 10) : null,
         order: formLote.order ? parseInt(formLote.order, 10) : 0
       };
@@ -547,6 +547,7 @@ function EventDetails() {
       pix: { label: 'PIX', icon: <AttachMoneyIcon fontSize="small" /> },
       boleto: { label: 'Boleto', icon: <ReceiptLongIcon fontSize="small" /> },
       offline: { label: 'Presencial', icon: <StoreIcon fontSize="small" /> },
+      free: { label: 'Inscricao gratuita', icon: <AttachMoneyIcon fontSize="small" /> },
       manual: { label: 'Manual', icon: <StoreIcon fontSize="small" /> }
     }[method] || { label: traduzirTipoPagamento(method), icon: <CreditCardIcon fontSize="small" /> };
 
@@ -612,6 +613,7 @@ function EventDetails() {
     const numero = Number(valor) || 0;
     return `R$ ${numero.toFixed(2).replace('.', ',')}`;
   };
+  const isFreeEvent = evento?.requiresPayment === false;
 
   const handleFilterChange = (field, value) => {
     setFilters(prev => ({ ...prev, [field]: value }));
@@ -1671,92 +1673,102 @@ function EventDetails() {
 
         {/* Tab Formas de Pagamento */}
         <TabPanel value={tabAtiva} index={3}>
-          <div style={{ marginBottom: 16 }}>
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<AddIcon />}
-              onClick={() => handleAbrirDialogPagamento()}
-            >
-              Adicionar Forma de Pagamento
-            </Button>
-          </div>
-
-          {formasLoading ? (
-            <TableContainer sx={paymentMethodsTableContainerSx}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell> </TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {skeletonRows}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          ) : formasPagamento.length === 0 ? (
-            <Typography variant="body2" color="textSecondary">
-              Nenhuma forma de pagamento configurada ainda.
-            </Typography>
+          {isFreeEvent ? (
+            <Box sx={{ p: 2, borderRadius: 2, bgcolor: 'action.hover' }}>
+              <Typography variant="body2" color="textSecondary">
+                Evento gratuito: a inscricao e confirmada sem configuracao de formas de pagamento.
+              </Typography>
+            </Box>
           ) : (
-            <TableContainer sx={paymentMethodsTableContainerSx}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Tipo</TableCell>
-                    <TableCell>Parcelas</TableCell>
-                    <TableCell>Juros</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell align="right">Ações</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {formasPagamento.map((pagamento) => (
-                    <TableRow key={pagamento.id}>
-                      <TableCell>{traduzirTipoPagamento(pagamento.paymentType)}</TableCell>
-                      <TableCell>
-                        {pagamento.paymentType === 'credit_card'
-                          ? `Até ${pagamento.maxInstallments}x`
-                          : pagamento.paymentType === 'offline'
-                            ? 'Presencial'
-                            : 'À vista'}
-                      </TableCell>
-                      <TableCell>
-                        {pagamento.paymentType === 'credit_card'
-                          ? formatarJurosParcelados(pagamento)
-                          : 'Sem juros'}
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={pagamento.isActive ? 'Ativo' : 'Inativo'}
-                          color={pagamento.isActive ? 'primary' : 'default'}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        <Tooltip title="Editar">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleAbrirDialogPagamento(pagamento)}
-                          >
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Deletar">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleDeletarPagamento(pagamento.id, traduzirTipoPagamento(pagamento.paymentType))}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+            <>
+              <div style={{ marginBottom: 16 }}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  startIcon={<AddIcon />}
+                  onClick={() => handleAbrirDialogPagamento()}
+                >
+              Adicionar Forma de Pagamento
+                </Button>
+              </div>
+
+              {formasLoading ? (
+                <TableContainer sx={paymentMethodsTableContainerSx}>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell> </TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {skeletonRows}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              ) : formasPagamento.length === 0 ? (
+                <Typography variant="body2" color="textSecondary">
+              Nenhuma forma de pagamento configurada ainda.
+                </Typography>
+              ) : (
+                <TableContainer sx={paymentMethodsTableContainerSx}>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Tipo</TableCell>
+                        <TableCell>Parcelas</TableCell>
+                        <TableCell>Juros</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell align="right">Ações</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {formasPagamento.map((pagamento) => (
+                        <TableRow key={pagamento.id}>
+                          <TableCell>{traduzirTipoPagamento(pagamento.paymentType)}</TableCell>
+                          <TableCell>
+                            {pagamento.paymentType === 'credit_card'
+                              ? `Até ${pagamento.maxInstallments}x`
+                              : pagamento.paymentType === 'offline'
+                                ? 'Presencial'
+                                : 'À vista'}
+                          </TableCell>
+                          <TableCell>
+                            {pagamento.paymentType === 'credit_card'
+                              ? formatarJurosParcelados(pagamento)
+                              : 'Sem juros'}
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={pagamento.isActive ? 'Ativo' : 'Inativo'}
+                              color={pagamento.isActive ? 'primary' : 'default'}
+                              size="small"
+                            />
+                          </TableCell>
+                          <TableCell align="right">
+                            <Tooltip title="Editar">
+                              <IconButton
+                                size="small"
+                                onClick={() => handleAbrirDialogPagamento(pagamento)}
+                              >
+                                <EditIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Deletar">
+                              <IconButton
+                                size="small"
+                                onClick={() => handleDeletarPagamento(pagamento.id, traduzirTipoPagamento(pagamento.paymentType))}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
+            </>
           )}
         </TabPanel>
       </Card>
@@ -1792,7 +1804,9 @@ function EventDetails() {
                 label="Preço (R$)"
                 value={formLote.price}
                 onChange={(e) => setFormLote({ ...formLote, price: e.target.value })}
+                disabled={isFreeEvent}
                 inputProps={{ step: '0.01', min: '0' }}
+                helperText={isFreeEvent ? 'Evento gratuito: o lote permanece em R$ 0,00' : ''}
               />
             </Grid>
             <Grid item xs={12} sm={6}>

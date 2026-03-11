@@ -4,6 +4,9 @@ const memberController = require('../controllers/memberController');
 const router = express.Router();
 
 router.get('/stats', memberController.stats);
+router.get('/duplicates', memberController.listPossibleDuplicates);
+router.post('/duplicates/merge', memberController.mergeDuplicates);
+router.post('/duplicates/dismiss', memberController.dismissDuplicate);
 router.get('/activity-types', memberController.listActivityTypes);
 router.post('/activity-types', memberController.createActivityType);
 router.put('/activity-types/:typeId', memberController.updateActivityType);

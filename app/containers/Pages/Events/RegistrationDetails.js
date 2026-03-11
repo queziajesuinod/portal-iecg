@@ -344,6 +344,7 @@ function RegistrationDetails() {
       cash: 'Dinheiro',
       pos: 'Maquininha',
       transfer: 'Transferência',
+      free: 'Inscricao gratuita',
       manual: 'Manual'
     };
     return labels[metodo] || metodo;
@@ -541,7 +542,11 @@ function RegistrationDetails() {
                     <TableRow>
                       <TableCell><strong>Modo:</strong></TableCell>
                       <TableCell>
-                        {inscricao.event?.registrationPaymentMode === 'BALANCE_DUE' ? 'Pagamento parcial' : 'Pagamento unico'}
+                        {inscricao.event?.requiresPayment === false
+                          ? 'Evento gratuito'
+                          : inscricao.event?.registrationPaymentMode === 'BALANCE_DUE'
+                            ? 'Pagamento parcial'
+                            : 'Pagamento unico'}
                       </TableCell>
                     </TableRow>
                     <TableRow>

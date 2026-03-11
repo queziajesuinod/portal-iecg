@@ -63,6 +63,14 @@ module.exports = (sequelize) => {
       type: DataTypes.JSONB,
       allowNull: true
     },
+    startDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: true
+    },
+    endDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: true
+    },
     dueDate: {
       type: DataTypes.DATE,
       allowNull: true
