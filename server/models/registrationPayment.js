@@ -70,6 +70,14 @@ module.exports = (sequelize) => {
       type: DataTypes.TEXT,
       allowNull: true
     },
+    pixTransactionId: {
+      type: DataTypes.STRING(100),
+      allowNull: true
+    },
+    pixEndToEndId: {
+      type: DataTypes.STRING(120),
+      allowNull: true
+    },
     installments: {
       type: DataTypes.INTEGER,
       allowNull: true

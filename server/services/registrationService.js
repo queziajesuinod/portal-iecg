@@ -333,17 +333,37 @@ async function sincronizarPagamentosCielo(registration, options = {}) {
     }
 
     const novoStatus = paymentService.mapearStatusCielo(consulta.status);
-    if (novoStatus === payment.status) {
+    const qrCodePix = paymentService.extrairPixQrCode(consulta.dadosCompletos);
+    const houveMudancaPix = (
+      (consulta.pixTransactionId && consulta.pixTransactionId !== payment.pixTransactionId)
+      || (consulta.pixEndToEndId && consulta.pixEndToEndId !== payment.pixEndToEndId)
+      || (qrCodePix.qrCodeString && qrCodePix.qrCodeString !== payment.pixQrCode)
+      || (qrCodePix.qrCodeBase64 && qrCodePix.qrCodeBase64 !== payment.pixQrCodeBase64)
+    );
+
+    if (novoStatus === payment.status && !houveMudancaPix) {
       return;
     }
 
     payment.status = novoStatus;
     payment.providerPayload = consulta.dadosCompletos || payment.providerPayload;
+    payment.pixQrCode = qrCodePix.qrCodeString || payment.pixQrCode;
+    payment.pixQrCodeBase64 = qrCodePix.qrCodeBase64 || payment.pixQrCodeBase64;
+    payment.pixTransactionId = consulta.pixTransactionId || payment.pixTransactionId;
+    payment.pixEndToEndId = consulta.pixEndToEndId || payment.pixEndToEndId;
     if (novoStatus === 'confirmed' && !payment.confirmedAt) {
       payment.confirmedAt = new Date();
     }
 
     await payment.save({ transaction: options.transaction });
+    if (registration.paymentId === payment.providerPaymentId) {
+      registration.cieloResponse = consulta.dadosCompletos || registration.cieloResponse;
+      registration.pixQrCode = qrCodePix.qrCodeString || registration.pixQrCode;
+      registration.pixQrCodeBase64 = qrCodePix.qrCodeBase64 || registration.pixQrCodeBase64;
+      registration.pixTransactionId = consulta.pixTransactionId || registration.pixTransactionId;
+      registration.pixEndToEndId = consulta.pixEndToEndId || registration.pixEndToEndId;
+      await registration.save({ transaction: options.transaction });
+    }
     await atualizarTransacoesCielo(payment.providerPaymentId, consulta, options);
     console.info(`[registrationService] PIX ${payment.providerPaymentId} atualizado para ${novoStatus}`);
   }));
@@ -582,7 +602,9 @@ async function processarInscricao(dadosInscricao) {
       paymentMethod,
       cieloResponse: null,
       pixQrCode: null,
-      pixQrCodeBase64: null
+      pixQrCodeBase64: null,
+      pixTransactionId: null,
+      pixEndToEndId: null
     });
 
     const attendeesPromises = attendeesData.map((attendee, index) => RegistrationAttendee.create({
@@ -757,7 +779,9 @@ async function processarInscricao(dadosInscricao) {
     cieloResponse: resultadoPagamento.dadosCompletos,
     // Dados específicos do PIX
     pixQrCode: resultadoPagamento.qrCodeString || null,
-    pixQrCodeBase64: resultadoPagamento.qrCodeBase64 || null
+    pixQrCodeBase64: resultadoPagamento.qrCodeBase64 || null,
+    pixTransactionId: resultadoPagamento.pixTransactionId || null,
+    pixEndToEndId: resultadoPagamento.pixEndToEndId || null
   });
 
   // 10. Criar registros dos inscritos com seus respectivos lotes
@@ -800,6 +824,8 @@ async function processarInscricao(dadosInscricao) {
       : { originalStatus: resultadoPagamento.status },
     pixQrCode: resultadoPagamento.qrCodeString || null,
     pixQrCodeBase64: resultadoPagamento.qrCodeBase64 || null,
+    pixTransactionId: resultadoPagamento.pixTransactionId || null,
+    pixEndToEndId: resultadoPagamento.pixEndToEndId || null,
     installments: paymentOption.paymentType === 'credit_card' ? parcelas : null,
     cardBrand: paymentOption.paymentType === 'credit_card'
       ? extrairBandeiraPagamento({
@@ -1350,6 +1376,8 @@ async function criarPagamentoOnline(registrationId, payload = {}) {
       : { originalStatus: resultadoPagamento.status },
     pixQrCode: resultadoPagamento.qrCodeString || null,
     pixQrCodeBase64: resultadoPagamento.qrCodeBase64 || null,
+    pixTransactionId: resultadoPagamento.pixTransactionId || null,
+    pixEndToEndId: resultadoPagamento.pixEndToEndId || null,
     installments: paymentOption.paymentType === 'credit_card' ? parcelas : null,
     cardBrand: paymentOption.paymentType === 'credit_card'
       ? extrairBandeiraPagamento({

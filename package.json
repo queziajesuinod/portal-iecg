@@ -40,6 +40,8 @@
     "backfill:inscritos-sales-to-members": "node ./server/scripts/backfillInscritosSalesToMembers.js",
     "backfill:card-brand": "node ./server/scripts/backfillRegistrationPaymentCardBrand.js",
     "backfill:cancelled-payments": "node ./server/scripts/backfillCancelledRegistrationPayments.js",
+    "backfill:pix-identifiers": "node ./server/scripts/backfillPixIdentifiers.js",
+    "backfill:pix-identifiers:cielo": "node ./server/scripts/backfillPixIdentifiersFromCielo.js",
     "migrate:celula-leaders": "node ./server/scripts/migrateCelulaLeaders.js",
     "lint": "npm run lint:js && npm run lint:css",
     "lint:css": "stylelint app/**/*.js",

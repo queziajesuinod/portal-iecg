@@ -112,6 +112,16 @@ module.exports = (sequelize) => {
       allowNull: true,
       comment: 'QR Code PIX em base64 para exibição'
     },
+    pixTransactionId: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+      comment: 'txid retornado pela integracao Pix da Cielo'
+    },
+    pixEndToEndId: {
+      type: DataTypes.STRING(120),
+      allowNull: true,
+      comment: 'EndToEndId retornado pela integracao Pix da Cielo'
+    },
   }, {
     sequelize,
     modelName: 'Registration',
