@@ -6,6 +6,15 @@ const { PaymentTransaction } = require('../models');
 const CIELO_MERCHANT_ID = process.env.CIELO_MERCHANT_ID || '';
 const CIELO_MERCHANT_KEY = process.env.CIELO_MERCHANT_KEY || '';
 const CIELO_ENVIRONMENT = process.env.CIELO_ENVIRONMENT || 'sandbox'; // 'sandbox' ou 'production'
+const CIELO_PIX_PROVIDER = process.env.CIELO_PIX_PROVIDER || 'Cielo2';
+const parsedPixQrCodeExpiration = Number(
+  process.env.CIELO_PIX_QRCODE_EXPIRATION
+  || process.env.CIELO_PIX_QRCODE_EXPIRATION_SECONDS
+  || 7200
+);
+const CIELO_PIX_QRCODE_EXPIRATION = Number.isFinite(parsedPixQrCodeExpiration) && parsedPixQrCodeExpiration > 0
+  ? parsedPixQrCodeExpiration
+  : 7200;
 
 const CIELO_ENDPOINTS = {
   sandbox: 'https://apisandbox.cieloecommerce.cielo.com.br',
@@ -19,6 +28,7 @@ const CIELO_QUERY_ENDPOINTS = {
 
 const BASE_URL = CIELO_ENDPOINTS[CIELO_ENVIRONMENT];
 const QUERY_BASE_URL = CIELO_QUERY_ENDPOINTS[CIELO_ENVIRONMENT];
+let pixEnvironmentWarningLogged = false;
 
 function logCielo(message, payload = {}) {
   console.info(`[Cielo] ${message}`, JSON.stringify(payload));
@@ -95,18 +105,82 @@ function montarCustomer(dadosPagamento) {
   };
 }
 
+function obterPayloadNormalizado(payload = {}) {
+  if (!payload) {
+    return null;
+  }
+
+  let parsedPayload = payload;
+  if (typeof payload === 'string') {
+    try {
+      parsedPayload = JSON.parse(payload);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  if (!parsedPayload || typeof parsedPayload !== 'object') {
+    return null;
+  }
+
+  if (parsedPayload?.dadosCompletos && typeof parsedPayload.dadosCompletos === 'object') {
+    return parsedPayload.dadosCompletos;
+  }
+
+  if (parsedPayload?.responseData && typeof parsedPayload.responseData === 'object') {
+    return parsedPayload.responseData;
+  }
+
+  return parsedPayload;
+}
+
+function extrairPixQrCode(payload = {}) {
+  const root = obterPayloadNormalizado(payload);
+  const payment = root?.Payment || {};
+
+  return {
+    qrCodeString: payment.QrCodeString || root?.QrCodeString || null,
+    qrCodeBase64: payment.QrCodeBase64Image || root?.QrCodeBase64Image || null
+  };
+}
+
+function extrairPixIdentifiers(payload = {}) {
+  const root = obterPayloadNormalizado(payload);
+  const payment = root?.Payment || {};
+
+  return {
+    paymentId: payment.PaymentId || root?.PaymentId || root?.paymentId || null,
+    merchantOrderId: root?.MerchantOrderId || payment?.MerchantOrderId || null,
+    txid: payment.AcquirerOrderId || payment.SentOrderId || root?.AcquirerOrderId || root?.SentOrderId || root?.txid || null,
+    endToEndId: payment.EndToEndId || root?.EndToEndId || payment.AuthorizationCode || root?.AuthorizationCode || null,
+    provider: payment.Provider || root?.Provider || null
+  };
+}
+
+function registrarAvisoPixSandbox() {
+  if (pixEnvironmentWarningLogged || CIELO_ENVIRONMENT !== 'sandbox' || CIELO_PIX_PROVIDER !== 'Cielo2') {
+    return;
+  }
+
+  pixEnvironmentWarningLogged = true;
+  console.warn('[Cielo] Pix configurado com Provider Cielo2 em sandbox. A documentacao oficial informa que a nova integracao Pix nao possui sandbox.');
+}
+
 /**
  * Criar transação PIX na Cielo
  */
 async function criarTransacaoPix(dadosPagamento) {
   const { merchantOrderId, amount } = dadosPagamento;
   const customer = montarCustomer(dadosPagamento);
+  registrarAvisoPixSandbox();
   logCielo('PIX request', {
     merchantOrderId,
     customerName: customer.name,
     customerEmail: customer.email,
     customerDocument: customer.document,
-    amount
+    amount,
+    provider: CIELO_PIX_PROVIDER,
+    qrCodeExpiration: CIELO_PIX_QRCODE_EXPIRATION
   });
 
   const payload = {
@@ -119,7 +193,11 @@ async function criarTransacaoPix(dadosPagamento) {
     },
     Payment: {
       Type: 'Pix',
-      Amount: amount
+      Provider: CIELO_PIX_PROVIDER,
+      Amount: amount,
+      QrCode: {
+        Expiration: CIELO_PIX_QRCODE_EXPIRATION
+      }
     }
   };
 
@@ -136,19 +214,26 @@ async function criarTransacaoPix(dadosPagamento) {
       }
     );
 
+    const identificadoresPix = extrairPixIdentifiers(response.data);
+    const qrCodePix = extrairPixQrCode(response.data);
+
     logCielo('PIX response', {
-      paymentId: response.data.Payment.PaymentId,
+      paymentId: identificadoresPix.paymentId,
       status: response.data.Payment.Status,
-      qrCodeString: response.data.Payment.QrCodeString,
-      qrCodeBase64: response.data.Payment.QrCodeBase64Image
+      txid: identificadoresPix.txid,
+      endToEndId: identificadoresPix.endToEndId,
+      qrCodeString: qrCodePix.qrCodeString,
+      qrCodeBase64: qrCodePix.qrCodeBase64
     });
 
     return {
       sucesso: true,
-      paymentId: response.data.Payment.PaymentId,
+      paymentId: identificadoresPix.paymentId,
       status: response.data.Payment.Status,
-      qrCodeBase64: response.data.Payment.QrCodeBase64Image,
-      qrCodeString: response.data.Payment.QrCodeString,
+      qrCodeBase64: qrCodePix.qrCodeBase64,
+      qrCodeString: qrCodePix.qrCodeString,
+      pixTransactionId: identificadoresPix.txid,
+      pixEndToEndId: identificadoresPix.endToEndId,
       dadosCompletos: response.data
     };
   } catch (error) {
@@ -401,9 +486,14 @@ async function consultarPagamento(paymentId) {
       }
     );
 
+    const identificadoresPix = extrairPixIdentifiers(response.data);
+
     return {
       sucesso: true,
+      paymentId: identificadoresPix.paymentId || paymentId,
       status: response.data.Payment.Status,
+      pixTransactionId: identificadoresPix.txid,
+      pixEndToEndId: identificadoresPix.endToEndId,
       dadosCompletos: response.data
     };
   } catch (error) {
@@ -425,12 +515,13 @@ async function consultarPagamento(paymentId) {
  * Registrar transação no banco de dados
  */
 async function registrarTransacao(registrationId, tipo, status, dados) {
+  const identificadoresPix = extrairPixIdentifiers(dados);
   return PaymentTransaction.create({
     id: uuid.v4(),
     registrationId,
     transactionType: tipo,
     status,
-    cieloPaymentId: dados.paymentId || null,
+    cieloPaymentId: dados.paymentId || identificadoresPix.paymentId || null,
     amount: dados.amount || null,
     responseData: dados.dadosCompletos || null,
     errorMessage: dados.erro || null
@@ -464,6 +555,7 @@ function mapearStatusCielo(statusCielo) {
       notfinished: 'pending',
       authorized: 'authorized',
       paymentconfirmed: 'confirmed',
+      paid: 'confirmed',
       denied: 'denied',
       voided: 'cancelled',
       refunded: 'refunded',
@@ -610,5 +702,7 @@ module.exports = {
   converterParaReais,
   detectarBandeira,
   normalizeCardBrand,
-  extrairBandeiraCartao
+  extrairBandeiraCartao,
+  extrairPixIdentifiers,
+  extrairPixQrCode
 };

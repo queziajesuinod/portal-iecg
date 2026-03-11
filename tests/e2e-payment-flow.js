@@ -1,21 +1,19 @@
 /**
  * Script de Teste E2E - Fluxo Completo de Pagamento PIX
- * 
+ *
  * Este script testa o fluxo completo:
  * 1. Criar evento com formas de pagamento
- * 2. Criar inscrição com PIX
+ * 2. Criar inscricao com PIX
  * 3. Simular webhook Cielo
- * 4. Verificar atualização de status
+ * 4. Verificar atualizacao de status e identificadores Pix
  */
 
 const axios = require('axios');
 const chalk = require('chalk');
 
-// Configuração
 const API_URL = process.env.API_URL || 'http://localhost:3005';
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || ''; // Token de autenticação admin
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 
-// Cliente HTTP
 const api = axios.create({
   baseURL: API_URL,
   headers: {
@@ -23,32 +21,29 @@ const api = axios.create({
   }
 });
 
-// Cliente autenticado (admin)
 const adminApi = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${ADMIN_TOKEN}`
+    Authorization: `Bearer ${ADMIN_TOKEN}`
   }
 });
 
-// Utilitários
 const log = {
-  info: (msg) => console.log(chalk.blue('ℹ️ '), msg),
-  success: (msg) => console.log(chalk.green('✅'), msg),
-  error: (msg) => console.log(chalk.red('❌'), msg),
-  warning: (msg) => console.log(chalk.yellow('⚠️ '), msg),
-  step: (num, msg) => console.log(chalk.cyan(`\n📍 Etapa ${num}:`), chalk.bold(msg))
+  info: (msg) => console.log(chalk.blue('[info]'), msg),
+  success: (msg) => console.log(chalk.green('[ok]'), msg),
+  error: (msg) => console.log(chalk.red('[erro]'), msg),
+  warning: (msg) => console.log(chalk.yellow('[aviso]'), msg),
+  step: (num, msg) => console.log(chalk.cyan(`\n[etapa ${num}]`), chalk.bold(msg))
 };
 
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Dados de teste
 const testData = {
   event: {
     title: `Evento Teste E2E - ${Date.now()}`,
     description: 'Evento criado automaticamente para teste E2E',
-    startDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // +30 dias
+    startDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     endDate: new Date(Date.now() + 31 * 24 * 60 * 60 * 1000).toISOString(),
     location: 'Local de Teste',
     maxRegistrations: 100,
@@ -56,8 +51,8 @@ const testData = {
     isActive: true
   },
   batch: {
-    name: 'Lote Único',
-    price: 100.00,
+    name: 'Lote Unico',
+    price: 100.0,
     maxQuantity: 50,
     startDate: new Date().toISOString(),
     endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
@@ -72,29 +67,31 @@ const testData = {
   },
   registration: {
     buyerData: {
-      nome: 'João da Silva',
+      nome: 'Joao da Silva',
       email: 'joao.teste@example.com',
       cpf: '12345678901',
       telefone: '11999999999'
     },
     attendeesData: [
       {
-        nome: 'João da Silva',
+        nome: 'Joao da Silva',
         email: 'joao.teste@example.com'
       }
     ]
   }
 };
 
-// Variáveis globais do teste
-let eventId, batchId, paymentOptionId, orderCode, paymentId;
+let eventId;
+let batchId;
+let paymentOptionId;
+let orderCode;
+let paymentId;
+let pixTransactionId;
+let pixEndToEndId;
 
-/**
- * Etapa 1: Criar Evento
- */
 async function criarEvento() {
   log.step(1, 'Criando evento de teste');
-  
+
   try {
     const response = await adminApi.post('/api/admin/events', testData.event);
     eventId = response.data.id;
@@ -106,12 +103,9 @@ async function criarEvento() {
   }
 }
 
-/**
- * Etapa 2: Criar Lote
- */
 async function criarLote() {
   log.step(2, 'Criando lote do evento');
-  
+
   try {
     const response = await adminApi.post(`/api/admin/events/${eventId}/batches`, {
       ...testData.batch,
@@ -126,12 +120,9 @@ async function criarLote() {
   }
 }
 
-/**
- * Etapa 3: Configurar Forma de Pagamento PIX
- */
 async function configurarPagamentoPix() {
   log.step(3, 'Configurando forma de pagamento PIX');
-  
+
   try {
     const response = await adminApi.post(`/api/admin/events/${eventId}/payment-options`, {
       ...testData.paymentOption,
@@ -146,12 +137,9 @@ async function configurarPagamentoPix() {
   }
 }
 
-/**
- * Etapa 4: Criar Inscrição com PIX
- */
 async function criarInscricao() {
-  log.step(4, 'Criando inscrição com pagamento PIX');
-  
+  log.step(4, 'Criando inscricao com pagamento PIX');
+
   try {
     const response = await api.post('/api/public/events/register', {
       eventId,
@@ -162,14 +150,14 @@ async function criarInscricao() {
       paymentOptionId,
       paymentData: {}
     });
-    
+
     orderCode = response.data.orderCode;
-    log.success(`Inscrição criada com código: ${orderCode}`);
+    log.success(`Inscricao criada com codigo: ${orderCode}`);
     log.info(`Status inicial: ${response.data.registration.paymentStatus}`);
-    
+
     return true;
   } catch (error) {
-    log.error(`Erro ao criar inscrição: ${error.response?.data?.message || error.message}`);
+    log.error(`Erro ao criar inscricao: ${error.response?.data?.message || error.message}`);
     if (error.response?.data) {
       console.log(JSON.stringify(error.response.data, null, 2));
     }
@@ -177,66 +165,64 @@ async function criarInscricao() {
   }
 }
 
-/**
- * Etapa 5: Consultar Inscrição
- */
 async function consultarInscricao() {
-  log.step(5, 'Consultando dados da inscrição');
-  
+  log.step(5, 'Consultando dados da inscricao');
+
   try {
     const response = await api.get(`/api/public/events/registrations/${orderCode}`);
     const registration = response.data;
-    
+
     paymentId = registration.paymentId;
-    
-    log.success('Dados da inscrição:');
+    pixTransactionId = registration.pixTransactionId || null;
+    pixEndToEndId = registration.pixEndToEndId || null;
+
+    log.success('Dados da inscricao:');
     console.log({
       orderCode: registration.orderCode,
       paymentStatus: registration.paymentStatus,
       paymentMethod: registration.paymentMethod,
       finalPrice: registration.finalPrice,
       paymentId: registration.paymentId,
-      pixQrCode: registration.pixQrCode ? '✅ Gerado' : '❌ Não gerado'
+      pixTransactionId: registration.pixTransactionId || '(nao retornado ainda)',
+      pixEndToEndId: registration.pixEndToEndId || '(nao retornado ainda)',
+      pixQrCode: registration.pixQrCode ? 'gerado' : 'nao gerado'
     });
-    
+
     return true;
   } catch (error) {
-    log.error(`Erro ao consultar inscrição: ${error.response?.data?.message || error.message}`);
+    log.error(`Erro ao consultar inscricao: ${error.response?.data?.message || error.message}`);
     return false;
   }
 }
 
-/**
- * Etapa 6: Simular Webhook Cielo
- */
 async function simularWebhook() {
   log.step(6, 'Simulando webhook da Cielo');
-  
+
   if (!paymentId) {
-    log.warning('PaymentId não disponível, gerando mock');
+    log.warning('PaymentId nao disponivel, gerando mock');
     paymentId = `mock-payment-${Date.now()}`;
   }
-  
+
   try {
     const webhookPayload = {
       PaymentId: paymentId,
-      ChangeType: 1, // Mudança de status
+      ChangeType: 1,
       MerchantOrderId: orderCode
     };
-    
+
     log.info('Payload do webhook:');
     console.log(JSON.stringify(webhookPayload, null, 2));
-    
+
     const response = await api.post('/api/webhooks/cielo', webhookPayload);
-    
-    log.success('Webhook processado com sucesso!');
+
+    log.success('Webhook processado com sucesso');
     console.log({
       success: response.data.success,
       message: response.data.message,
       orderCode: response.data.orderCode,
       status: response.data.status
     });
-    
+
     return true;
   } catch (error) {
     log.error(`Erro ao processar webhook: ${error.response?.data?.message || error.message}`);
@@ -247,78 +233,85 @@ async function simularWebhook() {
   }
 }
 
-/**
- * Etapa 7: Verificar Atualização de Status
- */
 async function verificarStatus() {
-  log.step(7, 'Verificando atualização de status');
-  
-  // Aguardar um pouco para garantir que o webhook foi processado
+  log.step(7, 'Verificando atualizacao de status');
+
   await sleep(1000);
-  
+
   try {
     const response = await api.get(`/api/public/events/registrations/${orderCode}`);
     const registration = response.data;
-    
+
+    if (registration.pixTransactionId) {
+      pixTransactionId = registration.pixTransactionId;
+    }
+    if (registration.pixEndToEndId) {
+      pixEndToEndId = registration.pixEndToEndId;
+    }
+
     log.info(`Status atual: ${registration.paymentStatus}`);
-    
+    console.log({
+      paymentStatus: registration.paymentStatus,
+      paymentId: registration.paymentId,
+      pixTransactionId: pixTransactionId || '(nao retornado ainda)',
+      pixEndToEndId: pixEndToEndId || '(nao retornado ainda)'
+    });
+
     if (registration.paymentStatus === 'confirmed') {
-      log.success('✅ Status atualizado corretamente para "confirmed"!');
+      log.success('Status atualizado corretamente para confirmed');
       return true;
-    } else if (registration.paymentStatus === 'pending') {
-      log.warning('⚠️  Status ainda está "pending" (webhook pode não ter sido processado)');
-      return false;
-    } else {
-      log.error(`❌ Status inesperado: ${registration.paymentStatus}`);
+    }
+
+    if (registration.paymentStatus === 'pending' && (registration.pixTransactionId || registration.pixEndToEndId)) {
+      log.warning('Status ainda esta pending, mas os identificadores Pix foram persistidos.');
+      return true;
+    }
+
+    if (registration.paymentStatus === 'pending') {
+      log.warning('Status ainda esta pending e os identificadores Pix nao apareceram.');
       return false;
     }
+
+    log.error(`Status inesperado: ${registration.paymentStatus}`);
+    return false;
   } catch (error) {
     log.error(`Erro ao verificar status: ${error.response?.data?.message || error.message}`);
     return false;
   }
 }
 
-/**
- * Limpeza: Deletar dados de teste (opcional)
- */
 async function limparDadosTeste() {
-  log.step(8, 'Limpando dados de teste (opcional)');
-  
+  log.step(8, 'Limpando dados de teste');
+
   try {
-    // Desativar evento ao invés de deletar
     await adminApi.patch(`/api/admin/events/${eventId}`, {
       isActive: false,
-      title: `[TESTE CONCLUÍDO] ${testData.event.title}`
+      title: `[TESTE CONCLUIDO] ${testData.event.title}`
     });
     log.success('Evento desativado');
     return true;
   } catch (error) {
-    log.warning('Não foi possível limpar dados de teste');
+    log.warning('Nao foi possivel limpar dados de teste');
     return false;
   }
 }
 
-/**
- * Executar todos os testes
- */
 async function executarTestes() {
-  console.log(chalk.bold.cyan('\n🧪 TESTE E2E - FLUXO DE PAGAMENTO PIX\n'));
+  console.log(chalk.bold.cyan('\nTESTE E2E - FLUXO DE PAGAMENTO PIX\n'));
   console.log(chalk.gray('='.repeat(60)));
-  
+
   const results = {
     total: 7,
     passed: 0,
     failed: 0
   };
-  
-  // Verificar configuração
+
   if (!ADMIN_TOKEN) {
-    log.error('ADMIN_TOKEN não configurado!');
-    log.info('Execute: export ADMIN_TOKEN="seu_token_aqui"');
+    log.error('ADMIN_TOKEN nao configurado');
+    log.info('Execute: $env:ADMIN_TOKEN="seu_token_aqui"');
     process.exit(1);
   }
-  
-  // Executar etapas
+
   const etapas = [
     criarEvento,
     criarLote,
@@ -328,41 +321,37 @@ async function executarTestes() {
     simularWebhook,
     verificarStatus
   ];
-  
+
   for (const etapa of etapas) {
     const sucesso = await etapa();
     if (sucesso) {
-      results.passed++;
+      results.passed += 1;
     } else {
-      results.failed++;
-      log.error('Teste falhou! Abortando...');
+      results.failed += 1;
+      log.error('Teste falhou. Abortando...');
       break;
     }
-    await sleep(500); // Pequena pausa entre etapas
+    await sleep(500);
   }
-  
-  // Limpar dados (sempre executar)
+
   await limparDadosTeste();
-  
-  // Relatório final
+
   console.log(chalk.gray('\n' + '='.repeat(60)));
-  console.log(chalk.bold.cyan('\n📊 RELATÓRIO FINAL\n'));
-  
+  console.log(chalk.bold.cyan('\nRELATORIO FINAL\n'));
   console.log(`Total de etapas: ${results.total}`);
-  console.log(chalk.green(`✅ Passou: ${results.passed}`));
-  console.log(chalk.red(`❌ Falhou: ${results.failed}`));
-  
+  console.log(chalk.green(`Passou: ${results.passed}`));
+  console.log(chalk.red(`Falhou: ${results.failed}`));
+
   if (results.failed === 0) {
-    console.log(chalk.bold.green('\n🎉 TODOS OS TESTES PASSARAM!\n'));
+    console.log(chalk.bold.green('\nTODOS OS TESTES PASSARAM\n'));
     process.exit(0);
-  } else {
-    console.log(chalk.bold.red('\n❌ ALGUNS TESTES FALHARAM\n'));
-    process.exit(1);
   }
+
+  console.log(chalk.bold.red('\nALGUNS TESTES FALHARAM\n'));
+  process.exit(1);
 }
 
-// Executar
-executarTestes().catch(error => {
+executarTestes().catch((error) => {
   log.error(`Erro fatal: ${error.message}`);
   console.error(error);
   process.exit(1);

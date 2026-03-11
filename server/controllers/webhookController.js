@@ -101,10 +101,19 @@ const WebhookController = {
       console.log(`✅ [WEBHOOK CIELO] Status na Cielo: ${statusCielo.status}`);
 
       const novoStatus = paymentService.mapearStatusCielo(statusCielo.status);
+      const qrCodePix = paymentService.extrairPixQrCode(statusCielo.dadosCompletos);
+      const houveMudancaPix = registrationPayment
+        ? (
+          (statusCielo.pixTransactionId && statusCielo.pixTransactionId !== registrationPayment.pixTransactionId)
+          || (statusCielo.pixEndToEndId && statusCielo.pixEndToEndId !== registrationPayment.pixEndToEndId)
+          || (qrCodePix.qrCodeString && qrCodePix.qrCodeString !== registrationPayment.pixQrCode)
+          || (qrCodePix.qrCodeBase64 && qrCodePix.qrCodeBase64 !== registrationPayment.pixQrCodeBase64)
+        )
+        : Boolean(statusCielo.pixTransactionId || statusCielo.pixEndToEndId || qrCodePix.qrCodeString || qrCodePix.qrCodeBase64);
 
       console.log(`🟢 [WEBHOOK CIELO] Novo status mapeado: ${novoStatus}`);
 
-      if (registrationPayment && registrationPayment.status === novoStatus) {
+      if (registrationPayment && registrationPayment.status === novoStatus && !houveMudancaPix) {
         console.log('⚠️ [WEBHOOK CIELO] Status não mudou, nenhuma ação necessária');
         return res.status(200).json({
           success: true,
@@ -129,12 +138,14 @@ const WebhookController = {
             amount: registration.finalPrice,
             status: novoStatus,
             provider: 'cielo',
-            providerPaymentId: PaymentId,
+            providerPaymentId: statusCielo.paymentId || PaymentId,
             providerPayload: statusCielo.dadosCompletos
               ? { ...statusCielo.dadosCompletos, originalStatus: statusCielo.status }
               : { originalStatus: statusCielo.status },
-            pixQrCode: statusCielo.dadosCompletos?.Payment?.QrCodeString || null,
-            pixQrCodeBase64: statusCielo.dadosCompletos?.Payment?.QrCodeBase64Image || null,
+            pixQrCode: qrCodePix.qrCodeString || null,
+            pixQrCodeBase64: qrCodePix.qrCodeBase64 || null,
+            pixTransactionId: statusCielo.pixTransactionId || null,
+            pixEndToEndId: statusCielo.pixEndToEndId || null,
             cardBrand
           }, { transaction });
         } else {
@@ -142,8 +153,11 @@ const WebhookController = {
           registrationPayment.providerPayload = statusCielo.dadosCompletos
             ? { ...statusCielo.dadosCompletos, originalStatus: statusCielo.status }
             : { originalStatus: statusCielo.status };
-          registrationPayment.pixQrCode = statusCielo.dadosCompletos?.Payment?.QrCodeString || registrationPayment.pixQrCode;
-          registrationPayment.pixQrCodeBase64 = statusCielo.dadosCompletos?.Payment?.QrCodeBase64Image || registrationPayment.pixQrCodeBase64;
+          registrationPayment.providerPaymentId = statusCielo.paymentId || registrationPayment.providerPaymentId || PaymentId;
+          registrationPayment.pixQrCode = qrCodePix.qrCodeString || registrationPayment.pixQrCode;
+          registrationPayment.pixQrCodeBase64 = qrCodePix.qrCodeBase64 || registrationPayment.pixQrCodeBase64;
+          registrationPayment.pixTransactionId = statusCielo.pixTransactionId || registrationPayment.pixTransactionId;
+          registrationPayment.pixEndToEndId = statusCielo.pixEndToEndId || registrationPayment.pixEndToEndId;
           if (registrationPayment.method === 'credit_card' && !registrationPayment.cardBrand) {
             registrationPayment.cardBrand = paymentService.extrairBandeiraCartao(statusCielo.dadosCompletos);
           }
@@ -151,18 +165,30 @@ const WebhookController = {
         }
 
         const modoPagamento = registration.event?.registrationPaymentMode || 'SINGLE';
+        if (registration.paymentId === PaymentId || registration.paymentMethod === 'pix') {
+          registration.paymentId = statusCielo.paymentId || registration.paymentId || PaymentId;
+          registration.cieloResponse = statusCielo.dadosCompletos || registration.cieloResponse;
+          registration.pixQrCode = qrCodePix.qrCodeString || registration.pixQrCode;
+          registration.pixQrCodeBase64 = qrCodePix.qrCodeBase64 || registration.pixQrCodeBase64;
+          registration.pixTransactionId = statusCielo.pixTransactionId || registration.pixTransactionId;
+          registration.pixEndToEndId = statusCielo.pixEndToEndId || registration.pixEndToEndId;
+        }
         if (modoPagamento === 'SINGLE') {
           if (registration.paymentStatus !== novoStatus) {
             const statusAnterior = registration.paymentStatus;
             registration.paymentStatus = novoStatus;
-            registration.cieloResponse = statusCielo.dadosCompletos;
             await registration.save({ transaction });
             await registrationService.ajustarContadoresDeStatus(registration, statusAnterior);
             console.log(`🔁 [WEBHOOK CIELO] Status atualizado: ${statusAnterior} → ${novoStatus}`);
             statusAtualizado = true;
             statusAnteriorWebhook = statusAnterior;
+          } else if (houveMudancaPix) {
+            await registration.save({ transaction });
           }
         } else {
+          if (houveMudancaPix) {
+            await registration.save({ transaction });
+          }
           await registrationService.atualizarStatusPagamentoPorPagamentos(registration, { transaction });
         }
 
