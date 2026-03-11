@@ -108,6 +108,7 @@ async function listarEventos() {
         "title",
         "startDate",
         "isActive",
+        "requiresPayment",
         "maxRegistrations",
         "createdAt",
       ],
@@ -567,6 +568,7 @@ async function criarEvento(body, userId) {
     latitude,
     longitude,
     eventType,
+    requiresPayment,
     registrationPaymentMode,
     minDepositAmount,
     maxPaymentCount,
@@ -575,6 +577,11 @@ async function criarEvento(body, userId) {
   if (!title) {
     throw new Error("Título do evento é obrigatório");
   }
+
+  const eventRequiresPayment = requiresPayment !== false;
+  const normalizedPaymentMode = eventRequiresPayment
+    ? (registrationPaymentMode || "SINGLE")
+    : "SINGLE";
 
   const event = await Event.create({
     id: uuid.v4(),
@@ -593,9 +600,10 @@ async function criarEvento(body, userId) {
     latitude,
     longitude,
     eventType: eventType || "ACAMP",
-    registrationPaymentMode: registrationPaymentMode || "SINGLE",
-    minDepositAmount: minDepositAmount || null,
-    maxPaymentCount: maxPaymentCount || null,
+    requiresPayment: eventRequiresPayment,
+    registrationPaymentMode: normalizedPaymentMode,
+    minDepositAmount: eventRequiresPayment && normalizedPaymentMode === 'BALANCE_DUE' ? (minDepositAmount || null) : null,
+    maxPaymentCount: eventRequiresPayment && normalizedPaymentMode === 'BALANCE_DUE' ? (maxPaymentCount || null) : null,
     currentRegistrations: 0,
     isActive: true,
     createdBy: userId,
@@ -616,6 +624,10 @@ async function atualizarEvento(id, body) {
   if (!event) {
     throw new Error("Evento não encontrado");
   }
+
+  const nextRequiresPayment = body.requiresPayment != null
+    ? Boolean(body.requiresPayment)
+    : event.requiresPayment;
 
   event.title = body.title != null ? body.title : event.title;
   event.description =
@@ -639,19 +651,29 @@ async function atualizarEvento(id, body) {
   event.latitude = body.latitude != null ? body.latitude : event.latitude;
   event.longitude = body.longitude != null ? body.longitude : event.longitude;
   event.eventType = body.eventType != null ? body.eventType : event.eventType;
+  event.requiresPayment = nextRequiresPayment;
   event.registrationPaymentMode =
-    body.registrationPaymentMode != null
-      ? body.registrationPaymentMode
-      : event.registrationPaymentMode;
+    nextRequiresPayment
+      ? (body.registrationPaymentMode != null
+        ? body.registrationPaymentMode
+        : event.registrationPaymentMode)
+      : 'SINGLE';
   event.minDepositAmount =
-    body.minDepositAmount != null
-      ? body.minDepositAmount
-      : event.minDepositAmount;
+    nextRequiresPayment && event.registrationPaymentMode === 'BALANCE_DUE'
+      ? (body.minDepositAmount != null
+        ? body.minDepositAmount
+        : event.minDepositAmount)
+      : null;
   event.maxPaymentCount =
-    body.maxPaymentCount != null ? body.maxPaymentCount : event.maxPaymentCount;
+    nextRequiresPayment && event.registrationPaymentMode === 'BALANCE_DUE'
+      ? (body.maxPaymentCount != null ? body.maxPaymentCount : event.maxPaymentCount)
+      : null;
   event.isActive = body.isActive != null ? body.isActive : event.isActive;
 
   await event.save();
+  if (!nextRequiresPayment) {
+    await EventBatch.update({ price: 0 }, { where: { eventId: event.id } });
+  }
   const changes = {};
   Object.keys(body).forEach((key) => {
     if (["id", "createdAt", "updatedAt"].includes(key)) return;
@@ -734,6 +756,7 @@ async function duplicarEvento(eventId, userId) {
         latitude: event.latitude,
         longitude: event.longitude,
         eventType: event.eventType,
+        requiresPayment: event.requiresPayment !== false,
         registrationPaymentMode: event.registrationPaymentMode,
         minDepositAmount: event.minDepositAmount,
         maxPaymentCount: event.maxPaymentCount,
@@ -750,7 +773,7 @@ async function duplicarEvento(eventId, userId) {
           id: uuid.v4(),
           eventId: newEvent.id,
           name: batch.name,
-          price: batch.price,
+          price: newEvent.requiresPayment === false ? 0 : batch.price,
           maxQuantity: batch.maxQuantity,
           startDate: batch.startDate,
           endDate: batch.endDate,

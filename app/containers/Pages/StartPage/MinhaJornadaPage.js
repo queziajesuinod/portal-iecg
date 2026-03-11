@@ -59,7 +59,7 @@ const STAGE_COPY = {
 
 const initialForm = {
   fullName: '',
-  preferredName: '',
+  cpf: '',
   email: '',
   phone: '',
   whatsapp: '',
@@ -95,6 +95,20 @@ const formatDateTime = (value) => {
   return parsed.toLocaleString('pt-BR');
 };
 
+const getActivityObservation = (activity) => {
+  const metadata = activity?.metadata;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return '';
+
+  return String(
+    metadata.observation
+    || metadata.observacao
+    || metadata.notes
+    || metadata.note
+    || metadata.description
+    || ''
+  ).trim();
+};
+
 const formatPhone = (value = '') => {
   const digits = String(value).replace(/\D/g, '').slice(0, 11);
   if (!digits) return '';
@@ -108,9 +122,15 @@ const formatPhone = (value = '') => {
   return digits.replace(/(\d{2})(\d{5})(\d{4}).*/, '($1) $2-$3');
 };
 
+const formatCpf = (value = '') => {
+  const digits = String(value).replace(/\D/g, '').slice(0, 11);
+  if (!digits) return '';
+  return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2}).*/, (_, a, b, c, d) => (d ? `${a}.${b}.${c}-${d}` : `${a}.${b}.${c}`));
+};
+
 const buildFormFromMember = (member) => ({
   fullName: member?.fullName || '',
-  preferredName: member?.preferredName || '',
+  cpf: formatCpf(member?.cpf || ''),
   email: member?.email || '',
   phone: member?.phone || '',
   whatsapp: member?.whatsapp || '',
@@ -134,7 +154,7 @@ const buildFormFromMember = (member) => ({
 
 const buildPayloadFromForm = (form) => ({
   fullName: form.fullName.trim(),
-  preferredName: form.preferredName || null,
+  cpf: form.cpf || null,
   email: form.email || null,
   phone: form.phone || null,
   whatsapp: form.whatsapp || null,
@@ -478,7 +498,7 @@ const MinhaJornadaPage = () => {
                     <TextField fullWidth label="Nome completo" value={form.fullName} onChange={(event) => handleChange('fullName', event.target.value)} />
                   </Grid>
                   <Grid item xs={12} md={6}>
-                    <TextField fullWidth label="Nome preferido" value={form.preferredName} onChange={(event) => handleChange('preferredName', event.target.value)} />
+                    <TextField fullWidth label="CPF" value={form.cpf} onChange={(event) => handleChange('cpf', formatCpf(event.target.value))} />
                   </Grid>
                   <Grid item xs={12} md={6}>
                     <TextField fullWidth label="E-mail" type="email" value={form.email} onChange={(event) => handleChange('email', event.target.value)} />
@@ -660,7 +680,7 @@ const MinhaJornadaPage = () => {
                   <Stack spacing={1.25}>
                     <Box display="flex" justifyContent="space-between" gap={2}>
                       <Typography color="textSecondary">CPF</Typography>
-                      <Typography>{member.cpf || 'Nao informado'}</Typography>
+                      <Typography>{formatCpf(member.cpf) || 'Nao informado'}</Typography>
                     </Box>
                     <Box display="flex" justifyContent="space-between" gap={2}>
                       <Typography color="textSecondary">Status</Typography>
@@ -871,6 +891,11 @@ const MinhaJornadaPage = () => {
                             {activity.displayLabel || activity.activityTypeRef?.name || activity.activityType}
                           </Typography>
                           <Typography variant="caption" color="textSecondary">{formatDateTime(activity.activityDate)}</Typography>
+                          {getActivityObservation(activity) && (
+                            <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
+                              {getActivityObservation(activity)}
+                            </Typography>
+                          )}
                         </Box>
                         <Chip size="small" label={`${activity.points || 0} pts`} />
                       </Stack>

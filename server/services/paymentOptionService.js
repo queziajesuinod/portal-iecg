@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { PaymentOption } = require('../models');
+const { Event, PaymentOption } = require('../models');
 
 function normalizeInstallmentInterestRates(installmentInterestRates, maxInstallments) {
   if (!installmentInterestRates || typeof installmentInterestRates !== 'object' || Array.isArray(installmentInterestRates)) {
@@ -58,11 +58,19 @@ function buildPaymentOptionPayload(dados = {}, current = null) {
 }
 
 async function listarPorEvento(eventId, options = {}) {
+  const event = await Event.findByPk(eventId, {
+    attributes: ['id', 'requiresPayment']
+  });
+  if (!event || event.requiresPayment === false) {
+    return [];
+  }
+
   const includeOffline = options.includeOffline ?? true;
   const where = { eventId };
   if (!includeOffline) {
     where.paymentType = { [Op.not]: 'offline' };
   }
+
   return PaymentOption.findAll({
     where,
     order: [['paymentType', 'ASC']]
@@ -71,14 +79,23 @@ async function listarPorEvento(eventId, options = {}) {
 
 async function criar(eventId, dados) {
   const { paymentType } = dados;
+  const event = await Event.findByPk(eventId, {
+    attributes: ['id', 'requiresPayment']
+  });
 
-  // Validar se já existe essa forma de pagamento para o evento
+  if (!event) {
+    throw new Error('Evento nao encontrado');
+  }
+  if (event.requiresPayment === false) {
+    throw new Error('Evento gratuito nao permite formas de pagamento');
+  }
+
   const existente = await PaymentOption.findOne({
     where: { eventId, paymentType }
   });
 
   if (existente) {
-    throw new Error(`Forma de pagamento ${paymentType} já existe para este evento`);
+    throw new Error(`Forma de pagamento ${paymentType} ja existe para este evento`);
   }
 
   const payload = buildPaymentOptionPayload(dados);
@@ -92,7 +109,7 @@ async function atualizar(id, dados) {
   const paymentOption = await PaymentOption.findByPk(id);
 
   if (!paymentOption) {
-    throw new Error('Forma de pagamento não encontrada');
+    throw new Error('Forma de pagamento nao encontrada');
   }
 
   const payload = buildPaymentOptionPayload(dados, paymentOption);
@@ -110,7 +127,7 @@ async function deletar(id) {
   const paymentOption = await PaymentOption.findByPk(id);
 
   if (!paymentOption) {
-    throw new Error('Forma de pagamento não encontrada');
+    throw new Error('Forma de pagamento nao encontrada');
   }
 
   await paymentOption.destroy();

@@ -20,12 +20,12 @@ import {
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import BackIcon from '@mui/icons-material/ArrowBack';
+import useTheme from '@mui/material/styles/useTheme';
 import { useHistory, useParams } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
 import { criarEvento, atualizarEvento, buscarEvento } from '../../../api/eventsApi';
 import { fetchGeocode } from '../../../utils/googleGeocode';
 import { EVENT_TYPE_OPTIONS } from '../../../constants/eventTypes';
-import useTheme from '@mui/material/styles/useTheme';
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 const toDataUrl = (file) => new Promise((resolve, reject) => {
@@ -61,6 +61,7 @@ function EventForm() {
     latitude: '',
     longitude: '',
     eventType: 'ACAMP',
+    requiresPayment: true,
     registrationPaymentMode: 'SINGLE',
     minDepositAmount: '',
     maxPaymentCount: ''
@@ -96,6 +97,7 @@ function EventForm() {
         latitude: evento.latitude != null ? evento.latitude.toString() : '',
         longitude: evento.longitude != null ? evento.longitude.toString() : '',
         eventType: evento.eventType || 'ACAMP',
+        requiresPayment: evento.requiresPayment !== false,
         registrationPaymentMode: evento.registrationPaymentMode || 'SINGLE',
         minDepositAmount: evento.minDepositAmount != null ? evento.minDepositAmount.toString() : '',
         maxPaymentCount: evento.maxPaymentCount != null ? evento.maxPaymentCount.toString() : ''
@@ -118,6 +120,16 @@ function EventForm() {
     const {
       name, value, checked, type
     } = e.target;
+    if (name === 'requiresPayment') {
+      setFormData(prev => ({
+        ...prev,
+        requiresPayment: checked,
+        registrationPaymentMode: checked ? prev.registrationPaymentMode : 'SINGLE',
+        minDepositAmount: checked ? prev.minDepositAmount : '',
+        maxPaymentCount: checked ? prev.maxPaymentCount : ''
+      }));
+      return;
+    }
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value
@@ -200,9 +212,14 @@ function EventForm() {
         maxPerBuyer: formData.maxPerBuyer ? parseInt(formData.maxPerBuyer, 10) : null,
         latitude: formData.latitude ? parseFloat(formData.latitude) : null,
         longitude: formData.longitude ? parseFloat(formData.longitude) : null,
+        requiresPayment: formData.requiresPayment !== false,
         registrationPaymentMode: formData.registrationPaymentMode || 'SINGLE',
-        minDepositAmount: formData.minDepositAmount ? parseFloat(formData.minDepositAmount) : null,
-        maxPaymentCount: formData.maxPaymentCount ? parseInt(formData.maxPaymentCount, 10) : null,
+        minDepositAmount: formData.requiresPayment && formData.registrationPaymentMode === 'BALANCE_DUE' && formData.minDepositAmount
+          ? parseFloat(formData.minDepositAmount)
+          : null,
+        maxPaymentCount: formData.requiresPayment && formData.registrationPaymentMode === 'BALANCE_DUE' && formData.maxPaymentCount
+          ? parseInt(formData.maxPaymentCount, 10)
+          : null,
       };
 
       if (isEdicao) {
@@ -321,24 +338,45 @@ function EventForm() {
                           </FormControl>
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                          <FormControl fullWidth disabled={loading}>
-                            <InputLabel id="modo-pagamento-label">Modo de Pagamento</InputLabel>
-                            <Select
-                              labelId="modo-pagamento-label"
-                              label="Modo de Pagamento"
-                              name="registrationPaymentMode"
-                              value={formData.registrationPaymentMode}
-                              onChange={handleChange}
-                            >
-                              <MenuItem value="SINGLE">Pagamento único</MenuItem>
-                              <MenuItem value="BALANCE_DUE">Pagamento parcial (sinal)</MenuItem>
-                            </Select>
-                          </FormControl>
+                          <FormControlLabel
+                            control={(
+                              <Switch
+                                checked={formData.requiresPayment}
+                                onChange={handleChange}
+                                name="requiresPayment"
+                                color="primary"
+                              />
+                            )}
+                            label="Exigir pagamento na inscricao"
+                          />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          {formData.requiresPayment ? (
+                            <FormControl fullWidth disabled={loading}>
+                              <InputLabel id="modo-pagamento-label">Modo de Pagamento</InputLabel>
+                              <Select
+                                labelId="modo-pagamento-label"
+                                label="Modo de Pagamento"
+                                name="registrationPaymentMode"
+                                value={formData.registrationPaymentMode}
+                                onChange={handleChange}
+                              >
+                                <MenuItem value="SINGLE">Pagamento único</MenuItem>
+                                <MenuItem value="BALANCE_DUE">Pagamento parcial (sinal)</MenuItem>
+                              </Select>
+                            </FormControl>
+                          ) : (
+                            <Box sx={{ p: 2, borderRadius: 2, bgcolor: theme.palette.action.hover }}>
+                              <Typography variant="body2">
+                                Evento gratuito: a inscricao sera confirmada sem etapa de pagamento.
+                              </Typography>
+                            </Box>
+                          )}
                         </Grid>
                       </Grid>
                     </Box>
                   </Grid>
-                  {formData.registrationPaymentMode === 'BALANCE_DUE' && (
+                  {formData.requiresPayment && formData.registrationPaymentMode === 'BALANCE_DUE' && (
                     <Grid item xs={12}>
                       <Typography variant="h6" gutterBottom>
                         Condições de parcela
@@ -665,7 +703,14 @@ function PaperPreview({ formData, coverPreview, loading }) {
           {formData.description || 'Descrição aparecerá aqui.'}
         </Typography>
       </Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 1
+        }}
+      >
         <Typography variant="caption" color="textSecondary">
           Início: {formattedDate(formData.startDate)}
         </Typography>
@@ -686,6 +731,9 @@ function PaperPreview({ formData, coverPreview, loading }) {
         </Typography>
         <Typography variant="body2">
           <strong>Capacidade:</strong> {formData.maxRegistrations || 'Ilimitado'}
+        </Typography>
+        <Typography variant="body2">
+          <strong>Cobranca:</strong> {formData.requiresPayment ? 'Evento pago' : 'Evento gratuito'}
         </Typography>
       </Box>
       {loading && (

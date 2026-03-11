@@ -98,6 +98,26 @@ const formatDateTime = (value) => {
   return parsed.toLocaleString('pt-BR');
 };
 
+const formatCpf = (value = '') => {
+  const digits = String(value).replace(/\D/g, '').slice(0, 11);
+  if (!digits) return '';
+  return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2}).*/, (_, a, b, c, d) => (d ? `${a}.${b}.${c}-${d}` : `${a}.${b}.${c}`));
+};
+
+const getActivityObservation = (activity) => {
+  const metadata = activity?.metadata;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return '';
+
+  return String(
+    metadata.observation
+    || metadata.observacao
+    || metadata.notes
+    || metadata.note
+    || metadata.description
+    || ''
+  ).trim();
+};
+
 const toDateInputValue = (value) => {
   if (!value) return '';
   const parsed = new Date(value);
@@ -567,7 +587,7 @@ const MembroDetailsPage = () => {
                     </ListItem>
                     <ListItem>
                       <ListItemIcon><Badge /></ListItemIcon>
-                      <ListItemText primary="CPF" secondary={member.cpf || 'Nao informado'} />
+                      <ListItemText primary="CPF" secondary={formatCpf(member.cpf) || 'Nao informado'} />
                     </ListItem>
                     <ListItem>
                       <ListItemIcon><Cake /></ListItemIcon>
@@ -704,6 +724,11 @@ const MembroDetailsPage = () => {
                     <Typography variant="caption" color="textSecondary">
                       {formatDateTime(activity.activityDate)} - {activity.points || 0} pontos
                     </Typography>
+                    {getActivityObservation(activity) && (
+                      <Typography variant="caption" display="block" color="textSecondary">
+                        {getActivityObservation(activity)}
+                      </Typography>
+                    )}
                   </Box>
                 ))}
               </Stack>

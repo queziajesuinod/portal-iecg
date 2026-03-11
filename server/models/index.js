@@ -11,6 +11,11 @@ const basename = path.basename(__filename);
 const env = process.env.NODE_ENV || 'development';
 const config = require(path.join(__dirname, '..', 'config', 'config.js'))[env];
 const db = {};
+const parsedPoolMax = Number(process.env.DB_POOL_MAX);
+const parsedPoolMin = Number(process.env.DB_POOL_MIN);
+const parsedPoolAcquire = Number(process.env.DB_POOL_ACQUIRE_MS);
+const parsedPoolIdle = Number(process.env.DB_POOL_IDLE_MS);
+const parsedPoolEvict = Number(process.env.DB_POOL_EVICT_MS);
 
 const enableSequelizeLogging = process.env.SEQUELIZE_LOGGING === 'true';
 const sequelize = new Sequelize(
@@ -22,6 +27,13 @@ const sequelize = new Sequelize(
     port: config.port,
     dialect: config.dialect,
     dialectOptions: config.dialectOptions,
+    pool: {
+      max: Number.isFinite(parsedPoolMax) && parsedPoolMax > 0 ? parsedPoolMax : 5,
+      min: Number.isFinite(parsedPoolMin) && parsedPoolMin >= 0 ? parsedPoolMin : 0,
+      acquire: Number.isFinite(parsedPoolAcquire) && parsedPoolAcquire > 0 ? parsedPoolAcquire : 30000,
+      idle: Number.isFinite(parsedPoolIdle) && parsedPoolIdle > 0 ? parsedPoolIdle : 10000,
+      evict: Number.isFinite(parsedPoolEvict) && parsedPoolEvict > 0 ? parsedPoolEvict : 1000
+    },
     logging: enableSequelizeLogging ? (msg) => console.debug(`[Sequelize] ${msg}`) : false,
     define: {
       schema: process.env.DB_SCHEMA || 'dev_iecg' // 👈 Isso aplica o schema para todos os models por padrão

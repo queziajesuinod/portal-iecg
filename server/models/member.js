@@ -1,5 +1,7 @@
 'use strict';
 const { Model, DataTypes } = require('sequelize');
+const { normalizeCpf } = require('../utils/cpf');
+const { syncUserFromMemberRecord } = require('../utils/memberUserSync');
 
 module.exports = (sequelize) => {
   class Member extends Model {
@@ -130,11 +132,11 @@ module.exports = (sequelize) => {
       allowNull: true
     },
     cpf: {
-      type: DataTypes.STRING(14),
+      type: DataTypes.STRING(11),
       unique: true,
       allowNull: true,
       validate: {
-        is: /^\d{3}\.\d{3}\.\d{3}-\d{2}$/
+        is: /^\d{11}$/
       }
     },
     rg: {
@@ -275,6 +277,22 @@ module.exports = (sequelize) => {
     schema: process.env.DB_SCHEMA || 'dev_iecg',
     paranoid: true, // Soft delete
     timestamps: true
+  });
+
+  Member.addHook('afterSave', async (member, options = {}) => {
+    if (options.skipLinkedUserSync) {
+      return;
+    }
+
+    await syncUserFromMemberRecord(member, {
+      transaction: options.transaction,
+      models: sequelize.models
+    });
+  });
+
+  Member.addHook('beforeValidate', (member) => {
+    if (!member) return;
+    member.setDataValue('cpf', normalizeCpf(member.cpf));
   });
 
   return Member;

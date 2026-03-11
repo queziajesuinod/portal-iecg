@@ -108,6 +108,12 @@ module.exports = (sequelize) => {
       allowNull: true,
       comment: 'Quantidade máxima de pagamentos permitidos'
     },
+    requiresPayment: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+      comment: 'Quando falso, a inscricao e gratuita e nao exige pagamento'
+    },
     createdBy: {
       type: DataTypes.UUID,
       allowNull: false,

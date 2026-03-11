@@ -283,6 +283,8 @@ const emptyChallenge = {
   questionOptionsText: '',
   fileTypes: '',
   formFields: [buildFormField('text', 0)],
+  startDate: '',
+  endDate: '',
   dueDate: '',
   isActive: true
 };
@@ -584,6 +586,8 @@ function BoardJournalAdminPage() {
         questionOptions: challengeForm.questionOptionsText.split('\n').map((item) => item.trim()).filter(Boolean),
         fileTypes: challengeForm.fileTypes,
         formSchema: ['form', 'lesson'].includes(challengeForm.challengeType) ? serializeFormFields(challengeForm.formFields || []) : [],
+        startDate: challengeForm.startDate || null,
+        endDate: challengeForm.endDate || null,
         dueDate: challengeForm.dueDate || null,
         isActive: challengeForm.isActive
       };
@@ -1177,6 +1181,8 @@ function BoardJournalAdminPage() {
                               questionOptionsText: (item.questionOptions || []).join('\n'),
                               fileTypes: item.fileTypes || '',
                               formFields: normalizeExistingFormFields(item.formSchema || []),
+                              startDate: item.startDate ? String(item.startDate).slice(0, 10) : '',
+                              endDate: item.endDate ? String(item.endDate).slice(0, 10) : '',
                               dueDate: item.dueDate ? String(item.dueDate).slice(0, 10) : '',
                               isActive: item.isActive !== false
                             };
@@ -1707,6 +1713,28 @@ function BoardJournalAdminPage() {
                 </Grid>
               </>
             )}
+            <Grid item xs={12} md={4}>
+              <TextField
+                label="Inicio da exibicao"
+                type="date"
+                value={challengeForm.startDate}
+                InputLabelProps={{ shrink: true }}
+                onChange={(e) => setChallengeForm((prev) => ({ ...prev, startDate: e.target.value }))}
+                helperText="Opcional. O desafio so aparece a partir desta data."
+                fullWidth
+              />
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <TextField
+                label="Fim da exibicao"
+                type="date"
+                value={challengeForm.endDate}
+                InputLabelProps={{ shrink: true }}
+                onChange={(e) => setChallengeForm((prev) => ({ ...prev, endDate: e.target.value }))}
+                helperText="Opcional. Depois desta data o desafio fecha."
+                fullWidth
+              />
+            </Grid>
             <Grid item xs={12} md={6}>
               <TextField label="Prazo" type="date" value={challengeForm.dueDate} InputLabelProps={{ shrink: true }} onChange={(e) => setChallengeForm((prev) => ({ ...prev, dueDate: e.target.value }))} fullWidth />
             </Grid>

@@ -104,7 +104,7 @@ function sanitizeJourneyPayload(payload = {}) {
 function sanitizeOwnProfilePayload(payload = {}) {
   const allowedFields = [
     'fullName',
-    'preferredName',
+    'cpf',
     'birthDate',
     'gender',
     'maritalStatus',
@@ -342,6 +342,47 @@ async function setActivityTypeActive(req, res) {
   }
 }
 
+async function listPossibleDuplicates(req, res) {
+  try {
+    const result = await memberService.listPossibleDuplicates();
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Erro ao listar membros duplicados' });
+  }
+}
+
+async function mergeDuplicates(req, res) {
+  try {
+    const mergedBy = req.user?.userId || req.user?.id || null;
+    const { memberIdA, memberIdB } = req.body || {};
+    if (!memberIdA || !memberIdB) {
+      res.status(400).json({ message: 'Informe memberIdA e memberIdB' });
+      return;
+    }
+
+    const result = await memberService.mergeDuplicateMembers(memberIdA, memberIdB, mergedBy);
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Erro ao fundir membros duplicados' });
+  }
+}
+
+async function dismissDuplicate(req, res) {
+  try {
+    const dismissedBy = req.user?.userId || req.user?.id || null;
+    const { memberIdA, memberIdB } = req.body || {};
+    if (!memberIdA || !memberIdB) {
+      res.status(400).json({ message: 'Informe memberIdA e memberIdB' });
+      return;
+    }
+
+    const result = await memberService.dismissDuplicateSuggestion(memberIdA, memberIdB, dismissedBy);
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Erro ao desconsiderar sugestao de duplicidade' });
+  }
+}
+
 module.exports = {
   list,
   getById,
@@ -352,6 +393,9 @@ module.exports = {
   updateMyProfile,
   remove,
   stats,
+  listPossibleDuplicates,
+  mergeDuplicates,
+  dismissDuplicate,
   addActivity,
   deleteActivity,
   addMilestone,

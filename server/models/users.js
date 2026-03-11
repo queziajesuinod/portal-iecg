@@ -1,5 +1,6 @@
 'use strict';
 const { Model, DataTypes } = require('sequelize');
+const { normalizeCpf } = require('../utils/cpf');
 
 module.exports = (sequelize) => {
   class User extends Model {
@@ -135,6 +136,11 @@ module.exports = (sequelize) => {
     modelName: 'User',
     tableName: 'Users',
     schema: process.env.DB_SCHEMA || 'dev_iecg'
+  });
+
+  User.addHook('beforeValidate', (user) => {
+    if (!user) return;
+    user.setDataValue('cpf', normalizeCpf(user.cpf));
   });
   
   return User;

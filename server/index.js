@@ -23,6 +23,7 @@ const cache = require('./utils/cache');
 const customHost = argv.host || process.env.HOST;
 const host = customHost || null; // Permite IPv6/IPv4
 const prettyHost = customHost || 'localhost';
+const enablePixJobsInDevelopment = process.env.ENABLE_PIX_JOBS_IN_DEVELOPMENT === 'true';
 
 // Middleware de autenticação JWT (protege as APIs)
 const authMiddleware = (req, res, next) => {
@@ -97,7 +98,6 @@ app.use('/api/icons', (req, res) => {
 app.use('/api/docs', (req, res) => {
   res.json({ records: [{ source: rawdocs(req.query) }] });
 });
-
 // Estáticos
 app.use('/', express.static('public', { etag: false }));
 app.use(favicon(path.join('public', 'favicons', 'favicon.ico')));
@@ -135,14 +135,16 @@ app.listen(port, host, async (err) => {
   }
 
   // Inicializar cache Redis
-  cache.connect().catch(err => {
-    console.warn('⚠️  Redis não disponível, sistema continuará sem cache:', err.message);
+  cache.connect().catch((cacheError) => {
+    console.warn('⚠️  Redis não disponível, sistema continuará sem cache:', cacheError.message);
   });
 
-  pixPendingJob.startPixPendingJob();
-  singlePaymentStatusJob.startSinglePaymentStatusJob();
+  if (isDev && !enablePixJobsInDevelopment) {
+    console.info('[payments] Jobs de validacao PIX desativados em development');
+  } else {
+    pixPendingJob.startPixPendingJob();
+    singlePaymentStatusJob.startSinglePaymentStatusJob();
+  }
 
   console.log(`Servidor rodando em: ${process.env.REACT_APP_API_URL}`);
 });
-
-

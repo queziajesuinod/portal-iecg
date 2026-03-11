@@ -8,9 +8,6 @@ async function listarLotesPorEvento(eventId) {
     order: [['order', 'ASC']]
   });
 
-  // Returns two counters:
-  // - inscritosOcupados: used for capacity checks (pending/authorized/partial/confirmed)
-  // - inscritosConfirmados: used for KPI-aligned confirmed display
   const { RegistrationAttendee, Registration } = require('../models');
 
   const lotesComVagas = await Promise.all(lotes.map(async (lote) => {
@@ -66,7 +63,7 @@ async function buscarLotePorId(id) {
   });
 
   if (!batch) {
-    throw new Error('Lote não encontrado');
+    throw new Error('Lote nao encontrado');
   }
 
   return batch;
@@ -78,28 +75,27 @@ async function criarLote(body) {
   } = body;
 
   if (!eventId) {
-    throw new Error('ID do evento é obrigatório');
+    throw new Error('ID do evento e obrigatorio');
   }
 
   if (!name) {
-    throw new Error('Nome do lote é obrigatório');
+    throw new Error('Nome do lote e obrigatorio');
   }
 
-  if (!price || price <= 0) {
-    throw new Error('Preço do lote deve ser maior que zero');
-  }
-
-  // Verificar se evento existe
   const event = await Event.findByPk(eventId);
   if (!event) {
-    throw new Error('Evento não encontrado');
+    throw new Error('Evento nao encontrado');
+  }
+
+  if (event.requiresPayment !== false && (!price || Number(price) <= 0)) {
+    throw new Error('Preco do lote deve ser maior que zero');
   }
 
   return EventBatch.create({
     id: uuid.v4(),
     eventId,
     name,
-    price,
+    price: event.requiresPayment === false ? 0 : price,
     maxQuantity,
     currentQuantity: 0,
     startDate,
@@ -113,11 +109,20 @@ async function atualizarLote(id, body) {
   const batch = await EventBatch.findByPk(id);
 
   if (!batch) {
-    throw new Error('Lote não encontrado');
+    throw new Error('Lote nao encontrado');
+  }
+
+  const event = await Event.findByPk(batch.eventId);
+  if (!event) {
+    throw new Error('Evento nao encontrado');
+  }
+
+  if (event.requiresPayment !== false && body.price !== undefined && body.price !== null && Number(body.price) <= 0) {
+    throw new Error('Preco do lote deve ser maior que zero');
   }
 
   batch.name = body.name ?? batch.name;
-  batch.price = body.price ?? batch.price;
+  batch.price = event.requiresPayment === false ? 0 : (body.price ?? batch.price);
   batch.maxQuantity = body.maxQuantity ?? batch.maxQuantity;
   batch.startDate = body.startDate ?? batch.startDate;
   batch.endDate = body.endDate ?? batch.endDate;
@@ -132,46 +137,41 @@ async function deletarLote(id) {
   const batch = await EventBatch.findByPk(id);
 
   if (!batch) {
-    throw new Error('Lote não encontrado');
+    throw new Error('Lote nao encontrado');
   }
 
-  // Verificar se há inscrições (attendees) neste lote
   const { Registration, RegistrationAttendee } = require('../models');
   const registrationCount = await Registration.count({ where: { batchId: id } });
   const attendeeCount = await RegistrationAttendee.count({ where: { batchId: id } });
 
   if (registrationCount > 0 || attendeeCount > 0) {
-    throw new Error('Não é possível deletar lote com inscrições. Desative o lote ao invés de deletar.');
+    throw new Error('Nao e possivel deletar lote com inscricoes. Desative o lote ao inves de deletar.');
   }
 
   await batch.destroy();
 }
 
-// Verificar disponibilidade de lote
 async function verificarDisponibilidade(batchId, quantidade) {
   const batch = await EventBatch.findByPk(batchId);
 
   if (!batch) {
-    throw new Error('Lote não encontrado');
+    throw new Error('Lote nao encontrado');
   }
 
   if (!batch.isActive) {
-    throw new Error('Lote não está ativo');
+    throw new Error('Lote nao esta ativo');
   }
 
-  // Verificar datas de validade
   const now = new Date();
   if (batch.startDate && new Date(batch.startDate) > now) {
-    throw new Error('Lote ainda não está disponível');
+    throw new Error('Lote ainda nao esta disponivel');
   }
 
   if (batch.endDate && new Date(batch.endDate) < now) {
     throw new Error('Lote expirado');
   }
 
-  // Verificar quantidade disponível
   if (batch.maxQuantity) {
-    // Contar inscritos com status pending ou paid neste lote
     const { RegistrationAttendee, Registration } = require('../models');
     const inscritosOcupados = await RegistrationAttendee.count({
       where: { batchId },
@@ -190,7 +190,7 @@ async function verificarDisponibilidade(batchId, quantidade) {
       console.warn(
         `[batchService] lote ${batch.id} sem vagas: maxQuantity=${batch.maxQuantity} ocupados=${inscritosOcupados} solicitado=${quantidade}`
       );
-      throw new Error(`Apenas ${disponiveis} vagas disponíveis neste lote`);
+      throw new Error(`Apenas ${disponiveis} vagas disponiveis neste lote`);
     }
 
     return {
@@ -207,12 +207,11 @@ async function verificarDisponibilidade(batchId, quantidade) {
   };
 }
 
-// Incrementar quantidade vendida
 async function incrementarQuantidade(batchId, quantidade) {
   const batch = await EventBatch.findByPk(batchId);
 
   if (!batch) {
-    throw new Error('Lote não encontrado');
+    throw new Error('Lote nao encontrado');
   }
 
   batch.currentQuantity += quantidade;

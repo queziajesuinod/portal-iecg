@@ -485,6 +485,7 @@ async function processarInscricao(dadosInscricao) {
 
   // 1. Validar evento
   const evento = await eventService.buscarEventoPublicoPorId(eventId);
+  const eventRequiresPayment = evento.requiresPayment !== false;
 
   // 1.1. Validar limite por comprador
   if (evento.maxPerBuyer && quantity > evento.maxPerBuyer) {
@@ -527,16 +528,17 @@ async function processarInscricao(dadosInscricao) {
   });
 
   // 3. Calcular preço total somando preço de cada inscrito
-  const precoOriginal = attendeesData.reduce((sum, att) => {
+  const precoOriginalCalculado = attendeesData.reduce((sum, att) => {
     const lote = lotesData[att.batchId];
     return sum + parseFloat(lote.price);
   }, 0);
+  const precoOriginal = eventRequiresPayment ? precoOriginalCalculado : 0;
   let precoFinal = precoOriginal;
   let desconto = 0;
   let couponId = null;
 
   // 4. Aplicar cupom se fornecido
-  if (couponCode) {
+  if (couponCode && eventRequiresPayment) {
     const quantidadeIngressos = Number(quantity);
     const quantidadeParaValidacao = Number.isFinite(quantidadeIngressos) ? quantidadeIngressos : 0;
     const resultadoCupom = await couponService.validarCupom(
@@ -563,7 +565,7 @@ async function processarInscricao(dadosInscricao) {
 
   const precoFinalNormalizado = normalizarValor(precoFinal);
   if (precoFinalNormalizado <= 0) {
-    const paymentMethod = 'manual';
+    const paymentMethod = eventRequiresPayment ? 'manual' : 'free';
     const registration = await Registration.create({
       id: uuid.v4(),
       orderCode,
@@ -615,11 +617,11 @@ async function processarInscricao(dadosInscricao) {
       method: paymentMethod,
       amount: 0,
       status: 'confirmed',
-      provider: 'discount',
+      provider: eventRequiresPayment ? 'discount' : 'free_event',
       providerPaymentId: null,
       providerPayload: couponId
         ? { couponId, reason: 'coupon_full_discount', originalStatus: 'confirmed' }
-        : { reason: 'zero_amount', originalStatus: 'confirmed' },
+        : { reason: eventRequiresPayment ? 'zero_amount' : 'free_event', originalStatus: 'confirmed' },
       confirmedAt: new Date()
     });
 
@@ -645,7 +647,7 @@ async function processarInscricao(dadosInscricao) {
         sucesso: true,
         status: 'confirmed',
         paymentId: null,
-        reason: 'zero_amount'
+        reason: eventRequiresPayment ? 'zero_amount' : 'free_event'
       }
     };
   }
@@ -1161,7 +1163,7 @@ async function buscarInscricaoPorCodigo(orderCode) {
       {
         model: Event,
         as: 'event',
-        attributes: ['id', 'title', 'startDate', 'location', 'registrationPaymentMode', 'minDepositAmount', 'maxPaymentCount', 'imageUrl']
+        attributes: ['id', 'title', 'startDate', 'location', 'registrationPaymentMode', 'minDepositAmount', 'maxPaymentCount', 'imageUrl', 'requiresPayment']
       },
       {
         model: EventBatch,
@@ -1251,6 +1253,10 @@ async function criarPagamentoOnline(registrationId, payload = {}) {
 
   if (!registration) {
     throw new Error('Inscrição não encontrada');
+  }
+
+  if (registration.event?.requiresPayment === false) {
+    throw new Error('Este evento nÃ£o possui cobranÃ§a de pagamento');
   }
 
   if (registration.event?.registrationPaymentMode !== 'BALANCE_DUE') {

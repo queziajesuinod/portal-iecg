@@ -1,7 +1,7 @@
-/* eslint-disable no-console */
+/* eslint-disable no-console, no-await-in-loop, no-restricted-syntax */
 const crypto = require('crypto');
-const { sequelize } = require('../models');
 const { QueryTypes } = require('sequelize');
+const { sequelize } = require('../models');
 
 const schema = process.env.DB_SCHEMA || 'dev_iecg';
 const isDryRun = process.argv.includes('--dry-run');
@@ -22,12 +22,14 @@ async function loadCandidates() {
     SELECT
       m.id AS "memberId",
       m."fullName",
+      m.email,
       m.phone,
       m.whatsapp,
       u.id AS "userId"
     FROM "${schema}"."Members" m
     JOIN "${schema}"."Users" u ON u.id = m."userId"
     WHERE m."userId" IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(m.email, '')), '') IS NOT NULL
       AND EXISTS (
         SELECT 1
         FROM "${schema}"."MemberActivities" ma
@@ -86,7 +88,7 @@ async function run() {
     });
   });
 
-  console.log(`Membros com usuario vinculado e atividade ${TARGET_ACTIVITY_TYPE}: ${rows.length}`);
+  console.log(`Membros com usuario vinculado, email preenchido e atividade ${TARGET_ACTIVITY_TYPE}: ${rows.length}`);
   console.log(`Usuarios elegiveis para redefinir senha pelo telefone: ${eligible.length}`);
   console.log(`Usuarios ignorados por falta de telefone no membro: ${skippedWithoutPhone.length}`);
 

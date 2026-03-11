@@ -1,4 +1,5 @@
 const { Op } = require('sequelize');
+const uuid = require('uuid');
 const {
   sequelize,
   User,
@@ -12,7 +13,6 @@ const {
   BoardBadge,
   BoardUserBadge
 } = require('../models');
-const uuid = require('uuid');
 const { hasUserPermission, buildPermissionInclude, extractPermissionNames } = require('./permissionResolver');
 
 const ADMIN_PERMISSIONS = ['DIARIO_BORDO_ADMIN', 'ADMIN_FULL_ACCESS'];
@@ -54,6 +54,33 @@ function normalizeDate(value) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed;
+}
+
+function getStartOfDay(value) {
+  const parsed = normalizeDate(value);
+  if (!parsed) return null;
+  parsed.setHours(0, 0, 0, 0);
+  return parsed;
+}
+
+function getEndOfDay(value) {
+  const parsed = normalizeDate(value);
+  if (!parsed) return null;
+  parsed.setHours(23, 59, 59, 999);
+  return parsed;
+}
+
+function isChallengeWithinSchedule(challenge, referenceDate = new Date()) {
+  const startDate = getStartOfDay(challenge?.startDate);
+  const endDate = getEndOfDay(challenge?.endDate);
+
+  if (startDate && startDate.getTime() > referenceDate.getTime()) {
+    return false;
+  }
+  if (endDate && endDate.getTime() < referenceDate.getTime()) {
+    return false;
+  }
+  return true;
 }
 
 function ensureArray(value) {
@@ -181,6 +208,39 @@ function serializeBadge(record) {
   };
 }
 
+function serializeChallenge(record, userSubmission = null) {
+  return {
+    id: record.id,
+    journalId: record.journalId,
+    title: record.title,
+    description: record.description,
+    points: record.points,
+    categoryId: record.categoryId,
+    challengeType: record.challengeType,
+    contentHtml: record.contentHtml,
+    questionText: record.questionText,
+    questionOptions: Array.isArray(record.questionOptions) ? record.questionOptions : [],
+    fileTypes: record.fileTypes,
+    formSchema: Array.isArray(record.formSchema) ? record.formSchema : [],
+    startDate: record.startDate,
+    endDate: record.endDate,
+    dueDate: record.dueDate,
+    allowSecondChance: Boolean(record.allowSecondChance),
+    secondChancePoints: record.secondChancePoints === null || record.secondChancePoints === undefined ? null : Number(record.secondChancePoints),
+    isActive: record.isActive,
+    createdBy: record.createdBy,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    category: record.category ? serializeCategory(record.category) : null,
+    creator: record.creator ? {
+      id: record.creator.id,
+      name: record.creator.name,
+      email: record.creator.email
+    } : null,
+    userSubmission
+  };
+}
+
 function serializeSubmission(record, pointsByUser = null) {
   return {
     id: record.id,
@@ -209,37 +269,6 @@ function serializeSubmission(record, pointsByUser = null) {
       id: record.approver.id,
       name: record.approver.name
     } : null
-  };
-}
-
-function serializeChallenge(record, userSubmission = null) {
-  return {
-    id: record.id,
-    journalId: record.journalId,
-    title: record.title,
-    description: record.description,
-    points: record.points,
-    categoryId: record.categoryId,
-    challengeType: record.challengeType,
-    contentHtml: record.contentHtml,
-    questionText: record.questionText,
-    questionOptions: Array.isArray(record.questionOptions) ? record.questionOptions : [],
-    fileTypes: record.fileTypes,
-    formSchema: Array.isArray(record.formSchema) ? record.formSchema : [],
-    dueDate: record.dueDate,
-    allowSecondChance: Boolean(record.allowSecondChance),
-    secondChancePoints: record.secondChancePoints === null || record.secondChancePoints === undefined ? null : Number(record.secondChancePoints),
-    isActive: record.isActive,
-    createdBy: record.createdBy,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-    category: record.category ? serializeCategory(record.category) : null,
-    creator: record.creator ? {
-      id: record.creator.id,
-      name: record.creator.name,
-      email: record.creator.email
-    } : null,
-    userSubmission
   };
 }
 
@@ -378,13 +407,22 @@ async function ensureJournalAccess(journalId, userId, options = {}) {
     return { journal, membership: null, isAdmin: true };
   }
   if (isManager) {
-    return { journal, membership: null, isAdmin: false, isManager: true };
+    return {
+      journal,
+      membership: null,
+      isAdmin: false,
+      isManager: true
+    };
   }
   const membership = await getJournalMembershipRow(journalId, userId);
   if (!membership || membership.status !== 'approved') {
     throw new Error('Usuario sem permissao para acessar este diario');
   }
-  return { journal, membership, isAdmin: false };
+  return {
+    journal,
+    membership,
+    isAdmin: false
+  };
 }
 
 async function ensureJournalManagementAccess(journalId, userId) {
@@ -522,11 +560,12 @@ async function ensureSingleActiveJournalManager(managerUserId, options = {}) {
   }
 }
 
-async function createJournal(payload = {}, userId) {
-  const name = normalizeString(payload.name, 150);
+async function createJournal(payload, userId) {
+  const safePayload = payload || {};
+  const name = normalizeString(safePayload.name, 150);
   if (!name) throw new Error('Nome do diario e obrigatorio');
-  const managerUserId = normalizeString(payload.managerUserId);
-  const isActive = normalizeBoolean(payload.isActive, true);
+  const managerUserId = normalizeString(safePayload.managerUserId);
+  const isActive = normalizeBoolean(safePayload.isActive, true);
 
   if (managerUserId) {
     const managerUser = await User.findByPk(managerUserId, { attributes: ['id'] });
@@ -541,9 +580,9 @@ async function createJournal(payload = {}, userId) {
 
   const record = await BoardJournal.create({
     name,
-    description: normalizeString(payload.description),
-    coverImageUrl: normalizeString(payload.coverImageUrl),
-    instructions: normalizeString(payload.instructions),
+    description: normalizeString(safePayload.description),
+    coverImageUrl: normalizeString(safePayload.coverImageUrl),
+    instructions: normalizeString(safePayload.instructions),
     isActive,
     managerUserId,
     createdBy: userId
@@ -698,20 +737,17 @@ async function awardEligibleBadges(userId, journalId, transaction) {
   });
   const existingBadgeIds = new Set(existingRows.map((row) => row.badgeId));
 
-  const created = [];
-  for (const badge of badges) {
-    if (existingBadgeIds.has(badge.id)) continue;
-    if (Number(points || 0) < Number(badge.pointsRequired || 0)) continue;
-    const row = await BoardUserBadge.create({
-      userId,
-      journalId,
-      badgeId: badge.id,
-      earnedAt: new Date()
-    }, { transaction });
-    created.push(row);
-  }
+  const eligibleBadges = badges.filter((badge) => (
+    !existingBadgeIds.has(badge.id)
+    && Number(points || 0) >= Number(badge.pointsRequired || 0)
+  ));
 
-  return created;
+  return Promise.all(eligibleBadges.map((badge) => BoardUserBadge.create({
+    userId,
+    journalId,
+    badgeId: badge.id,
+    earnedAt: new Date()
+  }, { transaction })));
 }
 
 async function normalizeCategoryPayload(payload = {}) {
@@ -812,6 +848,13 @@ async function normalizeChallengePayload(payload = {}, userId = null, existing =
 
   const dueDate = payload.dueDate ? normalizeDate(payload.dueDate) : null;
   if (payload.dueDate && !dueDate) throw new Error('Data limite invalida');
+  const startDate = payload.startDate ? getStartOfDay(payload.startDate) : null;
+  if (payload.startDate && !startDate) throw new Error('Data de inicio invalida');
+  const endDate = payload.endDate ? getStartOfDay(payload.endDate) : null;
+  if (payload.endDate && !endDate) throw new Error('Data de fim invalida');
+  if (startDate && endDate && startDate.getTime() > endDate.getTime()) {
+    throw new Error('Data de inicio nao pode ser maior que a data de fim');
+  }
 
   const normalized = {
     journalId,
@@ -825,6 +868,8 @@ async function normalizeChallengePayload(payload = {}, userId = null, existing =
     questionOptions: null,
     fileTypes: normalizeString(payload.fileTypes, 255),
     formSchema: null,
+    startDate,
+    endDate,
     dueDate,
     allowSecondChance: normalizeBoolean(payload.allowSecondChance, existing ? existing.allowSecondChance : false),
     secondChancePoints: null,
@@ -901,6 +946,10 @@ async function getChallenges(filters = {}, requesterId = null) {
     order: [['isActive', 'DESC'], ['dueDate', 'ASC'], ['createdAt', 'DESC']]
   });
 
+  const visibleRecords = includeInactive
+    ? records
+    : records.filter((record) => isChallengeWithinSchedule(record));
+
   let latestSubmissionByChallenge = {};
   if (requesterId) {
     const submissions = await BoardChallengeSubmission.findAll({
@@ -913,7 +962,7 @@ async function getChallenges(filters = {}, requesterId = null) {
     }, {});
   }
 
-  return records.map((record) => serializeChallenge(record, latestSubmissionByChallenge[record.id] || null));
+  return visibleRecords.map((record) => serializeChallenge(record, latestSubmissionByChallenge[record.id] || null));
 }
 
 async function getChallengeById(id, requesterId = null) {
@@ -929,7 +978,11 @@ async function getChallengeById(id, requesterId = null) {
   let userSubmission = null;
   if (requesterId) {
     const latestSubmission = await BoardChallengeSubmission.findOne({
-      where: { challengeId: id, userId: requesterId, journalId: record.journalId },
+      where: {
+        challengeId: id,
+        userId: requesterId,
+        journalId: record.journalId
+      },
       order: [['submittedAt', 'DESC']]
     });
     userSubmission = latestSubmission ? serializeSubmission(latestSubmission) : null;
@@ -938,14 +991,14 @@ async function getChallengeById(id, requesterId = null) {
   return serializeChallenge(record, userSubmission);
 }
 
-async function createChallenge(payload = {}, userId) {
+async function createChallenge(payload, userId) {
   const normalized = await normalizeChallengePayload(payload, userId);
   await ensureJournalManagementAccess(normalized.journalId, userId);
   const record = await BoardChallenge.create(normalized);
   return getChallengeById(record.id, userId);
 }
 
-async function updateChallenge(id, payload = {}, requesterId = null) {
+async function updateChallenge(id, payload, requesterId = null) {
   const record = await BoardChallenge.findByPk(id);
   if (!record) throw new Error('Desafio nao encontrado');
   if (requesterId) {
@@ -967,10 +1020,15 @@ async function deleteChallenge(id, requesterId = null) {
   await record.destroy();
 }
 
-async function normalizeSubmissionPayload(payload = {}, challenge) {
+async function normalizeSubmissionPayload(payload, challenge) {
   const responseType = normalizeString(payload.responseType || challenge.challengeType);
   if (!CHALLENGE_TYPES.includes(responseType)) throw new Error('Tipo de resposta invalido');
-  const normalized = { responseType, responseText: null, responseFileUrl: null, responsePayload: null };
+  const normalized = {
+    responseType,
+    responseText: null,
+    responseFileUrl: null,
+    responsePayload: null
+  };
 
   if (challenge.challengeType === 'question' || challenge.challengeType === 'text') {
     const answer = normalizeString(payload.responseText);
@@ -1086,7 +1144,7 @@ async function getMySubmissions(userId, journalId) {
   return records.map((record) => serializeSubmission(record, pointsByUser));
 }
 
-async function createSubmission(payload = {}, userId) {
+async function createSubmission(payload, userId) {
   const challengeId = normalizeString(payload.challengeId);
   if (!challengeId) throw new Error('Desafio e obrigatorio');
 
@@ -1094,7 +1152,11 @@ async function createSubmission(payload = {}, userId) {
   if (!challenge || !challenge.isActive) throw new Error('Desafio nao encontrado ou inativo');
   await ensureJournalAccess(challenge.journalId, userId);
 
-  if (challenge.dueDate && new Date(challenge.dueDate).getTime() < Date.now()) {
+  if (!isChallengeWithinSchedule(challenge)) {
+    throw new Error('Desafio fora da janela programada');
+  }
+
+  if (challenge.dueDate && getEndOfDay(challenge.dueDate)?.getTime() < Date.now()) {
     throw new Error('Prazo do desafio encerrado');
   }
 
@@ -1341,8 +1403,8 @@ async function getUserRanking(journalId, limit = 20, offset = 0) {
     where: { journalId },
     attributes: [
       'userId',
-      [sequelize.fn('SUM', sequelize.literal(`CASE WHEN status = 'approved' THEN 1 ELSE 0 END`)), 'approvedCount'],
-      [sequelize.fn('SUM', sequelize.literal(`CASE WHEN status = 'pending' THEN 1 ELSE 0 END`)), 'pendingCount']
+      [sequelize.fn('SUM', sequelize.literal('CASE WHEN status = \'approved\' THEN 1 ELSE 0 END')), 'approvedCount'],
+      [sequelize.fn('SUM', sequelize.literal('CASE WHEN status = \'pending\' THEN 1 ELSE 0 END')), 'pendingCount']
     ],
     group: ['userId'],
     raw: true

@@ -13,6 +13,7 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  Chip,
   IconButton,
   Tooltip,
   TextField,
@@ -452,7 +453,13 @@ function EventList() {
                         </IconButton>
                       </TableCell>
                       <TableCell>
-                        <Typography variant="subtitle2">{evento.title}</Typography>
+                        <Typography variant="subtitle2" style={{ marginBottom: 4 }}>{evento.title}</Typography>
+                        <Chip
+                          label={evento.requiresPayment === false ? 'Gratuito' : 'Pago'}
+                          size="small"
+                          color={evento.requiresPayment === false ? 'success' : 'primary'}
+                          variant={evento.requiresPayment === false ? 'outlined' : 'filled'}
+                        />
                       </TableCell>
                       <TableCell>{formatarData(evento.startDate)}</TableCell>
                       <TableCell>{evento.location || '-'}</TableCell>
