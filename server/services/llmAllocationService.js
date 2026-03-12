@@ -1431,10 +1431,14 @@ ${availableFields.join(', ')}
 ${omittedFieldsCount > 0 ? `\n(Foram omitidos ${omittedFieldsCount} campos menos relevantes para reduzir tamanho do prompt.)` : ''}
 
 ## Regras obrigatorias (ordem de prioridade)
-1. Pessoas com o mesmo registrationId ficam no mesmo time.
-2. Equilibrar sexo entre os times.
-3. Equilibrar faixa etaria entre os times.
-4. Deixar os times com tamanhos parecidos.
+1. [P1] ABSOLUTA — Pessoas com o mesmo registrationId ficam no mesmo time. Nunca quebrar.
+2. [P2] MUITO FORTE — Blocos de celula: para cada lider_de_celula (nao-excecao) com 2+ inscritos, manter pelo menos uma dupla no mesmo time. Excecoes (tratar como sem celula): "NAO TENHO", "OUTRO LIDER", vazio ou nulo. Se o bloco ultrapassar 40% do time, dividir em sub-blocos de no minimo 2; nunca isolar 1 pessoa do lider sozinha.
+3. [P3] FORTE — Equilibrar sexo entre os times (diferenca maxima de 1 pessoa por sexo entre quaisquer dois times). P2 pode ser parcialmente flexibilizado somente se uma celula for 100% de um sexo e mante-la criar desequilibrio de 3+ pessoas no sexo.
+4. [P4] FORTE — Equilibrar faixa etaria proporcionalmente: jovens (<18), adultos (18-35), maduros (36-55), seniors (>55). P2 pode ser ajustado se a celula for muito homogenea em idade e o desvio entre times superar 30%.
+5. [P5] Tamanhos proximos: diferenca maxima de 1 pessoa entre o maior e o menor time.
+6. [P6] AUXILIAR — Convidados (attendeeData.convidado) e sem-celula sao alocados por ultimo para completar equilibrio de sexo, idade e tamanho. Preferir colocar convidado no mesmo time de quem o convidou (attendeeData.quem_te_convidou), se possivel.
+
+Conflito P2 vs P3: se manter o bloco gera desequilibrio de sexo >= 3, separar o bloco mantendo pelo menos 1 dupla desse lider em algum time. Registrar em warnings qualquer caso em que P2 foi quebrado.
 
 ## Regras adicionais
 ${customRules || 'Nenhuma regra adicional.'}

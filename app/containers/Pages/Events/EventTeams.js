@@ -627,7 +627,7 @@ export default function EventTeams() {
                 multiline
                 rows={7}
                 label="Regras adicionais (linguagem natural)"
-                placeholder={'Exemplos:\n- Líderes distribuídos 1 por time\n- Crianças abaixo de 12 anos no Time A\n- Fulano e Ciclano não podem ser do mesmo time\n- Separar por cidade de origem'}
+                placeholder={'Exemplos:\n- Manter duplas/trios do mesmo líder de célula no mesmo time\n- Equilibrar sexo e faixa etária entre os times\n- Convidados junto de quem os convidou\n- Fulano e Ciclano não podem ser do mesmo time\n- Líderes de célula distribuídos 1 por time'}
                 value={customRules}
                 onChange={(e) => setCustomRules(e.target.value)}
                 helperText="O LLM irá interpretar e aplicar respeitando os campos disponíveis nos inscritos."
