@@ -678,7 +678,10 @@ function sanitizeTeamsAllocation(allocation, allowedAttendeesById, teams = []) {
       attendeeId,
       nome: sanitizeAllocationValue(item?.nome) || attendee.nome,
       teamId,
-      teamName: sanitizeAllocationValue(item?.teamName) || team.name
+      teamName: sanitizeAllocationValue(item?.teamName) || team.name,
+      idade: attendee.idade != null ? String(attendee.idade) : null,
+      sexo: attendee.sexo || null,
+      lider_de_celula: attendee.camposDinamicos?.['attendeeData.lider_de_celula'] || null
     });
   });
 
@@ -1430,15 +1433,18 @@ Total de inscritos: ${attendees.length}
 ${availableFields.join(', ')}
 ${omittedFieldsCount > 0 ? `\n(Foram omitidos ${omittedFieldsCount} campos menos relevantes para reduzir tamanho do prompt.)` : ''}
 
+## Instrucao geral
+SEMPRE gere o JSON de alocacao completo, com TODOS os inscritos. Nunca recuse ou retorne resposta parcial por falta de campos — aplique apenas as regras cujos campos existam nos dados; pule silenciosamente as que nao se aplicam e registre em warnings.
+
 ## Regras obrigatorias (ordem de prioridade)
 1. [P1] ABSOLUTA — Pessoas com o mesmo registrationId ficam no mesmo time. Nunca quebrar.
-2. [P2] MUITO FORTE — Blocos de celula: para cada lider_de_celula (nao-excecao) com 2+ inscritos, manter pelo menos uma dupla no mesmo time. Excecoes (tratar como sem celula): "NAO TENHO", "OUTRO LIDER", vazio ou nulo. Se o bloco ultrapassar 40% do time, dividir em sub-blocos de no minimo 2; nunca isolar 1 pessoa do lider sozinha.
-3. [P3] FORTE — Equilibrar sexo entre os times (diferenca maxima de 1 pessoa por sexo entre quaisquer dois times). P2 pode ser parcialmente flexibilizado somente se uma celula for 100% de um sexo e mante-la criar desequilibrio de 3+ pessoas no sexo.
-4. [P4] FORTE — Equilibrar faixa etaria proporcionalmente: jovens (<18), adultos (18-35), maduros (36-55), seniors (>55). P2 pode ser ajustado se a celula for muito homogenea em idade e o desvio entre times superar 30%.
+2. [P2] MUITO FORTE — Se o campo lider_de_celula existir nos dados: para cada lider (nao-excecao) com 2+ inscritos, manter pelo menos uma dupla no mesmo time. Excecoes (sem celula): "NAO TENHO", "OUTRO LIDER", vazio ou nulo. Se o bloco ultrapassar 40% do time, dividir em sub-blocos de no minimo 2; nunca isolar 1 pessoa do lider sozinha. Se o campo nao existir, pular esta regra.
+3. [P3] FORTE — Se o campo sexo existir: equilibrar sexo entre os times (diferenca maxima de 1 pessoa por sexo entre quaisquer dois times). P2 pode ser parcialmente flexibilizado somente se mante-lo criar desequilibrio de 3+ pessoas no sexo. Se o campo nao existir, pular esta regra.
+4. [P4] FORTE — Se campos de idade/data_de_nascimento existirem: equilibrar faixa etaria proporcionalmente (jovens <18, adultos 18-35, maduros 36-55, seniors >55). P2 pode ser ajustado se a celula for muito homogenea em idade e o desvio entre times superar 30%. Se o campo nao existir, pular esta regra.
 5. [P5] Tamanhos proximos: diferenca maxima de 1 pessoa entre o maior e o menor time.
-6. [P6] AUXILIAR — Convidados (attendeeData.convidado) e sem-celula sao alocados por ultimo para completar equilibrio de sexo, idade e tamanho. Preferir colocar convidado no mesmo time de quem o convidou (attendeeData.quem_te_convidou), se possivel.
+6. [P6] AUXILIAR — Se o campo convidado existir: alocar convidados e sem-celula por ultimo para completar equilibrio. Preferir colocar convidado no mesmo time de quem o convidou (quem_te_convidou), se possivel. Se os campos nao existirem, pular esta regra.
 
-Conflito P2 vs P3: se manter o bloco gera desequilibrio de sexo >= 3, separar o bloco mantendo pelo menos 1 dupla desse lider em algum time. Registrar em warnings qualquer caso em que P2 foi quebrado.
+Conflito P2 vs P3: se manter o bloco gera desequilibrio de sexo >= 3, separar o bloco mantendo pelo menos 1 dupla desse lider em algum time. Registrar em warnings qualquer caso em que P2 foi quebrado ou uma regra foi pulada por ausencia de campo.
 
 ## Regras adicionais
 ${customRules || 'Nenhuma regra adicional.'}
