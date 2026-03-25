@@ -23,12 +23,14 @@ import {
   FormControlLabel,
   Grid,
   IconButton,
+  InputAdornment,
   InputLabel,
   MenuItem,
   Select,
   Stack,
   Switch,
   Tab,
+  TablePagination,
   Tabs,
   Table,
   TableBody,
@@ -46,6 +48,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { Editor } from 'react-draft-wysiwyg';
@@ -153,10 +156,10 @@ const emptyJournal = {
 };
 
 const ADMIN_TABS = [
-  { value: 'journals', label: 'Diarios' },
+  { value: 'journals', label: 'Diários' },
   { value: 'categories', label: 'Categorias' },
   { value: 'challenges', label: 'Desafios' },
-  { value: 'approvals', label: 'Aprovacoes' },
+  { value: 'approvals', label: 'Aprovações' },
   { value: 'badges', label: 'Badges' }
 ];
 
@@ -297,6 +300,7 @@ function BoardJournalAdminPage() {
       : 'categories';
   });
   const [loading, setLoading] = useState(true);
+  const [loadingMembers, setLoadingMembers] = useState(false);
   const [notification, setNotification] = useState('');
   const [journals, setJournals] = useState([]);
   const [managerUsers, setManagerUsers] = useState([]);
@@ -326,8 +330,18 @@ function BoardJournalAdminPage() {
   const [detailItem, setDetailItem] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [membersNameFilter, setMembersNameFilter] = useState('');
+  const [membersEmailFilter, setMembersEmailFilter] = useState('');
+  const [membersPage, setMembersPage] = useState(0);
+  const [membersRowsPerPage, setMembersRowsPerPage] = useState(10);
+  const [pendingPage, setPendingPage] = useState(0);
+  const [pendingRowsPerPage, setPendingRowsPerPage] = useState(10);
+  const [approvalsPage, setApprovalsPage] = useState(0);
+  const [approvalsRowsPerPage, setApprovalsRowsPerPage] = useState(10);
+  const [challengesPage, setChallengesPage] = useState(0);
+  const [challengesRowsPerPage, setChallengesRowsPerPage] = useState(10);
 
-  const title = `${brand.name} - Diario de Bordo Administrativo`;
+  const title = `${brand.name} - Diário de Bordo Administrativo`;
   const storedPermissions = useMemo(() => getStoredPermissions(), []);
   const hasBoardAdminPermission = useMemo(
     () => storedPermissions.includes('ADMIN_FULL_ACCESS') || storedPermissions.includes('DIARIO_BORDO_ADMIN'),
@@ -379,6 +393,23 @@ function BoardJournalAdminPage() {
   const formPreviewFields = useMemo(() => serializeFormFields(challengeForm.formFields || []), [challengeForm.formFields]);
   const pendingJournalMembers = useMemo(() => journalMembers.filter((item) => item.status === 'pending'), [journalMembers]);
   const approvedJournalMembers = useMemo(() => journalMembers.filter((item) => item.status === 'approved'), [journalMembers]);
+  const filteredApprovedMembers = useMemo(() => {
+    const nameQ = membersNameFilter.trim().toLowerCase();
+    const emailQ = membersEmailFilter.trim().toLowerCase();
+    return approvedJournalMembers.filter((item) => {
+      const name = (item.user?.name || '').toLowerCase();
+      const email = (item.user?.email || '').toLowerCase();
+      return (!nameQ || name.includes(nameQ)) && (!emailQ || email.includes(emailQ));
+    });
+  }, [approvedJournalMembers, membersNameFilter, membersEmailFilter]);
+  const paginatedMembers = useMemo(
+    () => filteredApprovedMembers.slice(membersPage * membersRowsPerPage, membersPage * membersRowsPerPage + membersRowsPerPage),
+    [filteredApprovedMembers, membersPage, membersRowsPerPage]
+  );
+  const paginatedPendingMembers = useMemo(
+    () => pendingJournalMembers.slice(pendingPage * pendingRowsPerPage, pendingPage * pendingRowsPerPage + pendingRowsPerPage),
+    [pendingJournalMembers, pendingPage, pendingRowsPerPage]
+  );
   const selectedJournal = journals.find((item) => item.id === selectedJournalId) || null;
   const filteredPendingSubmissions = useMemo(() => {
     const userFilter = approvalUserFilter.trim().toLowerCase();
@@ -396,6 +427,14 @@ function BoardJournalAdminPage() {
       return matchesCategory && matchesChallenge && matchesUser;
     });
   }, [approvalCategoryFilter, approvalChallengeFilter, approvalUserFilter, pendingSubmissions]);
+  const paginatedPendingSubmissions = useMemo(
+    () => filteredPendingSubmissions.slice(approvalsPage * approvalsRowsPerPage, approvalsPage * approvalsRowsPerPage + approvalsRowsPerPage),
+    [filteredPendingSubmissions, approvalsPage, approvalsRowsPerPage]
+  );
+  const paginatedChallenges = useMemo(
+    () => challenges.slice(challengesPage * challengesRowsPerPage, challengesPage * challengesRowsPerPage + challengesRowsPerPage),
+    [challenges, challengesPage, challengesRowsPerPage]
+  );
 
   const loadData = async () => {
     try {
@@ -447,6 +486,19 @@ function BoardJournalAdminPage() {
       setNotification(error.message || 'Erro ao carregar Diario de Bordo administrativo');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMembers = async () => {
+    if (!selectedJournalId) return;
+    try {
+      setLoadingMembers(true);
+      const memberRows = await listBoardJournalMembers(selectedJournalId);
+      setJournalMembers(memberRows || []);
+    } catch (error) {
+      setNotification(error.message || 'Erro ao atualizar solicitacoes');
+    } finally {
+      setLoadingMembers(false);
     }
   };
 
@@ -833,7 +885,7 @@ function BoardJournalAdminPage() {
   return (
     <div>
       <Helmet><title>{title}</title></Helmet>
-      <PapperBlock title="Diario de Bordo Administrativo" icon="ion-ios-settings-outline" desc="Gerencie categorias, desafios, aprovacoes e badges" overflowX>
+      <PapperBlock title="Diário de Bordo Administrativo" icon="ion-ios-settings-outline" desc="Gerencie categorias, desafios, aprovacoes e badges" overflowX>
         <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
           <Tabs value={tab} onChange={(_e, value) => setTab(value)} variant="scrollable" scrollButtons="auto">
             {availableTabs.map((item) => (
@@ -877,7 +929,7 @@ function BoardJournalAdminPage() {
                   ) : (
                     <Typography variant="body2" color="textSecondary">
                       {hasBoardAdminPermission
-                        ? 'Selecione um diario para gerir categorias, desafios, Aprovacoes e badges.'
+                        ? 'Selecione um diario para gerir categorias, desafios, Aprovações e badges.'
                         : 'A gestao desta conta esta vinculada ao diario atribuido.'}
                     </Typography>
                   )}
@@ -892,13 +944,13 @@ function BoardJournalAdminPage() {
             <CardContent>
               <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={2} sx={{ mb: 2 }}>
                 <Box>
-                  <Typography variant="h6">Diarios</Typography>
+                  <Typography variant="h6">Diários</Typography>
                   <Typography variant="body2" color="textSecondary">
-                    Crie Diarios, selecione o diario ativo da gestao e aprove entradas de usuarios.
+                    Crie Diários, selecione o diário ativo da gestão e aprove entradas de usuários.
                   </Typography>
                 </Box>
                 <Button variant="contained" onClick={() => { setJournalForm(emptyJournal); setJournalInstructionsEditorState(EditorState.createEmpty()); setJournalOpen(true); }}>
-                  Novo diario
+                  Novo diário
                 </Button>
               </Stack>
 
@@ -933,7 +985,7 @@ function BoardJournalAdminPage() {
                     <TableCell>Status</TableCell>
                     <TableCell>Membros</TableCell>
                     <TableCell>Pendentes</TableCell>
-                    <TableCell align="right">Acoes</TableCell>
+                    <TableCell align="right">Ações</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -1000,18 +1052,25 @@ function BoardJournalAdminPage() {
 
               <Divider sx={{ my: 2 }} />
 
-              <Typography variant="subtitle1" sx={{ mb: 1 }}>Solicitacoes de entrada do diario atual</Typography>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                <Typography variant="subtitle1">Solicitações de entrada do diário atual</Typography>
+                <Tooltip title="Atualizar solicitações">
+                  <IconButton size="small" onClick={loadMembers} disabled={loadingMembers}>
+                    <RefreshIcon fontSize="small" sx={{ animation: loadingMembers ? 'spin 1s linear infinite' : 'none', '@keyframes spin': { from: { transform: 'rotate(0deg)' }, to: { transform: 'rotate(360deg)' } } }} />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
               <Table size="small">
                 <TableHead>
                   <TableRow>
                     <TableCell>Usuario</TableCell>
                     <TableCell>Status</TableCell>
                     <TableCell>Data</TableCell>
-                    <TableCell align="right">Acoes</TableCell>
+                    <TableCell align="right">Ações</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {pendingJournalMembers.map((item) => (
+                  {paginatedPendingMembers.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell>{item.user?.name || '-'}</TableCell>
                       <TableCell>{item.status}</TableCell>
@@ -1033,21 +1092,53 @@ function BoardJournalAdminPage() {
                   {pendingJournalMembers.length === 0 && <TableRow><TableCell colSpan={4}>Nenhuma solicitacao pendente.</TableCell></TableRow>}
                 </TableBody>
               </Table>
+              <TablePagination
+                component="div"
+                count={pendingJournalMembers.length}
+                page={pendingPage}
+                onPageChange={(_e, newPage) => setPendingPage(newPage)}
+                rowsPerPage={pendingRowsPerPage}
+                onRowsPerPageChange={(e) => { setPendingRowsPerPage(parseInt(e.target.value, 10)); setPendingPage(0); }}
+                rowsPerPageOptions={[5, 10, 25]}
+                labelRowsPerPage="Por página:"
+                labelDisplayedRows={({ from, to, count }) => `${from}–${to} de ${count}`}
+              />
 
               <Divider sx={{ my: 2 }} />
 
-              <Typography variant="subtitle1" sx={{ mb: 1 }}>Usuarios com acesso ao diario atual</Typography>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
+                <Typography variant="subtitle1">Usuários com acesso ao diário atual</Typography>
+                <Typography variant="caption" color="textSecondary">{filteredApprovedMembers.length} usuário(s)</Typography>
+              </Stack>
+              <Stack direction="row" spacing={1.5} sx={{ mb: 1.5 }}>
+                <TextField
+                  size="small"
+                  placeholder="Buscar por nome"
+                  value={membersNameFilter}
+                  onChange={(e) => { setMembersNameFilter(e.target.value); setMembersPage(0); }}
+                  InputProps={{ startAdornment: <InputAdornment position="start">👤</InputAdornment> }}
+                  sx={{ flex: 1 }}
+                />
+                <TextField
+                  size="small"
+                  placeholder="Buscar por e-mail"
+                  value={membersEmailFilter}
+                  onChange={(e) => { setMembersEmailFilter(e.target.value); setMembersPage(0); }}
+                  InputProps={{ startAdornment: <InputAdornment position="start">@</InputAdornment> }}
+                  sx={{ flex: 1 }}
+                />
+              </Stack>
               <Table size="small">
                 <TableHead>
                   <TableRow>
                     <TableCell>Usuario</TableCell>
                     <TableCell>Email</TableCell>
                     <TableCell>Entrada aprovada em</TableCell>
-                    <TableCell align="right">Acoes</TableCell>
+                    <TableCell align="right">Ações</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {approvedJournalMembers.map((item) => {
+                  {paginatedMembers.map((item) => {
                     const isCreator = String(item.userId || '') === String(selectedJournal?.createdBy || '');
                     return (
                       <TableRow key={item.id}>
@@ -1080,9 +1171,26 @@ function BoardJournalAdminPage() {
                       </TableRow>
                     );
                   })}
-                  {approvedJournalMembers.length === 0 && <TableRow><TableCell colSpan={4}>Nenhum usuario aprovado neste diario.</TableCell></TableRow>}
+                  {filteredApprovedMembers.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4}>
+                        {(membersNameFilter || membersEmailFilter) ? 'Nenhum usuario encontrado para essa busca.' : 'Nenhum usuario aprovado neste diario.'}
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
+              <TablePagination
+                component="div"
+                count={filteredApprovedMembers.length}
+                page={membersPage}
+                onPageChange={(_e, newPage) => setMembersPage(newPage)}
+                rowsPerPage={membersRowsPerPage}
+                onRowsPerPageChange={(e) => { setMembersRowsPerPage(parseInt(e.target.value, 10)); setMembersPage(0); }}
+                rowsPerPageOptions={[5, 10, 25, 50]}
+                labelRowsPerPage="Por página:"
+                labelDisplayedRows={({ from, to, count }) => `${from}–${to} de ${count}`}
+              />
             </CardContent>
           </Card>
         )}
@@ -1101,7 +1209,7 @@ function BoardJournalAdminPage() {
                   <TableRow>
                     <TableCell>Nome</TableCell>
                     <TableCell>Descricao</TableCell>
-                    <TableCell align="right">Acoes</TableCell>
+                    <TableCell align="right">Ações</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -1152,11 +1260,11 @@ function BoardJournalAdminPage() {
                     <TableCell>Tipo</TableCell>
                     <TableCell>Pontos</TableCell>
                     <TableCell>Status</TableCell>
-                    <TableCell align="right">Acoes</TableCell>
+                    <TableCell align="right">Ações</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {challenges.map((item) => (
+                  {paginatedChallenges.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell>{item.title}</TableCell>
                       <TableCell>{item.category?.name || '-'}</TableCell>
@@ -1203,6 +1311,17 @@ function BoardJournalAdminPage() {
                   ))}
                 </TableBody>
               </Table>
+              <TablePagination
+                component="div"
+                count={challenges.length}
+                page={challengesPage}
+                onPageChange={(_e, newPage) => setChallengesPage(newPage)}
+                rowsPerPage={challengesRowsPerPage}
+                onRowsPerPageChange={(e) => { setChallengesRowsPerPage(parseInt(e.target.value, 10)); setChallengesPage(0); }}
+                rowsPerPageOptions={[5, 10, 25, 50]}
+                labelRowsPerPage="Por página:"
+                labelDisplayedRows={({ from, to, count }) => `${from}–${to} de ${count}`}
+              />
             </CardContent>
           </Card>
         )}
@@ -1210,12 +1329,12 @@ function BoardJournalAdminPage() {
         {!loading && tab === 'approvals' && hasBoardAdminPermission && (
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>Aprovacoes pendentes</Typography>
+              <Typography variant="h6" gutterBottom>Aprovações pendentes</Typography>
               <Grid container spacing={2} sx={{ mb: 2 }}>
                 <Grid item xs={12} md={4}>
                   <FormControl fullWidth size="small">
                     <InputLabel>Categoria</InputLabel>
-                    <Select value={approvalCategoryFilter} label="Categoria" onChange={(e) => setApprovalCategoryFilter(e.target.value)}>
+                    <Select value={approvalCategoryFilter} label="Categoria" onChange={(e) => { setApprovalCategoryFilter(e.target.value); setApprovalsPage(0); }}>
                       <MenuItem value="all">Todas</MenuItem>
                       {categories.map((item) => (
                         <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
@@ -1226,7 +1345,7 @@ function BoardJournalAdminPage() {
                 <Grid item xs={12} md={4}>
                   <FormControl fullWidth size="small">
                     <InputLabel>Desafio</InputLabel>
-                    <Select value={approvalChallengeFilter} label="Desafio" onChange={(e) => setApprovalChallengeFilter(e.target.value)}>
+                    <Select value={approvalChallengeFilter} label="Desafio" onChange={(e) => { setApprovalChallengeFilter(e.target.value); setApprovalsPage(0); }}>
                       <MenuItem value="all">Todos</MenuItem>
                       {challenges.map((item) => (
                         <MenuItem key={item.id} value={item.id}>{item.title}</MenuItem>
@@ -1238,7 +1357,7 @@ function BoardJournalAdminPage() {
                   <TextField
                     label="Usuario"
                     value={approvalUserFilter}
-                    onChange={(e) => setApprovalUserFilter(e.target.value)}
+                    onChange={(e) => { setApprovalUserFilter(e.target.value); setApprovalsPage(0); }}
                     placeholder="Filtrar por nome ou email"
                     fullWidth
                     size="small"
@@ -1249,18 +1368,20 @@ function BoardJournalAdminPage() {
                 <TableHead>
                   <TableRow>
                     <TableCell>Usuario</TableCell>
+                    <TableCell>Categoria</TableCell>
                     <TableCell>Desafio</TableCell>
                     <TableCell>Resposta</TableCell>
-                    <TableCell align="right">Acoes</TableCell>
+                    <TableCell align="right">Ações</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {filteredPendingSubmissions.map((item) => (
+                  {paginatedPendingSubmissions.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell>
                         <Typography variant="body2">{item.user?.name || '-'}</Typography>
                         <Typography variant="caption" color="textSecondary">{item.user?.email || '-'}</Typography>
                       </TableCell>
+                      <TableCell>{item.challenge?.category?.name || '-'}</TableCell>
                       <TableCell>{item.challenge?.title}</TableCell>
                       <TableCell>{renderSubmissionSummary(item)}</TableCell>
                       <TableCell align="right">
@@ -1285,6 +1406,17 @@ function BoardJournalAdminPage() {
                   {filteredPendingSubmissions.length === 0 && <TableRow><TableCell colSpan={4}>Nenhuma submissao encontrada para os filtros atuais.</TableCell></TableRow>}
                 </TableBody>
               </Table>
+              <TablePagination
+                component="div"
+                count={filteredPendingSubmissions.length}
+                page={approvalsPage}
+                onPageChange={(_e, newPage) => setApprovalsPage(newPage)}
+                rowsPerPage={approvalsRowsPerPage}
+                onRowsPerPageChange={(e) => { setApprovalsRowsPerPage(parseInt(e.target.value, 10)); setApprovalsPage(0); }}
+                rowsPerPageOptions={[5, 10, 25, 50]}
+                labelRowsPerPage="Por página:"
+                labelDisplayedRows={({ from, to, count }) => `${from}–${to} de ${count}`}
+              />
             </CardContent>
           </Card>
         )}
@@ -1303,7 +1435,7 @@ function BoardJournalAdminPage() {
                     <TableCell>Tipo</TableCell>
                     <TableCell>Pontos</TableCell>
                     <TableCell>Status</TableCell>
-                    <TableCell align="right">Acoes</TableCell>
+                    <TableCell align="right">Ações</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -1619,7 +1751,7 @@ function BoardJournalAdminPage() {
                 value={challengeForm.secondChancePoints}
                 onChange={(e) => setChallengeForm((prev) => ({ ...prev, secondChancePoints: e.target.value }))}
                 disabled={!challengeForm.allowSecondChance}
-                helperText="Pontuacao concedida quando a aprovacao ocorrer na segunda tentativa."
+                helperText="Pontuacao concedida quando a aprovação ocorrer na segunda tentativa."
                 fullWidth
               />
             </Grid>
@@ -1769,7 +1901,7 @@ function BoardJournalAdminPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setReviewOpen(false)}>Cancelar</Button>
-          <Button variant="contained" color={reviewAction === 'approve' ? 'success' : 'error'} onClick={submitReview}>{reviewAction === 'approve' ? 'Confirmar aprovacao' : 'Confirmar rejeicao'}</Button>
+          <Button variant="contained" color={reviewAction === 'approve' ? 'success' : 'error'} onClick={submitReview}>{reviewAction === 'approve' ? 'Confirmar aprovação' : 'Confirmar rejeicao'}</Button>
         </DialogActions>
       </Dialog>
 

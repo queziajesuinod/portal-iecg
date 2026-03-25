@@ -1390,7 +1390,7 @@ async function getOverallStats(journalId) {
 
 async function getUserRanking(journalId, limit = 20, offset = 0) {
   if (!journalId) throw new Error('Diario e obrigatorio');
-  const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
+  const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 1000);
   const safeOffset = Math.max(Number(offset) || 0, 0);
   const pointsByUser = await getApprovedPointsByUser(journalId);
   const badgeRows = await BoardUserBadge.findAll({
@@ -1438,8 +1438,9 @@ async function getUserRanking(journalId, limit = 20, offset = 0) {
     approvedCount: Number(metricsByUser[user.id]?.approvedCount || 0),
     pendingCount: Number(metricsByUser[user.id]?.pendingCount || 0),
     badgeCount: Number(metricsByUser[user.id]?.badgeCount || 0)
-  })).sort((a, b) => {
+  })).filter((row) => row.points > 0).sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
+    if (b.approvedCount !== a.approvedCount) return b.approvedCount - a.approvedCount;
     return String(a.name || '').localeCompare(String(b.name || ''));
   });
   return ranking.slice(safeOffset, safeOffset + safeLimit).map((row, index) => ({
