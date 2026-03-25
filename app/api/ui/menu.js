@@ -90,6 +90,55 @@ module.exports = [
     ]
   },
   {
+    key: 'cultos',
+    name: 'Saúde dos Cultos',
+    icon: 'ion-ios-microphone-outline',
+    child: [
+      {
+        key: 'cultosDashboard',
+        name: 'Dashboard',
+        link: '/app/cultos/dashboard',
+        icon: 'ion-ios-analytics-outline',
+        permission: 'SAUDE_CULTOS'
+      },
+      {
+        key: 'cultosRegistros',
+        name: 'Registros de Culto',
+        link: '/app/cultos/registros',
+        icon: 'ion-ios-list-box-outline',
+        permission: 'SAUDE_CULTOS'
+      },
+      {
+        key: 'cultosMinisterios',
+        name: 'Ministérios',
+        link: '/app/cultos/admin/ministerios',
+        icon: 'ion-ios-people-outline',
+        permission: 'SAUDE_CULTOS'
+      },
+      {
+        key: 'cultosTiposEvento',
+        name: 'Tipos de Evento',
+        link: '/app/cultos/admin/tipos-evento',
+        icon: 'ion-ios-pricetag-outline',
+        permission: 'SAUDE_CULTOS'
+      },
+      {
+        key: 'cultosCampusMinisterios',
+        name: 'Campus × Ministérios',
+        link: '/app/cultos/admin/campus-ministerios',
+        icon: 'ion-ios-git-network-outline',
+        permission: 'SAUDE_CULTOS'
+      },
+      {
+        key: 'cultosMinistros',
+        name: 'Ministros',
+        link: '/app/cultos/admin/ministros',
+        icon: 'ion-ios-mic-outline',
+        permission: 'SAUDE_CULTOS'
+      }
+    ]
+  },
+  {
     key: 'diarioBordo',
     name: 'Diário de Bordo',
     icon: 'ion-ios-book-outline',
@@ -99,7 +148,7 @@ module.exports = [
         name: 'Meu Diário',
         link: '/app/diario-bordo',
         icon: 'ion-ios-compose-outline',
-        permission: 'DIARIO_BORDO_USER'
+        
       },
       {
         key: 'gestaoDiarioBordo',

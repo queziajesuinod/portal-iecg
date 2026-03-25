@@ -7,6 +7,12 @@ module.exports = (sequelize) => {
       if (models.Celula) {
         Campus.hasMany(models.Celula, { foreignKey: 'campusId', as: 'celulas' });
       }
+      if (models.CampusMinisterio) {
+        Campus.hasMany(models.CampusMinisterio, { foreignKey: 'campusId', as: 'ministerioVinculos' });
+      }
+      if (models.RegistroCulto) {
+        Campus.hasMany(models.RegistroCulto, { foreignKey: 'campusId', as: 'registrosCulto' });
+      }
     }
   }
 
@@ -29,6 +35,11 @@ module.exports = (sequelize) => {
       pastoresResponsaveis: DataTypes.TEXT,
       lat: DataTypes.STRING,
       lon: DataTypes.STRING,
+      transmiteOnline: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
     },
     {
       sequelize,
