@@ -140,7 +140,7 @@ function BoardJournalPage() {
     responsePayload: {}
   });
 
-  const title = `${brand.name} - Meu Diario de Bordo`;
+  const title = `${brand.name} - Meu Diário de Bordo`;
 
   const myByChallenge = useMemo(() => mySubmissions.reduce((acc, item) => {
     if (!acc[item.challengeId]) {
@@ -194,7 +194,7 @@ function BoardJournalPage() {
       setRanking(rankingRows || []);
       setMyStats(stats || null);
     } catch (error) {
-      setNotification(error.message || 'Erro ao carregar Meu Diario');
+      setNotification(error.message || 'Erro ao carregar Meu Diário');
     } finally {
       setLoading(false);
     }
@@ -220,9 +220,9 @@ function BoardJournalPage() {
   const getChallengeActionLabel = (challenge) => {
     const submission = myByChallenge[challenge.id];
     if (submission?.status === 'rejected' && canRespondToChallenge(challenge)) {
-      return challenge.challengeType === 'lesson' ? 'Refazer licao' : 'Responder novamente';
+      return challenge.challengeType === 'lesson' ? 'Refazer Lição' : 'Responder novamente';
     }
-    if (challenge.challengeType === 'lesson') return 'Iniciar licao';
+    if (challenge.challengeType === 'lesson') return 'Iniciar Lição';
     return 'Responder';
   };
 
@@ -530,9 +530,7 @@ function BoardJournalPage() {
               <Typography variant="h5" sx={{ color: COLORS.navy, fontWeight: 800, mt: 0.25 }}>
                 Diários disponiveis
               </Typography>
-              <Typography variant="body2" sx={{ color: COLORS.ink, maxWidth: 620 }}>
-                Escolha um diário aprovado para entrar ou solicite acesso. O layout abaixo ficou mais direto para trocar de diário sem quebrar o fluxo..
-              </Typography>
+             
             </Box>
             {selectedJournal && (
               <Chip
@@ -720,7 +718,7 @@ function BoardJournalPage() {
               <Grid item xs={12} md={7}>
                 <Stack spacing={1.5}>
                   <Chip
-                    label="Diario selecionado"
+                    label="Diário selecionado"
                     sx={{
                       alignSelf: 'flex-start',
                       backgroundColor: '#EFF4F8',
@@ -729,7 +727,7 @@ function BoardJournalPage() {
                     }}
                   />
                   <Typography variant="h3" sx={{ fontWeight: 800, letterSpacing: '-0.03em' }}>
-                    {selectedJournal?.name || 'Meu Diario de Bordo'}
+                    {selectedJournal?.name || 'Meu Diário de Bordo'}
                   </Typography>
                   <Typography variant="body1" sx={{ maxWidth: 620, color: COLORS.ink }}>
                     {journalDescription}
@@ -839,7 +837,7 @@ function BoardJournalPage() {
                           Guia rápido do diário
                         </Typography>
                         <Typography variant="body2" color="textSecondary">
-                          O visual, as regras e o contexto abaixo pertencem ao diario selecionado.
+                          O visual, as regras e o contexto abaixo pertencem ao Diário selecionado.
                         </Typography>
                       </Box>
                     </Stack>
@@ -937,7 +935,7 @@ function BoardJournalPage() {
           </Grid>
 
           <PapperBlock
-            title={selectedJournal?.name || 'Meu Diario de Bordo'}
+            title={selectedJournal?.name || 'Meu Diário de Bordo'}
             icon="ion-ios-bookmarks-outline"
             desc={journalDescription}
             overflowX
@@ -974,7 +972,7 @@ function BoardJournalPage() {
                   }
                 }}
               >
-                <Tab label="Meu Diario" />
+                <Tab label="Meu Diário" />
                 <Tab label="Meus Desafios" />
                 <Tab label="Ranking" />
                 <Tab label="Analytics" />
@@ -1035,7 +1033,6 @@ function BoardJournalPage() {
                                         fontWeight: 700
                                       }}
                                     />
-                                    <Chip size="small" variant="outlined" label={getChallengeTypeLabel(challenge.challengeType)} />
                                     <Chip
                                       size="small"
                                       variant="outlined"
@@ -1085,7 +1082,7 @@ function BoardJournalPage() {
                               >
                                 <Grid container spacing={2}>
                                   <Grid item xs={12} sm={4}>
-                                    <Typography variant="caption" color="textSecondary">Programacao</Typography>
+                                    <Typography variant="caption" color="textSecondary">Programação</Typography>
                                     <Typography variant="body1" sx={{ mt: 0.5, fontWeight: 700, color: COLORS.ink }}>
                                       {[challenge.startDate ? formatDate(challenge.startDate) : null, challenge.endDate ? formatDate(challenge.endDate) : null]
                                         .filter(Boolean)
@@ -1389,7 +1386,7 @@ function BoardJournalPage() {
                               >
                                 <Grid container spacing={2}>
                                   <Grid item xs={12} sm={3}>
-                                    <Typography variant="caption" color="textSecondary">Programacao</Typography>
+                                    <Typography variant="caption" color="textSecondary">Programação</Typography>
                                     <Typography variant="body1" sx={{ mt: 0.5, fontWeight: 700, color: COLORS.ink }}>
                                       {[challenge.startDate ? formatDate(challenge.startDate) : null, challenge.endDate ? formatDate(challenge.endDate) : null]
                                         .filter(Boolean)
@@ -1868,27 +1865,15 @@ function BoardJournalPage() {
                   border: '1px solid rgba(21,48,74,0.06)'
                 }}
               >
-                {selectedJournal?.instructions && (
-                  <Box
-                    sx={{
-                      color: 'text.secondary',
-                      mb: 2,
-                      '& p': { my: 0 },
-                      '& ul, & ol': { pl: 3, my: 0.75 },
-                      '& a': { color: COLORS.navy, fontWeight: 700 }
-                    }}
-                    dangerouslySetInnerHTML={sanitizeRichHtml(selectedJournal.instructions)}
-                  />
-                )}
                 {submissionTarget?.description && (
-                  <Typography variant="body2" color="textSecondary" paragraph>
+                  <Typography variant="subtitle1" paragraph style={{ fontWeight: 'bold', color: '#333' }}>
                     {submissionTarget.description}
                   </Typography>
                 )}
                 <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mb: 2 }}>
                   <Chip size="small" label={`${submissionTarget?.points || 0} pts`} />
                   {submissionTarget?.category?.name && <Chip size="small" label={submissionTarget.category.name} />}
-                  <Chip size="small" variant="outlined" label={getChallengeTypeLabel(submissionTarget?.challengeType)} />
+                
                   <Chip
                     size="small"
                     variant="outlined"

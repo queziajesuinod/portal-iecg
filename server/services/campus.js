@@ -6,7 +6,7 @@ async function listar() {
 }
 
 async function criar(body) {
-  const { nome, endereco, pastoresResponsaveis, bairro, cidade, estado, lat, lon } = body;
+  const { nome, endereco, pastoresResponsaveis, bairro, cidade, estado, lat, lon, transmiteOnline } = body;
   if (!nome) {
     throw new Error('Nome do campus é obrigatório');
   }
@@ -20,6 +20,7 @@ async function criar(body) {
     estado,
     lat,
     lon,
+    transmiteOnline: transmiteOnline ?? false,
   });
 }
 
@@ -36,6 +37,7 @@ async function atualizar(id, body) {
   campus.pastoresResponsaveis = body.pastoresResponsaveis ?? campus.pastoresResponsaveis;
   campus.lat = body.lat ?? campus.lat;
   campus.lon = body.lon ?? campus.lon;
+  if (body.transmiteOnline !== undefined) campus.transmiteOnline = body.transmiteOnline;
   await campus.save();
   return campus;
 }

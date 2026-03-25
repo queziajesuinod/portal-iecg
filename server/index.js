@@ -86,6 +86,7 @@ app.use('/api/admin/notifications', authMiddleware, require('./routers/notificat
 // Rotas administrativas financeiras (protegidas)
 app.use('/api/admin/financial', authMiddleware, require('./routers/financialRoutes'));
 app.use('/api/admin/diario-bordo', authMiddleware, require('./routers/boardJournalRoutes'));
+app.use('/api/admin/cultos', authMiddleware, require('./routers/cultosRoutes'));
 // Webhook Cielo (pública - sem autenticação)
 app.use('/api/webhooks', require('./routers/webhookRoutes'));
 // Webhook Evolution API (pública - sem autenticação)

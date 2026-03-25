@@ -40,6 +40,13 @@ import RegistrationDetails from '../Pages/Events/RegistrationDetails';
 import EventHousing from '../Pages/Events/EventHousing';
 import EventTeams from '../Pages/Events/EventTeams';
 import FinancialPage from '../Pages/Financial/FinancialPage';
+import RegistroCultoList from '../Pages/Cultos/RegistroCultoList';
+import RegistroCultoForm from '../Pages/Cultos/RegistroCultoForm';
+import CultosDashboard from '../Pages/Cultos/CultosDashboard';
+import MinisteriosPage from '../Pages/Cultos/admin/MinisteriosPage';
+import TiposEventoPage from '../Pages/Cultos/admin/TiposEventoPage';
+import CampusMinisteriosPage from '../Pages/Cultos/admin/CampusMinisteriosPage';
+import MinistrosPage from '../Pages/Cultos/admin/MinistrosPage';
 import { isStoredTokenValid } from '../../utils/authSession';
 
 function Application({ history }) {
@@ -105,6 +112,15 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/events/registrations/:id" component={RegistrationDetails} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/:id/housing" component={EventHousing} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/:id/teams" component={EventTeams} isAuthenticated={isAuthenticated} />
+            {/* ===== Módulo: Saúde e Fluxo de Cultos ===== */}
+            <ProtectedRoute exact path="/app/cultos/dashboard" component={CultosDashboard} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/cultos/registros" component={RegistroCultoList} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/cultos/registros/novo" component={RegistroCultoForm} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/cultos/registros/:id/editar" component={RegistroCultoForm} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/cultos/admin/ministerios" component={MinisteriosPage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/cultos/admin/tipos-evento" component={TiposEventoPage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/cultos/admin/campus-ministerios" component={CampusMinisteriosPage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/cultos/admin/ministros" component={MinistrosPage} isAuthenticated={isAuthenticated} />
           </Switch>
         </Dashboard>
       </Route>
