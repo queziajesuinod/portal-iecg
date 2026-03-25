@@ -763,7 +763,7 @@ const MembrosPage = () => {
             <TableCell>Email</TableCell>
             <TableCell>Telefone</TableCell>
             <TableCell>Status</TableCell>
-            <TableCell>Acoes</TableCell>
+            <TableCell>Ações</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>

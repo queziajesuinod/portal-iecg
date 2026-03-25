@@ -184,7 +184,7 @@ function BoardJournalPage() {
         listBoardChallenges({ journalId: nextSelectedJournalId }),
         listMyBoardSubmissions(nextSelectedJournalId),
         listMyBoardBadges(nextSelectedJournalId),
-        getBoardRanking({ journalId: nextSelectedJournalId, limit: 20 }),
+        getBoardRanking({ journalId: nextSelectedJournalId, limit: 1000 }),
         getMyBoardStats(nextSelectedJournalId)
       ]);
       setSelectedJournal(journal || null);
@@ -479,7 +479,7 @@ function BoardJournalPage() {
 
   const summaryCards = [
     {
-      label: 'Pontuacao acumulada',
+      label: 'Pontuação acumulada',
       value: myStats?.user?.points || 0,
       caption: `${approvedSubmissions} Aprovações confirmadas`,
       icon: 'ion-cash',
@@ -500,7 +500,7 @@ function BoardJournalPage() {
       accent: '#D8C0DD'
     },
     {
-      label: 'Taxa de aprovacao',
+      label: 'Taxa de aprovação',
       value: `${approvalRate}%`,
       caption: `${pendingSubmissions} pendencias em analise`,
       icon: 'ion-ios-pulse',
@@ -736,7 +736,7 @@ function BoardJournalPage() {
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25} useFlexGap flexWrap="wrap">
                     <Chip label={`${availableChallenges} desafios pendentes`} sx={{ backgroundColor: '#EFF4F8', color: COLORS.navy }} />
                     <Chip label={myRankPosition ? `Posicao atual #${myRankPosition}` : 'Ranking em andamento'} sx={{ backgroundColor: '#EFF4F8', color: COLORS.navy }} />
-                    <Chip label={`${approvalRate}% de aprovacao`} sx={{ backgroundColor: '#EFF4F8', color: COLORS.navy }} />
+                    <Chip label={`${approvalRate}% de aprovação`} sx={{ backgroundColor: '#EFF4F8', color: COLORS.navy }} />
                   </Stack>
                 </Stack>
               </Grid>
@@ -762,7 +762,7 @@ function BoardJournalPage() {
                         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                           {selectedJournal?.membership?.status === 'approved'
                             ? 'Seu acesso esta liberado neste diario.'
-                            : 'Acesso depende de aprovacao da gestao.'}
+                            : 'Acesso depende de aprovação da gestao.'}
                         </Typography>
                       </Box>
                       <Box>
@@ -877,7 +877,7 @@ function BoardJournalPage() {
                     </Typography>
                     <Typography variant="body2" sx={{ color: COLORS.ink }}>
                       {selectedJournal?.metrics?.pendingRequests
-                        ? `${selectedJournal.metrics.pendingRequests} solicitacao(oes) aguardando aprovacao da gestao.`
+                        ? `${selectedJournal.metrics.pendingRequests} solicitacao(oes) aguardando aprovação da gestao.`
                         : 'Sem solicitacoes pendentes no momento.'}
                     </Typography>
                     <Typography variant="body2" sx={{ color: COLORS.ink }}>
@@ -1653,13 +1653,13 @@ function BoardJournalPage() {
                     >
                       <CardContent>
                         <Typography variant="overline" sx={{ color: COLORS.amber, letterSpacing: '0.12em' }}>
-                      SUA POSICAO
+                      SUA POSIÇÃO
                         </Typography>
                         <Typography variant="h2" sx={{ fontWeight: 800, mt: 1, color: COLORS.navy }}>
                           {myRankPosition || '--'}
                         </Typography>
                         <Typography variant="body2" sx={{ color: COLORS.ink }}>
-                          {myRankPosition ? 'Voce aparece na listagem atual.' : 'Voce ainda nao entrou na faixa listada.'}
+                          {myRankPosition ? 'Voce aparece na listagem atual.' : 'Você ainda nao entrou na faixa listada.'}
                         </Typography>
                       </CardContent>
                     </Card>
@@ -1720,7 +1720,7 @@ function BoardJournalPage() {
                       <Stack spacing={2}>
                         <Box>
                           <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.75 }}>
-                            <Typography variant="body2">Taxa de aprovacao</Typography>
+                            <Typography variant="body2">Taxa de aprovação</Typography>
                             <Typography variant="body2">{approvalRate}%</Typography>
                           </Stack>
                           <LinearProgress
@@ -1841,7 +1841,7 @@ function BoardJournalPage() {
                           </Box>
                         ))}
                         {!(myStats?.latestApprovedChallenges || []).length && (
-                          <Typography variant="body2">Nenhuma aprovacao ainda.</Typography>
+                          <Typography variant="body2">Nenhuma aprovação ainda.</Typography>
                         )}
                       </Stack>
                     </CardContent>

@@ -740,7 +740,7 @@ function FinancialPage() {
                   <TableCell>Forma de Pagamento</TableCell>
                   <TableCell>Data</TableCell>
                   <TableCell>Status</TableCell>
-                  <TableCell align="center">Acoes</TableCell>
+                  <TableCell align="center">Ações</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
