@@ -1,5 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet';
+import {
+  ContentState,
+  EditorState,
+  convertFromHTML,
+  convertToRaw
+} from 'draft-js';
+import draftToHtml from 'draftjs-to-html';
+import { Editor } from 'react-draft-wysiwyg';
+import 'react-draft-wysiwyg/dist/react-draft-wysiwyg.css';
 import { PapperBlock, Notification } from 'dan-components';
 import {
   Box,
@@ -8,6 +17,7 @@ import {
   CardContent,
   Checkbox,
   Chip,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
@@ -16,6 +26,7 @@ import {
   FormControl,
   FormControlLabel,
   Grid,
+  IconButton,
   InputLabel,
   LinearProgress,
   MenuItem,
@@ -24,8 +35,11 @@ import {
   Tab,
   Tabs,
   TextField,
+  Tooltip,
   Typography
 } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import brand from 'dan-api/dummy/brand';
 import {
   createBoardSubmission,
@@ -38,6 +52,10 @@ import {
   listMyBoardSubmissions,
   requestBoardJournalAccess
 } from '../../../api/boardJournalApi';
+import {
+  formatDateInAppTimezone,
+  getTodayDateInputValue
+} from '../../../utils/dateTime';
 
 const COLORS = {
   cream: '#F6F0E3',
@@ -55,34 +73,38 @@ const COLORS = {
 const HERO_GRADIENT = 'linear-gradient(135deg, #F8FBFF 0%, #EEF4FB 100%)';
 
 function formatDate(dateValue) {
-  if (!dateValue) return 'Sem prazo';
-  const parsed = new Date(dateValue);
-  if (Number.isNaN(parsed.getTime())) return 'Sem prazo';
-  return parsed.toLocaleDateString('pt-BR');
+  return formatDateInAppTimezone(dateValue, 'Sem prazo');
 }
 
-function getStartOfDay(dateValue) {
+function toComparableDateOnlyValue(dateValue) {
   if (!dateValue) return null;
-  const parsed = new Date(dateValue);
-  if (Number.isNaN(parsed.getTime())) return null;
-  parsed.setHours(0, 0, 0, 0);
-  return parsed;
+  if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue.trim())) {
+    return dateValue.trim();
+  }
+
+  const formatted = formatDateInAppTimezone(dateValue, '');
+  if (!formatted) return null;
+
+  const [day, month, year] = formatted.split('/');
+  if (!day || !month || !year) return null;
+  return `${year}-${month}-${day}`;
 }
 
-function getEndOfDay(dateValue) {
-  if (!dateValue) return null;
-  const parsed = new Date(dateValue);
-  if (Number.isNaN(parsed.getTime())) return null;
-  parsed.setHours(23, 59, 59, 999);
-  return parsed;
+function isAfterBusinessDay(dateValue, referenceDate = getTodayDateInputValue()) {
+  const comparableDate = toComparableDateOnlyValue(dateValue);
+  if (!comparableDate) return false;
+  return comparableDate > referenceDate;
 }
 
-function isChallengeWithinSchedule(challenge, referenceDate = new Date()) {
-  const startDate = getStartOfDay(challenge?.startDate);
-  const endDate = getEndOfDay(challenge?.endDate);
+function isBeforeBusinessDay(dateValue, referenceDate = getTodayDateInputValue()) {
+  const comparableDate = toComparableDateOnlyValue(dateValue);
+  if (!comparableDate) return false;
+  return comparableDate < referenceDate;
+}
 
-  if (startDate && startDate.getTime() > referenceDate.getTime()) return false;
-  if (endDate && endDate.getTime() < referenceDate.getTime()) return false;
+function isChallengeWithinSchedule(challenge, referenceDate = getTodayDateInputValue()) {
+  if (isAfterBusinessDay(challenge?.startDate, referenceDate)) return false;
+  if (isBeforeBusinessDay(challenge?.endDate, referenceDate)) return false;
   return true;
 }
 
@@ -108,6 +130,17 @@ function getChallengeTypeLabel(challengeType) {
   if (challengeType === 'form') return 'Formulario';
   if (challengeType === 'lesson') return 'Licao guiada';
   return 'Texto';
+}
+
+function createEditorStateFromHtml(value) {
+  const html = String(value || '').trim();
+  if (!html) return EditorState.createEmpty();
+  const blocks = convertFromHTML(html);
+  const contentState = ContentState.createFromBlockArray(
+    blocks.contentBlocks,
+    blocks.entityMap
+  );
+  return EditorState.createWithContent(contentState);
 }
 
 function sanitizeRichHtml(value) {
@@ -139,6 +172,8 @@ function BoardJournalPage() {
     responseFileUrl: '',
     responsePayload: {}
   });
+  const [textEditorState, setTextEditorState] = useState(() => EditorState.createEmpty());
+  const [expandedResponseId, setExpandedResponseId] = useState(null);
 
   const title = `${brand.name} - Meu Diário de Bordo`;
 
@@ -208,7 +243,7 @@ function BoardJournalPage() {
     const submission = myByChallenge[challenge.id];
     if (!challenge?.isActive) return false;
     if (!isChallengeWithinSchedule(challenge)) return false;
-    if (challenge?.dueDate && getEndOfDay(challenge.dueDate)?.getTime() < Date.now()) return false;
+    if (challenge?.dueDate && isBeforeBusinessDay(challenge.dueDate)) return false;
     if (!submission) return true;
     if (submission.status === 'approved' || submission.status === 'pending') return false;
     if (submission.status === 'rejected') {
@@ -232,22 +267,32 @@ function BoardJournalPage() {
       payload[field.name] = field.type === 'checkbox' ? false : '';
     });
 
+    const existingText = myByChallenge[challenge.id]?.responseText || '';
     setSubmissionTarget(challenge);
     setSubmissionForm({
-      responseText: myByChallenge[challenge.id]?.responseText || '',
+      responseText: existingText,
       responseFileUrl: myByChallenge[challenge.id]?.responseFileUrl || '',
       responsePayload: myByChallenge[challenge.id]?.responsePayload || payload
     });
+
+    if (challenge.challengeType === 'text') {
+      setTextEditorState(createEditorStateFromHtml(existingText));
+    }
+
     setSubmissionOpen(true);
   };
 
   const sendSubmission = async () => {
     try {
+      const responseText = submissionTarget.challengeType === 'text'
+        ? draftToHtml(convertToRaw(textEditorState.getCurrentContent()))
+        : submissionForm.responseText;
+
       await createBoardSubmission({
         journalId: selectedJournalId,
         challengeId: submissionTarget.id,
         responseType: submissionTarget.challengeType,
-        responseText: submissionForm.responseText,
+        responseText,
         responseFileUrl: submissionForm.responseFileUrl,
         responsePayload: submissionForm.responsePayload
       });
@@ -434,16 +479,37 @@ function BoardJournalPage() {
       );
     }
 
+    // tipo texto — editor rico
     return (
-      <TextField
-        fullWidth
-        multiline
-        minRows={6}
-        label="Resposta"
-        helperText="Descreva sua resposta com clareza."
-        value={submissionForm.responseText}
-        onChange={(e) => setSubmissionForm((prev) => ({ ...prev, responseText: e.target.value }))}
-      />
+      <Box>
+        <Typography variant="caption" color="textSecondary" sx={{ mb: 0.5, display: 'block' }}>
+          Resposta — descreva com clareza
+        </Typography>
+        <Box
+          sx={{
+            border: '1px solid rgba(21,48,74,0.18)',
+            borderRadius: 2,
+            minHeight: 220,
+            '& .rdw-editor-wrapper': { borderRadius: 2 },
+            '& .rdw-editor-toolbar': {
+              borderRadius: '8px 8px 0 0',
+              borderBottom: '1px solid rgba(21,48,74,0.12)',
+              mb: 0
+            },
+            '& .rdw-editor-main': { px: 2, minHeight: 160 }
+          }}
+        >
+          <Editor
+            editorState={textEditorState}
+            onEditorStateChange={setTextEditorState}
+            toolbar={{
+              options: ['inline', 'blockType', 'list', 'link', 'history'],
+              inline: { options: ['bold', 'italic', 'underline'] }
+            }}
+            localization={{ locale: 'pt' }}
+          />
+        </Box>
+      </Box>
     );
   };
 
@@ -530,7 +596,7 @@ function BoardJournalPage() {
               <Typography variant="h5" sx={{ color: COLORS.navy, fontWeight: 800, mt: 0.25 }}>
                 Diários disponiveis
               </Typography>
-             
+
             </Box>
             {selectedJournal && (
               <Chip
@@ -1374,6 +1440,41 @@ function BoardJournalPage() {
                                     {challenge.description || 'Sem descricao'}
                                   </Typography>
                                 </Box>
+
+                                {submission?.status === 'pending' ? (
+                                  <Tooltip title="Sua resposta ainda esta pendente de avaliacao. Voce pode editar enquanto isso.">
+                                    <Button
+                                      variant="outlined"
+                                      size="small"
+                                      onClick={() => openSubmission(challenge)}
+                                      sx={{
+                                        borderColor: COLORS.gold,
+                                        color: COLORS.amber,
+                                        fontWeight: 700,
+                                        whiteSpace: 'nowrap',
+                                        flexShrink: 0,
+                                        '&:hover': { borderColor: COLORS.amber, backgroundColor: `${COLORS.gold}11` }
+                                      }}
+                                    >
+                                      Editar resposta
+                                    </Button>
+                                  </Tooltip>
+                                ) : (
+                                  submission && (
+                                    <Tooltip title={submission.status === 'approved' ? 'Resposta aprovada — nao e possivel editar' : 'Resposta reprovada — use a opcao de nova tentativa no Meu Diario'}>
+                                      <span>
+                                        <Button
+                                          variant="outlined"
+                                          size="small"
+                                          disabled
+                                          sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+                                        >
+                                          {submission.status === 'approved' ? 'Aprovado' : 'Reprovado'}
+                                        </Button>
+                                      </span>
+                                    </Tooltip>
+                                  )
+                                )}
                               </Stack>
 
                               <Box
@@ -1418,6 +1519,98 @@ function BoardJournalPage() {
                                     </Typography>
                                   </Grid>
                                 </Grid>
+
+                                {submission && (
+                                  <Box sx={{ mt: 1.5 }}>
+                                    <Button
+                                      size="small"
+                                      variant="text"
+                                      endIcon={expandedResponseId === challenge.id ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                      onClick={() => setExpandedResponseId((prev) => (prev === challenge.id ? null : challenge.id))}
+                                      sx={{ color: COLORS.navy, fontWeight: 600, pl: 0 }}
+                                    >
+                                      {expandedResponseId === challenge.id ? 'Ocultar resposta' : 'Ver resposta enviada'}
+                                    </Button>
+
+                                    <Collapse in={expandedResponseId === challenge.id}>
+                                      <Box
+                                        sx={{
+                                          mt: 1,
+                                          p: 2,
+                                          borderRadius: 2,
+                                          backgroundColor: '#FFFDF8',
+                                          border: '1px solid rgba(198,161,91,0.2)'
+                                        }}
+                                      >
+                                        <Typography variant="caption" color="textSecondary" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                          Resposta enviada
+                                        </Typography>
+
+                                        {/* Tipo texto — pode ser HTML ou texto puro */}
+                                        {(challenge.challengeType === 'text' || !challenge.challengeType) && (
+                                          /<[a-z][\s\S]*>/i.test(submission.responseText || '')
+                                            ? (
+                                              <Box
+                                                sx={{ mt: 1, '& p': { margin: '4px 0' }, '& ul,& ol': { pl: 2 } }}
+                                                dangerouslySetInnerHTML={sanitizeRichHtml(submission.responseText)}
+                                              />
+                                            )
+                                            : (
+                                              <Typography variant="body2" sx={{ mt: 1, whiteSpace: 'pre-wrap' }}>
+                                                {submission.responseText || '—'}
+                                              </Typography>
+                                            )
+                                        )}
+
+                                        {/* Tipo pergunta */}
+                                        {challenge.challengeType === 'question' && (
+                                          <Typography variant="body2" sx={{ mt: 1 }}>
+                                            {submission.responseText || '—'}
+                                          </Typography>
+                                        )}
+
+                                        {/* Tipo arquivo */}
+                                        {challenge.challengeType === 'file' && (
+                                          <Box sx={{ mt: 1 }}>
+                                            {submission.responseFileUrl
+                                              ? <a href={submission.responseFileUrl} target="_blank" rel="noopener noreferrer" style={{ color: COLORS.navy, fontWeight: 600 }}>{submission.responseFileUrl}</a>
+                                              : <Typography variant="body2">—</Typography>
+                                            }
+                                          </Box>
+                                        )}
+
+                                        {/* Tipo formulário ou lição */}
+                                        {(challenge.challengeType === 'form' || challenge.challengeType === 'lesson') && (
+                                          <Stack spacing={1} sx={{ mt: 1 }}>
+                                            {(challenge.formSchema || []).map((field) => {
+                                              const val = submission.responsePayload?.[field.name];
+                                              return (
+                                                <Box key={field.name}>
+                                                  <Typography variant="caption" color="textSecondary">{field.label || field.name}</Typography>
+                                                  <Typography variant="body2">
+                                                    {typeof val === 'boolean' ? (val ? 'Sim' : 'Não') : (val || '—')}
+                                                  </Typography>
+                                                </Box>
+                                              );
+                                            })}
+                                          </Stack>
+                                        )}
+
+                                        {/* Feedback do avaliador */}
+                                        {submission.feedback && (
+                                          <Box sx={{ mt: 2, pt: 1.5, borderTop: '1px solid rgba(21,48,74,0.08)' }}>
+                                            <Typography variant="caption" color="textSecondary" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                              Feedback do avaliador
+                                            </Typography>
+                                            <Typography variant="body2" sx={{ mt: 0.5, fontStyle: 'italic' }}>
+                                              {submission.feedback}
+                                            </Typography>
+                                          </Box>
+                                        )}
+                                      </Box>
+                                    </Collapse>
+                                  </Box>
+                                )}
                               </Box>
                             </Stack>
                           </CardContent>
@@ -1853,7 +2046,11 @@ function BoardJournalPage() {
 
           <Dialog open={submissionOpen} onClose={() => setSubmissionOpen(false)} fullWidth maxWidth="md">
             <DialogTitle sx={{ pb: 1 }}>
-              {submissionTarget ? `Responder: ${submissionTarget.title}` : 'Responder'}
+              {submissionTarget
+                ? (myByChallenge[submissionTarget.id]?.status === 'pending'
+                  ? `Editar resposta: ${submissionTarget.title}`
+                  : `Responder: ${submissionTarget.title}`)
+                : 'Responder'}
             </DialogTitle>
             <DialogContent>
               <Box
@@ -1873,7 +2070,7 @@ function BoardJournalPage() {
                 <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mb: 2 }}>
                   <Chip size="small" label={`${submissionTarget?.points || 0} pts`} />
                   {submissionTarget?.category?.name && <Chip size="small" label={submissionTarget.category.name} />}
-                
+
                   <Chip
                     size="small"
                     variant="outlined"

@@ -83,8 +83,25 @@ async function deleteExpense(req, res) {
   }
 }
 
+async function exportExpenses(req, res) {
+  try {
+    const filters = {
+      expenseDateFrom: normalizeQueryValue(req.query.expenseDateFrom),
+      expenseDateTo: normalizeQueryValue(req.query.expenseDateTo),
+      expenseEventId: normalizeQueryValue(req.query.expenseEventId),
+      expenseIsSettled: normalizeQueryValue(req.query.expenseIsSettled)
+    };
+    const expenses = await financialService.getExpensesForExport(filters);
+    res.status(200).json(expenses);
+  } catch (error) {
+    console.error('Erro ao exportar saídas:', error);
+    res.status(500).json({ message: error.message || 'Erro ao exportar saídas' });
+  }
+}
+
 module.exports = {
   listRecords,
+  exportExpenses,
   getFeeConfig,
   updateFeeConfig,
   createExpense,

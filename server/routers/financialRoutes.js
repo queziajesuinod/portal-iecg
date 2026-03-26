@@ -10,6 +10,7 @@ router.use(requireFinancialAccess);
 router.get('/records', financialController.listRecords);
 router.get('/fee-config', financialController.getFeeConfig);
 router.put('/fee-config', financialController.updateFeeConfig);
+router.get('/expenses/export', financialController.exportExpenses);
 router.post('/expenses', financialController.createExpense);
 router.put('/expenses/:id', financialController.updateExpense);
 router.delete('/expenses/:id', financialController.deleteExpense);

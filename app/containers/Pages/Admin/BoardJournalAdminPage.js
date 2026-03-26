@@ -80,6 +80,7 @@ import {
   updateBoardChallenge
 } from '../../../api/boardJournalApi';
 import { getStoredPermissions } from '../../../utils/permissions';
+import { formatDateTimeInAppTimezone } from '../../../utils/dateTime';
 
 const FORM_FIELD_TYPES = [
   { value: 'text', label: 'Texto curto' },
@@ -151,7 +152,7 @@ const emptyJournal = {
   description: '',
   coverImageUrl: '',
   instructions: '',
-  managerUserId: '',
+  managerUserIds: [],
   isActive: true
 };
 
@@ -171,6 +172,10 @@ const MANAGER_TABS = [
 
 const VALID_MANAGER_PROFILE_NAMES = ['START', 'ADMIN', 'ADMINISTRADOR'];
 const VALID_MANAGER_PERMISSION_NAMES = ['DIARIO_BORDO_MANAGER', 'DIARIO_BORDO_ADMIN', 'ADMIN_FULL_ACCESS'];
+
+function formatDateTime(value) {
+  return formatDateTimeInAppTimezone(value);
+}
 
 function slugifyFieldName(value, index = 0) {
   const base = String(value || '')
@@ -271,6 +276,17 @@ function extractUserPermissionNames(user = {}) {
     .filter(Boolean);
 }
 
+function normalizeJournalManagerUserIds(journal = {}) {
+  if (Array.isArray(journal?.managerUserIds)) {
+    return journal.managerUserIds.filter(Boolean);
+  }
+  return journal?.managerUserId ? [journal.managerUserId] : [];
+}
+
+function formatManagerUserLabel(user = {}) {
+  return `${user.name || user.email || user.id}${extractUserProfileNames(user).length ? ` - ${extractUserProfileNames(user).join(', ')}` : ''}`;
+}
+
 const emptyChallenge = {
   id: null,
   journalId: '',
@@ -310,7 +326,7 @@ function BoardJournalAdminPage() {
   const [challenges, setChallenges] = useState([]);
   const [badges, setBadges] = useState([]);
   const [pendingSubmissions, setPendingSubmissions] = useState([]);
-  const [journalForm, setJournalForm] = useState(emptyJournal);
+  const [journalForm, setJournalForm] = useState({ ...emptyJournal, managerUserIds: [] });
   const [categoryForm, setCategoryForm] = useState(emptyCategory);
   const [badgeForm, setBadgeForm] = useState(emptyBadge);
   const [challengeForm, setChallengeForm] = useState(emptyChallenge);
@@ -355,27 +371,40 @@ function BoardJournalAdminPage() {
     () => (!hasBoardAdminPermission ? journals[0]?.id || '' : ''),
     [hasBoardAdminPermission, journals]
   );
+  const selectedManagerUserIds = useMemo(
+    () => (Array.isArray(journalForm.managerUserIds) ? journalForm.managerUserIds.filter(Boolean) : []),
+    [journalForm.managerUserIds]
+  );
+  const selectedManagerUserIdSet = useMemo(
+    () => new Set(selectedManagerUserIds),
+    [selectedManagerUserIds]
+  );
   const unavailableManagerUserIds = useMemo(
     () => new Set(
       journals
         .filter((journal) => journal.isActive !== false)
         .filter((journal) => String(journal.id || '') !== String(journalForm.id || ''))
-        .map((journal) => journal.managerUserId)
+        .flatMap((journal) => normalizeJournalManagerUserIds(journal))
         .filter(Boolean)
     ),
     [journals, journalForm.id]
   );
   const eligibleManagerUsers = useMemo(
     () => managerUsers.filter((user) => {
-      if (user?.active === false) return false;
-      if (unavailableManagerUserIds.has(user.id)) return false;
+      const isSelected = selectedManagerUserIdSet.has(user.id);
+      if (user?.active === false && !isSelected) return false;
+      if (unavailableManagerUserIds.has(user.id) && !isSelected) return false;
       const profileNames = extractUserProfileNames(user);
       const permissionNames = extractUserPermissionNames(user);
       const hasValidProfile = profileNames.some((profileName) => VALID_MANAGER_PROFILE_NAMES.includes(profileName));
       const hasValidPermission = permissionNames.some((permissionName) => VALID_MANAGER_PERMISSION_NAMES.includes(permissionName));
-      return hasValidProfile || hasValidPermission;
+      return isSelected || hasValidProfile || hasValidPermission;
     }),
-    [managerUsers, unavailableManagerUserIds]
+    [managerUsers, selectedManagerUserIdSet, unavailableManagerUserIds]
+  );
+  const managerUserLabelById = useMemo(
+    () => new Map(managerUsers.map((user) => [user.id, formatManagerUserLabel(user)])),
+    [managerUsers]
   );
   const activeJournals = useMemo(
     () => journals.filter((journal) => journal.isActive !== false),
@@ -541,7 +570,7 @@ function BoardJournalAdminPage() {
   }, [challengeForm.journalId, selectedJournalId]);
 
   const resetJournal = () => {
-    setJournalForm(emptyJournal);
+    setJournalForm({ ...emptyJournal, managerUserIds: [] });
     setJournalInstructionsEditorState(EditorState.createEmpty());
     setJournalOpen(false);
   };
@@ -730,6 +759,27 @@ function BoardJournalAdminPage() {
 
     const text = String(item.responseText || '').trim();
     if (!text) return '-';
+
+    if (/<[a-z][\s\S]*>/i.test(text)) {
+      return (
+        <Box
+          sx={{
+            fontSize: 12,
+            lineHeight: 1.4,
+            maxHeight: 52,
+            overflow: 'hidden',
+            display: '-webkit-box',
+            WebkitLineClamp: 3,
+            WebkitBoxOrient: 'vertical',
+            wordBreak: 'break-word',
+            '& p, & ul, & ol': { margin: 0, padding: 0 },
+            '& *': { fontSize: 'inherit' }
+          }}
+          dangerouslySetInnerHTML={sanitizeRichHtml(text)}
+        />
+      );
+    }
+
     return text.length > 80 ? `${text.slice(0, 80)}...` : text;
   };
 
@@ -770,9 +820,29 @@ function BoardJournalAdminPage() {
       );
     }
 
+    const text = String(item.responseText || '').trim();
+    if (!text) return <Typography variant="body2">-</Typography>;
+
+    if (/<[a-z][\s\S]*>/i.test(text)) {
+      return (
+        <Box
+          sx={{
+            fontSize: 14,
+            lineHeight: 1.6,
+            wordBreak: 'break-word',
+            '& p': { margin: '4px 0' },
+            '& ul, & ol': { pl: 2, margin: '4px 0' },
+            '& strong': { fontWeight: 700 },
+            '& a': { color: 'primary.main' }
+          }}
+          dangerouslySetInnerHTML={sanitizeRichHtml(text)}
+        />
+      );
+    }
+
     return (
       <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-        {item.responseText || '-'}
+        {text}
       </Typography>
     );
   };
@@ -949,7 +1019,7 @@ function BoardJournalAdminPage() {
                     Crie Diários, selecione o diário ativo da gestão e aprove entradas de usuários.
                   </Typography>
                 </Box>
-                <Button variant="contained" onClick={() => { setJournalForm(emptyJournal); setJournalInstructionsEditorState(EditorState.createEmpty()); setJournalOpen(true); }}>
+                <Button variant="contained" onClick={() => { setJournalForm({ ...emptyJournal, managerUserIds: [] }); setJournalInstructionsEditorState(EditorState.createEmpty()); setJournalOpen(true); }}>
                   Novo diário
                 </Button>
               </Stack>
@@ -981,7 +1051,7 @@ function BoardJournalAdminPage() {
                 <TableHead>
                   <TableRow>
                     <TableCell>Nome</TableCell>
-                    <TableCell>Gestor</TableCell>
+                    <TableCell>Gestores</TableCell>
                     <TableCell>Status</TableCell>
                     <TableCell>Membros</TableCell>
                     <TableCell>Pendentes</TableCell>
@@ -992,7 +1062,7 @@ function BoardJournalAdminPage() {
                   {journals.map((item) => (
                     <TableRow key={item.id} selected={item.id === selectedJournalId}>
                       <TableCell>{item.name}</TableCell>
-                      <TableCell>{item.manager?.name || '-'}</TableCell>
+                      <TableCell>{(Array.isArray(item.managers) && item.managers.length > 0) ? item.managers.map((manager) => manager.name || manager.email || manager.id).join(', ') : '-'}</TableCell>
                       <TableCell>{item.isActive ? 'Ativo' : 'Inativo'}</TableCell>
                       <TableCell>{item.metrics?.approvedMembers || 0}</TableCell>
                       <TableCell>{item.metrics?.pendingRequests || 0}</TableCell>
@@ -1010,7 +1080,7 @@ function BoardJournalAdminPage() {
                               description: item.description || '',
                               coverImageUrl: item.coverImageUrl || '',
                               instructions: item.instructions || '',
-                              managerUserId: item.managerUserId || '',
+                              managerUserIds: normalizeJournalManagerUserIds(item),
                               isActive: item.isActive !== false
                             };
                             setJournalForm(nextJournalForm);
@@ -1031,6 +1101,7 @@ function BoardJournalAdminPage() {
                                   description: item.description || '',
                                   coverImageUrl: item.coverImageUrl || '',
                                   instructions: item.instructions || '',
+                                  managerUserIds: normalizeJournalManagerUserIds(item),
                                   isActive: !item.isActive
                                 });
                                 setNotification(item.isActive ? 'Diario desativado' : 'Diario ativado');
@@ -1074,7 +1145,7 @@ function BoardJournalAdminPage() {
                     <TableRow key={item.id}>
                       <TableCell>{item.user?.name || '-'}</TableCell>
                       <TableCell>{item.status}</TableCell>
-                      <TableCell>{item.requestedAt ? new Date(item.requestedAt).toLocaleString('pt-BR') : '-'}</TableCell>
+                      <TableCell>{formatDateTime(item.requestedAt)}</TableCell>
                       <TableCell align="right">
                         <Tooltip title="Aprovar acesso">
                           <IconButton size="small" color="success" onClick={async () => { try { await approveBoardJournalMember(selectedJournalId, item.id); setNotification('Acesso aprovado'); loadData(); } catch (error) { setNotification(error.message); } }}>
@@ -1144,7 +1215,7 @@ function BoardJournalAdminPage() {
                       <TableRow key={item.id}>
                         <TableCell>{item.user?.name || '-'}</TableCell>
                         <TableCell>{item.user?.email || '-'}</TableCell>
-                        <TableCell>{item.approvedAt ? new Date(item.approvedAt).toLocaleString('pt-BR') : '-'}</TableCell>
+                        <TableCell>{formatDateTime(item.approvedAt)}</TableCell>
                         <TableCell align="right">
                           <Tooltip title={isCreator ? 'Criador do diario nao pode ser removido' : 'Remover usuario do diario'}>
                             <span>
@@ -1370,7 +1441,7 @@ function BoardJournalAdminPage() {
                     <TableCell>Usuario</TableCell>
                     <TableCell>Categoria</TableCell>
                     <TableCell>Desafio</TableCell>
-                    <TableCell>Resposta</TableCell>
+                    <TableCell sx={{ width: { xs: 'auto', md: 220 }, maxWidth: 220 }}>Resposta</TableCell>
                     <TableCell align="right">Ações</TableCell>
                   </TableRow>
                 </TableHead>
@@ -1383,7 +1454,7 @@ function BoardJournalAdminPage() {
                       </TableCell>
                       <TableCell>{item.challenge?.category?.name || '-'}</TableCell>
                       <TableCell>{item.challenge?.title}</TableCell>
-                      <TableCell>{renderSubmissionSummary(item)}</TableCell>
+                      <TableCell sx={{ maxWidth: 220, wordBreak: 'break-word', whiteSpace: 'normal' }}>{renderSubmissionSummary(item)}</TableCell>
                       <TableCell align="right">
                         <Tooltip title="Ver resposta">
                           <IconButton size="small" onClick={() => openDetailDialog(item)}>
@@ -1547,16 +1618,29 @@ function BoardJournalAdminPage() {
               </Grid>
             </Grid>
             <FormControl fullWidth>
-              <InputLabel>Gestor do diario</InputLabel>
+              <InputLabel id="journal-managers-label">Gestores do diario</InputLabel>
               <Select
-                value={journalForm.managerUserId || ''}
-                label="Gestor do diario"
-                onChange={(e) => setJournalForm((prev) => ({ ...prev, managerUserId: e.target.value }))}
+                labelId="journal-managers-label"
+                multiple
+                displayEmpty
+                value={selectedManagerUserIds}
+                label="Gestores do diario"
+                renderValue={(selected) => {
+                  const ids = Array.isArray(selected) ? selected : [];
+                  if (ids.length === 0) {
+                    return 'Sem gestores definidos';
+                  }
+                  return ids.map((id) => managerUserLabelById.get(id) || id).join(', ');
+                }}
+                onChange={(e) => {
+                  const value = Array.isArray(e.target.value) ? e.target.value : String(e.target.value || '').split(',').filter(Boolean);
+                  setJournalForm((prev) => ({ ...prev, managerUserIds: value }));
+                }}
               >
-                <MenuItem value="">Sem gestor definido</MenuItem>
                 {eligibleManagerUsers.map((item) => (
                   <MenuItem key={item.id} value={item.id}>
-                    {`${item.name || item.email || item.id}${extractUserProfileNames(item).length ? ` - ${extractUserProfileNames(item).join(', ')}` : ''}`}
+                    <Checkbox checked={selectedManagerUserIdSet.has(item.id)} />
+                    {formatManagerUserLabel(item)}
                   </MenuItem>
                 ))}
               </Select>
