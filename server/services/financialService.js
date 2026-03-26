@@ -8,6 +8,11 @@ const {
   User
 } = require('../models');
 const paymentService = require('./paymentService');
+const {
+  now,
+  parseDateOnly,
+  todayDateOnly
+} = require('../utils/dateTime');
 
 const ALLOWED_PAYMENT_METHODS = [
   'pix',
@@ -41,30 +46,14 @@ function normalizeOptionalValue(value) {
 function parseIsoDate(value) {
   const normalized = normalizeOptionalValue(value);
   if (!normalized) return null;
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalized);
-  if (!match) return null;
 
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
-    return null;
-  }
-
-  const utcDate = new Date(Date.UTC(year, month - 1, day));
-  if (
-    utcDate.getUTCFullYear() !== year
-    || utcDate.getUTCMonth() !== month - 1
-    || utcDate.getUTCDate() !== day
-  ) {
-    return null;
-  }
+  const parsed = parseDateOnly(normalized);
+  if (!parsed) return null;
 
   return {
-    year,
-    month,
-    day,
-    iso: normalized
+    iso: parsed.format('YYYY-MM-DD'),
+    start: parsed.clone().startOf('day').toDate(),
+    end: parsed.clone().endOf('day').toDate()
   };
 }
 
@@ -77,13 +66,13 @@ function buildDateRange(field, dateFrom, dateTo, options = {}) {
   if (parsedFrom) {
     range[Op.gte] = dateOnly
       ? parsedFrom.iso
-      : new Date(parsedFrom.year, parsedFrom.month - 1, parsedFrom.day, 0, 0, 0, 0);
+      : parsedFrom.start;
   }
 
   if (parsedTo) {
     range[Op.lte] = dateOnly
       ? parsedTo.iso
-      : new Date(parsedTo.year, parsedTo.month - 1, parsedTo.day, 23, 59, 59, 999);
+      : parsedTo.end;
   }
 
   if (!Object.keys(range).length) {
@@ -343,16 +332,6 @@ async function normalizeExpensePayload(payload = {}) {
     throw new Error('Descricao e obrigatoria');
   }
 
-  const amount = toMoney(payload.amount);
-  if (amount <= 0) {
-    throw new Error('Valor deve ser maior que zero');
-  }
-
-  const paymentMethod = String(payload.paymentMethod || '').trim() || 'pix';
-  if (!ALLOWED_PAYMENT_METHODS.includes(paymentMethod)) {
-    throw new Error('Forma de pagamento invalida');
-  }
-
   const eventId = normalizeOptionalValue(payload.eventId);
   if (!eventId) {
     throw new Error('Evento e obrigatorio');
@@ -363,18 +342,94 @@ async function normalizeExpensePayload(payload = {}) {
     throw new Error('Evento invalido para a saida');
   }
 
-  let { expenseDate } = payload;
-  if (!expenseDate) {
-    expenseDate = new Date().toISOString().slice(0, 10);
+  const notes = payload.notes ? String(payload.notes).trim() : null;
+  const supplier = payload.supplier ? String(payload.supplier).trim() : null;
+  const paymentType = payload.paymentType === 'com_entrada' ? 'com_entrada' : 'unico';
+
+  if (paymentType === 'com_entrada') {
+    const entradaAmount = toMoney(payload.entradaAmount);
+    if (entradaAmount <= 0) {
+      throw new Error('Valor da entrada deve ser maior que zero');
+    }
+
+    const quitacaoAmount = toMoney(payload.quitacaoAmount);
+    if (quitacaoAmount <= 0) {
+      throw new Error('Valor da quitacao deve ser maior que zero');
+    }
+
+    const entradaPaymentMethod = String(payload.entradaPaymentMethod || '').trim() || 'pix';
+    if (!ALLOWED_PAYMENT_METHODS.includes(entradaPaymentMethod)) {
+      throw new Error('Forma de pagamento da entrada invalida');
+    }
+
+    const quitacaoPaymentMethod = String(payload.quitacaoPaymentMethod || '').trim() || 'pix';
+    if (!ALLOWED_PAYMENT_METHODS.includes(quitacaoPaymentMethod)) {
+      throw new Error('Forma de pagamento da quitacao invalida');
+    }
+
+    let entradaDate = payload.entradaDate || todayDateOnly();
+    const parsedEntradaDate = parseDateOnly(entradaDate);
+    if (!parsedEntradaDate) {
+      throw new Error('Data da entrada invalida');
+    }
+
+    let quitacaoDate = payload.quitacaoDate || todayDateOnly();
+    const parsedQuitacaoDate = parseDateOnly(quitacaoDate);
+    if (!parsedQuitacaoDate) {
+      throw new Error('Data da quitacao invalida');
+    }
+
+    const entradaIsSettled = Boolean(payload.entradaIsSettled);
+    const quitacaoIsSettled = Boolean(payload.quitacaoIsSettled);
+    const isSettled = entradaIsSettled && quitacaoIsSettled;
+    const totalAmount = toMoney(entradaAmount + quitacaoAmount);
+
+    return {
+      description,
+      eventId,
+      notes,
+      paymentType: 'com_entrada',
+      amount: totalAmount,
+      paymentMethod: entradaPaymentMethod,
+      expenseDate: parsedEntradaDate.format('YYYY-MM-DD'),
+      isSettled,
+      settledAt: isSettled ? now() : null,
+      entradaAmount,
+      entradaPaymentMethod,
+      entradaDate: parsedEntradaDate.format('YYYY-MM-DD'),
+      entradaIsSettled,
+      entradaSettledAt: entradaIsSettled ? now() : null,
+      quitacaoAmount,
+      quitacaoPaymentMethod,
+      quitacaoDate: parsedQuitacaoDate.format('YYYY-MM-DD'),
+      quitacaoIsSettled,
+      quitacaoSettledAt: quitacaoIsSettled ? now() : null,
+      supplier
+    };
   }
 
-  const parsedExpenseDate = new Date(expenseDate);
-  if (Number.isNaN(parsedExpenseDate.getTime())) {
+  // pagamento unico
+  const amount = toMoney(payload.amount);
+  if (amount <= 0) {
+    throw new Error('Valor deve ser maior que zero');
+  }
+
+  const paymentMethod = String(payload.paymentMethod || '').trim() || 'pix';
+  if (!ALLOWED_PAYMENT_METHODS.includes(paymentMethod)) {
+    throw new Error('Forma de pagamento invalida');
+  }
+
+  let { expenseDate } = payload;
+  if (!expenseDate) {
+    expenseDate = todayDateOnly();
+  }
+
+  const parsedExpenseDate = parseDateOnly(expenseDate);
+  if (!parsedExpenseDate) {
     throw new Error('Data da saida invalida');
   }
 
   const isSettled = Boolean(payload.isSettled);
-  const notes = payload.notes ? String(payload.notes).trim() : null;
 
   return {
     description,
@@ -382,9 +437,21 @@ async function normalizeExpensePayload(payload = {}) {
     eventId,
     paymentMethod,
     isSettled,
-    expenseDate: parsedExpenseDate.toISOString().slice(0, 10),
-    settledAt: isSettled ? new Date() : null,
-    notes
+    expenseDate: parsedExpenseDate.format('YYYY-MM-DD'),
+    settledAt: isSettled ? now() : null,
+    notes,
+    paymentType: 'unico',
+    entradaAmount: null,
+    entradaPaymentMethod: null,
+    entradaDate: null,
+    entradaIsSettled: false,
+    entradaSettledAt: null,
+    quitacaoAmount: null,
+    quitacaoPaymentMethod: null,
+    quitacaoDate: null,
+    quitacaoIsSettled: false,
+    quitacaoSettledAt: null,
+    supplier
   };
 }
 
@@ -398,7 +465,11 @@ async function listFinancialRecords(filters = {}) {
   const expensePerPage = Math.min(Math.max(Number(filters.expensePerPage) || 10, 1), 100);
   const expenseOffset = (expensePage - 1) * expensePerPage;
   const paymentDateFilter = buildDateRange('createdAt', filters.dateFrom, filters.dateTo, { dateOnly: false });
-  const expenseDateFilter = buildDateRange('expenseDate', filters.dateFrom, filters.dateTo, { dateOnly: true });
+
+  // filtros específicos de saídas (se fornecidos, substituem os globais para expenses)
+  const expDateFrom = normalizeOptionalValue(filters.expenseDateFrom) || filters.dateFrom;
+  const expDateTo = normalizeOptionalValue(filters.expenseDateTo) || filters.dateTo;
+  const expenseDateFilter = buildDateRange('expenseDate', expDateFrom, expDateTo, { dateOnly: true });
 
   const registrationWhere = {};
   const normalizedEventId = normalizeOptionalValue(filters.eventId);
@@ -406,6 +477,7 @@ async function listFinancialRecords(filters = {}) {
     registrationWhere.eventId = normalizedEventId;
   }
   const normalizedPaymentMethod = normalizeOptionalValue(filters.paymentMethod);
+  const normalizedExpenseEventId = normalizeOptionalValue(filters.expenseEventId) || normalizedEventId;
 
   const summaryPaymentWhere = {
     status: 'confirmed',
@@ -424,9 +496,12 @@ async function listFinancialRecords(filters = {}) {
     entriesPaymentWhere.method = normalizedPaymentMethod;
     expenseWhere.paymentMethod = normalizedPaymentMethod;
   }
-  if (normalizedEventId) {
-    expenseWhere.eventId = normalizedEventId;
+  if (normalizedExpenseEventId) {
+    expenseWhere.eventId = normalizedExpenseEventId;
   }
+  const expenseIsSettled = normalizeOptionalValue(filters.expenseIsSettled);
+  if (expenseIsSettled === 'true') expenseWhere.isSettled = true;
+  else if (expenseIsSettled === 'false') expenseWhere.isSettled = false;
 
   // Usado para o resumo financeiro total (não paginado)
   const paymentsForSummary = await RegistrationPayment.findAll({
@@ -537,7 +612,7 @@ async function listFinancialRecords(filters = {}) {
 
   const expensesForSummary = await FinancialExpense.findAll({
     where: expenseWhere,
-    attributes: ['id', 'amount', 'isSettled'],
+    attributes: ['id', 'amount', 'isSettled', 'paymentType', 'entradaAmount', 'entradaIsSettled', 'quitacaoAmount', 'quitacaoIsSettled'],
     order: [['expenseDate', 'DESC'], ['createdAt', 'DESC']]
   });
 
@@ -565,6 +640,18 @@ async function listFinancialRecords(filters = {}) {
     expenseDate: expense.expenseDate,
     settledAt: expense.settledAt,
     notes: expense.notes,
+    paymentType: expense.paymentType || 'unico',
+    entradaAmount: expense.entradaAmount != null ? toMoney(expense.entradaAmount) : null,
+    entradaPaymentMethod: expense.entradaPaymentMethod || null,
+    entradaDate: expense.entradaDate || null,
+    entradaIsSettled: Boolean(expense.entradaIsSettled),
+    entradaSettledAt: expense.entradaSettledAt || null,
+    quitacaoAmount: expense.quitacaoAmount != null ? toMoney(expense.quitacaoAmount) : null,
+    quitacaoPaymentMethod: expense.quitacaoPaymentMethod || null,
+    quitacaoDate: expense.quitacaoDate || null,
+    quitacaoIsSettled: Boolean(expense.quitacaoIsSettled),
+    quitacaoSettledAt: expense.quitacaoSettledAt || null,
+    supplier: expense.supplier || null,
     createdAt: expense.createdAt,
     updatedAt: expense.updatedAt,
     createdBy: expense.creator ? { id: expense.creator.id, name: expense.creator.name } : null,
@@ -605,13 +692,23 @@ async function listFinancialRecords(filters = {}) {
   const ticketNet = toMoney(ticketGrossTotal - processorFees);
 
   const expenseTotals = expensesForSummary.reduce((acc, expense) => {
-    const amount = toMoney(expense.amount);
-    if (expense.isSettled) {
-      acc.expensesSettled += amount;
+    if (expense.paymentType === 'com_entrada') {
+      const ea = toMoney(expense.entradaAmount || 0);
+      const qa = toMoney(expense.quitacaoAmount || 0);
+      acc.expensesSettled += expense.entradaIsSettled ? ea : 0;
+      acc.expensesSettled += expense.quitacaoIsSettled ? qa : 0;
+      acc.expensesPending += expense.entradaIsSettled ? 0 : ea;
+      acc.expensesPending += expense.quitacaoIsSettled ? 0 : qa;
+      acc.expensesTotal += ea + qa;
     } else {
-      acc.expensesPending += amount;
+      const amount = toMoney(expense.amount);
+      if (expense.isSettled) {
+        acc.expensesSettled += amount;
+      } else {
+        acc.expensesPending += amount;
+      }
+      acc.expensesTotal += amount;
     }
-    acc.expensesTotal += amount;
     return acc;
   }, {
     expensesSettled: 0,
@@ -700,8 +797,56 @@ async function deleteExpense(id) {
   await expense.destroy();
 }
 
+async function getExpensesForExport(filters = {}) {
+  const expDateFrom = normalizeOptionalValue(filters.expenseDateFrom);
+  const expDateTo = normalizeOptionalValue(filters.expenseDateTo);
+  const expenseDateFilter = buildDateRange('expenseDate', expDateFrom, expDateTo, { dateOnly: true });
+
+  const where = { ...expenseDateFilter };
+
+  const normalizedEventId = normalizeOptionalValue(filters.expenseEventId);
+  if (normalizedEventId) where.eventId = normalizedEventId;
+
+  const isSettled = normalizeOptionalValue(filters.expenseIsSettled);
+  if (isSettled === 'true') where.isSettled = true;
+  else if (isSettled === 'false') where.isSettled = false;
+
+  const expenses = await FinancialExpense.findAll({
+    where,
+    include: [
+      { model: Event, as: 'event', attributes: ['id', 'title'] },
+      { model: User, as: 'creator', attributes: ['id', 'name'] }
+    ],
+    order: [['expenseDate', 'ASC'], ['createdAt', 'ASC']]
+  });
+
+  return expenses.map((e) => ({
+    id: e.id,
+    eventTitle: e.event?.title || '-',
+    description: e.description,
+    paymentType: e.paymentType || 'unico',
+    amount: toMoney(e.amount),
+    paymentMethod: e.paymentMethod,
+    isSettled: Boolean(e.isSettled),
+    expenseDate: e.expenseDate,
+    entradaAmount: e.entradaAmount != null ? toMoney(e.entradaAmount) : null,
+    entradaPaymentMethod: e.entradaPaymentMethod || null,
+    entradaDate: e.entradaDate || null,
+    entradaIsSettled: Boolean(e.entradaIsSettled),
+    quitacaoAmount: e.quitacaoAmount != null ? toMoney(e.quitacaoAmount) : null,
+    quitacaoPaymentMethod: e.quitacaoPaymentMethod || null,
+    quitacaoDate: e.quitacaoDate || null,
+    quitacaoIsSettled: Boolean(e.quitacaoIsSettled),
+    supplier: e.supplier || '',
+    notes: e.notes || '',
+    createdBy: e.creator?.name || '-',
+    createdAt: e.createdAt
+  }));
+}
+
 module.exports = {
   listFinancialRecords,
+  getExpensesForExport,
   getFeeConfig,
   updateFeeConfig,
   createExpense,

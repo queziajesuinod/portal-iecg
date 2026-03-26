@@ -47,6 +47,57 @@ module.exports = (sequelize) => {
       type: DataTypes.DATE,
       allowNull: true
     },
+    paymentType: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      defaultValue: 'unico'
+    },
+    entradaAmount: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true
+    },
+    entradaPaymentMethod: {
+      type: DataTypes.STRING(50),
+      allowNull: true
+    },
+    entradaDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: true
+    },
+    entradaIsSettled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    entradaSettledAt: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    quitacaoAmount: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true
+    },
+    quitacaoPaymentMethod: {
+      type: DataTypes.STRING(50),
+      allowNull: true
+    },
+    quitacaoDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: true
+    },
+    quitacaoIsSettled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    quitacaoSettledAt: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    supplier: {
+      type: DataTypes.STRING(255),
+      allowNull: true
+    },
     notes: {
       type: DataTypes.TEXT,
       allowNull: true

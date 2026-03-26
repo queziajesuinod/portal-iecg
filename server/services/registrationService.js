@@ -1,4 +1,5 @@
 const uuid = require('uuid');
+const { Op } = require('sequelize');
 const {
   Registration,
   RegistrationAttendee,
@@ -14,7 +15,6 @@ const {
   Perfil,
   sequelize
 } = require('../models');
-const { Op } = require('sequelize');
 const { isCountablePaymentStatus } = require('../constants/registrationStatuses');
 const orderCodeService = require('./orderCodeService');
 const batchService = require('./batchService');
@@ -25,6 +25,10 @@ const efiService = require('./efiService');
 const eventService = require('./eventService');
 const webhookEmitter = require('./webhookEmitter');
 const { getUserPermissionNames } = require('./permissionResolver');
+const {
+  buildDayRange,
+  now
+} = require('../utils/dateTime');
 
 const OFFLINE_PAYMENT_METHODS = ['cash', 'pos', 'transfer', 'manual', 'pix', 'credit_card'];
 
@@ -121,7 +125,7 @@ async function registrarComissaoEfipay(paymentRecord, registration, context = {}
     paymentRecord.efiCommissionAmount = amountReal;
     paymentRecord.efiCommissionResponse = result.dadosCompletos || (result.erro ? { erro: result.erro } : null);
     if (result.sucesso) {
-      paymentRecord.efiCommissionSentAt = new Date();
+      paymentRecord.efiCommissionSentAt = now();
     }
 
     await paymentRecord.save();
@@ -352,7 +356,7 @@ async function sincronizarPagamentosCielo(registration, options = {}) {
     payment.pixTransactionId = consulta.pixTransactionId || payment.pixTransactionId;
     payment.pixEndToEndId = consulta.pixEndToEndId || payment.pixEndToEndId;
     if (novoStatus === 'confirmed' && !payment.confirmedAt) {
-      payment.confirmedAt = new Date();
+      payment.confirmedAt = now();
     }
 
     await payment.save({ transaction: options.transaction });
@@ -644,7 +648,7 @@ async function processarInscricao(dadosInscricao) {
       providerPayload: couponId
         ? { couponId, reason: 'coupon_full_discount', originalStatus: 'confirmed' }
         : { reason: eventRequiresPayment ? 'zero_amount' : 'free_event', originalStatus: 'confirmed' },
-      confirmedAt: new Date()
+      confirmedAt: now()
     });
 
     if (couponId) {
@@ -988,21 +992,14 @@ async function listarInscricoesPorEvento(eventId, options = {}) {
   if (filters.paymentStatus) {
     where.paymentStatus = filters.paymentStatus;
   }
-  const safeDate = (value) => {
-    if (!value) return null;
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  };
-
   const dateConditions = [];
-  const fromDate = safeDate(filters.dateFrom);
+  const fromDate = buildDayRange(filters.dateFrom);
   if (fromDate) {
-    dateConditions.push({ createdAt: { [Op.gte]: fromDate } });
+    dateConditions.push({ createdAt: { [Op.gte]: fromDate.start } });
   }
-  const toDate = safeDate(filters.dateTo);
+  const toDate = buildDayRange(filters.dateTo);
   if (toDate) {
-    toDate.setHours(23, 59, 59, 999);
-    dateConditions.push({ createdAt: { [Op.lte]: toDate } });
+    dateConditions.push({ createdAt: { [Op.lte]: toDate.end } });
   }
   if (dateConditions.length) {
     where[Op.and] = (where[Op.and] || []).concat(dateConditions);
@@ -1500,7 +1497,7 @@ async function criarPagamentoOffline(registrationId, userId, payload = {}) {
       cardBrand,
       createdBy: userId,
       confirmedBy: userId,
-      confirmedAt: new Date(),
+      confirmedAt: now(),
       notes: payload.notes || null
     }, { transaction });
 
@@ -1767,7 +1764,7 @@ async function cancelarInscricao(id) {
         ? { ...cancelamento.dadosCompletos, originalStatus: cancelamento.status }
         : { originalStatus: cancelamento.status };
       if (!payment.confirmedAt && novoStatusPagamento === 'refunded') {
-        payment.confirmedAt = new Date();
+        payment.confirmedAt = now();
       }
       await payment.save();
     }

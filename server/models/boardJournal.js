@@ -4,7 +4,13 @@ module.exports = (sequelize) => {
   class BoardJournal extends Model {
     static associate(models) {
       BoardJournal.belongsTo(models.User, { foreignKey: 'createdBy', as: 'creator' });
-      BoardJournal.belongsTo(models.User, { foreignKey: 'managerUserId', as: 'manager' });
+      BoardJournal.hasMany(models.BoardJournalManager, { foreignKey: 'journalId', as: 'managerLinks' });
+      BoardJournal.belongsToMany(models.User, {
+        through: models.BoardJournalManager,
+        as: 'managers',
+        foreignKey: 'journalId',
+        otherKey: 'userId'
+      });
       BoardJournal.hasMany(models.BoardJournalMember, { foreignKey: 'journalId', as: 'members' });
       BoardJournal.hasMany(models.BoardChallengeCategory, { foreignKey: 'journalId', as: 'categories' });
       BoardJournal.hasMany(models.BoardChallenge, { foreignKey: 'journalId', as: 'challenges' });

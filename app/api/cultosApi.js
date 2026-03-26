@@ -1,4 +1,6 @@
 // API helper — Módulo Saúde e Fluxo de Cultos
+import { fetchWithAuth } from 'utils/authSession';
+
 const resolveApiUrl = () => {
   if (process.env.REACT_APP_API_URL) {
     return process.env.REACT_APP_API_URL.replace(/\/$/, '');
@@ -10,21 +12,6 @@ const resolveApiUrl = () => {
 
 const API_URL = resolveApiUrl();
 const BASE = `${API_URL}/api/admin/cultos`;
-
-const fetchWithAuth = async (url, options = {}) => {
-  const token = localStorage.getItem('token');
-  const headers = { 'Content-Type': 'application/json', ...options.headers };
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const response = await fetch(url, { ...options, headers });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Erro desconhecido' }));
-    throw new Error(error.erro || error.message || `Erro ${response.status}`);
-  }
-  if (response.status === 204 || response.status === 205) return null;
-  return response.json();
-};
 
 // ===== Ministros (pregadores) =====
 export const listarMinistros = (apenasAtivos = false) =>

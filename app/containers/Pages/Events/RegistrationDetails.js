@@ -46,6 +46,7 @@ import {
 } from '../../../api/eventsApi';
 import { getPaymentStatusChipSx, getPaymentStatusLabel } from '../../../constants/paymentStatus';
 import { getStoredPermissions } from '../../../utils/permissions';
+import { formatDateTimeInAppTimezone } from '../../../utils/dateTime';
 import Notification from '../../../components/Notification/Notification';
 import CancelRegistrationDialog from '../../../components/CancelRegistrationDialog';
 
@@ -330,10 +331,7 @@ function RegistrationDetails() {
     }
   };
 
-  const formatarData = (data) => {
-    if (!data) return '-';
-    return new Date(data).toLocaleString('pt-BR');
-  };
+  const formatarData = (data) => formatDateTimeInAppTimezone(data);
 
   const formatarPreco = (preco) => `R$ ${parseFloat(preco).toFixed(2).replace('.', ',')}`;
 

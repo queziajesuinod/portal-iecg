@@ -6,6 +6,7 @@ const {
   Permissao,
   UserPermissao,
   BoardJournal,
+  BoardJournalManager,
   BoardJournalMember,
   BoardChallengeCategory,
   BoardChallenge,
@@ -14,6 +15,12 @@ const {
   BoardUserBadge
 } = require('../models');
 const { hasUserPermission, buildPermissionInclude, extractPermissionNames } = require('./permissionResolver');
+const {
+  now,
+  toDateOnlyString,
+  toEndOfDay,
+  toStartOfDay
+} = require('../utils/dateTime');
 
 const ADMIN_PERMISSIONS = ['DIARIO_BORDO_ADMIN', 'ADMIN_FULL_ACCESS'];
 const JOURNAL_MANAGER_PERMISSION = 'DIARIO_BORDO_MANAGER';
@@ -49,28 +56,15 @@ function normalizeBoolean(value, fallback = false) {
   return Boolean(value);
 }
 
-function normalizeDate(value) {
-  if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed;
-}
-
 function getStartOfDay(value) {
-  const parsed = normalizeDate(value);
-  if (!parsed) return null;
-  parsed.setHours(0, 0, 0, 0);
-  return parsed;
+  return toStartOfDay(value);
 }
 
 function getEndOfDay(value) {
-  const parsed = normalizeDate(value);
-  if (!parsed) return null;
-  parsed.setHours(23, 59, 59, 999);
-  return parsed;
+  return toEndOfDay(value);
 }
 
-function isChallengeWithinSchedule(challenge, referenceDate = new Date()) {
+function isChallengeWithinSchedule(challenge, referenceDate = now()) {
   const startDate = getStartOfDay(challenge?.startDate);
   const endDate = getEndOfDay(challenge?.endDate);
 
@@ -131,7 +125,79 @@ function normalizeFormSchema(value) {
     .filter(Boolean);
 }
 
+function normalizeManagerUserIds(value) {
+  const rawValues = Array.isArray(value)
+    ? value
+    : (value === undefined || value === null ? [] : [value]);
+  const seen = new Set();
+
+  return rawValues
+    .map((item) => normalizeString(item))
+    .filter((item) => {
+      if (!item || seen.has(item)) return false;
+      seen.add(item);
+      return true;
+    });
+}
+
+function serializeManager(record) {
+  if (!record) return null;
+  return {
+    id: record.id,
+    name: record.name,
+    email: record.email
+  };
+}
+
+function serializeManagers(records = []) {
+  return (Array.isArray(records) ? records : [])
+    .map(serializeManager)
+    .filter(Boolean)
+    .sort((left, right) => {
+      const leftLabel = String(left.name || left.email || left.id || '').toLowerCase();
+      const rightLabel = String(right.name || right.email || right.id || '').toLowerCase();
+      return leftLabel.localeCompare(rightLabel);
+    });
+}
+
+function journalHasManager(record, userId) {
+  if (!record || !userId) return false;
+  if (Array.isArray(record.managers) && record.managers.some((manager) => String(manager.id || '') === String(userId))) {
+    return true;
+  }
+  return String(record.managerUserId || '') === String(userId || '');
+}
+
+function buildJournalInclude(options = {}) {
+  const include = [
+    { model: User, as: 'creator', attributes: ['id', 'name', 'email'] },
+    {
+      model: User,
+      as: 'managers',
+      attributes: ['id', 'name', 'email'],
+      through: { attributes: [] }
+    }
+  ];
+
+  if (options.managerUserId) {
+    include[1].where = { id: options.managerUserId };
+    include[1].required = true;
+  }
+
+  return include;
+}
+
 function serializeJournal(record, membership = null, metrics = null) {
+  const managers = serializeManagers(record.managers);
+  const primaryManagerUserId = normalizeString(record.managerUserId) || managers[0]?.id || null;
+  const orderedManagers = primaryManagerUserId
+    ? [
+      ...managers.filter((manager) => manager.id === primaryManagerUserId),
+      ...managers.filter((manager) => manager.id !== primaryManagerUserId)
+    ]
+    : managers;
+  const primaryManager = orderedManagers[0] || null;
+
   return {
     id: record.id,
     name: record.name,
@@ -139,7 +205,8 @@ function serializeJournal(record, membership = null, metrics = null) {
     coverImageUrl: record.coverImageUrl,
     instructions: record.instructions,
     isActive: record.isActive,
-    managerUserId: record.managerUserId || null,
+    managerUserId: primaryManagerUserId,
+    managerUserIds: orderedManagers.map((manager) => manager.id),
     createdBy: record.createdBy,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
@@ -148,11 +215,8 @@ function serializeJournal(record, membership = null, metrics = null) {
       name: record.creator.name,
       email: record.creator.email
     } : null,
-    manager: record.manager ? {
-      id: record.manager.id,
-      name: record.manager.name,
-      email: record.manager.email
-    } : null,
+    manager: primaryManager,
+    managers: orderedManagers,
     membership,
     metrics
   };
@@ -309,63 +373,67 @@ async function canAccessBoardManagement(userId, journalId = null) {
   const access = await getBoardAccessContext(userId);
   if (access.isAdmin) return true;
   if (!userId) return false;
-  if (!journalId) {
-    const managedCount = await BoardJournal.count({ where: { managerUserId: userId } });
-    return managedCount > 0;
+  const where = { userId };
+  if (journalId) {
+    where.journalId = journalId;
   }
-  const managedJournal = await BoardJournal.count({ where: { id: journalId, managerUserId: userId } });
-  return managedJournal > 0;
+  const managedCount = await BoardJournalManager.count({ where });
+  return managedCount > 0;
 }
 
-async function ensureJournalManagerPermission() {
+async function ensureJournalManagerPermission(options = {}) {
   const [permission] = await Permissao.findOrCreate({
     where: { nome: JOURNAL_MANAGER_PERMISSION },
     defaults: {
       id: uuid.v4(),
       nome: JOURNAL_MANAGER_PERMISSION,
       descricao: 'Gerenciar o diario atribuido como gestor'
-    }
+    },
+    transaction: options.transaction
   });
   return permission;
 }
 
-async function syncJournalManagerPermission(previousManagerUserId = null, nextManagerUserId = null) {
-  const normalizedPrevious = normalizeString(previousManagerUserId);
-  const normalizedNext = normalizeString(nextManagerUserId);
+async function syncJournalManagerPermission(previousManagerUserIds = [], nextManagerUserIds = [], options = {}) {
+  const previousIds = normalizeManagerUserIds(previousManagerUserIds);
+  const nextIds = normalizeManagerUserIds(nextManagerUserIds);
 
-  if (!normalizedPrevious && !normalizedNext) {
+  if (previousIds.length === 0 && nextIds.length === 0) {
     return;
   }
 
-  const permission = await ensureJournalManagerPermission();
+  const permission = await ensureJournalManagerPermission(options);
 
-  if (normalizedNext) {
-    await UserPermissao.findOrCreate({
-      where: {
-        userId: normalizedNext,
-        permissaoId: permission.id
-      },
-      defaults: {
-        id: uuid.v4(),
-        userId: normalizedNext,
-        permissaoId: permission.id
-      }
-    });
-  }
+  await Promise.all(nextIds.map((userId) => UserPermissao.findOrCreate({
+    where: {
+      userId,
+      permissaoId: permission.id
+    },
+    defaults: {
+      id: uuid.v4(),
+      userId,
+      permissaoId: permission.id
+    },
+    transaction: options.transaction
+  })));
 
-  if (normalizedPrevious && normalizedPrevious !== normalizedNext) {
-    const managedCount = await BoardJournal.count({
-      where: { managerUserId: normalizedPrevious }
-    });
-    if (managedCount === 0) {
-      await UserPermissao.destroy({
-        where: {
-          userId: normalizedPrevious,
-          permissaoId: permission.id
-        }
+  await Promise.all(previousIds
+    .filter((item) => !nextIds.includes(item))
+    .map(async (userId) => {
+      const managedCount = await BoardJournalManager.count({
+        where: { userId },
+        transaction: options.transaction
       });
-    }
-  }
+      if (managedCount === 0) {
+        await UserPermissao.destroy({
+          where: {
+            userId,
+            permissaoId: permission.id
+          },
+          transaction: options.transaction
+        });
+      }
+    }));
 }
 
 async function getApprovedPointsByUser(journalId) {
@@ -388,10 +456,7 @@ async function getJournalMembershipRow(journalId, userId) {
 
 async function ensureJournalExists(journalId) {
   const journal = await BoardJournal.findByPk(journalId, {
-    include: [
-      { model: User, as: 'creator', attributes: ['id', 'name', 'email'] },
-      { model: User, as: 'manager', attributes: ['id', 'name', 'email'] }
-    ]
+    include: buildJournalInclude()
   });
   if (!journal) {
     throw new Error('Diario nao encontrado');
@@ -402,7 +467,7 @@ async function ensureJournalExists(journalId) {
 async function ensureJournalAccess(journalId, userId, options = {}) {
   const journal = await ensureJournalExists(journalId);
   const isAdmin = options.isAdminOverride !== undefined ? options.isAdminOverride : await hasAdminPermission(userId);
-  const isManager = String(journal.managerUserId || '') === String(userId || '');
+  const isManager = journalHasManager(journal, userId);
   if (isAdmin) {
     return { journal, membership: null, isAdmin: true };
   }
@@ -431,7 +496,7 @@ async function ensureJournalManagementAccess(journalId, userId) {
   if (access.isAdmin) {
     return { journal, isAdmin: true, isManager: false };
   }
-  if (String(journal.managerUserId || '') === String(userId || '')) {
+  if (journalHasManager(journal, userId)) {
     return { journal, isAdmin: false, isManager: true };
   }
   throw new Error('Usuario sem permissao para gerenciar este diario');
@@ -445,7 +510,7 @@ async function createOrRefreshJournalMembership(journalId, userId, note = null) 
   if (existing) {
     await existing.update({
       status: 'pending',
-      requestedAt: new Date(),
+      requestedAt: now(),
       approvedAt: null,
       approvedBy: null,
       note: normalizeString(note)
@@ -457,7 +522,7 @@ async function createOrRefreshJournalMembership(journalId, userId, note = null) 
     journalId,
     userId,
     status: 'pending',
-    requestedAt: new Date(),
+    requestedAt: now(),
     note: normalizeString(note)
   });
 }
@@ -465,21 +530,17 @@ async function listJournals(requesterId, options = {}) {
   const access = await getBoardAccessContext(requesterId);
   const scope = normalizeString(options.scope);
   const where = {};
+  const include = scope === 'management' && !access.isAdmin
+    ? buildJournalInclude({ managerUserId: requesterId || null })
+    : buildJournalInclude();
 
-  if (scope === 'management') {
-    if (!access.isAdmin) {
-      where.managerUserId = requesterId || null;
-    }
-  } else if (!access.isAdmin) {
+  if (scope !== 'management' && !access.isAdmin) {
     where.isActive = true;
   }
 
   const records = await BoardJournal.findAll({
     where,
-    include: [
-      { model: User, as: 'creator', attributes: ['id', 'name', 'email'] },
-      { model: User, as: 'manager', attributes: ['id', 'name', 'email'] }
-    ],
+    include,
     order: [['createdAt', 'DESC']]
   });
 
@@ -534,29 +595,46 @@ async function getJournalById(journalId, requesterId) {
 }
 
 async function ensureSingleActiveJournalManager(managerUserId, options = {}) {
-  const normalizedManagerUserId = normalizeString(managerUserId);
-  if (!normalizedManagerUserId) {
+  const managerUserIds = normalizeManagerUserIds(managerUserId);
+  if (managerUserIds.length === 0) {
     return;
   }
 
-  const where = {
-    managerUserId: normalizedManagerUserId,
-    isActive: true
-  };
-
+  const journalWhere = { isActive: true };
   if (options.excludeJournalId) {
-    where.id = {
+    journalWhere.id = {
       [Op.ne]: options.excludeJournalId
     };
   }
 
-  const existingJournal = await BoardJournal.findOne({
-    where,
-    attributes: ['id', 'name']
+  const existingAssignments = await BoardJournalManager.findAll({
+    where: {
+      userId: {
+        [Op.in]: managerUserIds
+      }
+    },
+    include: [
+      {
+        model: BoardJournal,
+        as: 'journal',
+        attributes: ['id', 'name'],
+        required: true,
+        where: journalWhere
+      },
+      {
+        model: User,
+        as: 'user',
+        attributes: ['id', 'name', 'email']
+      }
+    ],
+    attributes: ['userId'],
+    transaction: options.transaction
   });
 
-  if (existingJournal) {
-    throw new Error(`Este gestor ja possui um diario ativo atribuido: ${existingJournal.name}`);
+  if (existingAssignments.length > 0) {
+    const conflict = existingAssignments[0];
+    const managerLabel = conflict.user?.name || conflict.user?.email || conflict.userId;
+    throw new Error(`O gestor ${managerLabel} ja possui um diario ativo atribuido: ${conflict.journal?.name}`);
   }
 }
 
@@ -564,74 +642,145 @@ async function createJournal(payload, userId) {
   const safePayload = payload || {};
   const name = normalizeString(safePayload.name, 150);
   if (!name) throw new Error('Nome do diario e obrigatorio');
-  const managerUserId = normalizeString(safePayload.managerUserId);
   const isActive = normalizeBoolean(safePayload.isActive, true);
+  const hasManagerArrayPayload = Object.prototype.hasOwnProperty.call(safePayload, 'managerUserIds');
+  const managerUserIds = hasManagerArrayPayload
+    ? normalizeManagerUserIds(safePayload.managerUserIds)
+    : normalizeManagerUserIds(safePayload.managerUserId);
+  const primaryManagerUserId = managerUserIds[0] || null;
+  let journalId = null;
 
-  if (managerUserId) {
-    const managerUser = await User.findByPk(managerUserId, { attributes: ['id'] });
-    if (!managerUser) {
-      throw new Error('Gestor do diario nao encontrado');
+  await sequelize.transaction(async (transaction) => {
+    if (managerUserIds.length > 0) {
+      const managers = await User.findAll({
+        where: { id: { [Op.in]: managerUserIds } },
+        attributes: ['id'],
+        transaction
+      });
+      if (managers.length !== managerUserIds.length) {
+        throw new Error('Um ou mais gestores do diario nao foram encontrados');
+      }
     }
-  }
 
-  if (managerUserId && isActive) {
-    await ensureSingleActiveJournalManager(managerUserId);
-  }
+    if (managerUserIds.length > 0 && isActive) {
+      await ensureSingleActiveJournalManager(managerUserIds, { transaction });
+    }
 
-  const record = await BoardJournal.create({
-    name,
-    description: normalizeString(safePayload.description),
-    coverImageUrl: normalizeString(safePayload.coverImageUrl),
-    instructions: normalizeString(safePayload.instructions),
-    isActive,
-    managerUserId,
-    createdBy: userId
+    const record = await BoardJournal.create({
+      name,
+      description: normalizeString(safePayload.description),
+      coverImageUrl: normalizeString(safePayload.coverImageUrl),
+      instructions: normalizeString(safePayload.instructions),
+      isActive,
+      managerUserId: primaryManagerUserId,
+      createdBy: userId
+    }, { transaction });
+
+    if (managerUserIds.length > 0) {
+      await BoardJournalManager.bulkCreate(managerUserIds.map((managerUserId) => ({
+        journalId: record.id,
+        userId: managerUserId
+      })), { transaction });
+    }
+
+    await syncJournalManagerPermission([], managerUserIds, { transaction });
+
+    await BoardJournalMember.create({
+      journalId: record.id,
+      userId,
+      status: 'approved',
+      requestedAt: now(),
+      approvedAt: now(),
+      approvedBy: userId,
+      note: 'Criador do diario'
+    }, { transaction });
+
+    journalId = record.id;
   });
 
-  await syncJournalManagerPermission(null, managerUserId);
-
-  await BoardJournalMember.create({
-    journalId: record.id,
-    userId,
-    status: 'approved',
-    requestedAt: new Date(),
-    approvedAt: new Date(),
-    approvedBy: userId,
-    note: 'Criador do diario'
-  });
-
-  return getJournalById(record.id, userId);
+  return getJournalById(journalId, userId);
 }
 
 async function updateJournal(journalId, payload = {}) {
   const record = await ensureJournalExists(journalId);
   const name = normalizeString(payload.name, 150);
   if (!name) throw new Error('Nome do diario e obrigatorio');
-  const previousManagerUserId = normalizeString(record.managerUserId);
-  const managerUserId = normalizeString(payload.managerUserId);
+  const existingManagerUserIds = (Array.isArray(record.managers) && record.managers.length > 0)
+    ? normalizeManagerUserIds(record.managers.map((manager) => manager.id))
+    : normalizeManagerUserIds(record.managerUserId);
+  const hasManagerArrayPayload = Object.prototype.hasOwnProperty.call(payload, 'managerUserIds');
+  const hasSingleManagerPayload = Object.prototype.hasOwnProperty.call(payload, 'managerUserId');
+  const managerUserIds = hasManagerArrayPayload
+    ? normalizeManagerUserIds(payload.managerUserIds)
+    : (hasSingleManagerPayload ? normalizeManagerUserIds(payload.managerUserId) : existingManagerUserIds);
+  const primaryManagerUserId = managerUserIds[0] || null;
   const isActive = normalizeBoolean(payload.isActive, record.isActive);
+  await sequelize.transaction(async (transaction) => {
+    const lockedRecord = await BoardJournal.findByPk(record.id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE
+    });
 
-  if (managerUserId) {
-    const managerUser = await User.findByPk(managerUserId, { attributes: ['id'] });
-    if (!managerUser) {
-      throw new Error('Gestor do diario nao encontrado');
+    if (!lockedRecord) {
+      throw new Error('Diario nao encontrado');
     }
-  }
 
-  if (managerUserId && isActive) {
-    await ensureSingleActiveJournalManager(managerUserId, { excludeJournalId: record.id });
-  }
+    if (managerUserIds.length > 0) {
+      const managers = await User.findAll({
+        where: { id: { [Op.in]: managerUserIds } },
+        attributes: ['id'],
+        transaction
+      });
+      if (managers.length !== managerUserIds.length) {
+        throw new Error('Um ou mais gestores do diario nao foram encontrados');
+      }
+    }
 
-  await record.update({
-    name,
-    description: normalizeString(payload.description),
-    coverImageUrl: normalizeString(payload.coverImageUrl),
-    instructions: normalizeString(payload.instructions),
-    isActive,
-    managerUserId
+    if (managerUserIds.length > 0 && isActive) {
+      await ensureSingleActiveJournalManager(managerUserIds, {
+        excludeJournalId: record.id,
+        transaction
+      });
+    }
+
+    const existingAssignments = await BoardJournalManager.findAll({
+      where: { journalId: record.id },
+      attributes: ['id', 'userId'],
+      transaction
+    });
+    const previousManagerUserIds = normalizeManagerUserIds(existingAssignments.map((assignment) => assignment.userId));
+    const nextManagerUserIdSet = new Set(managerUserIds);
+    const assignmentIdsToRemove = existingAssignments
+      .filter((assignment) => !nextManagerUserIdSet.has(assignment.userId))
+      .map((assignment) => assignment.id);
+    const managerUserIdsToCreate = managerUserIds
+      .filter((managerUserId) => !existingAssignments.some((assignment) => assignment.userId === managerUserId));
+
+    await lockedRecord.update({
+      name,
+      description: normalizeString(payload.description),
+      coverImageUrl: normalizeString(payload.coverImageUrl),
+      instructions: normalizeString(payload.instructions),
+      isActive,
+      managerUserId: primaryManagerUserId
+    }, { transaction });
+
+    if (assignmentIdsToRemove.length > 0) {
+      await BoardJournalManager.destroy({
+        where: { id: { [Op.in]: assignmentIdsToRemove } },
+        transaction
+      });
+    }
+
+    if (managerUserIdsToCreate.length > 0) {
+      await BoardJournalManager.bulkCreate(managerUserIdsToCreate.map((managerUserId) => ({
+        journalId: record.id,
+        userId: managerUserId
+      })), { transaction });
+    }
+
+    await syncJournalManagerPermission(previousManagerUserIds, managerUserIds, { transaction });
   });
-
-  await syncJournalManagerPermission(previousManagerUserId, managerUserId);
 
   return getJournalById(record.id, record.createdBy);
 }
@@ -670,7 +819,7 @@ async function updateJournalMemberStatus(journalId, memberId, status, adminId, n
 
   await row.update({
     status,
-    approvedAt: new Date(),
+    approvedAt: now(),
     approvedBy: adminId,
     note: normalizeString(note)
   });
@@ -746,7 +895,7 @@ async function awardEligibleBadges(userId, journalId, transaction) {
     userId,
     journalId,
     badgeId: badge.id,
-    earnedAt: new Date()
+    earnedAt: now()
   }, { transaction })));
 }
 
@@ -846,13 +995,13 @@ async function normalizeChallengePayload(payload = {}, userId = null, existing =
   const challengeType = normalizeString(payload.challengeType || existing?.challengeType || 'text');
   if (!CHALLENGE_TYPES.includes(challengeType)) throw new Error('Tipo de desafio invalido');
 
-  const dueDate = payload.dueDate ? normalizeDate(payload.dueDate) : null;
+  const dueDate = payload.dueDate ? getEndOfDay(payload.dueDate) : null;
   if (payload.dueDate && !dueDate) throw new Error('Data limite invalida');
-  const startDate = payload.startDate ? getStartOfDay(payload.startDate) : null;
+  const startDate = payload.startDate ? toDateOnlyString(payload.startDate) : null;
   if (payload.startDate && !startDate) throw new Error('Data de inicio invalida');
-  const endDate = payload.endDate ? getStartOfDay(payload.endDate) : null;
+  const endDate = payload.endDate ? toDateOnlyString(payload.endDate) : null;
   if (payload.endDate && !endDate) throw new Error('Data de fim invalida');
-  if (startDate && endDate && startDate.getTime() > endDate.getTime()) {
+  if (startDate && endDate && startDate > endDate) {
     throw new Error('Data de inicio nao pode ser maior que a data de fim');
   }
 
@@ -1177,7 +1326,7 @@ async function createSubmission(payload, userId) {
       approvedAt: null,
       approvedBy: null,
       pointsAwarded: null,
-      submittedAt: new Date()
+      submittedAt: now()
     });
     record = latestSubmission;
   } else if (latestSubmission?.status === 'rejected') {
@@ -1188,7 +1337,7 @@ async function createSubmission(payload, userId) {
       userId,
       journalId: challenge.journalId,
       challengeId,
-      submittedAt: new Date(),
+      submittedAt: now(),
       status: 'pending',
       attemptNumber: Number(latestSubmission.attemptNumber || 1) + 1,
       pointsAwarded: null,
@@ -1199,7 +1348,7 @@ async function createSubmission(payload, userId) {
       userId,
       journalId: challenge.journalId,
       challengeId,
-      submittedAt: new Date(),
+      submittedAt: now(),
       status: 'pending',
       attemptNumber: 1,
       pointsAwarded: null,
@@ -1224,7 +1373,7 @@ async function approveSubmission(submissionId, adminId, feedback = null) {
     const pointsAwarded = getAwardedPointsForSubmission(challenge, submission);
     await submission.update({
       status: 'approved',
-      approvedAt: new Date(),
+      approvedAt: now(),
       approvedBy: adminId,
       feedback: normalizeString(feedback),
       pointsAwarded
@@ -1241,7 +1390,7 @@ async function rejectSubmission(submissionId, adminId, feedback = null) {
   if (submission.status === 'approved') throw new Error('Nao e possivel rejeitar uma submissao ja aprovada');
   await submission.update({
     status: 'rejected',
-    approvedAt: new Date(),
+    approvedAt: now(),
     approvedBy: adminId,
     feedback: normalizeString(feedback),
     pointsAwarded: null

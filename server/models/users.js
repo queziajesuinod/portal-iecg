@@ -1,27 +1,33 @@
-'use strict';
 const { Model, DataTypes } = require('sequelize');
 const { normalizeCpf } = require('../utils/cpf');
 
 module.exports = (sequelize) => {
   class User extends Model {
     static associate(models) {
-    User.belongsTo(models.Perfil, { foreignKey: 'perfilId' });
-    User.belongsToMany(models.Perfil, {
-      through: models.UserPerfil,
-      as: 'perfis',
-      foreignKey: 'userId',
-      otherKey: 'perfilId'
-    });
-    User.belongsToMany(models.Permissao, {
-      through: models.UserPermissao,
-      as: 'permissoesDiretas',
-      foreignKey: 'userId',
-      otherKey: 'permissaoId'
-    });
-    User.hasOne(models.Aposentado, { foreignKey: 'user_id', as: 'aposentado' });
-    User.belongsTo(models.User, { as: 'conjuge', foreignKey: 'conjuge_id' });
-    User.hasMany(models.User, { as: 'conjugeDe', foreignKey: 'conjuge_id' });
-    User.hasMany(models.Celula, { as: 'lideranca', foreignKey: 'liderId' });
+      User.belongsTo(models.Perfil, { foreignKey: 'perfilId' });
+      User.belongsToMany(models.Perfil, {
+        through: models.UserPerfil,
+        as: 'perfis',
+        foreignKey: 'userId',
+        otherKey: 'perfilId'
+      });
+      User.belongsToMany(models.Permissao, {
+        through: models.UserPermissao,
+        as: 'permissoesDiretas',
+        foreignKey: 'userId',
+        otherKey: 'permissaoId'
+      });
+      User.hasMany(models.BoardJournalManager, { foreignKey: 'userId', as: 'boardJournalManagerLinks' });
+      User.belongsToMany(models.BoardJournal, {
+        through: models.BoardJournalManager,
+        as: 'managedBoardJournals',
+        foreignKey: 'userId',
+        otherKey: 'journalId'
+      });
+      User.hasOne(models.Aposentado, { foreignKey: 'user_id', as: 'aposentado' });
+      User.belongsTo(models.User, { as: 'conjuge', foreignKey: 'conjuge_id' });
+      User.hasMany(models.User, { as: 'conjugeDe', foreignKey: 'conjuge_id' });
+      User.hasMany(models.Celula, { as: 'lideranca', foreignKey: 'liderId' });
     }
   }
 
@@ -51,7 +57,7 @@ module.exports = (sequelize) => {
       allowNull: false,
       defaultValue: 0
     },
-  
+
     // 🔽 Adicione aqui os novos campos vindos do Aposentado:
     data_nascimento: {
       type: DataTypes.DATEONLY,
@@ -142,6 +148,6 @@ module.exports = (sequelize) => {
     if (!user) return;
     user.setDataValue('cpf', normalizeCpf(user.cpf));
   });
-  
+
   return User;
 };

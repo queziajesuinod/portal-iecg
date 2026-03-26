@@ -69,6 +69,11 @@ import {
 } from '../../../api/eventsApi';
 import { EVENT_TYPE_LABELS } from '../../../constants/eventTypes';
 import { getPaymentStatusChipSx, getPaymentStatusLabel } from '../../../constants/paymentStatus';
+import {
+  formatDateInAppTimezone,
+  formatDateTimeInAppTimezone,
+  getTodayDateInputValue
+} from '../../../utils/dateTime';
 import CancelRegistrationDialog from '../../../components/CancelRegistrationDialog';
 
 function TabPanel({ children, value, index }) {
@@ -594,15 +599,9 @@ function EventDetails() {
     || '-'
   );
 
-  const formatarData = (data) => {
-    if (!data) return '-';
-    return new Date(data).toLocaleDateString('pt-BR');
-  };
+  const formatarData = (data) => formatDateInAppTimezone(data);
 
-  const formatarDataHora = (data) => {
-    if (!data) return '-';
-    return new Date(data).toLocaleString('pt-BR');
-  };
+  const formatarDataHora = (data) => formatDateTimeInAppTimezone(data);
 
   const formatarPreco = (preco) => {
     const valor = Number(preco) || 0;
@@ -661,11 +660,11 @@ function EventDetails() {
     if (fieldName === 'installments' || fieldName.endsWith('.installments')) {
       return `${Number(value) || 1}x`;
     }
-    if (/(At|Date)$/i.test(fieldName)) {
-      const parsed = new Date(value);
-      if (!Number.isNaN(parsed.getTime())) {
-        return formatarDataHora(value);
-      }
+    if (/At$/i.test(fieldName)) {
+      return formatarDataHora(value);
+    }
+    if (/Date$/i.test(fieldName)) {
+      return formatarData(value);
     }
 
     return String(value);
@@ -813,7 +812,7 @@ function EventDetails() {
 
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
-      const dateTag = new Date().toISOString().slice(0, 10);
+      const dateTag = getTodayDateInputValue();
       const fileName = `vendas_${sanitizeFileName(evento?.title || 'evento')}_${dateTag}.xlsx`;
 
       link.href = url;
@@ -899,7 +898,7 @@ function EventDetails() {
       );
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
-      const dateTag = new Date().toISOString().slice(0, 10);
+      const dateTag = getTodayDateInputValue();
       const fileName = `inscritos_${sanitizeFileName(evento?.title || 'evento')}_${dateTag}.xlsx`;
 
       link.href = url;

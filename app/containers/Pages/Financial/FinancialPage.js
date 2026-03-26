@@ -37,6 +37,7 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import brand from 'dan-api/dummy/brand';
 import { listarEventos } from '../../../api/eventsApi';
 import {
@@ -45,8 +46,15 @@ import {
   buscarConfiguracaoTaxasFinanceiras,
   criarSaidaFinanceira,
   deletarSaidaFinanceira,
+  exportarSaidasFinanceiras,
   listarRegistrosFinanceiros
 } from '../../../api/financialApi';
+import * as XLSX from 'xlsx';
+import {
+  formatDateInAppTimezone,
+  formatDateTimeInAppTimezone,
+  getTodayDateInputValue
+} from '../../../utils/dateTime';
 
 const PAYMENT_METHOD_OPTIONS = [
   { value: 'pix', label: 'PIX' },
@@ -93,10 +101,22 @@ const CARD_BRAND_STYLES = {
 const defaultForm = () => ({
   eventId: '',
   description: '',
+  supplier: '',
+  paymentType: 'unico',
+  // pagamento unico
   amount: '',
   paymentMethod: 'pix',
   isSettled: false,
-  expenseDate: new Date().toISOString().slice(0, 10),
+  expenseDate: getTodayDateInputValue(),
+  // pagamento com entrada
+  entradaAmount: '',
+  entradaPaymentMethod: 'pix',
+  entradaDate: getTodayDateInputValue(),
+  entradaIsSettled: false,
+  quitacaoAmount: '',
+  quitacaoPaymentMethod: 'pix',
+  quitacaoDate: getTodayDateInputValue(),
+  quitacaoIsSettled: false,
   notes: ''
 });
 
@@ -141,6 +161,13 @@ function FinancialPage() {
   const [settlingExpenseId, setSettlingExpenseId] = useState(null);
   const [editingExpenseId, setEditingExpenseId] = useState(null);
   const [form, setForm] = useState(defaultForm());
+  const [expenseFilters, setExpenseFilters] = useState({
+    dateFrom: '',
+    dateTo: '',
+    eventId: '',
+    isSettled: ''
+  });
+  const [exportingExpenses, setExportingExpenses] = useState(false);
 
   const title = `${brand.name} - Financeiro`;
 
@@ -154,15 +181,9 @@ function FinancialPage() {
     return `R$ ${amount.toFixed(2).replace('.', ',')}`;
   };
 
-  const formatDateTime = (value) => {
-    if (!value) return '-';
-    return new Date(value).toLocaleString('pt-BR');
-  };
+  const formatDateTime = (value) => formatDateTimeInAppTimezone(value);
 
-  const formatDate = (value) => {
-    if (!value) return '-';
-    return new Date(value).toLocaleDateString('pt-BR');
-  };
+  const formatDate = (value) => formatDateInAppTimezone(value);
 
   const getPaymentMethodLabel = (value) => PAYMENT_METHOD_LABELS[value] || value || '-';
 
@@ -224,7 +245,8 @@ function FinancialPage() {
     page = entriesPage,
     perPage = entriesRowsPerPage,
     expensePage = expensesPage,
-    expensePerPage = expensesRowsPerPage
+    expensePerPage = expensesRowsPerPage,
+    currentExpenseFilters = expenseFilters
   ) => {
     try {
       setLoading(true);
@@ -236,7 +258,11 @@ function FinancialPage() {
         page: page + 1,
         perPage,
         expensePage: expensePage + 1,
-        expensePerPage
+        expensePerPage,
+        expenseDateFrom: currentExpenseFilters.dateFrom || undefined,
+        expenseDateTo: currentExpenseFilters.dateTo || undefined,
+        expenseEventId: currentExpenseFilters.eventId || undefined,
+        expenseIsSettled: currentExpenseFilters.isSettled || undefined
       };
       const response = await listarRegistrosFinanceiros(params);
       setEntries(response?.entries || []);
@@ -274,8 +300,7 @@ function FinancialPage() {
 
   const handleApplyFilters = () => {
     setEntriesPage(0);
-    setExpensesPage(0);
-    loadData(filters, 0, entriesRowsPerPage, 0, expensesRowsPerPage);
+    loadData(filters, 0, entriesRowsPerPage, expensesPage, expensesRowsPerPage, expenseFilters);
   };
 
   const handleClearFilters = () => {
@@ -287,8 +312,91 @@ function FinancialPage() {
     };
     setFilters(reset);
     setEntriesPage(0);
+    loadData(reset, 0, entriesRowsPerPage, expensesPage, expensesRowsPerPage, expenseFilters);
+  };
+
+  const handleExpenseFilterChange = (field, value) => {
+    setExpenseFilters((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleApplyExpenseFilters = () => {
     setExpensesPage(0);
-    loadData(reset, 0, entriesRowsPerPage, 0, expensesRowsPerPage);
+    loadData(filters, entriesPage, entriesRowsPerPage, 0, expensesRowsPerPage, expenseFilters);
+  };
+
+  const handleClearExpenseFilters = () => {
+    const reset = { dateFrom: '', dateTo: '', eventId: '', isSettled: '' };
+    setExpenseFilters(reset);
+    setExpensesPage(0);
+    loadData(filters, entriesPage, entriesRowsPerPage, 0, expensesRowsPerPage, reset);
+  };
+
+  const PAYMENT_METHOD_LABELS_MAP = PAYMENT_METHOD_OPTIONS.reduce((acc, o) => { acc[o.value] = o.label; return acc; }, {});
+
+  const exportExpensesToExcel = async () => {
+    try {
+      setExportingExpenses(true);
+      const data = await exportarSaidasFinanceiras({
+        expenseDateFrom: expenseFilters.dateFrom || undefined,
+        expenseDateTo: expenseFilters.dateTo || undefined,
+        expenseEventId: expenseFilters.eventId || undefined,
+        expenseIsSettled: expenseFilters.isSettled || undefined
+      });
+
+      const rows = (Array.isArray(data) ? data : []).map((e) => {
+        if (e.paymentType === 'com_entrada') {
+          return {
+            Evento: e.eventTitle,
+            Descricao: e.description,
+            Fornecedor: e.supplier || '-',
+            'Tipo Pagamento': 'Com Entrada',
+            'Total (R$)': Number(e.amount || 0).toFixed(2),
+            'Valor Entrada (R$)': Number(e.entradaAmount || 0).toFixed(2),
+            'Forma Pgto Entrada': PAYMENT_METHOD_LABELS_MAP[e.entradaPaymentMethod] || e.entradaPaymentMethod || '-',
+            'Data Entrada': e.entradaDate || '-',
+            'Entrada Paga': e.entradaIsSettled ? 'Sim' : 'Nao',
+            'Valor Quitacao (R$)': Number(e.quitacaoAmount || 0).toFixed(2),
+            'Forma Pgto Quitacao': PAYMENT_METHOD_LABELS_MAP[e.quitacaoPaymentMethod] || e.quitacaoPaymentMethod || '-',
+            'Data Quitacao': e.quitacaoDate || '-',
+            'Quitacao Paga': e.quitacaoIsSettled ? 'Sim' : 'Nao',
+            Situacao: (e.entradaIsSettled && e.quitacaoIsSettled) ? 'Quitado' : 'Pendente',
+            Observacao: e.notes || '',
+            'Criado Por': e.createdBy || '-'
+          };
+        }
+        return {
+          Evento: e.eventTitle,
+          Descricao: e.description,
+          Fornecedor: e.supplier || '-',
+          'Tipo Pagamento': 'Unico',
+          'Total (R$)': Number(e.amount || 0).toFixed(2),
+          'Valor Entrada (R$)': '',
+          'Forma Pgto Entrada': '',
+          'Data Entrada': '',
+          'Entrada Paga': '',
+          'Valor Quitacao (R$)': '',
+          'Forma Pgto Quitacao': '',
+          'Data Quitacao': '',
+          'Quitacao Paga': '',
+          Situacao: e.isSettled ? 'Quitado' : 'Pendente',
+          'Forma Pagamento': PAYMENT_METHOD_LABELS_MAP[e.paymentMethod] || e.paymentMethod || '-',
+          'Data Saida': e.expenseDate || '-',
+          Observacao: e.notes || '',
+          'Criado Por': e.createdBy || '-'
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Saidas');
+      const hoje = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(wb, `saidas_financeiro_${hoje}.xlsx`);
+    } catch (error) {
+      console.error('Erro ao exportar saidas:', error);
+      setNotification(error.message || 'Erro ao exportar saidas');
+    } finally {
+      setExportingExpenses(false);
+    }
   };
 
   const handleEntriesPageChange = (_event, newPage) => {
@@ -305,14 +413,14 @@ function FinancialPage() {
 
   const handleExpensesPageChange = (_event, newPage) => {
     setExpensesPage(newPage);
-    loadData(filters, entriesPage, entriesRowsPerPage, newPage, expensesRowsPerPage);
+    loadData(filters, entriesPage, entriesRowsPerPage, newPage, expensesRowsPerPage, expenseFilters);
   };
 
   const handleExpensesRowsPerPageChange = (event) => {
     const newRowsPerPage = parseInt(event.target.value, 10);
     setExpensesRowsPerPage(newRowsPerPage);
     setExpensesPage(0);
-    loadData(filters, entriesPage, entriesRowsPerPage, 0, newRowsPerPage);
+    loadData(filters, entriesPage, entriesRowsPerPage, 0, newRowsPerPage, expenseFilters);
   };
 
   const handleFeeConfigChange = (field, value) => {
@@ -396,13 +504,24 @@ function FinancialPage() {
 
   const openEditExpenseDialog = (expense) => {
     setEditingExpenseId(expense.id);
+    const pt = expense.paymentType || 'unico';
     setForm({
       eventId: expense.eventId || '',
       description: expense.description || '',
-      amount: expense.amount,
-      paymentMethod: expense.paymentMethod || 'pix',
-      isSettled: Boolean(expense.isSettled),
-      expenseDate: expense.expenseDate || new Date().toISOString().slice(0, 10),
+      supplier: expense.supplier || '',
+      paymentType: pt,
+      amount: pt === 'unico' ? expense.amount : '',
+      paymentMethod: pt === 'unico' ? (expense.paymentMethod || 'pix') : 'pix',
+      isSettled: pt === 'unico' ? Boolean(expense.isSettled) : false,
+      expenseDate: pt === 'unico' ? (expense.expenseDate || getTodayDateInputValue()) : getTodayDateInputValue(),
+      entradaAmount: pt === 'com_entrada' ? (expense.entradaAmount ?? '') : '',
+      entradaPaymentMethod: pt === 'com_entrada' ? (expense.entradaPaymentMethod || 'pix') : 'pix',
+      entradaDate: pt === 'com_entrada' ? (expense.entradaDate || getTodayDateInputValue()) : getTodayDateInputValue(),
+      entradaIsSettled: pt === 'com_entrada' ? Boolean(expense.entradaIsSettled) : false,
+      quitacaoAmount: pt === 'com_entrada' ? (expense.quitacaoAmount ?? '') : '',
+      quitacaoPaymentMethod: pt === 'com_entrada' ? (expense.quitacaoPaymentMethod || 'pix') : 'pix',
+      quitacaoDate: pt === 'com_entrada' ? (expense.quitacaoDate || getTodayDateInputValue()) : getTodayDateInputValue(),
+      quitacaoIsSettled: pt === 'com_entrada' ? Boolean(expense.quitacaoIsSettled) : false,
       notes: expense.notes || ''
     });
     setFormOpen(true);
@@ -425,22 +544,49 @@ function FinancialPage() {
       return;
     }
 
-    if (Number(form.amount) <= 0) {
+    if (form.paymentType === 'com_entrada') {
+      if (Number(form.entradaAmount) <= 0) {
+        setNotification('Informe o valor da entrada');
+        return;
+      }
+      if (Number(form.quitacaoAmount) <= 0) {
+        setNotification('Informe o valor da quitacao');
+        return;
+      }
+    } else if (Number(form.amount) <= 0) {
       setNotification('Informe um valor maior que zero');
       return;
     }
 
     try {
       setSaving(true);
-      const payload = {
-        eventId: form.eventId,
-        description: form.description,
-        amount: Number(form.amount),
-        paymentMethod: form.paymentMethod,
-        isSettled: Boolean(form.isSettled),
-        expenseDate: form.expenseDate,
-        notes: form.notes
-      };
+      const payload = form.paymentType === 'com_entrada'
+        ? {
+          eventId: form.eventId,
+          description: form.description,
+          paymentType: 'com_entrada',
+          entradaAmount: Number(form.entradaAmount),
+          entradaPaymentMethod: form.entradaPaymentMethod,
+          entradaDate: form.entradaDate,
+          entradaIsSettled: Boolean(form.entradaIsSettled),
+          quitacaoAmount: Number(form.quitacaoAmount),
+          quitacaoPaymentMethod: form.quitacaoPaymentMethod,
+          quitacaoDate: form.quitacaoDate,
+          quitacaoIsSettled: Boolean(form.quitacaoIsSettled),
+          supplier: form.supplier || '',
+          notes: form.notes
+        }
+        : {
+          eventId: form.eventId,
+          description: form.description,
+          paymentType: 'unico',
+          amount: Number(form.amount),
+          paymentMethod: form.paymentMethod,
+          isSettled: Boolean(form.isSettled),
+          expenseDate: form.expenseDate,
+          supplier: form.supplier || '',
+          notes: form.notes
+        };
 
       if (editingExpenseId) {
         await atualizarSaidaFinanceira(editingExpenseId, payload);
@@ -475,22 +621,47 @@ function FinancialPage() {
     }
   };
 
-  const settleExpense = async (expense) => {
-    if (!expense || expense.isSettled) return;
+  const settleExpense = async (expense, part = null) => {
+    if (!expense) return;
 
     try {
       setSettlingExpenseId(expense.id);
-      const payload = {
-        eventId: expense.eventId,
-        description: expense.description,
-        amount: Number(expense.amount),
-        paymentMethod: expense.paymentMethod || 'pix',
-        isSettled: true,
-        expenseDate: expense.expenseDate,
-        notes: expense.notes || ''
-      };
+
+      let payload;
+      if (expense.paymentType === 'com_entrada') {
+        const settleEntrada = part === 'entrada' ? true : Boolean(expense.entradaIsSettled);
+        const settleQuitacao = part === 'quitacao' ? true : Boolean(expense.quitacaoIsSettled);
+        payload = {
+          eventId: expense.eventId,
+          description: expense.description,
+          paymentType: 'com_entrada',
+          entradaAmount: Number(expense.entradaAmount),
+          entradaPaymentMethod: expense.entradaPaymentMethod || 'pix',
+          entradaDate: expense.entradaDate,
+          entradaIsSettled: settleEntrada,
+          quitacaoAmount: Number(expense.quitacaoAmount),
+          quitacaoPaymentMethod: expense.quitacaoPaymentMethod || 'pix',
+          quitacaoDate: expense.quitacaoDate,
+          quitacaoIsSettled: settleQuitacao,
+          supplier: expense.supplier || '',
+          notes: expense.notes || ''
+        };
+      } else {
+        payload = {
+          eventId: expense.eventId,
+          description: expense.description,
+          paymentType: 'unico',
+          amount: Number(expense.amount),
+          paymentMethod: expense.paymentMethod || 'pix',
+          isSettled: true,
+          expenseDate: expense.expenseDate,
+          supplier: expense.supplier || '',
+          notes: expense.notes || ''
+        };
+      }
+
       await atualizarSaidaFinanceira(expense.id, payload);
-      setNotification('Saida marcada como quitada');
+      setNotification('Saida atualizada');
       loadData(filters, entriesPage, entriesRowsPerPage, expensesPage, expensesRowsPerPage);
     } catch (error) {
       console.error('Erro ao marcar saida como quitada:', error);
@@ -713,16 +884,92 @@ function FinancialPage() {
           </>
         )}
 
-        <Box display="flex" justifyContent="space-between" alignItems="center" style={{ marginTop: 24, marginBottom: 8 }}>
-          <Typography variant="h6">Saidas</Typography>
-          <Button
-            variant="contained"
-            color="secondary"
-            startIcon={<AddIcon />}
-            onClick={openNewExpenseDialog}
-          >
-            Nova Saida
-          </Button>
+        <Box style={{ marginTop: 32, marginBottom: 8 }}>
+          <Typography variant="h6" style={{ marginBottom: 12 }}>Saidas</Typography>
+
+          <Grid container spacing={2} alignItems="flex-end" style={{ marginBottom: 8 }}>
+            <Grid item xs={12} sm={6} md={3}>
+              <TextField
+                label="Data inicial (saidas)"
+                type="date"
+                fullWidth
+                value={expenseFilters.dateFrom}
+                InputLabelProps={{ shrink: true }}
+                onChange={(event) => handleExpenseFilterChange('dateFrom', event.target.value)}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <TextField
+                label="Data final (saidas)"
+                type="date"
+                fullWidth
+                value={expenseFilters.dateTo}
+                InputLabelProps={{ shrink: true }}
+                onChange={(event) => handleExpenseFilterChange('dateTo', event.target.value)}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <FormControl fullWidth>
+                <InputLabel id="expense-filter-event-label">Evento</InputLabel>
+                <Select
+                  labelId="expense-filter-event-label"
+                  value={expenseFilters.eventId}
+                  label="Evento"
+                  onChange={(event) => handleExpenseFilterChange('eventId', event.target.value)}
+                >
+                  <MenuItem value="">Todos</MenuItem>
+                  {events.map((event) => (
+                    <MenuItem key={event.id} value={event.id}>{event.title}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <FormControl fullWidth>
+                <InputLabel id="expense-filter-settled-label">Situacao</InputLabel>
+                <Select
+                  labelId="expense-filter-settled-label"
+                  value={expenseFilters.isSettled}
+                  label="Situacao"
+                  onChange={(event) => handleExpenseFilterChange('isSettled', event.target.value)}
+                >
+                  <MenuItem value="">Todas</MenuItem>
+                  <MenuItem value="false">Pendente</MenuItem>
+                  <MenuItem value="true">Quitado</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <Box display="flex" gap={1} flexWrap="wrap">
+                <Button variant="contained" color="primary" onClick={handleApplyExpenseFilters}>
+                  Filtrar
+                </Button>
+                <Button variant="outlined" onClick={handleClearExpenseFilters}>
+                  Limpar
+                </Button>
+                <Button
+                  variant="outlined"
+                  color="success"
+                  startIcon={<FileDownloadIcon />}
+                  onClick={exportExpensesToExcel}
+                  disabled={exportingExpenses}
+                >
+                  {exportingExpenses ? 'Exportando...' : 'Exportar Excel'}
+                </Button>
+              </Box>
+            </Grid>
+          </Grid>
+
+          <Box display="flex" justifyContent="flex-end">
+            <Button
+              variant="contained"
+              color="secondary"
+              startIcon={<AddIcon />}
+              onClick={openNewExpenseDialog}
+            >
+              Nova Saida
+            </Button>
+          </Box>
         </Box>
 
         {loading ? (
@@ -736,11 +983,12 @@ function FinancialPage() {
                 <TableRow>
                   <TableCell>Evento</TableCell>
                   <TableCell>Descricao</TableCell>
+                  <TableCell>Fornecedor</TableCell>
                   <TableCell>Valor</TableCell>
                   <TableCell>Forma de Pagamento</TableCell>
                   <TableCell>Data</TableCell>
                   <TableCell>Status</TableCell>
-                  <TableCell align="center">Ações</TableCell>
+                  <TableCell align="center">Acoes</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -748,31 +996,112 @@ function FinancialPage() {
                   <TableRow key={expense.id}>
                     <TableCell>{expense.eventTitle || '-'}</TableCell>
                     <TableCell>{expense.description}</TableCell>
-                    <TableCell>{formatCurrency(expense.amount)}</TableCell>
-                    <TableCell>{getPaymentMethodLabel(expense.paymentMethod)}</TableCell>
-                    <TableCell>{formatDate(expense.expenseDate)}</TableCell>
+                    <TableCell>{expense.supplier || '-'}</TableCell>
                     <TableCell>
-                      <Box display="flex" alignItems="center" gap={1}>
-                        <Chip
-                          size="small"
-                          label={expense.isSettled ? 'Quitado' : 'Pendente'}
-                          color={expense.isSettled ? 'success' : 'warning'}
-                        />
-                        {!expense.isSettled && (
-                          <Tooltip title={settlingExpenseId === expense.id ? 'Atualizando...' : 'Marcar como quitado'}>
-                            <span>
-                              <IconButton
-                                size="small"
-                                color="success"
-                                onClick={() => settleExpense(expense)}
-                                disabled={settlingExpenseId === expense.id}
-                              >
-                                <CheckCircleOutlineIcon fontSize="small" />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                        )}
-                      </Box>
+                      {formatCurrency(expense.amount)}
+                      {expense.paymentType === 'com_entrada' && (
+                        <Typography variant="caption" display="block" color="textSecondary">
+                          Entrada: {formatCurrency(expense.entradaAmount)} / Quitacao: {formatCurrency(expense.quitacaoAmount)}
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {expense.paymentType === 'com_entrada' ? (
+                        <>
+                          <Typography variant="caption" display="block">
+                            Entrada: {getPaymentMethodLabel(expense.entradaPaymentMethod)}
+                          </Typography>
+                          <Typography variant="caption" display="block">
+                            Quitacao: {getPaymentMethodLabel(expense.quitacaoPaymentMethod)}
+                          </Typography>
+                        </>
+                      ) : (
+                        getPaymentMethodLabel(expense.paymentMethod)
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {expense.paymentType === 'com_entrada' ? (
+                        <>
+                          <Typography variant="caption" display="block">
+                            Entrada: {formatDate(expense.entradaDate)}
+                          </Typography>
+                          <Typography variant="caption" display="block">
+                            Quitacao: {formatDate(expense.quitacaoDate)}
+                          </Typography>
+                        </>
+                      ) : (
+                        formatDate(expense.expenseDate)
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {expense.paymentType === 'com_entrada' ? (
+                        <Box display="flex" flexDirection="column" gap={0.5}>
+                          <Box display="flex" alignItems="center" gap={0.5}>
+                            <Chip
+                              size="small"
+                              label={expense.entradaIsSettled ? 'Entrada Paga' : 'Entrada Pendente'}
+                              color={expense.entradaIsSettled ? 'success' : 'warning'}
+                            />
+                            {!expense.entradaIsSettled && (
+                              <Tooltip title="Marcar entrada como paga">
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    color="success"
+                                    onClick={() => settleExpense(expense, 'entrada')}
+                                    disabled={settlingExpenseId === expense.id}
+                                  >
+                                    <CheckCircleOutlineIcon fontSize="small" />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            )}
+                          </Box>
+                          <Box display="flex" alignItems="center" gap={0.5}>
+                            <Chip
+                              size="small"
+                              label={expense.quitacaoIsSettled ? 'Quitacao Paga' : 'Quitacao Pendente'}
+                              color={expense.quitacaoIsSettled ? 'success' : 'warning'}
+                            />
+                            {!expense.quitacaoIsSettled && (
+                              <Tooltip title="Marcar quitacao como paga">
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    color="success"
+                                    onClick={() => settleExpense(expense, 'quitacao')}
+                                    disabled={settlingExpenseId === expense.id}
+                                  >
+                                    <CheckCircleOutlineIcon fontSize="small" />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            )}
+                          </Box>
+                        </Box>
+                      ) : (
+                        <Box display="flex" alignItems="center" gap={1}>
+                          <Chip
+                            size="small"
+                            label={expense.isSettled ? 'Quitado' : 'Pendente'}
+                            color={expense.isSettled ? 'success' : 'warning'}
+                          />
+                          {!expense.isSettled && (
+                            <Tooltip title={settlingExpenseId === expense.id ? 'Atualizando...' : 'Marcar como quitado'}>
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  color="success"
+                                  onClick={() => settleExpense(expense)}
+                                  disabled={settlingExpenseId === expense.id}
+                                >
+                                  <CheckCircleOutlineIcon fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          )}
+                        </Box>
+                      )}
                     </TableCell>
                     <TableCell align="center">
                       <Tooltip title="Editar Saida">
@@ -956,57 +1285,200 @@ function FinancialPage() {
                 onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12}>
               <TextField
                 fullWidth
-                type="number"
-                label="Valor"
-                value={form.amount}
-                inputProps={{ min: 0, step: 0.01 }}
-                onChange={(event) => setForm((prev) => ({ ...prev, amount: event.target.value }))}
+                label="Fornecedor"
+                value={form.supplier}
+                onChange={(event) => setForm((prev) => ({ ...prev, supplier: event.target.value }))}
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12}>
               <FormControl fullWidth>
-                <InputLabel id="expense-payment-method-label">Forma de Pagamento</InputLabel>
+                <InputLabel id="expense-payment-type-label">Tipo de Pagamento</InputLabel>
                 <Select
-                  labelId="expense-payment-method-label"
-                  value={form.paymentMethod}
-                  label="Forma de Pagamento"
-                  onChange={(event) => setForm((prev) => ({ ...prev, paymentMethod: event.target.value }))}
+                  labelId="expense-payment-type-label"
+                  value={form.paymentType}
+                  label="Tipo de Pagamento"
+                  onChange={(event) => setForm((prev) => ({ ...prev, paymentType: event.target.value }))}
                 >
-                  {PAYMENT_METHOD_OPTIONS.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
+                  <MenuItem value="unico">Pagamento Unico</MenuItem>
+                  <MenuItem value="com_entrada">Pagamento com Entrada</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                type="date"
-                label="Data da Saida"
-                InputLabelProps={{ shrink: true }}
-                value={form.expenseDate}
-                onChange={(event) => setForm((prev) => ({ ...prev, expenseDate: event.target.value }))}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel id="expense-settled-label">Situacao</InputLabel>
-                <Select
-                  labelId="expense-settled-label"
-                  value={form.isSettled ? 'yes' : 'no'}
-                  label="Situacao"
-                  onChange={(event) => setForm((prev) => ({ ...prev, isSettled: event.target.value === 'yes' }))}
-                >
-                  <MenuItem value="yes">Quitado</MenuItem>
-                  <MenuItem value="no">Nao Quitado</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
+
+            {form.paymentType === 'unico' && (
+              <>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Valor"
+                    value={form.amount}
+                    inputProps={{ min: 0, step: 0.01 }}
+                    onChange={(event) => setForm((prev) => ({ ...prev, amount: event.target.value }))}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel id="expense-payment-method-label">Forma de Pagamento</InputLabel>
+                    <Select
+                      labelId="expense-payment-method-label"
+                      value={form.paymentMethod}
+                      label="Forma de Pagamento"
+                      onChange={(event) => setForm((prev) => ({ ...prev, paymentMethod: event.target.value }))}
+                    >
+                      {PAYMENT_METHOD_OPTIONS.map((option) => (
+                        <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    type="date"
+                    label="Data da Saida"
+                    InputLabelProps={{ shrink: true }}
+                    value={form.expenseDate}
+                    onChange={(event) => setForm((prev) => ({ ...prev, expenseDate: event.target.value }))}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel id="expense-settled-label">Situacao</InputLabel>
+                    <Select
+                      labelId="expense-settled-label"
+                      value={form.isSettled ? 'yes' : 'no'}
+                      label="Situacao"
+                      onChange={(event) => setForm((prev) => ({ ...prev, isSettled: event.target.value === 'yes' }))}
+                    >
+                      <MenuItem value="yes">Quitado</MenuItem>
+                      <MenuItem value="no">Pendente</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+              </>
+            )}
+
+            {form.paymentType === 'com_entrada' && (
+              <>
+                <Grid item xs={12}>
+                  <Typography variant="subtitle2" style={{ marginTop: 8 }}>Entrada (Sinal)</Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Valor da Entrada"
+                    value={form.entradaAmount}
+                    inputProps={{ min: 0, step: 0.01 }}
+                    onChange={(event) => setForm((prev) => ({ ...prev, entradaAmount: event.target.value }))}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel id="entrada-pm-label">Forma de Pagamento</InputLabel>
+                    <Select
+                      labelId="entrada-pm-label"
+                      value={form.entradaPaymentMethod}
+                      label="Forma de Pagamento"
+                      onChange={(event) => setForm((prev) => ({ ...prev, entradaPaymentMethod: event.target.value }))}
+                    >
+                      {PAYMENT_METHOD_OPTIONS.map((option) => (
+                        <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    type="date"
+                    label="Data da Entrada"
+                    InputLabelProps={{ shrink: true }}
+                    value={form.entradaDate}
+                    onChange={(event) => setForm((prev) => ({ ...prev, entradaDate: event.target.value }))}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel id="entrada-settled-label">Situacao</InputLabel>
+                    <Select
+                      labelId="entrada-settled-label"
+                      value={form.entradaIsSettled ? 'yes' : 'no'}
+                      label="Situacao"
+                      onChange={(event) => setForm((prev) => ({ ...prev, entradaIsSettled: event.target.value === 'yes' }))}
+                    >
+                      <MenuItem value="yes">Pago</MenuItem>
+                      <MenuItem value="no">Pendente</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Typography variant="subtitle2" style={{ marginTop: 8 }}>Quitacao (Pagamento Final)</Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Valor da Quitacao"
+                    value={form.quitacaoAmount}
+                    inputProps={{ min: 0, step: 0.01 }}
+                    onChange={(event) => setForm((prev) => ({ ...prev, quitacaoAmount: event.target.value }))}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel id="quitacao-pm-label">Forma de Pagamento</InputLabel>
+                    <Select
+                      labelId="quitacao-pm-label"
+                      value={form.quitacaoPaymentMethod}
+                      label="Forma de Pagamento"
+                      onChange={(event) => setForm((prev) => ({ ...prev, quitacaoPaymentMethod: event.target.value }))}
+                    >
+                      {PAYMENT_METHOD_OPTIONS.map((option) => (
+                        <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    type="date"
+                    label="Data da Quitacao"
+                    InputLabelProps={{ shrink: true }}
+                    value={form.quitacaoDate}
+                    onChange={(event) => setForm((prev) => ({ ...prev, quitacaoDate: event.target.value }))}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel id="quitacao-settled-label">Situacao</InputLabel>
+                    <Select
+                      labelId="quitacao-settled-label"
+                      value={form.quitacaoIsSettled ? 'yes' : 'no'}
+                      label="Situacao"
+                      onChange={(event) => setForm((prev) => ({ ...prev, quitacaoIsSettled: event.target.value === 'yes' }))}
+                    >
+                      <MenuItem value="yes">Pago</MenuItem>
+                      <MenuItem value="no">Pendente</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                {(Number(form.entradaAmount) > 0 || Number(form.quitacaoAmount) > 0) && (
+                  <Grid item xs={12}>
+                    <Typography variant="body2" color="textSecondary">
+                      Total: {`R$ ${(Number(form.entradaAmount || 0) + Number(form.quitacaoAmount || 0)).toFixed(2).replace('.', ',')}`}
+                    </Typography>
+                  </Grid>
+                )}
+              </>
+            )}
+
             <Grid item xs={12}>
               <TextField
                 fullWidth
