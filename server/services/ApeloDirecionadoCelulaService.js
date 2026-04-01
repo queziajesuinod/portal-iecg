@@ -527,6 +527,7 @@ class ApeloDirecionadoCelulaService {
 
   async _processarConsolidacaoDoApelo(apelo, transaction) {
     const member = await this._ensureMemberForApelo(apelo, transaction);
+    await this._promoverMembroConsolidado(member, transaction);
     await this._ensureMemberMilestone(
       member.id,
       'CONSOLIDADO_CELULA',
@@ -534,6 +535,40 @@ class ApeloDirecionadoCelulaService {
       'Consolidado via apelo direcionado',
       transaction
     );
+    return member;
+  }
+
+  async _promoverMembroConsolidado(member, transaction) {
+    if (!member?.id) {
+      return null;
+    }
+
+    if (member.status !== 'MEMBRO') {
+      await member.update({
+        status: 'MEMBRO',
+        statusChangeDate: new Date(),
+        statusReason: 'Consolidado na celula via apelo direcionado'
+      }, { transaction });
+    }
+
+    const journey = await this._ensureMemberJourney(member.id, transaction);
+    if (!journey) {
+      return member;
+    }
+
+    const journeyPayload = {};
+    if (journey.currentStage !== 'MEMBRO') {
+      journeyPayload.currentStage = 'MEMBRO';
+      journeyPayload.stageChangedAt = new Date();
+    }
+    if (!journey.lastActivityDate) {
+      journeyPayload.lastActivityDate = new Date();
+    }
+
+    if (Object.keys(journeyPayload).length > 0) {
+      await journey.update(journeyPayload, { transaction });
+    }
+
     return member;
   }
 
@@ -680,6 +715,12 @@ class ApeloDirecionadoCelulaService {
   }
 
   _deveEnriquecerEndereco(payload = {}, itemAtual = null) {
+    const camposEndereco = ['cep_apelo', 'cep', 'bairro_apelo', 'cidade_apelo', 'estado_apelo', 'lat_apelo', 'lon_apelo'];
+    const alterandoEndereco = camposEndereco.some((field) => Object.prototype.hasOwnProperty.call(payload, field));
+    if (alterandoEndereco) {
+      return true;
+    }
+
     const decisao = Object.prototype.hasOwnProperty.call(payload, 'decisao')
       ? payload.decisao
       : itemAtual?.decisao;

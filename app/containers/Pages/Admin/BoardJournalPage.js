@@ -219,7 +219,7 @@ function BoardJournalPage() {
         listBoardChallenges({ journalId: nextSelectedJournalId }),
         listMyBoardSubmissions(nextSelectedJournalId),
         listMyBoardBadges(nextSelectedJournalId),
-        getBoardRanking({ journalId: nextSelectedJournalId, limit: 1000 }),
+        getBoardRanking({ journalId: nextSelectedJournalId, limit: 10 }),
         getMyBoardStats(nextSelectedJournalId)
       ]);
       setSelectedJournal(journal || null);
@@ -1782,7 +1782,7 @@ function BoardJournalPage() {
                     >
                       <CardContent>
                         <Typography variant="h6" sx={{ color: COLORS.navy, fontWeight: 800, mb: 2 }}>
-                      Ranking completo
+                      Top 10 do ranking
                         </Typography>
                         <Stack spacing={1.25}>
                           {ranking.map((row) => {

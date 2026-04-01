@@ -53,9 +53,14 @@ export const deleteBoardChallenge = (id) => fetchWithAuth(`${BASE}/challenges/${
 export const listMyBoardSubmissions = (journalId) => fetchWithAuth(withQuery('/submissions/me', { journalId }));
 export const createBoardSubmission = (data) => fetchWithAuth(`${BASE}/submissions`, { method: 'POST', body: JSON.stringify(data) });
 export const listPendingBoardSubmissions = (params = {}) => fetchWithAuth(withQuery('/submissions/pending', params));
+export const listReviewedBoardSubmissions = (params = {}) => fetchWithAuth(withQuery('/submissions/reviewed', params));
 export const listBoardSubmissionsByChallenge = (challengeId) => fetchWithAuth(`${BASE}/submissions/challenge/${challengeId}`);
 export const approveBoardSubmission = (id, feedback) => fetchWithAuth(`${BASE}/submissions/${id}/approve`, { method: 'PUT', body: JSON.stringify({ feedback }) });
 export const rejectBoardSubmission = (id, feedback) => fetchWithAuth(`${BASE}/submissions/${id}/reject`, { method: 'PUT', body: JSON.stringify({ feedback }) });
+export const updateBoardSubmissionReview = (id, status, feedback) => fetchWithAuth(`${BASE}/submissions/${id}/review`, {
+  method: 'PUT',
+  body: JSON.stringify({ status, feedback })
+});
 
 export const listBoardBadges = (journalId) => fetchWithAuth(withQuery('/badges', { journalId }));
 export const listMyBoardBadges = (journalId) => fetchWithAuth(withQuery('/badges/me', { journalId }));

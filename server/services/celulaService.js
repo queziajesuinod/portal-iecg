@@ -7,6 +7,46 @@ const sanitizeCelular = (valor) => {
   return String(valor).replace(/\D/g, '');
 };
 
+const findLeaderMemberForCelula = async (celula, transaction = null) => {
+  if (!celula) return null;
+
+  if (celula.liderMemberId) {
+    const member = await Member.findByPk(celula.liderMemberId, { transaction });
+    if (member) return member;
+  }
+
+  if (celula.liderId) {
+    const member = await Member.findOne({
+      where: { userId: celula.liderId },
+      transaction
+    });
+    if (member) return member;
+  }
+
+  return null;
+};
+
+const syncLeaderMemberPhone = async ({ celula, phone, transaction = null } = {}) => {
+  const leaderMember = await findLeaderMemberForCelula(celula, transaction);
+  if (!leaderMember) return;
+
+  const nextPhone = sanitizeCelular(phone) || null;
+  const currentPhone = sanitizeCelular(leaderMember.phone) || null;
+  const currentWhatsapp = sanitizeCelular(leaderMember.whatsapp) || null;
+
+  const updates = {};
+  if (currentPhone !== nextPhone) {
+    updates.phone = nextPhone;
+  }
+  if (currentWhatsapp !== nextPhone) {
+    updates.whatsapp = nextPhone;
+  }
+
+  if (Object.keys(updates).length) {
+    await leaderMember.update(updates, { transaction });
+  }
+};
+
 const defaultCelulaIncludes = [
   {
     model: Campus,
@@ -29,7 +69,9 @@ const celulaForLeaderSearchIncludes = [
 ];
 
 const CelulaService = {
-  async resolveLeaderLinks(payload = {}) {
+  async resolveLeaderLinks(payload = {}, options = {}) {
+    const transaction = options.transaction || null;
+
     if (Object.prototype.hasOwnProperty.call(payload, 'liderMemberId')) {
       if (!payload.liderMemberId) {
         payload.liderMemberId = null;
@@ -38,7 +80,8 @@ const CelulaService = {
       }
 
       const member = await Member.findByPk(payload.liderMemberId, {
-        attributes: ['id', 'userId']
+        attributes: ['id', 'userId'],
+        transaction
       });
       if (!member) {
         throw new Error('Membro líder informado não encontrado');
@@ -56,7 +99,8 @@ const CelulaService = {
       }
       const member = await Member.findOne({
         where: { userId: payload.liderId },
-        attributes: ['id']
+        attributes: ['id'],
+        transaction
       });
       payload.liderMemberId = member?.id || null;
       return payload;
@@ -190,8 +234,12 @@ const CelulaService = {
     };
   },
 
-  async buscarCelulaPorId(id) {
-    const celula = await Celula.findByPk(id, { include: defaultCelulaIncludes });
+  async buscarCelulaPorId(id, options = {}) {
+    const transaction = options.transaction || null;
+    const celula = await Celula.findByPk(id, {
+      include: defaultCelulaIncludes,
+      transaction
+    });
     if (!celula) {
       throw new Error('Célula não encontrada');
     }
@@ -199,31 +247,52 @@ const CelulaService = {
   },
 
   async atualizarCelula(id, dadosAtualizados = {}) {
-    const celula = await CelulaService.buscarCelulaPorId(id);
     const payload = { ...dadosAtualizados };
-    if (payload.campus && !payload.campusId) {
-      const campus = await Campus.findOne({
-        where: {
-          nome: {
-            [Op.iLike]: `%${payload.campus}%`
-          }
-        }
-      });
-      if (campus) {
-        payload.campusId = campus.id;
-      }
-    }
-    if (Object.prototype.hasOwnProperty.call(payload, 'cel_lider')) {
-      payload.cel_lider = sanitizeCelular(payload.cel_lider);
-    }
-    await CelulaService.resolveLeaderLinks(payload);
+    const transaction = await Celula.sequelize.transaction();
 
-    const updated = await celula.update(payload);
-    webhookEmitter.emit('celula.updated', {
-      id: updated.id,
-      data: payload
-    });
-    return updated;
+    try {
+      const celula = await CelulaService.buscarCelulaPorId(id, { transaction });
+
+      if (payload.campus && !payload.campusId) {
+        const campus = await Campus.findOne({
+          where: {
+            nome: {
+              [Op.iLike]: `%${payload.campus}%`
+            }
+          },
+          transaction
+        });
+        if (campus) {
+          payload.campusId = campus.id;
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'cel_lider')) {
+        payload.cel_lider = sanitizeCelular(payload.cel_lider);
+      }
+      await CelulaService.resolveLeaderLinks(payload, { transaction });
+
+      const updated = await celula.update(payload, { transaction });
+
+      if (Object.prototype.hasOwnProperty.call(payload, 'cel_lider')) {
+        await syncLeaderMemberPhone({
+          celula: updated,
+          phone: payload.cel_lider,
+          transaction
+        });
+      }
+
+      await transaction.commit();
+
+      webhookEmitter.emit('celula.updated', {
+        id: updated.id,
+        data: payload
+      });
+
+      return updated.reload({ include: defaultCelulaIncludes });
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
   },
 
   async deletarCelula(id) {

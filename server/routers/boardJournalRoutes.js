@@ -43,9 +43,11 @@ router.delete('/challenges/:id', requireBoardManagementAccess, boardJournalContr
 router.get('/submissions/me', boardJournalController.listMySubmissions);
 router.post('/submissions', boardJournalController.createSubmission);
 router.get('/submissions/pending', requireBoardAdmin, boardJournalController.listPendingSubmissions);
+router.get('/submissions/reviewed', requireBoardAdmin, boardJournalController.listReviewedSubmissions);
 router.get('/submissions/challenge/:challengeId', requireBoardAdmin, boardJournalController.listSubmissionsByChallenge);
 router.put('/submissions/:id/approve', requireBoardAdmin, boardJournalController.approveSubmission);
 router.put('/submissions/:id/reject', requireBoardAdmin, boardJournalController.rejectSubmission);
+router.put('/submissions/:id/review', requireBoardAdmin, boardJournalController.updateSubmissionReview);
 
 router.get('/badges', boardJournalController.listBadges);
 router.get('/badges/me', boardJournalController.listMyBadges);

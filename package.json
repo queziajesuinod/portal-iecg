@@ -71,6 +71,9 @@
   "resolutions": {
     "babel-core": "7.0.0-bridge.0"
   },
+  "overrides": {
+    "handlebars": "4.7.9"
+  },
   "dllPlugin": {
     "path": "node_modules/react-boilerplate-dlls",
     "exclude": [

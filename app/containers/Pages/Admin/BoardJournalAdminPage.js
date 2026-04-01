@@ -56,7 +56,6 @@ import brand from 'dan-api/dummy/brand';
 import 'react-draft-wysiwyg/dist/react-draft-wysiwyg.css';
 import {
   approveBoardJournalMember,
-  approveBoardSubmission,
   createBoardJournal,
   createBoardBadge,
   createBoardCategory,
@@ -72,12 +71,13 @@ import {
   listBoardJournalMembers,
   listSystemUsers,
   listPendingBoardSubmissions,
+  listReviewedBoardSubmissions,
   rejectBoardJournalMember,
-  rejectBoardSubmission,
   updateBoardJournal,
   updateBoardBadge,
   updateBoardCategory,
-  updateBoardChallenge
+  updateBoardChallenge,
+  updateBoardSubmissionReview
 } from '../../../api/boardJournalApi';
 import { getStoredPermissions } from '../../../utils/permissions';
 import { formatDateTimeInAppTimezone } from '../../../utils/dateTime';
@@ -161,6 +161,7 @@ const ADMIN_TABS = [
   { value: 'categories', label: 'Categorias' },
   { value: 'challenges', label: 'Desafios' },
   { value: 'approvals', label: 'Aprovações' },
+  { value: 'reviews', label: 'Avaliacoes' },
   { value: 'badges', label: 'Badges' }
 ];
 
@@ -254,6 +255,12 @@ function getChallengeTypeLabel(challengeType) {
   return 'Texto';
 }
 
+function getSubmissionStatusLabel(status) {
+  if (status === 'approved') return 'Aprovado';
+  if (status === 'rejected') return 'Rejeitado';
+  return 'Pendente';
+}
+
 function normalizeProfileName(value) {
   return String(value || '')
     .normalize('NFD')
@@ -326,17 +333,22 @@ function BoardJournalAdminPage() {
   const [challenges, setChallenges] = useState([]);
   const [badges, setBadges] = useState([]);
   const [pendingSubmissions, setPendingSubmissions] = useState([]);
+  const [reviewedSubmissions, setReviewedSubmissions] = useState([]);
   const [journalForm, setJournalForm] = useState({ ...emptyJournal, managerUserIds: [] });
   const [categoryForm, setCategoryForm] = useState(emptyCategory);
   const [badgeForm, setBadgeForm] = useState(emptyBadge);
   const [challengeForm, setChallengeForm] = useState(emptyChallenge);
   const [challengeCategoryOptions, setChallengeCategoryOptions] = useState([]);
   const [reviewItem, setReviewItem] = useState(null);
-  const [reviewAction, setReviewAction] = useState('approve');
+  const [reviewAction, setReviewAction] = useState('approved');
   const [reviewFeedback, setReviewFeedback] = useState('');
   const [approvalCategoryFilter, setApprovalCategoryFilter] = useState('all');
   const [approvalChallengeFilter, setApprovalChallengeFilter] = useState('all');
   const [approvalUserFilter, setApprovalUserFilter] = useState('');
+  const [reviewStatusFilter, setReviewStatusFilter] = useState('all');
+  const [reviewCategoryFilter, setReviewCategoryFilter] = useState('all');
+  const [reviewChallengeFilter, setReviewChallengeFilter] = useState('all');
+  const [reviewUserFilter, setReviewUserFilter] = useState('');
   const [journalOpen, setJournalOpen] = useState(false);
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [badgeOpen, setBadgeOpen] = useState(false);
@@ -354,6 +366,8 @@ function BoardJournalAdminPage() {
   const [pendingRowsPerPage, setPendingRowsPerPage] = useState(10);
   const [approvalsPage, setApprovalsPage] = useState(0);
   const [approvalsRowsPerPage, setApprovalsRowsPerPage] = useState(10);
+  const [reviewsPage, setReviewsPage] = useState(0);
+  const [reviewsRowsPerPage, setReviewsRowsPerPage] = useState(10);
   const [challengesPage, setChallengesPage] = useState(0);
   const [challengesRowsPerPage, setChallengesRowsPerPage] = useState(10);
 
@@ -460,6 +474,34 @@ function BoardJournalAdminPage() {
     () => filteredPendingSubmissions.slice(approvalsPage * approvalsRowsPerPage, approvalsPage * approvalsRowsPerPage + approvalsRowsPerPage),
     [filteredPendingSubmissions, approvalsPage, approvalsRowsPerPage]
   );
+  const filteredReviewedSubmissions = useMemo(() => {
+    const userFilter = reviewUserFilter.trim().toLowerCase();
+
+    return reviewedSubmissions.filter((item) => {
+      const matchesStatus = reviewStatusFilter === 'all'
+        || String(item.status || '') === String(reviewStatusFilter);
+      const matchesCategory = reviewCategoryFilter === 'all'
+        || String(item.challenge?.category?.id || '') === String(reviewCategoryFilter);
+      const matchesChallenge = reviewChallengeFilter === 'all'
+        || String(item.challenge?.id || '') === String(reviewChallengeFilter);
+      const userName = String(item.user?.name || '').toLowerCase();
+      const userEmail = String(item.user?.email || '').toLowerCase();
+      const matchesUser = !userFilter
+        || userName.includes(userFilter)
+        || userEmail.includes(userFilter);
+      return matchesStatus && matchesCategory && matchesChallenge && matchesUser;
+    });
+  }, [
+    reviewStatusFilter,
+    reviewCategoryFilter,
+    reviewChallengeFilter,
+    reviewUserFilter,
+    reviewedSubmissions
+  ]);
+  const paginatedReviewedSubmissions = useMemo(
+    () => filteredReviewedSubmissions.slice(reviewsPage * reviewsRowsPerPage, reviewsPage * reviewsRowsPerPage + reviewsRowsPerPage),
+    [filteredReviewedSubmissions, reviewsPage, reviewsRowsPerPage]
+  );
   const paginatedChallenges = useMemo(
     () => challenges.slice(challengesPage * challengesRowsPerPage, challengesPage * challengesRowsPerPage + challengesRowsPerPage),
     [challenges, challengesPage, challengesRowsPerPage]
@@ -496,21 +538,24 @@ function BoardJournalAdminPage() {
         setChallenges([]);
         setBadges([]);
         setPendingSubmissions([]);
+        setReviewedSubmissions([]);
         return;
       }
 
-      const [categoryRows, challengeRows, badgeRows, memberRows, pendingRows] = await Promise.all([
+      const [categoryRows, challengeRows, badgeRows, memberRows, pendingRows, reviewedRows] = await Promise.all([
         listBoardCategories(nextSelectedJournalId),
         listBoardChallenges({ journalId: nextSelectedJournalId, includeInactive: true }),
         listBoardBadges(nextSelectedJournalId),
         hasBoardAdminPermission ? listBoardJournalMembers(nextSelectedJournalId) : Promise.resolve([]),
-        hasBoardAdminPermission ? listPendingBoardSubmissions({ journalId: nextSelectedJournalId }) : Promise.resolve([])
+        hasBoardAdminPermission ? listPendingBoardSubmissions({ journalId: nextSelectedJournalId }) : Promise.resolve([]),
+        hasBoardAdminPermission ? listReviewedBoardSubmissions({ journalId: nextSelectedJournalId }) : Promise.resolve([])
       ]);
       setJournalMembers(memberRows || []);
       setCategories(categoryRows || []);
       setChallenges(challengeRows || []);
       setBadges(badgeRows || []);
       setPendingSubmissions(pendingRows || []);
+      setReviewedSubmissions(reviewedRows || []);
     } catch (error) {
       setNotification(error.message || 'Erro ao carregar Diario de Bordo administrativo');
     } finally {
@@ -698,11 +743,11 @@ function BoardJournalAdminPage() {
 
   const submitReview = async () => {
     try {
-      if (reviewAction === 'approve') {
-        await approveBoardSubmission(reviewItem.id, reviewFeedback);
-      } else {
-        await rejectBoardSubmission(reviewItem.id, reviewFeedback);
+      if (!reviewItem?.id) {
+        setNotification('Submissao invalida para revisao');
+        return;
       }
+      await updateBoardSubmissionReview(reviewItem.id, reviewAction, reviewFeedback);
       setNotification('Revisao salva');
       setReviewOpen(false);
       loadData();
@@ -727,8 +772,11 @@ function BoardJournalAdminPage() {
   };
 
   const openReviewDialog = (item, action) => {
+    const normalizedAction = action === 'approve'
+      ? 'approved'
+      : (action === 'reject' ? 'rejected' : action);
     setReviewItem(item);
-    setReviewAction(action);
+    setReviewAction(['approved', 'rejected', 'pending'].includes(normalizedAction) ? normalizedAction : 'approved');
     setReviewFeedback(item?.feedback || '');
     setReviewOpen(true);
   };
@@ -1462,12 +1510,12 @@ function BoardJournalAdminPage() {
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Aprovar">
-                          <IconButton size="small" color="success" onClick={() => openReviewDialog(item, 'approve')}>
+                          <IconButton size="small" color="success" onClick={() => openReviewDialog(item, 'approved')}>
                             <CheckCircleOutlineIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Rejeitar">
-                          <IconButton size="small" color="error" onClick={() => openReviewDialog(item, 'reject')}>
+                          <IconButton size="small" color="error" onClick={() => openReviewDialog(item, 'rejected')}>
                             <CancelOutlinedIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
@@ -1484,6 +1532,118 @@ function BoardJournalAdminPage() {
                 onPageChange={(_e, newPage) => setApprovalsPage(newPage)}
                 rowsPerPage={approvalsRowsPerPage}
                 onRowsPerPageChange={(e) => { setApprovalsRowsPerPage(parseInt(e.target.value, 10)); setApprovalsPage(0); }}
+                rowsPerPageOptions={[5, 10, 25, 50]}
+                labelRowsPerPage="Por página:"
+                labelDisplayedRows={({ from, to, count }) => `${from}–${to} de ${count}`}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {!loading && tab === 'reviews' && hasBoardAdminPermission && (
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>Aprovados e rejeitados</Typography>
+              <Grid container spacing={2} sx={{ mb: 2 }}>
+                <Grid item xs={12} md={3}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Status</InputLabel>
+                    <Select value={reviewStatusFilter} label="Status" onChange={(e) => { setReviewStatusFilter(e.target.value); setReviewsPage(0); }}>
+                      <MenuItem value="all">Todos</MenuItem>
+                      <MenuItem value="approved">Aprovados</MenuItem>
+                      <MenuItem value="rejected">Rejeitados</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Categoria</InputLabel>
+                    <Select value={reviewCategoryFilter} label="Categoria" onChange={(e) => { setReviewCategoryFilter(e.target.value); setReviewsPage(0); }}>
+                      <MenuItem value="all">Todas</MenuItem>
+                      {categories.map((item) => (
+                        <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Desafio</InputLabel>
+                    <Select value={reviewChallengeFilter} label="Desafio" onChange={(e) => { setReviewChallengeFilter(e.target.value); setReviewsPage(0); }}>
+                      <MenuItem value="all">Todos</MenuItem>
+                      {challenges.map((item) => (
+                        <MenuItem key={item.id} value={item.id}>{item.title}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    label="Usuario"
+                    value={reviewUserFilter}
+                    onChange={(e) => { setReviewUserFilter(e.target.value); setReviewsPage(0); }}
+                    placeholder="Filtrar por nome ou email"
+                    fullWidth
+                    size="small"
+                  />
+                </Grid>
+              </Grid>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Usuario</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Categoria</TableCell>
+                    <TableCell>Desafio</TableCell>
+                    <TableCell>Nota</TableCell>
+                    <TableCell sx={{ width: { xs: 'auto', md: 220 }, maxWidth: 220 }}>Feedback</TableCell>
+                    <TableCell>Avaliado em</TableCell>
+                    <TableCell align="right">Ações</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {paginatedReviewedSubmissions.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell>
+                        <Typography variant="body2">{item.user?.name || '-'}</Typography>
+                        <Typography variant="caption" color="textSecondary">{item.user?.email || '-'}</Typography>
+                      </TableCell>
+                      <TableCell>{getSubmissionStatusLabel(item.status)}</TableCell>
+                      <TableCell>{item.challenge?.category?.name || '-'}</TableCell>
+                      <TableCell>{item.challenge?.title || '-'}</TableCell>
+                      <TableCell>{item.pointsAwarded ?? '-'}</TableCell>
+                      <TableCell sx={{ maxWidth: 220, wordBreak: 'break-word', whiteSpace: 'normal' }}>
+                        {item.feedback || '-'}
+                      </TableCell>
+                      <TableCell>{item.approvedAt ? formatDateTime(item.approvedAt) : '-'}</TableCell>
+                      <TableCell align="right">
+                        <Tooltip title="Ver resposta">
+                          <IconButton size="small" onClick={() => openDetailDialog(item)}>
+                            <VisibilityOutlinedIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Editar avaliacao">
+                          <IconButton size="small" color="primary" onClick={() => openReviewDialog(item, item.status || 'approved')}>
+                            <EditOutlinedIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredReviewedSubmissions.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={8}>Nenhuma submissao avaliada encontrada para os filtros atuais.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+              <TablePagination
+                component="div"
+                count={filteredReviewedSubmissions.length}
+                page={reviewsPage}
+                onPageChange={(_e, newPage) => setReviewsPage(newPage)}
+                rowsPerPage={reviewsRowsPerPage}
+                onRowsPerPageChange={(e) => { setReviewsRowsPerPage(parseInt(e.target.value, 10)); setReviewsPage(0); }}
                 rowsPerPageOptions={[5, 10, 25, 50]}
                 labelRowsPerPage="Por página:"
                 labelDisplayedRows={({ from, to, count }) => `${from}–${to} de ${count}`}
@@ -1973,7 +2133,11 @@ function BoardJournalAdminPage() {
       </Dialog>
 
       <Dialog open={reviewOpen} onClose={() => setReviewOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>{reviewAction === 'approve' ? 'Aprovar submissao' : 'Rejeitar submissao'}</DialogTitle>
+        <DialogTitle>
+          {reviewAction === 'pending'
+            ? 'Revogar avaliacao'
+            : (reviewAction === 'approved' ? 'Aprovar submissao' : 'Rejeitar submissao')}
+        </DialogTitle>
         <DialogContent>
           {reviewItem && (
             <Box sx={{ mb: 2 }}>
@@ -1981,11 +2145,27 @@ function BoardJournalAdminPage() {
               {renderSubmissionResponse(reviewItem)}
             </Box>
           )}
+          <FormControl fullWidth sx={{ mt: 1 }}>
+            <InputLabel>Status da avaliacao</InputLabel>
+            <Select value={reviewAction} label="Status da avaliacao" onChange={(e) => setReviewAction(e.target.value)}>
+              <MenuItem value="approved">Aprovado</MenuItem>
+              <MenuItem value="rejected">Rejeitado</MenuItem>
+              <MenuItem value="pending">Pendente (revogar)</MenuItem>
+            </Select>
+          </FormControl>
           <TextField label="Feedback" value={reviewFeedback} onChange={(e) => setReviewFeedback(e.target.value)} fullWidth multiline minRows={4} sx={{ mt: 1 }} />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setReviewOpen(false)}>Cancelar</Button>
-          <Button variant="contained" color={reviewAction === 'approve' ? 'success' : 'error'} onClick={submitReview}>{reviewAction === 'approve' ? 'Confirmar aprovação' : 'Confirmar rejeicao'}</Button>
+          <Button
+            variant="contained"
+            color={reviewAction === 'approved' ? 'success' : (reviewAction === 'rejected' ? 'error' : 'warning')}
+            onClick={submitReview}
+          >
+            {reviewAction === 'pending'
+              ? 'Voltar para pendente'
+              : (reviewAction === 'approved' ? 'Salvar como aprovado' : 'Salvar como rejeitado')}
+          </Button>
         </DialogActions>
       </Dialog>
 
@@ -2002,6 +2182,24 @@ function BoardJournalAdminPage() {
               <Box>
                 <Typography variant="subtitle2">Desafio</Typography>
                 <Typography variant="body2">{detailItem.challenge?.title || '-'}</Typography>
+              </Box>
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={4}>
+                  <Typography variant="subtitle2">Status</Typography>
+                  <Typography variant="body2">{getSubmissionStatusLabel(detailItem.status)}</Typography>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <Typography variant="subtitle2">Nota</Typography>
+                  <Typography variant="body2">{detailItem.pointsAwarded ?? '-'}</Typography>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <Typography variant="subtitle2">Avaliado em</Typography>
+                  <Typography variant="body2">{detailItem.approvedAt ? formatDateTime(detailItem.approvedAt) : '-'}</Typography>
+                </Grid>
+              </Grid>
+              <Box>
+                <Typography variant="subtitle2">Feedback</Typography>
+                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{detailItem.feedback || '-'}</Typography>
               </Box>
               <Box>
                 <Typography variant="subtitle2" gutterBottom>Resposta enviada</Typography>
