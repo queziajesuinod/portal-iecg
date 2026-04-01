@@ -8,7 +8,6 @@ import {
   Chip,
   CircularProgress,
   Grid,
-  LinearProgress,
   MenuItem,
   Paper,
   Stack,
@@ -16,7 +15,6 @@ import {
   Typography
 } from '@mui/material';
 import {
-  AutoAwesome,
   FavoriteBorder,
   MilitaryTechOutlined,
   TimelineOutlined
@@ -37,13 +35,6 @@ const MARITAL_STATUS_OPTIONS = [
   { value: 'DIVORCIADO', label: 'Divorciado(a)' },
   { value: 'VIUVO', label: 'Viuvo(a)' }
 ];
-
-const HEALTH_COPY = {
-  SAUDAVEL: 'Saudável',
-  ATENCAO: 'Atenção',
-  CRITICO: 'Crítico',
-  MIA: 'MIA'
-};
 
 const STAGE_COPY = {
   VISITANTE: 'Visitante',
@@ -176,13 +167,6 @@ const buildPayloadFromForm = (form) => ({
   photoUrl: form.photoUrl || null
 });
 
-const getHealthColor = (status) => {
-  if (status === 'SAUDAVEL') return 'success';
-  if (status === 'ATENCAO') return 'warning';
-  if (status === 'CRITICO') return 'error';
-  return 'default';
-};
-
 const MinhaJornadaPage = () => {
   const [member, setMember] = useState(null);
   const [form, setForm] = useState(initialForm);
@@ -208,8 +192,6 @@ const MinhaJornadaPage = () => {
     return [...list];
   }, [member]);
 
-  const journeyIndicators = member?.journey?.engagementIndicators || {};
-  const engagementScore = Number(member?.journey?.engagementScore || 0);
   const isMarried = form.maritalStatus === 'CASADO';
   const selectedSpouse = useMemo(() => (
     spouseCandidates.find((candidate) => candidate.id === form.spouseMemberId)
@@ -382,7 +364,7 @@ const MinhaJornadaPage = () => {
               }}
             >
               <Grid container spacing={3} alignItems="center">
-                <Grid item xs={12} md={7}>
+                <Grid item xs={12} md={12}>
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2.5} alignItems={{ xs: 'flex-start', sm: 'center' }}>
                     <Avatar
                       src={member.photoUrl || ''}
@@ -406,10 +388,7 @@ const MinhaJornadaPage = () => {
                           label={STAGE_COPY[member?.journey?.currentStage] || member?.journey?.currentStage || 'Sem etapa'}
                           sx={{ bgcolor: 'rgba(255,255,255,0.18)', color: '#fff' }}
                         />
-                        <Chip
-                          label={HEALTH_COPY[member?.journey?.healthStatus] || member?.journey?.healthStatus || 'Sem status'}
-                          sx={{ bgcolor: 'rgba(255,255,255,0.12)', color: '#fff' }}
-                        />
+
                         <Chip
                           label={member.status || 'Sem status'}
                           sx={{ bgcolor: 'rgba(255,255,255,0.12)', color: '#fff' }}
@@ -417,49 +396,6 @@ const MinhaJornadaPage = () => {
                       </Stack>
                     </Box>
                   </Stack>
-                </Grid>
-                <Grid item xs={12} md={5}>
-                  <Grid container spacing={1.5}>
-                    <Grid item xs={4}>
-                      <Paper
-                        sx={{
-                          p: 1.5,
-                          borderRadius: 3,
-                          bgcolor: 'rgba(255,255,255,0.12)',
-                          color: '#fff'
-                        }}
-                      >
-                        <Typography variant="caption" sx={{ opacity: 0.8 }}>Score</Typography>
-                        <Typography variant="h5" sx={{ fontWeight: 700 }}>{engagementScore}</Typography>
-                      </Paper>
-                    </Grid>
-                    <Grid item xs={4}>
-                      <Paper
-                        sx={{
-                          p: 1.5,
-                          borderRadius: 3,
-                          bgcolor: 'rgba(255,255,255,0.12)',
-                          color: '#fff'
-                        }}
-                      >
-                        <Typography variant="caption" sx={{ opacity: 0.8 }}>Inativo</Typography>
-                        <Typography variant="h5" sx={{ fontWeight: 700 }}>{member?.journey?.daysInactive ?? 0}</Typography>
-                      </Paper>
-                    </Grid>
-                    <Grid item xs={4}>
-                      <Paper
-                        sx={{
-                          p: 1.5,
-                          borderRadius: 3,
-                          bgcolor: 'rgba(255,255,255,0.12)',
-                          color: '#fff'
-                        }}
-                      >
-                        <Typography variant="caption" sx={{ opacity: 0.8 }}>Marcos</Typography>
-                        <Typography variant="h5" sx={{ fontWeight: 700 }}>{milestones.length}</Typography>
-                      </Paper>
-                    </Grid>
-                  </Grid>
                 </Grid>
               </Grid>
             </Box>
@@ -619,83 +555,6 @@ const MinhaJornadaPage = () => {
 
             <Grid item xs={12} lg={5}>
               <Stack spacing={3}>
-                <Paper
-                  sx={{
-                    p: 3,
-                    borderRadius: 4,
-                    border: '1px solid rgba(12, 71, 88, 0.12)',
-                    background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(245,248,250,0.94))'
-                  }}
-                >
-                  <Stack direction="row" spacing={1.5} alignItems="center" mb={1.5}>
-                    <TimelineOutlined color="primary" />
-                    <Typography variant="h6">Resumo da Jornada</Typography>
-                  </Stack>
-                  <Typography variant="body2" color="textSecondary" gutterBottom>
-                    Score de engajamento calculado automaticamente pelas suas atividades.
-                  </Typography>
-                  <LinearProgress
-                    variant="determinate"
-                    value={Math.max(0, Math.min(100, engagementScore))}
-                    sx={{ height: 10, borderRadius: 999, mb: 2 }}
-                  />
-                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mb={2}>
-                    <Chip color={getHealthColor(member?.journey?.healthStatus)} label={`Saude: ${HEALTH_COPY[member?.journey?.healthStatus] || member?.journey?.healthStatus || 'NA'}`} />
-                    <Chip variant="outlined" label={`Etapa: ${STAGE_COPY[member?.journey?.currentStage] || member?.journey?.currentStage || 'NA'}`} />
-                    <Chip variant="outlined" label={`Ultima atividade: ${formatDateTime(member?.journey?.lastActivityDate)}`} />
-                  </Stack>
-                  <Grid container spacing={1.5}>
-                    <Grid item xs={12} sm={4}>
-                      <Paper sx={{ p: 1.5, borderRadius: 3, bgcolor: 'rgba(14, 92, 112, 0.06)' }}>
-                        <Typography variant="caption" color="textSecondary">Celula</Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>{journeyIndicators.celula ? 'Ativo' : 'Sem registro recente'}</Typography>
-                      </Paper>
-                    </Grid>
-                    <Grid item xs={12} sm={4}>
-                      <Paper sx={{ p: 1.5, borderRadius: 3, bgcolor: 'rgba(235, 120, 48, 0.08)' }}>
-                        <Typography variant="caption" color="textSecondary">Escolas</Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>{journeyIndicators.escola ? 'Ativo' : 'Sem registro recente'}</Typography>
-                      </Paper>
-                    </Grid>
-                    <Grid item xs={12} sm={4}>
-                      <Paper sx={{ p: 1.5, borderRadius: 3, bgcolor: 'rgba(36, 46, 56, 0.05)' }}>
-                        <Typography variant="caption" color="textSecondary">Eventos</Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>{journeyIndicators.eventos ? 'Ativo' : 'Sem registro recente'}</Typography>
-                      </Paper>
-                    </Grid>
-                  </Grid>
-                </Paper>
-
-                <Paper
-                  sx={{
-                    p: 3,
-                    borderRadius: 4,
-                    border: '1px solid rgba(12, 71, 88, 0.12)'
-                  }}
-                >
-                  <Stack direction="row" spacing={1.5} alignItems="center" mb={2}>
-                    <AutoAwesome color="primary" />
-                    <Typography variant="h6">Visao Geral</Typography>
-                  </Stack>
-                  <Stack spacing={1.25}>
-                    <Box display="flex" justifyContent="space-between" gap={2}>
-                      <Typography color="textSecondary">CPF</Typography>
-                      <Typography>{formatCpf(member.cpf) || 'Nao informado'}</Typography>
-                    </Box>
-                    <Box display="flex" justifyContent="space-between" gap={2}>
-                      <Typography color="textSecondary">Status</Typography>
-                      <Typography>{member.status || 'Nao informado'}</Typography>
-                    </Box>
-                    <Box display="flex" justifyContent="space-between" gap={2}>
-                      <Typography color="textSecondary">Campus</Typography>
-                      <Typography>{member?.campus?.nome || 'Nao informado'}</Typography>
-                    </Box>
-                    <Box display="flex" justifyContent="space-between" gap={2}>
-                      <Typography color="textSecondary">Telefone principal</Typography>
-                      <Typography>{member.phone || member.whatsapp || 'Nao informado'}</Typography>
-                    </Box>
-                  </Stack>
-                </Paper>
 
                 {member?.maritalStatus === 'CASADO' && member?.spouse && (
                   <Paper
@@ -741,7 +600,7 @@ const MinhaJornadaPage = () => {
                   >
                     <Stack direction="row" spacing={1.5} alignItems="center" mb={2}>
                       <TimelineOutlined color="primary" />
-                      <Typography variant="h6">Lideranca de Celula</Typography>
+                      <Typography variant="h6">Célula que lidero</Typography>
                     </Stack>
                     <Stack spacing={1.5}>
                       {leaderCells.map((cell) => (
@@ -897,7 +756,6 @@ const MinhaJornadaPage = () => {
                             </Typography>
                           )}
                         </Box>
-                        <Chip size="small" label={`${activity.points || 0} pts`} />
                       </Stack>
                     </Paper>
                   ))}

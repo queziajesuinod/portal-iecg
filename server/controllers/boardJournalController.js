@@ -199,11 +199,27 @@ async function listPendingSubmissions(req, res) {
     const data = await boardJournalService.getPendingSubmissions({
       journalId: req.query.journalId,
       challengeId: req.query.challengeId,
-      userId: req.query.userId
+      userId: req.query.userId,
+      categoryId: req.query.categoryId
     });
     res.status(200).json(data);
   } catch (error) {
     res.status(500).json({ message: error.message || 'Erro ao listar aprovações pendentes' });
+  }
+}
+
+async function listReviewedSubmissions(req, res) {
+  try {
+    const data = await boardJournalService.getReviewedSubmissions({
+      journalId: req.query.journalId,
+      challengeId: req.query.challengeId,
+      userId: req.query.userId,
+      categoryId: req.query.categoryId,
+      status: req.query.status
+    });
+    res.status(200).json(data);
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Erro ao listar avaliacoes' });
   }
 }
 
@@ -253,6 +269,19 @@ async function rejectSubmission(req, res) {
     res.status(200).json(data);
   } catch (error) {
     res.status(400).json({ message: error.message || 'Erro ao rejeitar submissao' });
+  }
+}
+
+async function updateSubmissionReview(req, res) {
+  try {
+    const userId = getCurrentUserId(req);
+    const data = await boardJournalService.updateSubmissionReview(req.params.id, userId, {
+      status: req.body?.status,
+      feedback: req.body?.feedback
+    });
+    res.status(200).json(data);
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Erro ao atualizar avaliacao da submissao' });
   }
 }
 
@@ -372,11 +401,13 @@ module.exports = {
   updateChallenge,
   deleteChallenge,
   listPendingSubmissions,
+  listReviewedSubmissions,
   listSubmissionsByChallenge,
   listMySubmissions,
   createSubmission,
   approveSubmission,
   rejectSubmission,
+  updateSubmissionReview,
   listBadges,
   createBadge,
   updateBadge,

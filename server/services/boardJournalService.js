@@ -27,6 +27,7 @@ const JOURNAL_MANAGER_PERMISSION = 'DIARIO_BORDO_MANAGER';
 const CHALLENGE_TYPES = ['question', 'text', 'file', 'form', 'lesson'];
 const BADGE_TYPES = ['level', 'achievement', 'special'];
 const MEMBER_STATUSES = ['pending', 'approved', 'rejected'];
+const SUBMISSION_STATUSES = ['pending', 'approved', 'rejected'];
 const ADMIN_PROFILE_NAMES = ['ADMIN', 'ADMINISTRADOR'];
 
 function normalizeString(value, maxLength = null) {
@@ -54,6 +55,24 @@ function normalizeBoolean(value, fallback = false) {
     if (['false', '0', 'no', 'nao'].includes(lowered)) return false;
   }
   return Boolean(value);
+}
+
+function normalizeSubmissionStatuses(value, fallback = []) {
+  const rawValues = Array.isArray(value)
+    ? value
+    : (typeof value === 'string' ? value.split(',') : []);
+
+  const normalized = rawValues
+    .map((item) => normalizeString(item))
+    .filter(Boolean)
+    .map((item) => item.toLowerCase())
+    .filter((item) => SUBMISSION_STATUSES.includes(item));
+
+  if (normalized.length > 0) {
+    return [...new Set(normalized)];
+  }
+
+  return Array.isArray(fallback) ? fallback : [];
 }
 
 function getStartOfDay(value) {
@@ -864,39 +883,67 @@ async function getJournalPoints(userId, journalId) {
   return Number(total || 0);
 }
 
-async function awardEligibleBadges(userId, journalId, transaction) {
+async function syncPointsBasedBadges(userId, journalId, transaction) {
   const points = await BoardChallengeSubmission.sum('pointsAwarded', {
     where: { userId, journalId, status: 'approved' },
     transaction
   });
-  const badges = await BoardBadge.findAll({
+  const pointsBadges = await BoardBadge.findAll({
     where: {
       journalId,
-      isActive: true,
       pointsRequired: { [Op.ne]: null }
     },
-    order: [['pointsRequired', 'ASC'], ['name', 'ASC']],
+    attributes: ['id', 'pointsRequired', 'isActive'],
     transaction
   });
 
+  if (!pointsBadges.length) {
+    return;
+  }
+
+  const trackedBadgeIds = pointsBadges.map((badge) => badge.id);
+  const eligibleBadgeIds = new Set(pointsBadges
+    .filter((badge) => (
+      badge.isActive !== false
+      && Number(points || 0) >= Number(badge.pointsRequired || 0)
+    ))
+    .map((badge) => badge.id));
+
   const existingRows = await BoardUserBadge.findAll({
-    where: { userId, journalId },
-    attributes: ['badgeId'],
+    where: {
+      userId,
+      journalId,
+      badgeId: { [Op.in]: trackedBadgeIds }
+    },
+    attributes: ['id', 'badgeId'],
     transaction
   });
   const existingBadgeIds = new Set(existingRows.map((row) => row.badgeId));
+  const staleBadgeRowIds = existingRows
+    .filter((row) => !eligibleBadgeIds.has(row.badgeId))
+    .map((row) => row.id);
 
-  const eligibleBadges = badges.filter((badge) => (
-    !existingBadgeIds.has(badge.id)
-    && Number(points || 0) >= Number(badge.pointsRequired || 0)
-  ));
+  if (staleBadgeRowIds.length > 0) {
+    await BoardUserBadge.destroy({
+      where: { id: { [Op.in]: staleBadgeRowIds } },
+      transaction
+    });
+  }
 
-  return Promise.all(eligibleBadges.map((badge) => BoardUserBadge.create({
-    userId,
-    journalId,
-    badgeId: badge.id,
-    earnedAt: now()
-  }, { transaction })));
+  const badgeRowsToCreate = [...eligibleBadgeIds]
+    .filter((badgeId) => !existingBadgeIds.has(badgeId))
+    .map((badgeId) => ({
+      userId,
+      journalId,
+      badgeId,
+      earnedAt: now()
+    }));
+
+  if (badgeRowsToCreate.length === 0) {
+    return;
+  }
+
+  await BoardUserBadge.bulkCreate(badgeRowsToCreate, { transaction });
 }
 
 async function normalizeCategoryPayload(payload = {}) {
@@ -1237,19 +1284,64 @@ async function getPendingSubmissions(filters = {}) {
   if (challengeId) where.challengeId = challengeId;
   const userId = normalizeString(filters.userId);
   if (userId) where.userId = userId;
+  const categoryId = normalizeString(filters.categoryId);
+
+  const challengeInclude = {
+    model: BoardChallenge,
+    as: 'challenge',
+    include: [{ model: BoardChallengeCategory, as: 'category' }]
+  };
+  if (categoryId) {
+    challengeInclude.where = { categoryId };
+  }
 
   const pointsByUser = await getApprovedPointsByUser(journalId);
   const records = await BoardChallengeSubmission.findAll({
     where,
     include: [
-      {
-        model: BoardChallenge,
-        as: 'challenge',
-        include: [{ model: BoardChallengeCategory, as: 'category' }]
-      },
+      challengeInclude,
       { model: User, as: 'user', attributes: ['id', 'name', 'email'] }
     ],
     order: [['submittedAt', 'DESC']]
+  });
+  return records.map((record) => serializeSubmission(record, pointsByUser));
+}
+
+async function getReviewedSubmissions(filters = {}) {
+  const journalId = normalizeString(filters.journalId);
+  if (!journalId) throw new Error('Diario e obrigatorio');
+
+  const statuses = normalizeSubmissionStatuses(filters.status, ['approved', 'rejected'])
+    .filter((status) => status !== 'pending');
+  if (!statuses.length) return [];
+
+  const where = { journalId };
+  where.status = statuses.length === 1 ? statuses[0] : { [Op.in]: statuses };
+
+  const challengeId = normalizeString(filters.challengeId);
+  if (challengeId) where.challengeId = challengeId;
+  const userId = normalizeString(filters.userId);
+  if (userId) where.userId = userId;
+  const categoryId = normalizeString(filters.categoryId);
+
+  const challengeInclude = {
+    model: BoardChallenge,
+    as: 'challenge',
+    include: [{ model: BoardChallengeCategory, as: 'category' }]
+  };
+  if (categoryId) {
+    challengeInclude.where = { categoryId };
+  }
+
+  const pointsByUser = await getApprovedPointsByUser(journalId);
+  const records = await BoardChallengeSubmission.findAll({
+    where,
+    include: [
+      challengeInclude,
+      { model: User, as: 'user', attributes: ['id', 'name', 'email'] },
+      { model: User, as: 'approver', attributes: ['id', 'name'] }
+    ],
+    order: [['approvedAt', 'DESC'], ['updatedAt', 'DESC']]
   });
   return records.map((record) => serializeSubmission(record, pointsByUser));
 }
@@ -1359,43 +1451,58 @@ async function createSubmission(payload, userId) {
 }
 
 async function approveSubmission(submissionId, adminId, feedback = null) {
+  return updateSubmissionReview(submissionId, adminId, {
+    status: 'approved',
+    feedback
+  });
+}
+
+async function rejectSubmission(submissionId, adminId, feedback = null) {
+  return updateSubmissionReview(submissionId, adminId, {
+    status: 'rejected',
+    feedback
+  });
+}
+
+async function updateSubmissionReview(submissionId, adminId, payload = {}) {
+  const normalizedStatus = String(normalizeString(payload.status) || '').toLowerCase();
+  if (!SUBMISSION_STATUSES.includes(normalizedStatus)) {
+    throw new Error('Status da submissao invalido');
+  }
+
   return sequelize.transaction(async (transaction) => {
     const submission = await BoardChallengeSubmission.findByPk(submissionId, {
       transaction,
       lock: transaction.LOCK.UPDATE
     });
     if (!submission) throw new Error('Submissao nao encontrada');
-    if (submission.status === 'approved') throw new Error('Submissao ja aprovada');
 
-    const challenge = await BoardChallenge.findByPk(submission.challengeId, { transaction });
-    if (!challenge) throw new Error('Desafio da submissao nao encontrado');
+    const normalizedFeedback = normalizeString(payload.feedback);
+    const updatePayload = {
+      status: normalizedStatus,
+      feedback: normalizedStatus === 'pending' ? null : normalizedFeedback
+    };
 
-    const pointsAwarded = getAwardedPointsForSubmission(challenge, submission);
-    await submission.update({
-      status: 'approved',
-      approvedAt: now(),
-      approvedBy: adminId,
-      feedback: normalizeString(feedback),
-      pointsAwarded
-    }, { transaction });
+    if (normalizedStatus === 'approved') {
+      const challenge = await BoardChallenge.findByPk(submission.challengeId, { transaction });
+      if (!challenge) throw new Error('Desafio da submissao nao encontrado');
+      updatePayload.pointsAwarded = getAwardedPointsForSubmission(challenge, submission);
+      updatePayload.approvedAt = now();
+      updatePayload.approvedBy = adminId;
+    } else if (normalizedStatus === 'rejected') {
+      updatePayload.pointsAwarded = null;
+      updatePayload.approvedAt = now();
+      updatePayload.approvedBy = adminId;
+    } else {
+      updatePayload.pointsAwarded = null;
+      updatePayload.approvedAt = null;
+      updatePayload.approvedBy = null;
+    }
 
-    await awardEligibleBadges(submission.userId, submission.journalId, transaction);
+    await submission.update(updatePayload, { transaction });
+    await syncPointsBasedBadges(submission.userId, submission.journalId, transaction);
     return submission;
   });
-}
-
-async function rejectSubmission(submissionId, adminId, feedback = null) {
-  const submission = await BoardChallengeSubmission.findByPk(submissionId);
-  if (!submission) throw new Error('Submissao nao encontrada');
-  if (submission.status === 'approved') throw new Error('Nao e possivel rejeitar uma submissao ja aprovada');
-  await submission.update({
-    status: 'rejected',
-    approvedAt: now(),
-    approvedBy: adminId,
-    feedback: normalizeString(feedback),
-    pointsAwarded: null
-  });
-  return submission;
 }
 
 async function normalizeBadgePayload(payload = {}, existing = null) {
@@ -1541,38 +1648,64 @@ async function getUserRanking(journalId, limit = 20, offset = 0) {
   if (!journalId) throw new Error('Diario e obrigatorio');
   const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 1000);
   const safeOffset = Math.max(Number(offset) || 0, 0);
-  const pointsByUser = await getApprovedPointsByUser(journalId);
-  const badgeRows = await BoardUserBadge.findAll({
-    where: { journalId },
-    attributes: ['userId', [sequelize.fn('COUNT', sequelize.col('id')), 'badgeCount']],
-    group: ['userId'],
-    raw: true
-  });
-  const submissionRows = await BoardChallengeSubmission.findAll({
-    where: { journalId },
-    attributes: [
-      'userId',
-      [sequelize.fn('SUM', sequelize.literal('CASE WHEN status = \'approved\' THEN 1 ELSE 0 END')), 'approvedCount'],
-      [sequelize.fn('SUM', sequelize.literal('CASE WHEN status = \'pending\' THEN 1 ELSE 0 END')), 'pendingCount']
-    ],
-    group: ['userId'],
-    raw: true
-  });
+  const [pointsByUser, badgeRows, submissionRows, feedbackRows] = await Promise.all([
+    getApprovedPointsByUser(journalId),
+    BoardUserBadge.findAll({
+      where: { journalId },
+      attributes: ['userId', [sequelize.fn('COUNT', sequelize.col('id')), 'badgeCount']],
+      group: ['userId'],
+      raw: true
+    }),
+    BoardChallengeSubmission.findAll({
+      where: { journalId },
+      attributes: [
+        'userId',
+        [sequelize.fn('SUM', sequelize.literal('CASE WHEN status = \'approved\' THEN 1 ELSE 0 END')), 'approvedCount'],
+        [sequelize.fn('SUM', sequelize.literal('CASE WHEN status = \'pending\' THEN 1 ELSE 0 END')), 'pendingCount']
+      ],
+      group: ['userId'],
+      raw: true
+    }),
+    BoardChallengeSubmission.findAll({
+      where: { journalId, status: 'approved' },
+      attributes: ['userId', [sequelize.fn('MAX', sequelize.col('updatedAt')), 'feedbackUpdatedAt']],
+      group: ['userId'],
+      raw: true
+    })
+  ]);
   const metricsByUser = {};
   submissionRows.forEach((row) => {
     metricsByUser[row.userId] = {
       approvedCount: Number(row.approvedCount || 0),
       pendingCount: Number(row.pendingCount || 0),
       badgeCount: 0,
-      points: Number(pointsByUser[row.userId] || 0)
+      points: Number(pointsByUser[row.userId] || 0),
+      feedbackUpdatedAt: null
     };
   });
   badgeRows.forEach((row) => {
     metricsByUser[row.userId] = {
-      ...(metricsByUser[row.userId] || { approvedCount: 0, pendingCount: 0, points: Number(pointsByUser[row.userId] || 0) }),
+      ...(metricsByUser[row.userId] || {
+        approvedCount: 0, pendingCount: 0, points: Number(pointsByUser[row.userId] || 0), feedbackUpdatedAt: null
+      }),
       badgeCount: Number(row.badgeCount || 0)
     };
   });
+  feedbackRows.forEach((row) => {
+    metricsByUser[row.userId] = {
+      ...(metricsByUser[row.userId] || {
+        approvedCount: 0, pendingCount: 0, badgeCount: 0, points: Number(pointsByUser[row.userId] || 0)
+      }),
+      feedbackUpdatedAt: row.feedbackUpdatedAt || null
+    };
+  });
+
+  const getFeedbackTimestamp = (feedbackUpdatedAt) => {
+    if (!feedbackUpdatedAt) return Number.POSITIVE_INFINITY;
+    const timestamp = new Date(feedbackUpdatedAt).getTime();
+    return Number.isNaN(timestamp) ? Number.POSITIVE_INFINITY : timestamp;
+  };
+
   const userIds = Object.keys(metricsByUser);
   if (!userIds.length) return [];
   const users = await User.findAll({
@@ -1586,10 +1719,13 @@ async function getUserRanking(journalId, limit = 20, offset = 0) {
     points: Number(metricsByUser[user.id]?.points || 0),
     approvedCount: Number(metricsByUser[user.id]?.approvedCount || 0),
     pendingCount: Number(metricsByUser[user.id]?.pendingCount || 0),
-    badgeCount: Number(metricsByUser[user.id]?.badgeCount || 0)
+    badgeCount: Number(metricsByUser[user.id]?.badgeCount || 0),
+    feedbackUpdatedAt: metricsByUser[user.id]?.feedbackUpdatedAt || null
   })).filter((row) => row.points > 0).sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
-    if (b.approvedCount !== a.approvedCount) return b.approvedCount - a.approvedCount;
+    const aFeedbackTimestamp = getFeedbackTimestamp(a.feedbackUpdatedAt);
+    const bFeedbackTimestamp = getFeedbackTimestamp(b.feedbackUpdatedAt);
+    if (aFeedbackTimestamp !== bFeedbackTimestamp) return aFeedbackTimestamp - bFeedbackTimestamp;
     return String(a.name || '').localeCompare(String(b.name || ''));
   });
   return ranking.slice(safeOffset, safeOffset + safeLimit).map((row, index) => ({
@@ -1697,11 +1833,13 @@ module.exports = {
   updateChallenge,
   deleteChallenge,
   getPendingSubmissions,
+  getReviewedSubmissions,
   getSubmissionsByChallenge,
   getMySubmissions,
   createSubmission,
   approveSubmission,
   rejectSubmission,
+  updateSubmissionReview,
   getBadges,
   createBadge,
   updateBadge,

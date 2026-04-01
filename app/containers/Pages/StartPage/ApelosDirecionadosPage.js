@@ -1,4 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react';
 import {
   Box,
   Button,
@@ -73,6 +78,8 @@ const ApelosDirecionadosPage = () => {
   const [loadingHistorico, setLoadingHistorico] = useState(false);
   const [celulaDialogOpen, setCelulaDialogOpen] = useState(false);
   const [celulaDetalhe, setCelulaDetalhe] = useState(null);
+  const [celulaPhoneForm, setCelulaPhoneForm] = useState('');
+  const [celulaSaving, setCelulaSaving] = useState(false);
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [novoStatus, setNovoStatus] = useState('');
   const [motivoStatus, setMotivoStatus] = useState('');
@@ -80,10 +87,22 @@ const ApelosDirecionadosPage = () => {
   const [loadingSugestoes, setLoadingSugestoes] = useState(false);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [detailApelo, setDetailApelo] = useState(null);
-  const [detailForm, setDetailForm] = useState({ bairro_apelo: '', bairro_proximo: [], rede: '' });
+  const [detailForm, setDetailForm] = useState({
+    bairro_apelo: '',
+    cep_apelo: '',
+    cidade_apelo: '',
+    estado_apelo: '',
+    lat_apelo: '',
+    lon_apelo: '',
+    bairro_proximo: [],
+    rede: ''
+  });
   const [detailBairroTemp, setDetailBairroTemp] = useState('');
   const [detailSaving, setDetailSaving] = useState(false);
+  const [detailGeoLoading, setDetailGeoLoading] = useState(false);
   const [apeloCoords, setApeloCoords] = useState(null);
+  const detailGeoTimerRef = useRef(null);
+  const detailGeoRequestRef = useRef(0);
 
   const API_URL = resolveApiUrl();
   const redeOptions = useMemo(() => {
@@ -302,6 +321,77 @@ const ApelosDirecionadosPage = () => {
   };
 
   const celulaAtualTexto = (apelo) => apelo?.celulaAtual?.celula || 'Sem célula';
+  const abrirDetalheCelula = (celula) => {
+    setCelulaDetalhe(celula || null);
+    setCelulaPhoneForm(celula?.cel_lider || '');
+    setCelulaDialogOpen(true);
+  };
+
+  const fecharDetalheCelula = () => {
+    if (celulaSaving) return;
+    setCelulaDialogOpen(false);
+    setCelulaDetalhe(null);
+    setCelulaPhoneForm('');
+  };
+
+  const salvarTelefoneLiderCelula = async () => {
+    if (!celulaDetalhe?.id || celulaSaving) return;
+
+    setCelulaSaving(true);
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${API_URL}/start/celula/${celulaDetalhe.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ cel_lider: celulaPhoneForm })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.erro || 'Falha ao atualizar telefone do lider.');
+      }
+
+      const celulaAtualizada = await res.json().catch(() => ({}));
+      const novoTelefone = celulaAtualizada?.cel_lider ?? celulaPhoneForm ?? '';
+
+      setCelulaDetalhe((prev) => (prev ? {
+        ...prev,
+        ...celulaAtualizada,
+        cel_lider: novoTelefone
+      } : prev));
+      setCelulaPhoneForm(novoTelefone);
+      setApelos((prev) => prev.map((apelo) => (
+        apelo?.celulaAtual?.id === celulaDetalhe.id
+          ? {
+            ...apelo,
+            celulaAtual: {
+              ...apelo.celulaAtual,
+              cel_lider: novoTelefone,
+              lider: celulaAtualizada?.lider || apelo.celulaAtual?.lider || null
+            }
+          }
+          : apelo
+      )));
+      setCelulas((prev) => prev.map((celula) => (
+        celula?.id === celulaDetalhe.id
+          ? {
+            ...celula,
+            ...celulaAtualizada,
+            cel_lider: novoTelefone
+          }
+          : celula
+      )));
+      setNotification('Telefone do lider atualizado com sucesso.');
+    } catch (err) {
+      console.error(err);
+      setNotification(err.message || 'Erro ao atualizar telefone do lider.');
+    } finally {
+      setCelulaSaving(false);
+    }
+  };
+
   const apeloSemDirecionamento = (apelo) => apelo?.status === 'NAO_HAVERAR_DIRECIONAMENTO';
 
   const celulasMesmaRede = (apelo, filtro = filtroCelula) => {
@@ -382,6 +472,71 @@ const ApelosDirecionadosPage = () => {
     );
   };
 
+  const normalizeCepDigits = (value) => String(value || '').replace(/\D/g, '').slice(0, 8);
+
+  const clearDetailGeoTimer = () => {
+    if (detailGeoTimerRef.current) {
+      clearTimeout(detailGeoTimerRef.current);
+      detailGeoTimerRef.current = null;
+    }
+  };
+
+  const applyDetailGeocodeResult = (geocodeResult) => {
+    if (!geocodeResult) return;
+    const cepNormalizado = normalizeCepDigits(geocodeResult.cepEncontrado || '');
+    const estadoNormalizado = geocodeResult.uf || geocodeResult.estado || '';
+    setDetailForm((prev) => ({
+      ...prev,
+      bairro_apelo: geocodeResult.bairro || prev.bairro_apelo || '',
+      cep_apelo: cepNormalizado || prev.cep_apelo || '',
+      cidade_apelo: geocodeResult.cidade || prev.cidade_apelo || '',
+      estado_apelo: estadoNormalizado || prev.estado_apelo || '',
+      lat_apelo: Number.isFinite(Number(geocodeResult.lat)) ? String(geocodeResult.lat) : prev.lat_apelo,
+      lon_apelo: Number.isFinite(Number(geocodeResult.lon)) ? String(geocodeResult.lon) : prev.lon_apelo,
+    }));
+  };
+
+  const geocodeDetailForm = async (mode, nextFormSnapshot) => {
+    const requestId = detailGeoRequestRef.current + 1;
+    detailGeoRequestRef.current = requestId;
+    setDetailGeoLoading(true);
+
+    try {
+      let query = '';
+      if (mode === 'cep') {
+        const cep = normalizeCepDigits(nextFormSnapshot.cep_apelo);
+        if (cep.length !== 8) return;
+        query = `${cep}, Brasil`;
+      } else {
+        const bairro = String(nextFormSnapshot.bairro_apelo || '').trim();
+        if (bairro.length < 3) return;
+        const cidade = String(nextFormSnapshot.cidade_apelo || detailApelo?.cidade_apelo || 'Campo Grande').trim();
+        const estado = String(nextFormSnapshot.estado_apelo || detailApelo?.estado_apelo || 'Mato Grosso do Sul').trim();
+        query = [bairro, cidade, estado, 'Brasil'].filter(Boolean).join(', ');
+      }
+
+      const geocodeResult = await fetchGeocode(query);
+      if (detailGeoRequestRef.current !== requestId) return;
+      if (geocodeResult) {
+        applyDetailGeocodeResult(geocodeResult);
+      }
+    } catch (err) {
+      console.error('Erro ao atualizar geolocalizacao do apelo:', err);
+    } finally {
+      if (detailGeoRequestRef.current === requestId) {
+        setDetailGeoLoading(false);
+      }
+    }
+  };
+
+  const scheduleDetailGeocode = (mode, nextFormSnapshot) => {
+    clearDetailGeoTimer();
+    const delayMs = mode === 'cep' ? 500 : 900;
+    detailGeoTimerRef.current = setTimeout(() => {
+      geocodeDetailForm(mode, nextFormSnapshot);
+    }, delayMs);
+  };
+
   const abrirDetalheApelo = (apelo) => {
     if (!apelo) return;
     const proximos = Array.isArray(apelo.bairro_proximo)
@@ -391,16 +546,44 @@ const ApelosDirecionadosPage = () => {
         : [];
     setDetailForm({
       bairro_apelo: apelo.bairro_apelo || '',
+      cep_apelo: normalizeCepDigits(apelo.cep_apelo || ''),
+      cidade_apelo: apelo.cidade_apelo || '',
+      estado_apelo: apelo.estado_apelo || '',
+      lat_apelo: apelo.lat_apelo === null || apelo.lat_apelo === undefined ? '' : String(apelo.lat_apelo),
+      lon_apelo: apelo.lon_apelo === null || apelo.lon_apelo === undefined ? '' : String(apelo.lon_apelo),
       bairro_proximo: proximos,
       rede: apelo.rede || ''
     });
     setDetailApelo(apelo);
     setDetailBairroTemp('');
+    setDetailGeoLoading(false);
     setDetailDialogOpen(true);
   };
 
   const handleDetailFormChange = (field, value) => {
-    setDetailForm((prev) => ({ ...prev, [field]: value }));
+    const normalizedValue = field === 'cep_apelo' ? normalizeCepDigits(value) : value;
+    const nextFormSnapshot = { ...detailForm, [field]: normalizedValue };
+    setDetailForm((prev) => ({ ...prev, [field]: normalizedValue }));
+
+    if (field === 'bairro_apelo') {
+      const bairro = String(normalizedValue || '').trim();
+      if (bairro.length >= 3) {
+        scheduleDetailGeocode('bairro', nextFormSnapshot);
+      } else {
+        clearDetailGeoTimer();
+        setDetailGeoLoading(false);
+      }
+    }
+
+    if (field === 'cep_apelo') {
+      const cep = normalizeCepDigits(normalizedValue);
+      if (cep.length === 8) {
+        scheduleDetailGeocode('cep', { ...nextFormSnapshot, cep_apelo: cep });
+      } else {
+        clearDetailGeoTimer();
+        setDetailGeoLoading(false);
+      }
+    }
   };
 
   const addDetailBairroProximo = () => {
@@ -423,9 +606,20 @@ const ApelosDirecionadosPage = () => {
   };
 
   const fecharDetalheDialog = () => {
+    clearDetailGeoTimer();
+    setDetailGeoLoading(false);
     setDetailDialogOpen(false);
     setDetailApelo(null);
-    setDetailForm({ bairro_apelo: '', bairro_proximo: [], rede: '' });
+    setDetailForm({
+      bairro_apelo: '',
+      cep_apelo: '',
+      cidade_apelo: '',
+      estado_apelo: '',
+      lat_apelo: '',
+      lon_apelo: '',
+      bairro_proximo: [],
+      rede: ''
+    });
     setDetailBairroTemp('');
   };
 
@@ -434,8 +628,15 @@ const ApelosDirecionadosPage = () => {
     setDetailSaving(true);
     try {
       const token = localStorage.getItem('token');
+      const latApelo = Number(detailForm.lat_apelo);
+      const lonApelo = Number(detailForm.lon_apelo);
       const payload = {
         bairro_apelo: detailForm.bairro_apelo || null,
+        cep_apelo: normalizeCepDigits(detailForm.cep_apelo) || null,
+        cidade_apelo: detailForm.cidade_apelo || null,
+        estado_apelo: detailForm.estado_apelo || null,
+        lat_apelo: Number.isFinite(latApelo) ? latApelo : null,
+        lon_apelo: Number.isFinite(lonApelo) ? lonApelo : null,
         rede: detailForm.rede || null,
         bairro_proximo: detailForm.bairro_proximo.length ? detailForm.bairro_proximo : []
       };
@@ -449,18 +650,25 @@ const ApelosDirecionadosPage = () => {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data?.erro || 'Falha ao atualizar os bairros.');
+        throw new Error(data?.erro || 'Falha ao atualizar os detalhes do apelo.');
       }
-      setNotification('Bairros atualizados com sucesso.');
+      setNotification('Detalhes do apelo atualizados com sucesso.');
       fetchApelos();
       fecharDetalheDialog();
     } catch (err) {
       console.error(err);
-      setNotification(err.message || 'Erro ao salvar bairros.');
+      setNotification(err.message || 'Erro ao salvar detalhes do apelo.');
     } finally {
       setDetailSaving(false);
     }
   };
+
+  useEffect(() => () => {
+    if (detailGeoTimerRef.current) {
+      clearTimeout(detailGeoTimerRef.current);
+      detailGeoTimerRef.current = null;
+    }
+  }, []);
 
   const celulasDisponiveis = apeloSelecionado ? celulasMesmaRede(apeloSelecionado) : [];
   const celulasRedeSemFiltro = useMemo(
@@ -584,6 +792,7 @@ const ApelosDirecionadosPage = () => {
                 <TableCell>Decisão</TableCell>
                 <TableCell>Data direcionamento</TableCell>
                 <TableCell>Célula atual</TableCell>
+                <TableCell>Lider</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell align="right">Ações</TableCell>
               </TableRow>
@@ -591,7 +800,7 @@ const ApelosDirecionadosPage = () => {
             <TableBody>
               {apelos.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} align="center">
+                  <TableCell colSpan={7} align="center">
                     {loading ? 'Carregando...' : 'Nenhum apelo encontrado.'}
                   </TableCell>
                 </TableRow>
@@ -626,14 +835,14 @@ const ApelosDirecionadosPage = () => {
                         <span>{celulaAtualTexto(apelo)}</span>
                         <Tooltip title="Detalhes da célula">
                           <IconButton size="small" onClick={() => {
-                            setCelulaDetalhe(apelo.celulaAtual);
-                            setCelulaDialogOpen(true);
+                            abrirDetalheCelula(apelo.celulaAtual);
                           }}>
                             <InfoOutlinedIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
                       </Box>
                     </TableCell>
+                    <TableCell>{apelo?.celulaAtual?.lider || '-'}</TableCell>
                     <TableCell>{renderStatusChip(apelo.status)}</TableCell>
                     <TableCell align="right">
                       <Box display="flex" gap={1} justifyContent="flex-end">
@@ -838,24 +1047,51 @@ const ApelosDirecionadosPage = () => {
                   <Typography variant="body2">{formatDate(detailApelo.data_direcionamento)}</Typography>
                 </Grid>
                 <Grid item xs={12} sm={6}>
-                  <Typography variant="caption" color="textSecondary">CEP</Typography>
-                  <Typography variant="body2">{detailApelo.cep_apelo || '-'}</Typography>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="CEP"
+                    value={detailForm.cep_apelo}
+                    onChange={(e) => handleDetailFormChange('cep_apelo', e.target.value)}
+                    disabled={detailSaving}
+                    helperText="Ao informar CEP, cidade/estado/latitude/longitude serão atualizados automaticamente."
+                  />
                 </Grid>
                 <Grid item xs={12} sm={6}>
-                  <Typography variant="caption" color="textSecondary">Cidade</Typography>
-                  <Typography variant="body2">{detailApelo.cidade_apelo || '-'}</Typography>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Cidade"
+                    value={detailForm.cidade_apelo || ''}
+                    InputProps={{ readOnly: true }}
+                  />
                 </Grid>
                 <Grid item xs={12} sm={6}>
-                  <Typography variant="caption" color="textSecondary">Estado</Typography>
-                  <Typography variant="body2">{detailApelo.estado_apelo || '-'}</Typography>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Estado"
+                    value={detailForm.estado_apelo || ''}
+                    InputProps={{ readOnly: true }}
+                  />
                 </Grid>
                 <Grid item xs={12} sm={6}>
-                  <Typography variant="caption" color="textSecondary">Latitude</Typography>
-                  <Typography variant="body2">{detailApelo.lat_apelo ?? '-'}</Typography>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Latitude"
+                    value={detailForm.lat_apelo || ''}
+                    InputProps={{ readOnly: true }}
+                  />
                 </Grid>
                 <Grid item xs={12} sm={6}>
-                  <Typography variant="caption" color="textSecondary">Longitude</Typography>
-                  <Typography variant="body2">{detailApelo.lon_apelo ?? '-'}</Typography>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Longitude"
+                    value={detailForm.lon_apelo || ''}
+                    InputProps={{ readOnly: true }}
+                  />
                 </Grid>
                 <Grid item xs={12}>
                   <Typography variant="caption" color="textSecondary">Observação</Typography>
@@ -867,13 +1103,20 @@ const ApelosDirecionadosPage = () => {
                 </Grid>
               </Grid>
               <Box mt={3}>
-                <Typography variant="subtitle2" gutterBottom>Editar bairro</Typography>
+                <Typography variant="subtitle2" gutterBottom>Editar bairro e CEP</Typography>
                 <TextField
                   fullWidth
                   label="Bairro do apelo"
                   value={detailForm.bairro_apelo}
                   onChange={(e) => handleDetailFormChange('bairro_apelo', e.target.value)}
+                  disabled={detailSaving}
+                  helperText="Ao alterar o bairro, CEP/cidade/estado/latitude/longitude serão atualizados automaticamente."
                 />
+                {detailGeoLoading && (
+                  <Typography variant="caption" color="textSecondary" sx={{ mt: 1, display: 'block' }}>
+                    Atualizando localização automaticamente...
+                  </Typography>
+                )}
               </Box>
               <Box mt={2}>
                 <Typography variant="subtitle2" gutterBottom>Bairros próximos</Typography>
@@ -915,8 +1158,8 @@ const ApelosDirecionadosPage = () => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={fecharDetalheDialog} disabled={detailSaving}>Cancelar</Button>
-          <Button variant="contained" onClick={salvarDetalheApelo} disabled={detailSaving}>
+          <Button onClick={fecharDetalheDialog} disabled={detailSaving || detailGeoLoading}>Cancelar</Button>
+          <Button variant="contained" onClick={salvarDetalheApelo} disabled={detailSaving || detailGeoLoading}>
             {detailSaving ? 'Salvando...' : 'Salvar'}
           </Button>
         </DialogActions>
@@ -1068,7 +1311,7 @@ const ApelosDirecionadosPage = () => {
         />
       </Box>
 
-      <Dialog open={celulaDialogOpen} onClose={() => setCelulaDialogOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={celulaDialogOpen} onClose={fecharDetalheCelula} fullWidth maxWidth="sm">
         <DialogTitle>Detalhes da célula</DialogTitle>
         <DialogContent dividers>
           {celulaDetalhe ? (
@@ -1083,7 +1326,14 @@ const ApelosDirecionadosPage = () => {
                 <Typography variant="body2"><strong>Líder:</strong> {celulaDetalhe.lider || '-'}</Typography>
               </Grid>
               <Grid item xs={12}>
-                <Typography variant="body2"><strong>Tel. do líder:</strong> {celulaDetalhe.cel_lider || '-'}</Typography>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Tel. do lider"
+                  value={celulaPhoneForm}
+                  onChange={(e) => setCelulaPhoneForm(e.target.value)}
+                  disabled={celulaSaving}
+                />
               </Grid>
               <Grid item xs={12}>
                 <Typography variant="body2"><strong>Dia:</strong> {celulaDetalhe.dia || '-'}</Typography>
@@ -1103,7 +1353,14 @@ const ApelosDirecionadosPage = () => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setCelulaDialogOpen(false)}>Fechar</Button>
+          <Button onClick={fecharDetalheCelula} disabled={celulaSaving}>Fechar</Button>
+          <Button
+            variant="contained"
+            onClick={salvarTelefoneLiderCelula}
+            disabled={!celulaDetalhe || celulaSaving}
+          >
+            {celulaSaving ? 'Salvando...' : 'Salvar'}
+          </Button>
         </DialogActions>
       </Dialog>
 
