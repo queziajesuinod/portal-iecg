@@ -2,12 +2,13 @@
  * Importação de registros de culto exportados do Google Forms.
  *
  * Uso:
- *   node server/scripts/importarCultosJSON.js <caminho-do-arquivo.json> [--campus "Nome"] [--dry-run]
+ *   node server/scripts/importarCultosJSON.js <caminho-do-arquivo.json> [--campus "Nome"] [--ministerio "Nome"] [--dry-run]
  *
  * Exemplos:
  *   node server/scripts/importarCultosJSON.js dados/cultos.json
  *   node server/scripts/importarCultosJSON.js dados/cultos.json --dry-run
  *   node server/scripts/importarCultosJSON.js dados/cultos.json --campus "CAMPUS IECG CENTRO"
+ *   node server/scripts/importarCultosJSON.js dados/cultos.json --campus "CAMPUS IECG CENTRO" --ministerio "Juniors"
  *
  * Comportamento:
  *   - Se o JSON tiver coluna "CAMPUS", usa ela por linha.
@@ -35,9 +36,11 @@ const arquivoPath = args.find((a) => !a.startsWith('--'));
 const isDryRun = args.includes('--dry-run');
 const campusArgIdx = args.indexOf('--campus');
 const campusOverride = campusArgIdx !== -1 ? args[campusArgIdx + 1] : null;
+const ministerioArgIdx = args.indexOf('--ministerio');
+const ministerioOverride = ministerioArgIdx !== -1 ? args[ministerioArgIdx + 1] : null;
 
 if (!arquivoPath) {
-  console.error('Uso: node importarCultosJSON.js <arquivo.json> [--campus "nome"] [--dry-run]');
+  console.error('Uso: node importarCultosJSON.js <arquivo.json> [--campus "nome"] [--ministerio "nome"] [--dry-run]');
   process.exit(1);
 }
 
@@ -65,6 +68,17 @@ function sanitizeInt(val) {
 function parseData(str) {
   if (!str) return null;
   const s = String(str).trim();
+
+  // Aceita formato ISO: YYYY-MM-DD (ou com "/" no lugar de "-")
+  const isoMatch = s.match(/^(\d{4})[-/](\d{2})[-/](\d{2})$/);
+  if (isoMatch) {
+    const year = parseInt(isoMatch[1], 10);
+    const month = parseInt(isoMatch[2], 10);
+    const day = parseInt(isoMatch[3], 10);
+    if (!year || !month || !day || month > 12 || day > 31) return null;
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+
   const parts = s.split('/');
   if (parts.length !== 3) return null;
 
@@ -131,6 +145,16 @@ function extrairNomes(texto) {
     .filter((n) => n.length > 0);
 }
 
+function montarChaveRegistro({ campusId, data, horario, ministerioId, tipoEventoId }) {
+  return [
+    campusId,
+    data,
+    horario,
+    ministerioId,
+    tipoEventoId || 'sem-tipo-evento',
+  ].join('|');
+}
+
 // ─── Processamento por registro ───────────────────────────────────────────────
 
 async function resolverMinistros(nomesMinistros, ministroByNome, linha, avisos) {
@@ -160,6 +184,8 @@ async function processarRegistro(r, linha, ctx) {
     ministerioByNome,
     tipoEventoByNome,
     ministroByNome,
+    ministerioForcado,
+    chavesExistentes,
     avisos,
   } = ctx;
 
@@ -197,16 +223,19 @@ async function processarRegistro(r, linha, ctx) {
 
   // ── Ministério ──
   const tipoCulto = trim(r['Tipo de Culto']) || '';
-  const nomeMapeado = TIPO_CULTO_MINISTERIO[tipoCulto];
-  let ministerio = nomeMapeado
-    ? ministerioByNome[nomeMapeado.toLowerCase()]
-    : null;
-  if (!ministerio) ministerio = ministerioByNome[tipoCulto.toLowerCase()];
+  let ministerio = ministerioForcado || null;
   if (!ministerio) {
-    ministerio = ministerioByNome.geral;
-    if (tipoCulto) {
+    const nomeMapeado = TIPO_CULTO_MINISTERIO[tipoCulto];
+    ministerio = nomeMapeado
+      ? ministerioByNome[nomeMapeado.toLowerCase()]
+      : null;
+    if (!ministerio) ministerio = ministerioByNome[tipoCulto.toLowerCase()];
+    if (!ministerio) {
+      ministerio = ministerioByNome.geral;
+      if (tipoCulto) {
       avisos.push(`[linha ${linha}] Tipo de Culto "${tipoCulto}" sem mapeamento → usando Geral`);
     }
+  }
   }
 
   // ── Tipo de Evento ──
@@ -215,10 +244,39 @@ async function processarRegistro(r, linha, ctx) {
     if (!isDryRun) {
       const te = await TipoEvento.create({ nome: tipoEventoNome, ativo: true });
       tipoEventoByNome[tipoEventoNome.toLowerCase()] = te;
-    }
+      }
     avisos.push(`[linha ${linha}] Tipo de Evento "${tipoEventoNome}" criado automaticamente`);
   }
   const tipoEvento = tipoEventoByNome[tipoEventoNome.toLowerCase()] || null;
+  const tipoEventoId = tipoEvento ? tipoEvento.id : null;
+
+  const chaveRegistro = montarChaveRegistro({
+    campusId: campus.id,
+    data,
+    horario,
+    ministerioId: ministerio.id,
+    tipoEventoId,
+  });
+  if (chavesExistentes.has(chaveRegistro)) {
+    avisos.push(`[linha ${linha}] Registro duplicado no arquivo (mesma chave) - ignorado`);
+    return false;
+  }
+
+  const registroExistente = await RegistroCulto.findOne({
+    attributes: ['id'],
+    where: {
+      campusId: campus.id,
+      data,
+      horario,
+      ministerioId: ministerio.id,
+      tipoEventoId,
+    },
+  });
+  if (registroExistente) {
+    chavesExistentes.add(chaveRegistro);
+    avisos.push(`[linha ${linha}] Registro ja existe para data/horario/tipo evento/tipo de culto - ignorado`);
+    return false;
+  }
 
   // ── Ministros (pregadores) ──
   const quemMinistrou = trim(r['QUEM MINISTROU?']) || trim(r['QUEM MINISTROU:']);
@@ -239,7 +297,7 @@ async function processarRegistro(r, linha, ctx) {
     horario,
     campusId: campus.id,
     ministerioId: ministerio.id,
-    tipoEventoId: tipoEvento ? tipoEvento.id : null,
+    tipoEventoId,
     quemMinistrou: quemMinistrou || '(não informado)',
     tituloMensagem: trim(r['TÍTULO DA MENSAGEM']) || '(não informado)',
     eSerie,
@@ -267,6 +325,8 @@ async function processarRegistro(r, linha, ctx) {
     }
   }
 
+  chavesExistentes.add(chaveRegistro);
+
   return true;
 }
 
@@ -286,23 +346,35 @@ async function run() {
   console.log(`\nArquivo: ${filePath}`);
   console.log(`Registros encontrados: ${registros.length}`);
   console.log(`Campus: ${campusOverride ? `override → "${campusOverride}"` : 'lido da coluna CAMPUS por linha'}`);
+  console.log(`Ministerio: ${ministerioOverride ? `override -> "${ministerioOverride}"` : 'resolvido pela coluna "Tipo de Culto"'}`);
   console.log(`Modo: ${isDryRun ? 'DRY RUN (nada será salvo)' : 'IMPORTAÇÃO REAL'}\n`);
 
   const campusCache = {};
   const ministerioByNome = {};
   const tipoEventoByNome = {};
   const ministroByNome = {};
+  const chavesExistentes = new Set();
   const avisos = [];
 
   (await Ministerio.findAll()).forEach((m) => { ministerioByNome[m.nome.toLowerCase()] = m; });
   (await TipoEvento.findAll()).forEach((t) => { tipoEventoByNome[t.nome.toLowerCase()] = t; });
   (await Ministro.findAll()).forEach((m) => { ministroByNome[m.nome.toLowerCase()] = m; });
 
+  const ministerioForcado = ministerioOverride
+    ? ministerioByNome[String(ministerioOverride).trim().toLowerCase()]
+    : null;
+  if (ministerioOverride && !ministerioForcado) {
+    console.error(`Ministerio override "${ministerioOverride}" nao encontrado no banco.`);
+    process.exit(1);
+  }
+
   const ctx = {
     campusCache,
     ministerioByNome,
     tipoEventoByNome,
     ministroByNome,
+    ministerioForcado,
+    chavesExistentes,
     avisos,
   };
 

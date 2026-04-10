@@ -28,6 +28,7 @@ class RegistroCultoController {
   async criar(req, res) {
     try {
       const dados = req.body;
+      const userId = req.user?.userId || req.user?.id || null;
       const camposObrigatorios = ['data', 'horario', 'campusId', 'ministerioId', 'tituloMensagem'];
       const faltando = camposObrigatorios.filter((c) => dados[c] == null || dados[c] === '');
       // Exige ao menos um ministro ou quemMinistrou preenchido
@@ -36,7 +37,7 @@ class RegistroCultoController {
       if (faltando.length > 0) {
         return res.status(400).json({ erro: `Campos obrigatórios faltando: ${faltando.join(', ')}` });
       }
-      const data = await RegistroCultoService.criar(dados);
+      const data = await RegistroCultoService.criar(dados, userId);
       return res.status(201).json(data);
     } catch (error) {
       return res.status(400).json({ erro: error.message });
@@ -73,3 +74,4 @@ class RegistroCultoController {
 }
 
 module.exports = new RegistroCultoController();
+

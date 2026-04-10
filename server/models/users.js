@@ -28,6 +28,7 @@ module.exports = (sequelize) => {
       User.belongsTo(models.User, { as: 'conjuge', foreignKey: 'conjuge_id' });
       User.hasMany(models.User, { as: 'conjugeDe', foreignKey: 'conjuge_id' });
       User.hasMany(models.Celula, { as: 'lideranca', foreignKey: 'liderId' });
+      User.hasMany(models.RegistroCulto, { as: 'registrosCultoCriados', foreignKey: 'userId' });
     }
   }
 
