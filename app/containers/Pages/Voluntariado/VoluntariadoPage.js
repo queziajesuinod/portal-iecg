@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react';
 import {
   Autocomplete,
   Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
@@ -38,7 +44,28 @@ const STATUS_CONFIG = {
   ENCERRADO: { label: 'Encerrado', color: 'default' },
 };
 
-const formatDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '-';
+const formatDate = (d) => {
+  if (!d) return '-';
+  return new Date(d).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+};
+const STATUS_POR_TAB = ['PENDENTE', 'APROVADO', 'ENCERRADO'];
+
+const getMemberGroupKey = (v) => v.memberId || v.membro?.id || `sem-membro:${v.id}`;
+
+const getMemberDisplayName = (membro, memberId) => {
+  if (!membro) return memberId;
+  return membro.preferredName || membro.fullName || membro.email || memberId;
+};
+
+const formatDateRange = (values = []) => {
+  const validDates = values.filter(Boolean).map((d) => String(d));
+  if (!validDates.length) return '-';
+  const sorted = [...validDates].sort();
+  const start = sorted[0];
+  const end = sorted[sorted.length - 1];
+  if (start === end) return formatDate(start);
+  return `${formatDate(start)} - ${formatDate(end)}`;
+};
 
 const VoluntariadoPage = () => {
   const [voluntariados, setVoluntariados] = useState([]);
@@ -50,14 +77,12 @@ const VoluntariadoPage = () => {
   const [tabAtiva, setTabAtiva] = useState(0);
   const [filtroArea, setFiltroArea] = useState('');
   const [dialog, setDialog] = useState({ open: false, editando: null });
-  const [dialogEncerrar, setDialogEncerrar] = useState({ open: false, id: null, dataFim: '' });
+  const [dialogEncerrar, setDialogEncerrar] = useState({ open: false, ids: [], dataFim: '' });
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [form, setForm] = useState(FORM_VAZIO);
   const [membroSelecionado, setMembroSelecionado] = useState(null);
   const [loading, setLoading] = useState(false);
   const debounceRef = useRef(null);
-
-  const STATUS_POR_TAB = ['PENDENTE', 'APROVADO', 'ENCERRADO'];
 
   const loadData = () => {
     setLoading(true);
@@ -88,7 +113,7 @@ const VoluntariadoPage = () => {
 
   // Debounce na busca de membros — só dispara quando o dialog estiver aberto
   useEffect(() => {
-    if (!dialog.open) return;
+    if (!dialog.open) return undefined;
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => buscarMembros(inputMembro), 400);
     return () => clearTimeout(debounceRef.current);
@@ -104,12 +129,41 @@ const VoluntariadoPage = () => {
     });
   }, [voluntariados, tabAtiva, filtroArea]);
 
+  const voluntariadosAgrupados = useMemo(() => {
+    const groups = new Map();
+
+    voluntariadosFiltrados.forEach((v) => {
+      const key = getMemberGroupKey(v);
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          memberId: v.memberId,
+          membro: v.membro || null,
+          status: v.status,
+          items: []
+        });
+      }
+      groups.get(key).items.push(v);
+    });
+
+    return Array.from(groups.values())
+      .map((group) => ({
+        ...group,
+        items: [...group.items].sort((a, b) => {
+          const nomeA = String(a.area?.nome || '').toLowerCase();
+          const nomeB = String(b.area?.nome || '').toLowerCase();
+          return nomeA.localeCompare(nomeB);
+        })
+      }))
+      .sort((a, b) => {
+        const nomeA = getMemberDisplayName(a.membro, a.memberId);
+        const nomeB = getMemberDisplayName(b.membro, b.memberId);
+        return nomeA.localeCompare(nomeB, 'pt-BR', { sensitivity: 'base' });
+      });
+  }, [voluntariadosFiltrados]);
+
   // ── Helpers ──────────────────────────────────────────────
-  const nomeExibicaoMembro = (v) => {
-    const m = v.membro;
-    if (!m) return v.memberId;
-    return m.preferredName || m.fullName || m.email || v.memberId;
-  };
+  const nomeExibicaoMembro = (group) => getMemberDisplayName(group.membro, group.memberId);
 
   // ── Dialog cadastro/edição ────────────────────────────────
   const abrirNovo = () => {
@@ -129,7 +183,12 @@ const VoluntariadoPage = () => {
       observacao: v.observacao || ''
     });
     const membroAtual = v.membro
-      ? { id: v.memberId, fullName: v.membro.fullName, preferredName: v.membro.preferredName, email: v.membro.email }
+      ? {
+        id: v.memberId,
+        fullName: v.membro.fullName,
+        preferredName: v.membro.preferredName,
+        email: v.membro.email
+      }
       : null;
     setMembroSelecionado(membroAtual);
     setInputMembro(membroAtual ? (membroAtual.preferredName || membroAtual.fullName || '') : '');
@@ -173,10 +232,14 @@ const VoluntariadoPage = () => {
   };
 
   // ── Aprovar ───────────────────────────────────────────────
-  const handleAprovar = async (id) => {
+  const handleAprovar = async (ids = []) => {
+    const idsList = Array.isArray(ids) ? ids : [ids];
+    if (!idsList.length) return;
     try {
-      await aprovarVoluntariado(id);
-      setNotification('Voluntariado aprovado com sucesso');
+      await Promise.all(idsList.map((id) => aprovarVoluntariado(id)));
+      setNotification(idsList.length > 1
+        ? `${idsList.length} vínculos aprovados com sucesso`
+        : 'Voluntariado aprovado com sucesso');
       loadData();
     } catch (err) {
       setNotification(err.message || 'Erro ao aprovar');
@@ -184,16 +247,22 @@ const VoluntariadoPage = () => {
   };
 
   // ── Encerrar ──────────────────────────────────────────────
-  const abrirEncerrar = (v) => {
+  const abrirEncerrar = (group) => {
     const hoje = new Date().toISOString().slice(0, 10);
-    setDialogEncerrar({ open: true, id: v.id, dataFim: v.dataFim || hoje });
+    const ids = group.items.map((item) => item.id);
+    const dataFimAtual = group.items.map((item) => item.dataFim).find(Boolean);
+    setDialogEncerrar({ open: true, ids, dataFim: dataFimAtual || hoje });
   };
 
   const handleEncerrar = async () => {
+    if (!dialogEncerrar.ids.length) return;
     try {
-      await encerrarVoluntariado(dialogEncerrar.id, dialogEncerrar.dataFim || null);
-      setNotification('Voluntariado encerrado com sucesso');
-      setDialogEncerrar({ open: false, id: null, dataFim: '' });
+      const total = dialogEncerrar.ids.length;
+      await Promise.all(dialogEncerrar.ids.map((id) => encerrarVoluntariado(id, dialogEncerrar.dataFim || null)));
+      setNotification(total > 1
+        ? `${total} vínculos encerrados com sucesso`
+        : 'Voluntariado encerrado com sucesso');
+      setDialogEncerrar({ open: false, ids: [], dataFim: '' });
       loadData();
     } catch (err) {
       setNotification(err.message || 'Erro ao encerrar');
@@ -202,10 +271,14 @@ const VoluntariadoPage = () => {
 
   // ── Remover ───────────────────────────────────────────────
   const handleRemover = async () => {
+    if (!confirmDelete?.ids?.length) return;
     try {
-      await removerVoluntariado(confirmDelete);
+      const total = confirmDelete.ids.length;
+      await Promise.all(confirmDelete.ids.map((id) => removerVoluntariado(id)));
       setConfirmDelete(null);
-      setNotification('Voluntariado removido');
+      setNotification(total > 1
+        ? `${total} vínculos removidos`
+        : 'Voluntariado removido');
       loadData();
     } catch (err) {
       setNotification(err.message || 'Erro ao remover');
@@ -214,9 +287,22 @@ const VoluntariadoPage = () => {
 
   // ── Contadores por aba ────────────────────────────────────
   const contadores = useMemo(() => {
-    const counts = { PENDENTE: 0, APROVADO: 0, ENCERRADO: 0 };
-    voluntariados.forEach((v) => { if (counts[v.status] !== undefined) counts[v.status] += 1; });
-    return counts;
+    const membersByStatus = {
+      PENDENTE: new Set(),
+      APROVADO: new Set(),
+      ENCERRADO: new Set()
+    };
+
+    voluntariados.forEach((v) => {
+      if (!membersByStatus[v.status]) return;
+      membersByStatus[v.status].add(getMemberGroupKey(v));
+    });
+
+    return {
+      PENDENTE: membersByStatus.PENDENTE.size,
+      APROVADO: membersByStatus.APROVADO.size,
+      ENCERRADO: membersByStatus.ENCERRADO.size
+    };
   }, [voluntariados]);
 
   return (
@@ -261,7 +347,7 @@ const VoluntariadoPage = () => {
             <TableHead>
               <TableRow>
                 <TableCell>Membro</TableCell>
-                <TableCell>Área</TableCell>
+                <TableCell>Áreas</TableCell>
                 <TableCell>Início</TableCell>
                 <TableCell>Fim</TableCell>
                 <TableCell>Status</TableCell>
@@ -270,57 +356,78 @@ const VoluntariadoPage = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {voluntariadosFiltrados.length === 0 && !loading && (
+              {voluntariadosAgrupados.length === 0 && !loading && (
                 <TableRow>
                   <TableCell colSpan={7} align="center">
                     Nenhum registro encontrado
                   </TableCell>
                 </TableRow>
               )}
-              {voluntariadosFiltrados.map((v) => {
-                const cfg = STATUS_CONFIG[v.status] || {};
+              {voluntariadosAgrupados.map((group) => {
+                const cfg = STATUS_CONFIG[group.status] || {};
+                const ids = group.items.map((item) => item.id);
+                const canEdit = group.items.length === 1 && group.status !== 'ENCERRADO';
+                const observacoes = group.items.map((item) => item.observacao).filter(Boolean);
                 return (
-                  <TableRow key={v.id} hover>
-                    <TableCell>{nomeExibicaoMembro(v)}</TableCell>
+                  <TableRow key={group.key} hover>
+                    <TableCell>{nomeExibicaoMembro(group)}</TableCell>
                     <TableCell>
-                      <Chip label={v.area?.nome || '-'} size="small" variant="outlined" />
+                      <Box display="flex" flexWrap="wrap" gap={0.5}>
+                        {group.items.map((item) => (
+                          <Chip key={item.id} label={item.area?.nome || '-'} size="small" variant="outlined" />
+                        ))}
+                      </Box>
                     </TableCell>
-                    <TableCell>{formatDate(v.dataInicio)}</TableCell>
-                    <TableCell>{v.dataFim ? formatDate(v.dataFim) : '-'}</TableCell>
+                    <TableCell>{formatDateRange(group.items.map((item) => item.dataInicio))}</TableCell>
+                    <TableCell>{formatDateRange(group.items.map((item) => item.dataFim))}</TableCell>
                     <TableCell>
                       <Chip label={cfg.label} size="small" color={cfg.color} />
                     </TableCell>
-                    <TableCell sx={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {v.observacao || '-'}
+                    <TableCell
+                      sx={{
+                        maxWidth: 160,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {observacoes.length ? observacoes.join(' | ') : '-'}
                     </TableCell>
                     <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}>
                       {/* Aprovar — apenas PENDENTE */}
-                      {v.status === 'PENDENTE' && (
-                        <Tooltip title="Aprovar">
-                          <IconButton size="small" color="success" onClick={() => handleAprovar(v.id)}>
+                      {group.status === 'PENDENTE' && (
+                        <Tooltip title={ids.length > 1 ? `Aprovar ${ids.length} vínculos` : 'Aprovar'}>
+                          <IconButton size="small" color="success" onClick={() => handleAprovar(ids)}>
                             <CheckCircleIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
                       )}
                       {/* Encerrar — apenas APROVADO */}
-                      {v.status === 'APROVADO' && (
-                        <Tooltip title="Dar saída / Encerrar">
-                          <IconButton size="small" color="warning" onClick={() => abrirEncerrar(v)}>
+                      {group.status === 'APROVADO' && (
+                        <Tooltip title={ids.length > 1 ? `Encerrar ${ids.length} vínculos` : 'Dar saída / Encerrar'}>
+                          <IconButton size="small" color="warning" onClick={() => abrirEncerrar(group)}>
                             <ExitToAppIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
                       )}
                       {/* Editar — PENDENTE e APROVADO */}
-                      {v.status !== 'ENCERRADO' && (
+                      {canEdit && (
                         <Tooltip title="Editar">
-                          <IconButton size="small" onClick={() => abrirEditar(v)}>
+                          <IconButton size="small" onClick={() => abrirEditar(group.items[0])}>
                             <EditIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
                       )}
                       {/* Remover */}
-                      <Tooltip title="Remover">
-                        <IconButton size="small" color="error" onClick={() => setConfirmDelete(v.id)}>
+                      <Tooltip title={ids.length > 1 ? `Remover ${ids.length} vínculos` : 'Remover'}>
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => setConfirmDelete({
+                            ids,
+                            memberName: nomeExibicaoMembro(group)
+                          })}
+                        >
                           <DeleteIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
@@ -405,7 +512,7 @@ const VoluntariadoPage = () => {
         </Dialog>
 
         {/* ── Dialog encerrar ── */}
-        <Dialog open={dialogEncerrar.open} onClose={() => setDialogEncerrar({ open: false, id: null, dataFim: '' })} maxWidth="xs" fullWidth>
+        <Dialog open={dialogEncerrar.open} onClose={() => setDialogEncerrar({ open: false, ids: [], dataFim: '' })} maxWidth="xs" fullWidth>
           <DialogTitle>Encerrar Voluntariado</DialogTitle>
           <DialogContent>
             <Typography variant="body2" color="text.secondary" mb={2}>
@@ -421,7 +528,7 @@ const VoluntariadoPage = () => {
             />
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setDialogEncerrar({ open: false, id: null, dataFim: '' })}>Cancelar</Button>
+            <Button onClick={() => setDialogEncerrar({ open: false, ids: [], dataFim: '' })}>Cancelar</Button>
             <Button variant="contained" color="warning" onClick={handleEncerrar}>Encerrar</Button>
           </DialogActions>
         </Dialog>
@@ -430,7 +537,11 @@ const VoluntariadoPage = () => {
         <Dialog open={Boolean(confirmDelete)} onClose={() => setConfirmDelete(null)} maxWidth="xs">
           <DialogTitle>Confirmar remoção</DialogTitle>
           <DialogContent>
-            <Typography>Deseja realmente remover este vínculo de voluntariado?</Typography>
+            <Typography>
+              {confirmDelete?.ids?.length > 1
+                ? `Deseja realmente remover ${confirmDelete.ids.length} vínculos de voluntariado de ${confirmDelete.memberName}?`
+                : 'Deseja realmente remover este vínculo de voluntariado?'}
+            </Typography>
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setConfirmDelete(null)}>Cancelar</Button>

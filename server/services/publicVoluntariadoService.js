@@ -36,9 +36,9 @@ const PublicVoluntariadoService = {
    * - Se existir: atualiza dados básicos
    * - Se não existir: cria Member + User (senha = telefone limpo)
    * - Em ambos os casos: garante que User existe e está ativo
-   * - Vincula à área de voluntariado (status PENDENTE)
-   * - Registra marco VOLUNTARIADO
-   * - Se área for BACKSTAGE: aplica perfil BACKSTAGE ao User
+   * - Vincula a uma ou mais áreas de voluntariado (status PENDENTE)
+   * - Registra marco VOLUNTARIADO por área
+   * - Se alguma área for BACKSTAGE: aplica perfil BACKSTAGE ao User
    */
   async cadastrarVoluntario(dados) {
     const {
@@ -50,19 +50,45 @@ const PublicVoluntariadoService = {
       whatsapp,
       birthDate,
       areaVoluntariadoId,
+      areaVoluntariadoIds,
       dataInicio,
       observacao
     } = dados;
 
-    if (!fullName || !areaVoluntariadoId || !dataInicio) {
-      throw new Error('Nome completo, área de voluntariado e data de início são obrigatórios');
+    const requestedAreaIds = Array.isArray(areaVoluntariadoIds)
+      ? areaVoluntariadoIds
+      : (areaVoluntariadoIds
+        ? [areaVoluntariadoIds]
+        : (Array.isArray(areaVoluntariadoId)
+          ? areaVoluntariadoId
+          : (areaVoluntariadoId ? [areaVoluntariadoId] : [])));
+
+    const normalizedAreaIds = [...new Set(
+      requestedAreaIds
+        .map((id) => String(id || '').trim())
+        .filter(Boolean)
+    )];
+
+    if (!fullName || !normalizedAreaIds.length || !dataInicio) {
+      throw new Error('Nome completo, area(s) de voluntariado e data de inicio sao obrigatorios');
     }
     if (!cpf && !email && !phone) {
-      throw new Error('Informe ao menos CPF, e-mail ou telefone para identificação');
+      throw new Error('Informe ao menos CPF, e-mail ou telefone para identificacao');
     }
 
-    const area = await AreaVoluntariado.findByPk(areaVoluntariadoId);
-    if (!area || !area.ativo) throw new Error('Área de voluntariado não encontrada ou inativa');
+    const areas = await AreaVoluntariado.findAll({
+      where: {
+        id: { [Op.in]: normalizedAreaIds },
+        ativo: true
+      }
+    });
+    const areaById = new Map(areas.map((area) => [String(area.id), area]));
+    const selectedAreas = normalizedAreaIds
+      .map((id) => areaById.get(id))
+      .filter(Boolean);
+    if (selectedAreas.length !== normalizedAreaIds.length) {
+      throw new Error('Uma ou mais areas de voluntariado nao foram encontradas ou estao inativas');
+    }
 
     const cpfLimpo = normalizeCpf(cpf);
     const phoneLimpo = sanitizePhone(phone || whatsapp);
@@ -186,39 +212,45 @@ const PublicVoluntariadoService = {
         }, { transaction });
       }
 
-      // ── 3. Vincular à área de voluntariado ─────────────────
-      const voluntariado = await Voluntariado.create({
-        memberId: member.id,
-        areaVoluntariadoId,
-        dataInicio,
-        observacao: observacao || null,
-        status: 'PENDENTE'
-      }, { transaction });
+      // ── 3. Vincular às áreas de voluntariado ───────────────
+      const voluntariados = await Voluntariado.bulkCreate(
+        selectedAreas.map((area) => ({
+          memberId: member.id,
+          areaVoluntariadoId: area.id,
+          dataInicio,
+          observacao: observacao || null,
+          status: 'PENDENTE'
+        })),
+        { transaction, returning: true }
+      );
 
-      // ── 4. Marco de voluntariado ───────────────────────────
-      await MemberMilestone.create({
-        memberId: member.id,
-        milestoneType: 'VOLUNTARIADO',
-        achievedDate: dataInicio,
-        description: `Voluntariado em ${area.nome}`,
-        createdBy: null
-      }, { transaction });
+      await MemberMilestone.bulkCreate(
+        selectedAreas.map((area) => ({
+          memberId: member.id,
+          milestoneType: 'VOLUNTARIADO',
+          achievedDate: dataInicio,
+          description: `Voluntariado em ${area.nome}`,
+          createdBy: null
+        })),
+        { transaction }
+      );
 
-      // ── 5. Perfil BACKSTAGE se aplicável ───────────────────
-      if (area.nome.toUpperCase() === 'BACKSTAGE') {
+      const hasBackstage = selectedAreas.some((area) => String(area.nome || '').toUpperCase() === 'BACKSTAGE');
+      if (hasBackstage) {
         const perfilBackstage = await Perfil.findOne({ where: { descricao: 'BACKSTAGE' }, transaction });
         if (perfilBackstage) {
           await user.update({ perfilId: perfilBackstage.id }, { transaction });
         }
       }
-
       await transaction.commit();
 
       return {
         memberId: member.id,
-        voluntariadoId: voluntariado.id,
+        voluntariadoId: voluntariados[0]?.id || null,
+        voluntariadoIds: voluntariados.map((item) => item.id),
         status: 'PENDENTE',
-        area: area.nome,
+        area: selectedAreas[0]?.nome || null,
+        areas: selectedAreas.map((area) => area.nome),
         mensagem: 'Cadastro realizado com sucesso. Aguardando aprovação.'
       };
     } catch (err) {
