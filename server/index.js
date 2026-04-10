@@ -88,6 +88,8 @@ app.use('/api/public/events', require('./routers/publicEventRoutes'));
 app.use('/api/public/checkin', require('./routers/publicCheckInRoutes'));
 // Rota pública para apelos direcionados
 app.use('/public', require('./routers/publicStartRoutes'));
+// Rotas públicas de voluntariado (sem autenticação)
+app.use('/api/public/voluntariado', require('./routers/publicVoluntariadoRoutes'));
 // Rotas administrativas de eventos (protegidas)
 app.use('/api/admin/events', authMiddleware, require('./routers/eventRoutes'));
 // Rotas administrativas de membros (protegidas)
@@ -100,6 +102,7 @@ app.use('/api/admin/notifications', authMiddleware, require('./routers/notificat
 app.use('/api/admin/financial', authMiddleware, require('./routers/financialRoutes'));
 app.use('/api/admin/diario-bordo', authMiddleware, require('./routers/boardJournalRoutes'));
 app.use('/api/admin/cultos', authMiddleware, require('./routers/cultosRoutes'));
+app.use('/api/admin/voluntariado', authMiddleware, require('./routers/voluntariadoRoutes'));
 // Webhook Cielo (pública - sem autenticação)
 app.use('/api/webhooks', require('./routers/webhookRoutes'));
 // Webhook Evolution API (pública - sem autenticação)

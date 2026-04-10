@@ -47,6 +47,8 @@ import MinisteriosPage from '../Pages/Cultos/admin/MinisteriosPage';
 import TiposEventoPage from '../Pages/Cultos/admin/TiposEventoPage';
 import CampusMinisteriosPage from '../Pages/Cultos/admin/CampusMinisteriosPage';
 import MinistrosPage from '../Pages/Cultos/admin/MinistrosPage';
+import AreaVoluntariadoPage from '../Pages/Voluntariado/AreaVoluntariadoPage';
+import VoluntariadoPage from '../Pages/Voluntariado/VoluntariadoPage';
 import { isStoredTokenValid } from '../../utils/authSession';
 
 function Application({ history }) {
@@ -121,6 +123,9 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/cultos/admin/tipos-evento" component={TiposEventoPage} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/cultos/admin/campus-ministerios" component={CampusMinisteriosPage} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/cultos/admin/ministros" component={MinistrosPage} isAuthenticated={isAuthenticated} />
+            {/* ===== Módulo: Voluntariado ===== */}
+            <ProtectedRoute exact path="/app/voluntariado/areas" component={AreaVoluntariadoPage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/voluntariado" component={VoluntariadoPage} isAuthenticated={isAuthenticated} />
           </Switch>
         </Dashboard>
       </Route>
