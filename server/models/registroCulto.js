@@ -13,6 +13,9 @@ module.exports = (sequelize) => {
       if (models.TipoEvento) {
         RegistroCulto.belongsTo(models.TipoEvento, { foreignKey: 'tipoEventoId', as: 'tipoEvento' });
       }
+      if (models.User) {
+        RegistroCulto.belongsTo(models.User, { foreignKey: 'userId', as: 'creator' });
+      }
       if (models.Ministro) {
         RegistroCulto.belongsToMany(models.Ministro, {
           through: 'registro_culto_ministro',
@@ -49,6 +52,10 @@ module.exports = (sequelize) => {
         allowNull: false,
       },
       tipoEventoId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      userId: {
         type: DataTypes.UUID,
         allowNull: true,
       },

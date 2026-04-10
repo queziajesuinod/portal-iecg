@@ -1,11 +1,12 @@
 'use strict';
 const { Op } = require('sequelize');
-const { RegistroCulto, Campus, Ministerio, TipoEvento, Ministro } = require('../models');
+const { RegistroCulto, Campus, Ministerio, TipoEvento, Ministro, User } = require('../models');
 
 const includeBase = [
   { model: Campus, as: 'campus', attributes: ['id', 'nome', 'transmiteOnline'] },
   { model: Ministerio, as: 'ministerio', attributes: ['id', 'nome', 'exibeCriancas', 'exibeBebes', 'apeloDefault'] },
   { model: TipoEvento, as: 'tipoEvento', attributes: ['id', 'nome'] },
+  { model: User, as: 'creator', attributes: ['id', 'name', 'email'] },
 ];
 
 const buildInclude = (ministroId) => {
@@ -49,8 +50,14 @@ const RegistroCultoService = {
     return registro;
   },
 
-  async criar(dados) {
-    const { ministroIds, ...camposRegistro } = dados;
+  async criar(dados, userId = null) {
+    const { ministroIds, userId: ignoredUserId, ...camposRegistro } = dados;
+
+    if (ignoredUserId) {
+      // Ignora userId enviado pelo cliente e usa somente o token autenticado.
+      delete camposRegistro.userId;
+    }
+    camposRegistro.userId = userId || null;
 
     // Deriva quemMinistrou dos ministros selecionados
     if (ministroIds && ministroIds.length > 0) {
@@ -68,7 +75,11 @@ const RegistroCultoService = {
   },
 
   async atualizar(id, dados) {
-    const { ministroIds, ...camposRegistro } = dados;
+    const { ministroIds, userId: ignoredUserId, ...camposRegistro } = dados;
+
+    if (ignoredUserId) {
+      delete camposRegistro.userId;
+    }
 
     const registro = await RegistroCulto.findByPk(id);
     if (!registro) throw new Error('Registro não encontrado');
