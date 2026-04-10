@@ -25,6 +25,15 @@ function decodeJwt(token) {
   }
 }
 
+const normalizeText = (value) => (typeof value === 'string' ? value.trim() : '');
+const isEmailLike = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeText(value));
+
+const resolveUserName = (...candidates) => {
+  const normalized = candidates.map(normalizeText).filter(Boolean);
+  const nonEmailName = normalized.find((candidate) => !isEmailLike(candidate));
+  return nonEmailName || normalized[0] || 'Usuario';
+};
+
 function Login({ setIsAuthenticated = () => {} }) {
   const { classes } = useStyles();
   const history = useHistory();
@@ -54,7 +63,7 @@ function Login({ setIsAuthenticated = () => {} }) {
       const decodedToken = decodeJwt(token);
       if (!decodedToken) throw new Error('Token invalido');
 
-      const { userId, perfil, nome } = decodedToken;
+      const { userId, perfis: tokenPerfis, nome } = decodedToken;
       let userDetails = {};
       let permissions = loginPermissions;
 
@@ -92,9 +101,11 @@ function Login({ setIsAuthenticated = () => {} }) {
       }
 
       const userData = {
-        name: userDetails.name || nome || 'Usuario',
+        name: resolveUserName(nome, userDetails.name, userDetails.username, values?.email),
         id: userDetails.id || userId || 'user',
-        perfil: userDetails.Perfil?.descricao || userDetails.perfil?.descricao || perfil,
+        perfis: Array.isArray(userDetails.perfis) && userDetails.perfis.length
+          ? userDetails.perfis.map((p) => p.descricao).filter(Boolean)
+          : (tokenPerfis || []),
         title: 'Usuario Autenticado',
         avatar: userDetails.image || 'default-avatar.png',
         status: 'online',

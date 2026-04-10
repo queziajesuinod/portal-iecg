@@ -1,5 +1,5 @@
 const { sign } = require('jsonwebtoken');
-const { User } = require('../models');
+const { User, Perfil } = require('../models');
 const crypto = require('crypto');
 const dotenv = require('dotenv');
 const fs = require('fs');
@@ -12,7 +12,16 @@ class AuthService {
     const usuario = await User.findOne({
       attributes: ['id', 'name', 'username', 'passwordHash', 'salt', 'perfilId'],
       where: { email: dto.email },
-      include: buildPermissionInclude()
+      include: [
+        ...buildPermissionInclude(),
+        {
+          model: Perfil,
+          as: 'perfis',
+          attributes: ['descricao'],
+          through: { attributes: [] },
+          required: false
+        }
+      ]
     });
 
     if (!usuario) {
@@ -36,11 +45,17 @@ class AuthService {
       throw new Error('Usuário ou senha inválido');
     }
 
-    // Gerar token com userId e descricao do perfil
+    // Coletar todas as descrições de perfis (legado + many-to-many, sem duplicatas)
+    const perfisDescricoes = Array.from(new Set([
+      ...(usuario.Perfil?.descricao ? [usuario.Perfil.descricao] : []),
+      ...(usuario.perfis?.map((p) => p.descricao).filter(Boolean) || [])
+    ]));
+
+    // Gerar token com userId e lista de perfis
     const accessToken = sign(
       {
         userId: usuario.id,
-        perfil: usuario.Perfil?.descricao || null,
+        perfis: perfisDescricoes,
         email: dto.email,
         username: usuario.username,
         nome: usuario.name
