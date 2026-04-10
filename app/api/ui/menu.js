@@ -160,6 +160,25 @@ module.exports = [
     ]
   },
   {
+    key: 'voluntariado',
+    name: 'Voluntariado',
+    icon: 'ion-ios-heart-outline',
+    child: [
+      {
+        key: 'voluntariadoLista',
+        name: 'Voluntários',
+        link: '/app/voluntariado',
+        icon: 'ion-ios-people-outline'
+      },
+      {
+        key: 'voluntariadoAreas',
+        name: 'Áreas de Voluntariado',
+        link: '/app/voluntariado/areas',
+        icon: 'ion-ios-list-box-outline'
+      }
+    ]
+  },
+  {
     key: 'admin',
     name: 'Administração',
     icon: 'ion-ios-settings-outline',

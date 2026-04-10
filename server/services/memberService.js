@@ -1374,6 +1374,16 @@ class MemberService {
         if (payload.status === 'MIA' && member.status !== 'MIA') {
           await this.convertToMIA(id, payload.statusReason, updatedBy);
         }
+
+        // Sincronizar active do usuário vinculado com o status do membro
+        if (member.userId) {
+          const statusesInativos = ['INATIVO', 'MIA', 'TRANSFERIDO', 'FALECIDO'];
+          const deveInativar = statusesInativos.includes(payload.status);
+          await User.update(
+            { active: !deveInativar },
+            { where: { id: member.userId } }
+          );
+        }
       }
 
       await member.update(payload);
@@ -1464,6 +1474,21 @@ class MemberService {
         if (member.spouseMemberId) {
           await this.syncSpouseLink(member.id, null);
         }
+
+        await MemberJourney.destroy({
+          where: { memberId: member.id },
+          transaction
+        });
+
+        await MemberMilestone.destroy({
+          where: { memberId: member.id },
+          transaction
+        });
+
+        await MemberActivity.destroy({
+          where: { memberId: member.id },
+          transaction
+        });
 
         await member.destroy({ transaction });
 
