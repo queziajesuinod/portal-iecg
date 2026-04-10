@@ -508,7 +508,7 @@ async function processarInscricao(dadosInscricao) {
   } = dadosInscricao;
 
   // 1. Validar evento
-  const evento = await eventService.buscarEventoPublicoPorId(eventId);
+  const evento = await eventService.buscarEventoPublicoPorId(eventId, { useCache: false });
   const eventRequiresPayment = evento.requiresPayment !== false;
 
   // 1.1. Validar limite por comprador

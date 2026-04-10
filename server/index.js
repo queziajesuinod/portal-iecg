@@ -25,6 +25,9 @@ const host = customHost || null; // Permite IPv6/IPv4
 const prettyHost = customHost || 'localhost';
 const enablePixJobsInDevelopment = process.env.ENABLE_PIX_JOBS_IN_DEVELOPMENT === 'true';
 
+// Evita respostas 304 em endpoints de API (alguns browsers tratam como erro de rede em cenários com cache inconsistente)
+app.set('etag', false);
+
 // Middleware de autenticação JWT (protege as APIs)
 const authMiddleware = (req, res, next) => {
   if (req.path.startsWith('/auth')) return next(); // permite login
@@ -45,7 +48,17 @@ const authMiddleware = (req, res, next) => {
 
 // CORS
 app.use(cors({
-  origin: ['https://portal.iecg.com.br', 'http://localhost:3005', 'http://0.0.0.0:3005', 'http://localhost:3007', 'http://localhost:3000', 'http://localhost:4173', 'http://127.0.0.1:4173'],
+  origin: [
+    'https://portal.iecg.com.br',
+    'http://localhost:3000',
+    'http://localhost:3005',
+    'http://localhost:3007',
+    'http://localhost:3008',
+    'http://localhost:4173',
+    'http://0.0.0.0:3005',
+    'http://127.0.0.1:3008',
+    'http://127.0.0.1:4173'
+  ],
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
   credentials: true,
   allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization']
