@@ -36,11 +36,11 @@ class AuthService {
       throw new Error('Usuário ou senha inválido');
     }
 
-    // Gerar token com userId e perfilId
+    // Gerar token com userId e descricao do perfil
     const accessToken = sign(
       {
         userId: usuario.id,
-        perfilId: usuario.perfilId,
+        perfil: usuario.Perfil?.descricao || null,
         email: dto.email,
         username: usuario.username,
         nome: usuario.name

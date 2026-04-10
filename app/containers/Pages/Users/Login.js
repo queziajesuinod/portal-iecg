@@ -54,7 +54,7 @@ function Login({ setIsAuthenticated = () => {} }) {
       const decodedToken = decodeJwt(token);
       if (!decodedToken) throw new Error('Token invalido');
 
-      const { userId, perfilId, nome } = decodedToken;
+      const { userId, perfil, nome } = decodedToken;
       let userDetails = {};
       let permissions = loginPermissions;
 
@@ -94,7 +94,7 @@ function Login({ setIsAuthenticated = () => {} }) {
       const userData = {
         name: userDetails.name || nome || 'Usuario',
         id: userDetails.id || userId || 'user',
-        perfilId: userDetails.perfilId || perfilId,
+        perfil: userDetails.Perfil?.descricao || userDetails.perfil?.descricao || perfil,
         title: 'Usuario Autenticado',
         avatar: userDetails.image || 'default-avatar.png',
         status: 'online',

@@ -289,8 +289,9 @@ async function listarEventosPublicos() {
   });
 }
 
-async function buscarEventoPublicoPorId(id) {
+async function buscarEventoPublicoPorId(id, options = {}) {
   const startTime = Date.now();
+  const { useCache = true } = options;
   const cacheKey = cache.CACHE_KEYS.eventPublic(id);
 
   // ============================================
@@ -299,9 +300,7 @@ async function buscarEventoPublicoPorId(id) {
   // Buscar do cache primeiro, se não existir, buscar do banco
   // Ganho estimado: 10-13 segundos para requisições em cache
   // ============================================
-  const result = await cache.getOrSet(
-    cacheKey,
-    async () => {
+  const fetchEvent = async () => {
       console.log(`[DB QUERY] Buscando evento ${id} do banco de dados...`);
       
       // ============================================
@@ -336,9 +335,11 @@ async function buscarEventoPublicoPorId(id) {
       }
 
       return event;
-    },
-    cache.DEFAULT_TTL
-  );
+    };
+
+  const result = useCache
+    ? await cache.getOrSet(cacheKey, fetchEvent, cache.DEFAULT_TTL)
+    : await fetchEvent();
 
   const duration = Date.now() - startTime;
   console.log(`[PERFORMANCE] buscarEventoPublicoPorId: ${duration}ms`);
