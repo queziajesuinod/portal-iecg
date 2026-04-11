@@ -1,6 +1,13 @@
 'use strict';
 const RegistroCultoService = require('../services/registroCultoService');
 
+const parseMultiParam = (valor) => {
+  if (Array.isArray(valor)) return valor.filter(Boolean);
+  if (typeof valor !== 'string' || valor.trim() === '') return [];
+  if (valor.includes(',')) return valor.split(',').map((item) => item.trim()).filter(Boolean);
+  return [valor.trim()];
+};
+
 class RegistroCultoController {
   async listar(req, res) {
     try {
@@ -64,8 +71,24 @@ class RegistroCultoController {
 
   async dashboard(req, res) {
     try {
-      const { campusId, ministerioId, dataInicio, dataFim } = req.query;
-      const data = await RegistroCultoService.dashboard({ campusId, ministerioId, dataInicio, dataFim });
+      const {
+        campusId,
+        campusIds,
+        ministerioId,
+        ministerioIds,
+        tipoEventoId,
+        dataInicio,
+        dataFim,
+      } = req.query;
+      const data = await RegistroCultoService.dashboard({
+        campusId,
+        campusIds: parseMultiParam(campusIds),
+        ministerioId,
+        ministerioIds: parseMultiParam(ministerioIds),
+        tipoEventoId,
+        dataInicio,
+        dataFim,
+      });
       return res.status(200).json(data);
     } catch (error) {
       return res.status(500).json({ erro: error.message });

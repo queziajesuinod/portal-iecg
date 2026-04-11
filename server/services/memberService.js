@@ -8,6 +8,7 @@ const {
   MemberActivity,
   MemberActivityType,
   MemberMilestone,
+  Voluntariado,
   MemberDuplicateDismissal,
   MIA,
   User,
@@ -1486,6 +1487,11 @@ class MemberService {
         });
 
         await MemberActivity.destroy({
+          where: { memberId: member.id },
+          transaction
+        });
+
+        await Voluntariado.destroy({
           where: { memberId: member.id },
           transaction
         });

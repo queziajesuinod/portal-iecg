@@ -30,28 +30,18 @@ const VoluntariadoService = {
 
   async buscarPorId(id) {
     const voluntariado = await Voluntariado.findByPk(id, { include: includeAssociations });
-    if (!voluntariado) throw new Error('Vínculo de voluntariado não encontrado');
+    if (!voluntariado) throw new Error('Vinculo de voluntariado nao encontrado');
     return voluntariado;
   },
 
   async criar(dados) {
     const voluntariado = await Voluntariado.create({ ...dados, status: 'PENDENTE' });
 
-    // Ações secundárias — não bloqueiam o cadastro se falharem
+    // Acoes secundÃƒÂ¡rias - nao bloqueiam o cadastro se falharem
     try {
       const area = await AreaVoluntariado.findByPk(dados.areaVoluntariadoId);
-      const nomeArea = area ? area.nome : 'área desconhecida';
 
-      // Marco de voluntariado no membro
-      await MemberMilestone.create({
-        memberId: dados.memberId,
-        milestoneType: 'VOLUNTARIADO',
-        achievedDate: dados.dataInicio,
-        description: `Voluntariado em ${nomeArea}`,
-        createdBy: dados.createdBy || null
-      });
-
-      // Se a área for BACKSTAGE, atualiza o perfil do usuário vinculado ao membro
+      // Se a area for BACKSTAGE, atualiza o perfil do usuario vinculado ao membro
       if (area && area.nome.toUpperCase() === 'BACKSTAGE') {
         const member = await Member.findByPk(dados.memberId, { attributes: ['id', 'userId'] });
         if (member && member.userId) {
@@ -64,12 +54,12 @@ const VoluntariadoService = {
               { where: { id: member.userId } }
             );
           } else {
-            console.warn('[VoluntariadoService] Perfil BACKSTAGE não encontrado na tabela Perfis');
+            console.warn('[VoluntariadoService] Perfil BACKSTAGE nao encontrado na tabela Perfis');
           }
         }
       }
     } catch (err) {
-      console.warn('[VoluntariadoService] Falha em ação secundária:', err.message);
+      console.warn('[VoluntariadoService] Falha em acao secundÃƒÂ¡ria:', err.message);
     }
 
     return voluntariado;
@@ -77,8 +67,8 @@ const VoluntariadoService = {
 
   async atualizar(id, dados) {
     const voluntariado = await Voluntariado.findByPk(id);
-    if (!voluntariado) throw new Error('Vínculo de voluntariado não encontrado');
-    // Não permite alterar status por este método
+    if (!voluntariado) throw new Error('Vinculo de voluntariado nao encontrado');
+    // Nao permite alterar status por este metodo
     const { status, ...resto } = dados;
     Object.assign(voluntariado, resto);
     await voluntariado.save();
@@ -86,27 +76,53 @@ const VoluntariadoService = {
   },
 
   async aprovar(id) {
-    const voluntariado = await Voluntariado.findByPk(id);
-    if (!voluntariado) throw new Error('Vínculo de voluntariado não encontrado');
+    const voluntariado = await Voluntariado.findByPk(id, {
+      include: [{ model: AreaVoluntariado, as: 'area', attributes: ['id', 'nome'] }]
+    });
+    if (!voluntariado) throw new Error('Vinculo de voluntariado nao encontrado');
     if (voluntariado.status !== 'PENDENTE') {
       throw new Error('Apenas voluntariados pendentes podem ser aprovados');
     }
+
     voluntariado.status = 'APROVADO';
     await voluntariado.save();
+
+    const nomeArea = voluntariado.area ? voluntariado.area.nome : 'area desconhecida';
+    const achievedDate = voluntariado.dataInicio || new Date().toISOString().slice(0, 10);
+    const description = `Voluntariado em ${nomeArea}`;
+
+    const existingMilestone = await MemberMilestone.findOne({
+      where: {
+        memberId: voluntariado.memberId,
+        milestoneType: 'VOLUNTARIADO',
+        achievedDate,
+        description
+      }
+    });
+
+    if (!existingMilestone) {
+      await MemberMilestone.create({
+        memberId: voluntariado.memberId,
+        milestoneType: 'VOLUNTARIADO',
+        achievedDate,
+        description,
+        createdBy: null
+      });
+    }
+
     return this.buscarPorId(id);
   },
-
   async encerrar(id, dataFim) {
     const voluntariado = await Voluntariado.findByPk(id, {
       include: [{ model: AreaVoluntariado, as: 'area', attributes: ['id', 'nome'] }]
     });
-    if (!voluntariado) throw new Error('Vínculo de voluntariado não encontrado');
+    if (!voluntariado) throw new Error('Vinculo de voluntariado nao encontrado');
     if (voluntariado.status === 'ENCERRADO') {
-      throw new Error('Voluntariado já está encerrado');
+      throw new Error('Voluntariado ja esta encerrado');
     }
 
     const dataFimFinal = dataFim || new Date().toISOString().slice(0, 10);
-    const nomeArea = voluntariado.area ? voluntariado.area.nome : 'área desconhecida';
+    const nomeArea = voluntariado.area ? voluntariado.area.nome : 'area desconhecida';
 
     voluntariado.status = 'ENCERRADO';
     voluntariado.dataFim = dataFimFinal;
@@ -130,7 +146,7 @@ const VoluntariadoService = {
 
   async remover(id) {
     const voluntariado = await Voluntariado.findByPk(id);
-    if (!voluntariado) throw new Error('Vínculo de voluntariado não encontrado');
+    if (!voluntariado) throw new Error('Vinculo de voluntariado nao encontrado');
     await voluntariado.destroy();
   }
 };
