@@ -102,7 +102,7 @@ function Login({ setIsAuthenticated = () => {} }) {
 
       const userData = {
         name: resolveUserName(nome, userDetails.name, userDetails.username, values?.email),
-        id: userDetails.id || userId || 'user',
+        id: userId || userDetails.id || 'user',
         perfis: Array.isArray(userDetails.perfis) && userDetails.perfis.length
           ? userDetails.perfis.map((p) => p.descricao).filter(Boolean)
           : (tokenPerfis || []),

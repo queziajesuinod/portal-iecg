@@ -13,6 +13,16 @@ const resolveApiUrl = () => {
 const API_URL = resolveApiUrl();
 const BASE = `${API_URL}/api/admin/cultos`;
 
+const appendFiltros = (params, filtros = {}) => {
+  Object.entries(filtros).forEach(([k, v]) => {
+    if (Array.isArray(v)) {
+      v.filter((item) => item != null && item !== '').forEach((item) => params.append(k, item));
+      return;
+    }
+    if (v != null && v !== '') params.append(k, v);
+  });
+};
+
 // ===== Ministros (pregadores) =====
 export const listarMinistros = (apenasAtivos = false) =>
   fetchWithAuth(`${BASE}/ministros${apenasAtivos ? '?ativo=true' : ''}`);
@@ -68,7 +78,7 @@ export const salvarVinculos = (campusId, ministerioIds) =>
 // ===== Registros de Culto =====
 export const listarRegistros = (filtros = {}) => {
   const params = new URLSearchParams();
-  Object.entries(filtros).forEach(([k, v]) => { if (v != null && v !== '') params.append(k, v); });
+  appendFiltros(params, filtros);
   return fetchWithAuth(`${BASE}/registros?${params}`);
 };
 
@@ -85,6 +95,6 @@ export const deletarRegistro = (id) =>
 
 export const buscarDashboard = (filtros = {}) => {
   const params = new URLSearchParams();
-  Object.entries(filtros).forEach(([k, v]) => { if (v != null && v !== '') params.append(k, v); });
+  appendFiltros(params, filtros);
   return fetchWithAuth(`${BASE}/registros/dashboard?${params}`);
 };

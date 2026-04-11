@@ -2,7 +2,7 @@
 
 const crypto = require('crypto');
 const { Op } = require('sequelize');
-const { sequelize, Member, MemberJourney, User, Voluntariado, AreaVoluntariado, MemberMilestone, Perfil } = require('../models');
+const { sequelize, Member, MemberJourney, User, Voluntariado, AreaVoluntariado, Perfil } = require('../models');
 const { normalizeCpf } = require('../utils/cpf');
 
 const DEFAULT_MEMBER_PERFIL_ID = process.env.DEFAULT_MEMBER_PERFIL_ID || '7d47d03a-a7aa-4907-b8b9-8fcf87bd52dc';
@@ -31,14 +31,14 @@ const PublicVoluntariadoService = {
   },
 
   /**
-   * Cadastra voluntário publicamente.
+   * Cadastra voluntario publicamente.
    * - Busca membro por CPF ou e-mail
-   * - Se existir: atualiza dados básicos
-   * - Se não existir: cria Member + User (senha = telefone limpo)
-   * - Em ambos os casos: garante que User existe e está ativo
-   * - Vincula a uma ou mais áreas de voluntariado (status PENDENTE)
-   * - Registra marco VOLUNTARIADO por área
-   * - Se alguma área for BACKSTAGE: aplica perfil BACKSTAGE ao User
+   * - Se existir: atualiza dados basicos
+   * - Se nao existir: cria Member + User (senha = telefone limpo)
+   * - Em ambos os casos: garante que User existe e estÃ¡ ativo
+   * - Vincula a uma ou mais areas de voluntariado (status PENDENTE)
+   * - O marco VOLUNTARIADO e criado somente na aprovacao do vÃ­nculo
+   * - Se alguma area for BACKSTAGE: aplica perfil BACKSTAGE ao User
    */
   async cadastrarVoluntario(dados) {
     const {
@@ -97,7 +97,7 @@ const PublicVoluntariadoService = {
     const transaction = await sequelize.transaction();
 
     try {
-      // ── 1. Localizar membro existente ──────────────────────
+      // -- 1. Localizar membro existente ----------------------
       const conditions = [];
       if (cpfLimpo) conditions.push({ cpf: cpfLimpo });
       if (email) conditions.push({ email: email.toLowerCase().trim() });
@@ -109,7 +109,7 @@ const PublicVoluntariadoService = {
       let user = null;
 
       if (member) {
-        // ── 2a. Membro existe — atualiza dados básicos ─────────
+        // -- 2a. Membro existe - atualiza dados basicos --------â”€
         await member.update({
           fullName,
           preferredName: preferredName || member.preferredName,
@@ -118,12 +118,12 @@ const PublicVoluntariadoService = {
           birthDate: birthDate || member.birthDate
         }, { transaction });
 
-        // Garante que o usuário vinculado existe e está ativo
+        // Garante que o usuario vinculado existe e estÃ¡ ativo
         if (member.userId) {
           user = await User.findByPk(member.userId, { transaction });
           if (user) {
             const updates = { active: true };
-            // Se o usuário não tem senha, define o telefone como senha agora
+            // Se o usuario nao tem senha, define o telefone como senha agora
             if (!user.salt || !user.passwordHash) {
               const salt = crypto.randomBytes(16).toString('hex');
               updates.salt = salt;
@@ -133,7 +133,7 @@ const PublicVoluntariadoService = {
           }
         }
 
-        // Se ainda não tem usuário, cria agora
+        // Se ainda nao tem usuario, cria agora
         if (!user) {
           const salt = crypto.randomBytes(16).toString('hex');
           const passwordHash = hashSHA256WithSalt(senha, salt);
@@ -153,15 +153,15 @@ const PublicVoluntariadoService = {
           await member.update({ userId: user.id }, { transaction });
         }
       } else {
-        // ── 2b. Membro não existe — localiza ou cria User, depois cria Member ──
+        // -- 2b. Membro nao existe - localiza ou cria User, depois cria Member --
 
-        // Verifica se já existe usuário com o mesmo email
+        // Verifica se jÃ¡ existe usuario com o mesmo email
         if (email) {
           user = await User.findOne({ where: { email: email.toLowerCase().trim() }, transaction });
         }
 
         if (user) {
-          // Usuário já existe: atualiza dados e garante senha/ativo
+          // Usuario jÃ¡ existe: atualiza dados e garante senha/ativo
           const updates = {
             name: fullName,
             telefone: phoneLimpo || user.telefone,
@@ -212,7 +212,7 @@ const PublicVoluntariadoService = {
         }, { transaction });
       }
 
-      // ── 3. Vincular às áreas de voluntariado ───────────────
+      // -- 3. Vincular as areas de voluntariado --------------â”€
       const voluntariados = await Voluntariado.bulkCreate(
         selectedAreas.map((area) => ({
           memberId: member.id,
@@ -222,17 +222,6 @@ const PublicVoluntariadoService = {
           status: 'PENDENTE'
         })),
         { transaction, returning: true }
-      );
-
-      await MemberMilestone.bulkCreate(
-        selectedAreas.map((area) => ({
-          memberId: member.id,
-          milestoneType: 'VOLUNTARIADO',
-          achievedDate: dataInicio,
-          description: `Voluntariado em ${area.nome}`,
-          createdBy: null
-        })),
-        { transaction }
       );
 
       const hasBackstage = selectedAreas.some((area) => String(area.nome || '').toUpperCase() === 'BACKSTAGE');
@@ -251,7 +240,7 @@ const PublicVoluntariadoService = {
         status: 'PENDENTE',
         area: selectedAreas[0]?.nome || null,
         areas: selectedAreas.map((area) => area.nome),
-        mensagem: 'Cadastro realizado com sucesso. Aguardando aprovação.'
+        mensagem: 'Cadastro realizado com sucesso. Aguardando aprovacao.'
       };
     } catch (err) {
       await transaction.rollback();
