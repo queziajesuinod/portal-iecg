@@ -5,6 +5,7 @@ const batchController = require('../controllers/batchController');
 const couponController = require('../controllers/couponController');
 const formFieldController = require('../controllers/formFieldController');
 const registrationController = require('../controllers/registrationController');
+const registrationRuleController = require('../controllers/registrationRuleController');
 const paymentOptionController = require('../controllers/paymentOptionController');
 const housingController = require('../controllers/housingController');
 const teamsController = require('../controllers/teamsController');
@@ -37,6 +38,11 @@ router.post('/form-fields/batch', formFieldController.criarEmLote);
 router.put('/form-fields/:id', formFieldController.atualizar);
 router.delete('/form-fields/:id', formFieldController.remover);
 
+// ============= REGRAS DE BLOQUEIO (ANTES DE /:id) =============
+router.post('/registration-rules', registrationRuleController.criar);
+router.put('/registration-rules/:id', registrationRuleController.atualizar);
+router.delete('/registration-rules/:id', registrationRuleController.remover);
+
 // ============= FORMAS DE PAGAMENTO (ANTES DE /:id) =============
 router.put('/payment-options/:id', paymentOptionController.atualizar);
 router.delete('/payment-options/:id', paymentOptionController.deletar);
@@ -66,6 +72,7 @@ router.delete('/:id', eventController.remover);
 // ============= ROTAS COM :eventId (DEPOIS DE /:id) =============
 router.get('/:eventId/batches', batchController.listarPorEvento);
 router.get('/:eventId/form-fields', formFieldController.listarPorEvento);
+router.get('/:eventId/registration-rules', registrationRuleController.listarPorEvento);
 router.get('/:eventId/payment-options', paymentOptionController.listarPorEvento);
 router.post('/:eventId/payment-options', paymentOptionController.criar);
 router.get('/:eventId/registrations', registrationController.listarPorEvento);

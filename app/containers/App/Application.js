@@ -39,6 +39,7 @@ import FormBuilder from '../Pages/Events/FormBuilder';
 import RegistrationDetails from '../Pages/Events/RegistrationDetails';
 import EventHousing from '../Pages/Events/EventHousing';
 import EventTeams from '../Pages/Events/EventTeams';
+import RegistrationRules from '../Pages/Events/RegistrationRules';
 import FinancialPage from '../Pages/Financial/FinancialPage';
 import RegistroCultoList from '../Pages/Cultos/RegistroCultoList';
 import RegistroCultoForm from '../Pages/Cultos/RegistroCultoForm';
@@ -111,6 +112,7 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/cupons" component={CouponsPage} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/financeiro" component={FinancialPage} isAuthenticated={isAuthenticated} requiredPermission="EVENTS_ACESS" />
             <ProtectedRoute exact path="/app/events/:id/formulario" component={FormBuilder} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/events/:id/regras-inscricao" component={RegistrationRules} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/registrations/:id" component={RegistrationDetails} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/:id/housing" component={EventHousing} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/:id/teams" component={EventTeams} isAuthenticated={isAuthenticated} />
