@@ -1267,6 +1267,17 @@ function EventDetails() {
             <Button
               fullWidth
               variant="outlined"
+              color="error"
+              startIcon={<BlockIcon />}
+              onClick={() => history.push(`/app/events/${id}/regras-inscricao`)}
+            >
+              Regras de Bloqueio
+            </Button>
+          </Grid>
+          <Grid item xs={12} sm={6} md="auto">
+            <Button
+              fullWidth
+              variant="outlined"
               startIcon={<BedIcon />}
               onClick={() => history.push(`/app/events/${id}/housing`)}
             >

@@ -3,7 +3,9 @@
     "allow": [
       "Bash(grep -l \"fetchWithAuth\\\\|import axios\" c:/Users/Quezia/Projetos/portal-iecg/app/api/*.js)",
       "Bash(grep -n \"import axios\\\\|const fetchWithAuth\" c:/Users/Quezia/Projetos/portal-iecg/app/api/*.js)",
-      "Bash(ls -la /c/Users/Quezia/Projetos/portal-iecg/*.json)"
+      "Bash(ls -la /c/Users/Quezia/Projetos/portal-iecg/*.json)",
+      "Bash(grep -l \"ENUM\\\\|JSONB\\\\|JSON\" /c/Users/Quezia/Projetos/portal-iecg/server/migrations/*.js)",
+      "Bash(xargs grep:*)"
     ]
   }
 }

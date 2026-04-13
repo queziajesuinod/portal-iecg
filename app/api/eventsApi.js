@@ -141,6 +141,24 @@ export const deletarPagamentoInscricao = (id, paymentId) => fetchWithAuth(`${API
   method: 'DELETE'
 });
 
+// ===== REGRAS DE BLOQUEIO DE INSCRIÇÃO =====
+
+export const listarRegrasPorEvento = (eventId) => fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/registration-rules`);
+
+export const criarRegraBloquio = (dados) => fetchWithAuth(`${API_URL}/api/admin/events/registration-rules`, {
+  method: 'POST',
+  body: JSON.stringify(dados),
+});
+
+export const atualizarRegraBloquio = (id, dados) => fetchWithAuth(`${API_URL}/api/admin/events/registration-rules/${id}`, {
+  method: 'PUT',
+  body: JSON.stringify(dados),
+});
+
+export const deletarRegraBloquio = (id) => fetchWithAuth(`${API_URL}/api/admin/events/registration-rules/${id}`, {
+  method: 'DELETE',
+});
+
 export const recalcularStatusInscricao = (id) => fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}/recalculate-status`, {
   method: 'POST'
 });

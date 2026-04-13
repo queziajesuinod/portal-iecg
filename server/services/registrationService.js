@@ -20,6 +20,7 @@ const orderCodeService = require('./orderCodeService');
 const batchService = require('./batchService');
 const couponService = require('./couponService');
 const formFieldService = require('./formFieldService');
+const registrationRuleService = require('./registrationRuleService');
 const paymentService = require('./paymentService');
 const efiService = require('./efiService');
 const eventService = require('./eventService');
@@ -583,6 +584,9 @@ async function processarInscricao(dadosInscricao) {
   const validacoes = attendeesData.map(attendee => formFieldService.validarDadosFormulario(eventId, attendee.data || attendee, 'attendee')
   );
   await Promise.all(validacoes);
+
+  // 6.1. Avaliar regras de bloqueio configuradas pelo organizador
+  await registrationRuleService.avaliarRegrasDeBloquio(eventId, buyerData, attendeesData);
 
   // 7. Gerar código único de pedido
   const orderCode = await orderCodeService.gerarCodigoUnico();
