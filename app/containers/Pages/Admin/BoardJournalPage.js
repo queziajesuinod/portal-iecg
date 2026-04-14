@@ -3,9 +3,9 @@ import { Helmet } from 'react-helmet';
 import {
   ContentState,
   EditorState,
-  convertFromHTML,
   convertToRaw
 } from 'draft-js';
+import htmlToDraft from 'html-to-draftjs';
 import draftToHtml from 'draftjs-to-html';
 import { Editor } from 'react-draft-wysiwyg';
 import 'react-draft-wysiwyg/dist/react-draft-wysiwyg.css';
@@ -135,12 +135,19 @@ function getChallengeTypeLabel(challengeType) {
 function createEditorStateFromHtml(value) {
   const html = String(value || '').trim();
   if (!html) return EditorState.createEmpty();
-  const blocks = convertFromHTML(html);
-  const contentState = ContentState.createFromBlockArray(
-    blocks.contentBlocks,
-    blocks.entityMap
-  );
-  return EditorState.createWithContent(contentState);
+  try {
+    const { contentBlocks, entityMap } = htmlToDraft(html);
+    if (!contentBlocks || contentBlocks.length === 0) {
+      return EditorState.createEmpty();
+    }
+    const contentState = ContentState.createFromBlockArray(
+      contentBlocks,
+      entityMap
+    );
+    return EditorState.createWithContent(contentState);
+  } catch {
+    return EditorState.createEmpty();
+  }
 }
 
 function sanitizeRichHtml(value) {
@@ -167,6 +174,7 @@ function BoardJournalPage() {
   const [myStats, setMyStats] = useState(null);
   const [submissionTarget, setSubmissionTarget] = useState(null);
   const [submissionOpen, setSubmissionOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [submissionForm, setSubmissionForm] = useState({
     responseText: '',
     responseFileUrl: '',
@@ -282,7 +290,38 @@ function BoardJournalPage() {
     setSubmissionOpen(true);
   };
 
+  const validateSubmission = () => {
+    const type = submissionTarget?.challengeType;
+    if (type === 'file') {
+      if (!submissionForm.responseFileUrl?.trim()) return 'Informe o link do arquivo antes de enviar.';
+    } else if (type === 'question') {
+      if (!submissionForm.responseText?.trim()) return 'Selecione uma resposta antes de enviar.';
+    } else if (type === 'text') {
+      const raw = convertToRaw(textEditorState.getCurrentContent());
+      const plain = raw.blocks.map((b) => b.text).join('').trim();
+      if (!plain) return 'Escreva sua resposta antes de enviar.';
+    } else if (type === 'form' || type === 'lesson') {
+      const schema = submissionTarget.formSchema || [];
+      for (const field of schema) {
+        if (!field.required) continue;
+        const val = submissionForm.responsePayload?.[field.name];
+        if (field.type === 'checkbox') continue; // checkboxes não são obrigatórios no sentido convencional
+        if (val === undefined || val === null || String(val).trim() === '') {
+          return `O campo "${field.label}" é obrigatório.`;
+        }
+      }
+    }
+    return null;
+  };
+
   const sendSubmission = async () => {
+    if (submitting) return;
+    const validationError = validateSubmission();
+    if (validationError) {
+      setNotification(validationError);
+      return;
+    }
+    setSubmitting(true);
     try {
       const responseText = submissionTarget.challengeType === 'text'
         ? draftToHtml(convertToRaw(textEditorState.getCurrentContent()))
@@ -296,11 +335,16 @@ function BoardJournalPage() {
         responseFileUrl: submissionForm.responseFileUrl,
         responsePayload: submissionForm.responsePayload
       });
+      const sentChallengeId = submissionTarget.id;
       setNotification('Resposta enviada');
       setSubmissionOpen(false);
+      setTab(1);
+      setExpandedResponseId(sentChallengeId);
       loadData();
     } catch (error) {
       setNotification(error.message || 'Erro ao enviar resposta');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -859,7 +903,7 @@ function BoardJournalPage() {
                         </Grid>
                         <Grid item xs={6}>
                           <Box sx={{ p: 1.5, borderRadius: 2, backgroundColor: '#F5F8FC' }}>
-                            <Typography variant="caption" color="textSecondary">Pendentes</Typography>
+                            <Typography variant="caption" color="textSecondary">Em aberto</Typography>
                             <Typography variant="h4" sx={{ fontWeight: 800 }}>{availableChallenges}</Typography>
                           </Box>
                         </Grid>
@@ -2044,7 +2088,7 @@ function BoardJournalPage() {
             )}
           </PapperBlock>
 
-          <Dialog open={submissionOpen} onClose={() => setSubmissionOpen(false)} fullWidth maxWidth="md">
+          <Dialog open={submissionOpen} onClose={() => { setSubmissionOpen(false); setSubmitting(false); }} fullWidth maxWidth="md">
             <DialogTitle sx={{ pb: 1 }}>
               {submissionTarget
                 ? (myByChallenge[submissionTarget.id]?.status === 'pending'
@@ -2083,9 +2127,9 @@ function BoardJournalPage() {
               </Box>
             </DialogContent>
             <DialogActions>
-              <Button onClick={() => setSubmissionOpen(false)}>Cancelar</Button>
-              <Button variant="contained" onClick={sendSubmission} sx={{ borderRadius: 999, px: 3 }}>
-            Enviar
+              <Button onClick={() => setSubmissionOpen(false)} disabled={submitting}>Cancelar</Button>
+              <Button variant="contained" onClick={sendSubmission} disabled={submitting} sx={{ borderRadius: 999, px: 3 }}>
+                {submitting ? 'Enviando...' : 'Enviar'}
               </Button>
             </DialogActions>
           </Dialog>

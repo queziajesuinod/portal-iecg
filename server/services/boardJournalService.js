@@ -1302,7 +1302,7 @@ async function getPendingSubmissions(filters = {}) {
       challengeInclude,
       { model: User, as: 'user', attributes: ['id', 'name', 'email'] }
     ],
-    order: [['submittedAt', 'DESC']]
+    order: [['submittedAt', 'ASC']]
   });
   return records.map((record) => serializeSubmission(record, pointsByUser));
 }

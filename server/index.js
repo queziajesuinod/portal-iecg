@@ -18,6 +18,8 @@ const app = express();
 const bodyParser = require('body-parser');
 const WebhookController = require('./controllers/webhookController');
 const pixPendingJob = require('./jobs/pixPendingRegistrationsJob');
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./swagger');
 const singlePaymentStatusJob = require('./jobs/singlePaymentStatusSyncJob');
 const cache = require('./utils/cache');
 const customHost = argv.host || process.env.HOST;
@@ -70,7 +72,27 @@ app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 app.use(express.json());
 
-// Rotas públicas
+// ============= SWAGGER UI =============
+// Disponível em /api-docs — sem autenticação para acesso à documentação
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  swaggerOptions: {
+    persistAuthorization: true, // mantém o token ao navegar entre abas
+    tryItOutEnabled: true,
+  },
+  customSiteTitle: 'Portal IECG — API Docs',
+  customCss: `
+    .swagger-ui .topbar { background: #1565c0; }
+    .swagger-ui .topbar-wrapper img { display: none; }
+    .swagger-ui .topbar-wrapper::before {
+      content: 'Portal IECG — API';
+      color: white;
+      font-size: 18px;
+      font-weight: bold;
+    }
+  `,
+}));
+
+// ============= ROTAS PÚBLICAS =============
 app.use('/auth', require('./routers/auth'));
 app.post('/webhooks/events', WebhookController.sendEvent);
 // Rotas protegidas
