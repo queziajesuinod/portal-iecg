@@ -3,9 +3,9 @@ import { Helmet } from 'react-helmet';
 import {
   ContentState,
   EditorState,
-  convertFromHTML,
   convertToRaw
 } from 'draft-js';
+import htmlToDraft from 'html-to-draftjs';
 import draftToHtml from 'draftjs-to-html';
 import { PapperBlock, Notification } from 'dan-components';
 import {
@@ -235,16 +235,20 @@ function sanitizeRichHtml(value) {
 
 function createEditorStateFromHtml(value) {
   const html = String(value || '').trim();
-  if (!html) {
+  if (!html) return EditorState.createEmpty();
+  try {
+    const { contentBlocks, entityMap } = htmlToDraft(html);
+    if (!contentBlocks || contentBlocks.length === 0) {
+      return EditorState.createEmpty();
+    }
+    const contentState = ContentState.createFromBlockArray(
+      contentBlocks,
+      entityMap
+    );
+    return EditorState.createWithContent(contentState);
+  } catch {
     return EditorState.createEmpty();
   }
-
-  const blocks = convertFromHTML(html);
-  const contentState = ContentState.createFromBlockArray(
-    blocks.contentBlocks,
-    blocks.entityMap
-  );
-  return EditorState.createWithContent(contentState);
 }
 
 function getChallengeTypeLabel(challengeType) {
