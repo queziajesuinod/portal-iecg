@@ -15,6 +15,8 @@ async function listRecords(req, res) {
     const perPage = Math.min(Math.max(parseInt(req.query.perPage, 10) || 10, 1), 100);
     const expensePage = Math.max(parseInt(req.query.expensePage, 10) || 1, 1);
     const expensePerPage = Math.min(Math.max(parseInt(req.query.expensePerPage, 10) || 10, 1), 100);
+    const manualEntryPage = Math.max(parseInt(req.query.manualEntryPage, 10) || 1, 1);
+    const manualEntryPerPage = Math.min(Math.max(parseInt(req.query.manualEntryPerPage, 10) || 10, 1), 100);
 
     const filters = {
       dateFrom: normalizeQueryValue(req.query.dateFrom),
@@ -24,7 +26,17 @@ async function listRecords(req, res) {
       page,
       perPage,
       expensePage,
-      expensePerPage
+      expensePerPage,
+      manualEntryPage,
+      manualEntryPerPage,
+      expenseDateFrom: normalizeQueryValue(req.query.expenseDateFrom),
+      expenseDateTo: normalizeQueryValue(req.query.expenseDateTo),
+      expenseEventId: normalizeQueryValue(req.query.expenseEventId),
+      expenseIsSettled: normalizeQueryValue(req.query.expenseIsSettled),
+      manualEntryDateFrom: normalizeQueryValue(req.query.manualEntryDateFrom),
+      manualEntryDateTo: normalizeQueryValue(req.query.manualEntryDateTo),
+      manualEntryEventId: normalizeQueryValue(req.query.manualEntryEventId),
+      manualEntryIsSettled: normalizeQueryValue(req.query.manualEntryIsSettled)
     };
 
     const result = await financialService.listFinancialRecords(filters);
@@ -99,6 +111,35 @@ async function exportExpenses(req, res) {
   }
 }
 
+async function createManualEntry(req, res) {
+  try {
+    const userId = req.user?.userId || req.user?.id || null;
+    const entry = await financialService.createManualEntry(req.body, userId);
+    res.status(201).json(entry);
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Erro ao criar entrada manual' });
+  }
+}
+
+async function updateManualEntry(req, res) {
+  try {
+    const userId = req.user?.userId || req.user?.id || null;
+    const entry = await financialService.updateManualEntry(req.params.id, req.body, userId);
+    res.status(200).json(entry);
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Erro ao atualizar entrada manual' });
+  }
+}
+
+async function deleteManualEntry(req, res) {
+  try {
+    await financialService.deleteManualEntry(req.params.id);
+    res.status(204).send();
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Erro ao remover entrada manual' });
+  }
+}
+
 module.exports = {
   listRecords,
   exportExpenses,
@@ -106,5 +147,8 @@ module.exports = {
   updateFeeConfig,
   createExpense,
   updateExpense,
-  deleteExpense
+  deleteExpense,
+  createManualEntry,
+  updateManualEntry,
+  deleteManualEntry
 };

@@ -38,6 +38,8 @@ import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import LinkIcon from '@mui/icons-material/Link';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import brand from 'dan-api/dummy/brand';
 import { listarEventos } from '../../../api/eventsApi';
 import {
@@ -47,7 +49,10 @@ import {
   criarSaidaFinanceira,
   deletarSaidaFinanceira,
   exportarSaidasFinanceiras,
-  listarRegistrosFinanceiros
+  listarRegistrosFinanceiros,
+  criarEntradaManual,
+  atualizarEntradaManual,
+  deletarEntradaManual
 } from '../../../api/financialApi';
 import * as XLSX from 'xlsx';
 import {
@@ -117,7 +122,19 @@ const defaultForm = () => ({
   quitacaoPaymentMethod: 'pix',
   quitacaoDate: getTodayDateInputValue(),
   quitacaoIsSettled: false,
-  notes: ''
+  notes: '',
+  receiptUrl: ''
+});
+
+const defaultManualEntryForm = () => ({
+  eventId: '',
+  description: '',
+  amount: '',
+  paymentMethod: 'pix',
+  isSettled: false,
+  entryDate: getTodayDateInputValue(),
+  notes: '',
+  receiptUrl: ''
 });
 
 function FinancialPage() {
@@ -132,6 +149,20 @@ function FinancialPage() {
   const [expensesPage, setExpensesPage] = useState(0);
   const [expensesRowsPerPage, setExpensesRowsPerPage] = useState(10);
   const [expensesTotal, setExpensesTotal] = useState(0);
+  const [manualEntries, setManualEntries] = useState([]);
+  const [manualEntriesPage, setManualEntriesPage] = useState(0);
+  const [manualEntriesRowsPerPage, setManualEntriesRowsPerPage] = useState(10);
+  const [manualEntriesTotal, setManualEntriesTotal] = useState(0);
+  const [manualEntryFormOpen, setManualEntryFormOpen] = useState(false);
+  const [savingManualEntry, setSavingManualEntry] = useState(false);
+  const [editingManualEntryId, setEditingManualEntryId] = useState(null);
+  const [manualEntryForm, setManualEntryForm] = useState(defaultManualEntryForm());
+  const [manualEntryFilters, setManualEntryFilters] = useState({
+    dateFrom: '',
+    dateTo: '',
+    eventId: '',
+    isSettled: ''
+  });
   const [feeConfig, setFeeConfig] = useState({
     pixPercent: 0,
     pixFixedFee: 0,
@@ -246,7 +277,10 @@ function FinancialPage() {
     perPage = entriesRowsPerPage,
     expensePage = expensesPage,
     expensePerPage = expensesRowsPerPage,
-    currentExpenseFilters = expenseFilters
+    currentExpenseFilters = expenseFilters,
+    manualEntryPage = manualEntriesPage,
+    manualEntryPerPage = manualEntriesRowsPerPage,
+    currentManualEntryFilters = manualEntryFilters
   ) => {
     try {
       setLoading(true);
@@ -262,13 +296,21 @@ function FinancialPage() {
         expenseDateFrom: currentExpenseFilters.dateFrom || undefined,
         expenseDateTo: currentExpenseFilters.dateTo || undefined,
         expenseEventId: currentExpenseFilters.eventId || undefined,
-        expenseIsSettled: currentExpenseFilters.isSettled || undefined
+        expenseIsSettled: currentExpenseFilters.isSettled || undefined,
+        manualEntryPage: manualEntryPage + 1,
+        manualEntryPerPage,
+        manualEntryDateFrom: currentManualEntryFilters.dateFrom || undefined,
+        manualEntryDateTo: currentManualEntryFilters.dateTo || undefined,
+        manualEntryEventId: currentManualEntryFilters.eventId || undefined,
+        manualEntryIsSettled: currentManualEntryFilters.isSettled || undefined
       };
       const response = await listarRegistrosFinanceiros(params);
       setEntries(response?.entries || []);
       setEntriesTotal(Number(response?.entriesPagination?.total || 0));
       setExpenses(response?.expenses || []);
       setExpensesTotal(Number(response?.expensesPagination?.total || 0));
+      setManualEntries(response?.manualEntries || []);
+      setManualEntriesTotal(Number(response?.manualEntriesPagination?.total || 0));
       setSummary(response?.summary || {});
       if (response?.feeConfig) {
         setFeeConfig({
@@ -300,7 +342,7 @@ function FinancialPage() {
 
   const handleApplyFilters = () => {
     setEntriesPage(0);
-    loadData(filters, 0, entriesRowsPerPage, expensesPage, expensesRowsPerPage, expenseFilters);
+    loadData(filters, 0, entriesRowsPerPage, expensesPage, expensesRowsPerPage, expenseFilters, manualEntriesPage, manualEntriesRowsPerPage, manualEntryFilters);
   };
 
   const handleClearFilters = () => {
@@ -312,7 +354,7 @@ function FinancialPage() {
     };
     setFilters(reset);
     setEntriesPage(0);
-    loadData(reset, 0, entriesRowsPerPage, expensesPage, expensesRowsPerPage, expenseFilters);
+    loadData(reset, 0, entriesRowsPerPage, expensesPage, expensesRowsPerPage, expenseFilters, manualEntriesPage, manualEntriesRowsPerPage, manualEntryFilters);
   };
 
   const handleExpenseFilterChange = (field, value) => {
@@ -321,14 +363,30 @@ function FinancialPage() {
 
   const handleApplyExpenseFilters = () => {
     setExpensesPage(0);
-    loadData(filters, entriesPage, entriesRowsPerPage, 0, expensesRowsPerPage, expenseFilters);
+    loadData(filters, entriesPage, entriesRowsPerPage, 0, expensesRowsPerPage, expenseFilters, manualEntriesPage, manualEntriesRowsPerPage, manualEntryFilters);
   };
 
   const handleClearExpenseFilters = () => {
     const reset = { dateFrom: '', dateTo: '', eventId: '', isSettled: '' };
     setExpenseFilters(reset);
     setExpensesPage(0);
-    loadData(filters, entriesPage, entriesRowsPerPage, 0, expensesRowsPerPage, reset);
+    loadData(filters, entriesPage, entriesRowsPerPage, 0, expensesRowsPerPage, reset, manualEntriesPage, manualEntriesRowsPerPage, manualEntryFilters);
+  };
+
+  const handleManualEntryFilterChange = (field, value) => {
+    setManualEntryFilters((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleApplyManualEntryFilters = () => {
+    setManualEntriesPage(0);
+    loadData(filters, entriesPage, entriesRowsPerPage, expensesPage, expensesRowsPerPage, expenseFilters, 0, manualEntriesRowsPerPage, manualEntryFilters);
+  };
+
+  const handleClearManualEntryFilters = () => {
+    const reset = { dateFrom: '', dateTo: '', eventId: '', isSettled: '' };
+    setManualEntryFilters(reset);
+    setManualEntriesPage(0);
+    loadData(filters, entriesPage, entriesRowsPerPage, expensesPage, expensesRowsPerPage, expenseFilters, 0, manualEntriesRowsPerPage, reset);
   };
 
   const PAYMENT_METHOD_LABELS_MAP = PAYMENT_METHOD_OPTIONS.reduce((acc, o) => { acc[o.value] = o.label; return acc; }, {});
@@ -361,6 +419,7 @@ function FinancialPage() {
             'Quitacao Paga': e.quitacaoIsSettled ? 'Sim' : 'Nao',
             Situacao: (e.entradaIsSettled && e.quitacaoIsSettled) ? 'Quitado' : 'Pendente',
             Observacao: e.notes || '',
+            'Comprovante/NF': e.receiptUrl || '',
             'Criado Por': e.createdBy || '-'
           };
         }
@@ -382,6 +441,7 @@ function FinancialPage() {
           'Forma Pagamento': PAYMENT_METHOD_LABELS_MAP[e.paymentMethod] || e.paymentMethod || '-',
           'Data Saida': e.expenseDate || '-',
           Observacao: e.notes || '',
+          'Comprovante/NF': e.receiptUrl || '',
           'Criado Por': e.createdBy || '-'
         };
       });
@@ -401,26 +461,38 @@ function FinancialPage() {
 
   const handleEntriesPageChange = (_event, newPage) => {
     setEntriesPage(newPage);
-    loadData(filters, newPage, entriesRowsPerPage, expensesPage, expensesRowsPerPage);
+    loadData(filters, newPage, entriesRowsPerPage, expensesPage, expensesRowsPerPage, expenseFilters, manualEntriesPage, manualEntriesRowsPerPage, manualEntryFilters);
   };
 
   const handleEntriesRowsPerPageChange = (event) => {
     const newRowsPerPage = parseInt(event.target.value, 10);
     setEntriesRowsPerPage(newRowsPerPage);
     setEntriesPage(0);
-    loadData(filters, 0, newRowsPerPage, expensesPage, expensesRowsPerPage);
+    loadData(filters, 0, newRowsPerPage, expensesPage, expensesRowsPerPage, expenseFilters, manualEntriesPage, manualEntriesRowsPerPage, manualEntryFilters);
   };
 
   const handleExpensesPageChange = (_event, newPage) => {
     setExpensesPage(newPage);
-    loadData(filters, entriesPage, entriesRowsPerPage, newPage, expensesRowsPerPage, expenseFilters);
+    loadData(filters, entriesPage, entriesRowsPerPage, newPage, expensesRowsPerPage, expenseFilters, manualEntriesPage, manualEntriesRowsPerPage, manualEntryFilters);
   };
 
   const handleExpensesRowsPerPageChange = (event) => {
     const newRowsPerPage = parseInt(event.target.value, 10);
     setExpensesRowsPerPage(newRowsPerPage);
     setExpensesPage(0);
-    loadData(filters, entriesPage, entriesRowsPerPage, 0, newRowsPerPage, expenseFilters);
+    loadData(filters, entriesPage, entriesRowsPerPage, 0, newRowsPerPage, expenseFilters, manualEntriesPage, manualEntriesRowsPerPage, manualEntryFilters);
+  };
+
+  const handleManualEntriesPageChange = (_event, newPage) => {
+    setManualEntriesPage(newPage);
+    loadData(filters, entriesPage, entriesRowsPerPage, expensesPage, expensesRowsPerPage, expenseFilters, newPage, manualEntriesRowsPerPage, manualEntryFilters);
+  };
+
+  const handleManualEntriesRowsPerPageChange = (event) => {
+    const newRowsPerPage = parseInt(event.target.value, 10);
+    setManualEntriesRowsPerPage(newRowsPerPage);
+    setManualEntriesPage(0);
+    loadData(filters, entriesPage, entriesRowsPerPage, expensesPage, expensesRowsPerPage, expenseFilters, 0, newRowsPerPage, manualEntryFilters);
   };
 
   const handleFeeConfigChange = (field, value) => {
@@ -484,7 +556,7 @@ function FinancialPage() {
       await atualizarConfiguracaoTaxasFinanceiras(payload);
       setNotification('Configuracao de taxas salva com sucesso');
       setFeeConfigModalOpen(false);
-      loadData(filters, entriesPage, entriesRowsPerPage, expensesPage, expensesRowsPerPage);
+      loadData(filters, entriesPage, entriesRowsPerPage, expensesPage, expensesRowsPerPage, expenseFilters, manualEntriesPage, manualEntriesRowsPerPage, manualEntryFilters);
     } catch (error) {
       console.error('Erro ao salvar configuracao de taxas:', error);
       setNotification(error.message || 'Erro ao salvar configuracao de taxas');
@@ -522,7 +594,8 @@ function FinancialPage() {
       quitacaoPaymentMethod: pt === 'com_entrada' ? (expense.quitacaoPaymentMethod || 'pix') : 'pix',
       quitacaoDate: pt === 'com_entrada' ? (expense.quitacaoDate || getTodayDateInputValue()) : getTodayDateInputValue(),
       quitacaoIsSettled: pt === 'com_entrada' ? Boolean(expense.quitacaoIsSettled) : false,
-      notes: expense.notes || ''
+      notes: expense.notes || '',
+      receiptUrl: expense.receiptUrl || ''
     });
     setFormOpen(true);
   };
@@ -574,7 +647,8 @@ function FinancialPage() {
           quitacaoDate: form.quitacaoDate,
           quitacaoIsSettled: Boolean(form.quitacaoIsSettled),
           supplier: form.supplier || '',
-          notes: form.notes
+          notes: form.notes,
+          receiptUrl: form.receiptUrl || null
         }
         : {
           eventId: form.eventId,
@@ -585,7 +659,8 @@ function FinancialPage() {
           isSettled: Boolean(form.isSettled),
           expenseDate: form.expenseDate,
           supplier: form.supplier || '',
-          notes: form.notes
+          notes: form.notes,
+          receiptUrl: form.receiptUrl || null
         };
 
       if (editingExpenseId) {
@@ -597,7 +672,7 @@ function FinancialPage() {
       }
 
       closeFormDialog();
-      loadData(filters, entriesPage, entriesRowsPerPage, expensesPage, expensesRowsPerPage);
+      loadData(filters, entriesPage, entriesRowsPerPage, expensesPage, expensesRowsPerPage, expenseFilters, manualEntriesPage, manualEntriesRowsPerPage, manualEntryFilters);
     } catch (error) {
       console.error('Erro ao salvar saida:', error);
       setNotification(error.message || 'Erro ao salvar saida');
@@ -614,10 +689,92 @@ function FinancialPage() {
     try {
       await deletarSaidaFinanceira(expense.id);
       setNotification('Saida removida com sucesso');
-      loadData(filters, entriesPage, entriesRowsPerPage, expensesPage, expensesRowsPerPage);
+      loadData(filters, entriesPage, entriesRowsPerPage, expensesPage, expensesRowsPerPage, expenseFilters, manualEntriesPage, manualEntriesRowsPerPage, manualEntryFilters);
     } catch (error) {
       console.error('Erro ao remover Saida:', error);
       setNotification(error.message || 'Erro ao remover Saida');
+    }
+  };
+
+  const openNewManualEntryDialog = () => {
+    setEditingManualEntryId(null);
+    setManualEntryForm(defaultManualEntryForm());
+    setManualEntryFormOpen(true);
+  };
+
+  const openEditManualEntryDialog = (entry) => {
+    setEditingManualEntryId(entry.id);
+    setManualEntryForm({
+      eventId: entry.eventId || '',
+      description: entry.description || '',
+      amount: entry.amount ?? '',
+      paymentMethod: entry.paymentMethod || 'pix',
+      isSettled: Boolean(entry.isSettled),
+      entryDate: entry.entryDate || getTodayDateInputValue(),
+      notes: entry.notes || '',
+      receiptUrl: entry.receiptUrl || ''
+    });
+    setManualEntryFormOpen(true);
+  };
+
+  const closeManualEntryDialog = () => {
+    if (savingManualEntry) return;
+    setManualEntryFormOpen(false);
+    setEditingManualEntryId(null);
+  };
+
+  const saveManualEntry = async () => {
+    if (!String(manualEntryForm.description || '').trim()) {
+      setNotification('Informe a descricao da entrada');
+      return;
+    }
+    if (Number(manualEntryForm.amount) <= 0) {
+      setNotification('Informe um valor maior que zero');
+      return;
+    }
+
+    try {
+      setSavingManualEntry(true);
+      const payload = {
+        eventId: manualEntryForm.eventId || null,
+        description: manualEntryForm.description,
+        amount: Number(manualEntryForm.amount),
+        paymentMethod: manualEntryForm.paymentMethod,
+        isSettled: Boolean(manualEntryForm.isSettled),
+        entryDate: manualEntryForm.entryDate,
+        notes: manualEntryForm.notes || null,
+        receiptUrl: manualEntryForm.receiptUrl || null
+      };
+
+      if (editingManualEntryId) {
+        await atualizarEntradaManual(editingManualEntryId, payload);
+        setNotification('Entrada manual atualizada com sucesso');
+      } else {
+        await criarEntradaManual(payload);
+        setNotification('Entrada manual cadastrada com sucesso');
+      }
+
+      closeManualEntryDialog();
+      loadData(filters, entriesPage, entriesRowsPerPage, expensesPage, expensesRowsPerPage, expenseFilters, manualEntriesPage, manualEntriesRowsPerPage, manualEntryFilters);
+    } catch (error) {
+      console.error('Erro ao salvar entrada manual:', error);
+      setNotification(error.message || 'Erro ao salvar entrada manual');
+    } finally {
+      setSavingManualEntry(false);
+    }
+  };
+
+  const removeManualEntry = async (entry) => {
+    if (!window.confirm(`Deseja remover a entrada "${entry.description}"?`)) {
+      return;
+    }
+    try {
+      await deletarEntradaManual(entry.id);
+      setNotification('Entrada manual removida com sucesso');
+      loadData(filters, entriesPage, entriesRowsPerPage, expensesPage, expensesRowsPerPage, expenseFilters, manualEntriesPage, manualEntriesRowsPerPage, manualEntryFilters);
+    } catch (error) {
+      console.error('Erro ao remover entrada manual:', error);
+      setNotification(error.message || 'Erro ao remover entrada manual');
     }
   };
 
@@ -644,7 +801,8 @@ function FinancialPage() {
           quitacaoDate: expense.quitacaoDate,
           quitacaoIsSettled: settleQuitacao,
           supplier: expense.supplier || '',
-          notes: expense.notes || ''
+          notes: expense.notes || '',
+          receiptUrl: expense.receiptUrl || null
         };
       } else {
         payload = {
@@ -656,13 +814,14 @@ function FinancialPage() {
           isSettled: true,
           expenseDate: expense.expenseDate,
           supplier: expense.supplier || '',
-          notes: expense.notes || ''
+          notes: expense.notes || '',
+          receiptUrl: expense.receiptUrl || null
         };
       }
 
       await atualizarSaidaFinanceira(expense.id, payload);
       setNotification('Saida atualizada');
-      loadData(filters, entriesPage, entriesRowsPerPage, expensesPage, expensesRowsPerPage);
+      loadData(filters, entriesPage, entriesRowsPerPage, expensesPage, expensesRowsPerPage, expenseFilters, manualEntriesPage, manualEntriesRowsPerPage, manualEntryFilters);
     } catch (error) {
       console.error('Erro ao marcar saida como quitada:', error);
       setNotification(error.message || 'Erro ao marcar saida como quitada');
@@ -679,60 +838,75 @@ function FinancialPage() {
 
       <Grid container spacing={2} style={{ marginBottom: 16 }}>
         <Grid item xs={12} sm={6} md={2}>
-          <Card>
-            <CardContent>
+          <Card sx={{ height: '100%' }}>
+            <CardContent sx={{ minHeight: 110 }}>
               <Typography variant="body2" color="textSecondary">Entradas Brutas</Typography>
               <Typography variant="h6">{formatCurrency(summary.ticketGross)}</Typography>
+              <Typography variant="caption" display="block" color="textSecondary">&nbsp;</Typography>
+              <Typography variant="caption" display="block" color="textSecondary">&nbsp;</Typography>
               <TrendingUpIcon color="primary" />
             </CardContent>
           </Card>
         </Grid>
         <Grid item xs={12} sm={6} md={2}>
-          <Card>
-            <CardContent>
+          <Card sx={{ height: '100%' }}>
+            <CardContent sx={{ minHeight: 110 }}>
               <Typography variant="body2" color="textSecondary">Taxa Lojista</Typography>
               <Typography variant="h6">{formatCurrency(summary.totalFees || summary.cieloFees)}</Typography>
               <Typography variant="caption" display="block" color="textSecondary">
                 Taxa bruta (cartao/PIX): {formatCurrency(summary.processorFees || summary.cieloFees)}
               </Typography>
+              <Typography variant="caption" display="block" color="textSecondary">&nbsp;</Typography>
               <ReceiptIcon color="warning" />
             </CardContent>
           </Card>
         </Grid>
         <Grid item xs={12} sm={6} md={2}>
-          <Card>
-            <CardContent>
+          <Card sx={{ height: '100%' }}>
+            <CardContent sx={{ minHeight: 110 }}>
               <Typography variant="body2" color="textSecondary">Entradas Liquidas</Typography>
-              <Typography variant="h6">{formatCurrency(summary.ticketNet)}</Typography>
+              <Typography variant="h6">{formatCurrency(summary.totalNet)}</Typography>
+              <Typography variant="caption" display="block" color="textSecondary">
+                Tickets: {formatCurrency(summary.ticketNet)}
+              </Typography>
+              <Typography variant="caption" display="block" color="textSecondary">
+                Manuais: {formatCurrency(summary.manualEntriesSettled || 0)}
+              </Typography>
               <PaidIcon color="success" />
             </CardContent>
           </Card>
         </Grid>
         <Grid item xs={12} sm={6} md={2}>
-          <Card>
-            <CardContent>
+          <Card sx={{ height: '100%' }}>
+            <CardContent sx={{ minHeight: 110 }}>
               <Typography variant="body2" color="textSecondary">Saidas Pagas</Typography>
               <Typography variant="h6">{formatCurrency(summary.expensesSettled)}</Typography>
+              <Typography variant="caption" display="block" color="textSecondary">&nbsp;</Typography>
+              <Typography variant="caption" display="block" color="textSecondary">&nbsp;</Typography>
               <TrendingDownIcon color="error" />
             </CardContent>
           </Card>
         </Grid>
         <Grid item xs={12} sm={6} md={2}>
-          <Card>
-            <CardContent>
+          <Card sx={{ height: '100%' }}>
+            <CardContent sx={{ minHeight: 110 }}>
               <Typography variant="body2" color="textSecondary">Saidas Pendentes</Typography>
               <Typography variant="h6">{formatCurrency(summary.expensesPending)}</Typography>
+              <Typography variant="caption" display="block" color="textSecondary">&nbsp;</Typography>
+              <Typography variant="caption" display="block" color="textSecondary">&nbsp;</Typography>
               <TrendingDownIcon color="disabled" />
             </CardContent>
           </Card>
         </Grid>
         <Grid item xs={12} sm={6} md={2}>
-          <Card>
-            <CardContent>
+          <Card sx={{ height: '100%' }}>
+            <CardContent sx={{ minHeight: 110 }}>
               <Typography variant="body2" color="textSecondary">Saldo</Typography>
               <Typography variant="h6" color={(summary.balance || 0) >= 0 ? 'primary' : 'error'}>
                 {formatCurrency(summary.balance)}
               </Typography>
+              <Typography variant="caption" display="block" color="textSecondary">&nbsp;</Typography>
+              <Typography variant="caption" display="block" color="textSecondary">&nbsp;</Typography>
               <AttachMoneyIcon color={(summary.balance || 0) >= 0 ? 'success' : 'error'} />
             </CardContent>
           </Card>
@@ -885,6 +1059,163 @@ function FinancialPage() {
         )}
 
         <Box style={{ marginTop: 32, marginBottom: 8 }}>
+          <Typography variant="h6" style={{ marginBottom: 12 }}>Entradas Manuais</Typography>
+
+          <Grid container spacing={2} alignItems="flex-end" style={{ marginBottom: 8 }}>
+            <Grid item xs={12} sm={6} md={3}>
+              <TextField
+                label="Data inicial (entradas manuais)"
+                type="date"
+                fullWidth
+                value={manualEntryFilters.dateFrom}
+                InputLabelProps={{ shrink: true }}
+                onChange={(event) => handleManualEntryFilterChange('dateFrom', event.target.value)}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <TextField
+                label="Data final (entradas manuais)"
+                type="date"
+                fullWidth
+                value={manualEntryFilters.dateTo}
+                InputLabelProps={{ shrink: true }}
+                onChange={(event) => handleManualEntryFilterChange('dateTo', event.target.value)}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <FormControl fullWidth>
+                <InputLabel id="manual-entry-filter-event-label">Evento</InputLabel>
+                <Select
+                  labelId="manual-entry-filter-event-label"
+                  value={manualEntryFilters.eventId}
+                  label="Evento"
+                  onChange={(event) => handleManualEntryFilterChange('eventId', event.target.value)}
+                >
+                  <MenuItem value="">Todos</MenuItem>
+                  {events.map((event) => (
+                    <MenuItem key={event.id} value={event.id}>{event.title}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <FormControl fullWidth>
+                <InputLabel id="manual-entry-filter-settled-label">Situacao</InputLabel>
+                <Select
+                  labelId="manual-entry-filter-settled-label"
+                  value={manualEntryFilters.isSettled}
+                  label="Situacao"
+                  onChange={(event) => handleManualEntryFilterChange('isSettled', event.target.value)}
+                >
+                  <MenuItem value="">Todas</MenuItem>
+                  <MenuItem value="false">Pendente</MenuItem>
+                  <MenuItem value="true">Recebido</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <Box display="flex" gap={1}>
+                <Button variant="contained" color="primary" onClick={handleApplyManualEntryFilters}>
+                  Filtrar
+                </Button>
+                <Button variant="outlined" onClick={handleClearManualEntryFilters}>
+                  Limpar
+                </Button>
+              </Box>
+            </Grid>
+          </Grid>
+
+          <Box display="flex" justifyContent="flex-end" style={{ marginBottom: 8 }}>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={openNewManualEntryDialog}
+            >
+              Nova Entrada Manual
+            </Button>
+          </Box>
+        </Box>
+
+        {loading ? (
+          <Typography>Carregando entradas manuais...</Typography>
+        ) : manualEntries.length === 0 ? (
+          <Typography>Nenhuma entrada manual cadastrada.</Typography>
+        ) : (
+          <>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Evento</TableCell>
+                  <TableCell>Descricao</TableCell>
+                  <TableCell>Valor</TableCell>
+                  <TableCell>Forma de Pagamento</TableCell>
+                  <TableCell>Data</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Comprovante</TableCell>
+                  <TableCell align="center">Acoes</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {manualEntries.map((entry) => (
+                  <TableRow key={entry.id}>
+                    <TableCell>{entry.eventTitle || '-'}</TableCell>
+                    <TableCell>{entry.description}</TableCell>
+                    <TableCell>{formatCurrency(entry.amount)}</TableCell>
+                    <TableCell>{getPaymentMethodLabel(entry.paymentMethod)}</TableCell>
+                    <TableCell>{formatDate(entry.entryDate)}</TableCell>
+                    <TableCell>
+                      <Chip
+                        size="small"
+                        label={entry.isSettled ? 'Recebido' : 'Pendente'}
+                        color={entry.isSettled ? 'success' : 'warning'}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {entry.receiptUrl ? (
+                        <Tooltip title="Abrir comprovante">
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            component="a"
+                            href={entry.receiptUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <OpenInNewIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      ) : '-'}
+                    </TableCell>
+                    <TableCell align="center">
+                      <Tooltip title="Editar Entrada">
+                        <IconButton size="small" onClick={() => openEditManualEntryDialog(entry)}>
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Excluir Entrada">
+                        <IconButton size="small" color="error" onClick={() => removeManualEntry(entry)}>
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <TablePagination
+              component="div"
+              count={manualEntriesTotal}
+              page={manualEntriesPage}
+              onPageChange={handleManualEntriesPageChange}
+              rowsPerPage={manualEntriesRowsPerPage}
+              onRowsPerPageChange={handleManualEntriesRowsPerPageChange}
+              rowsPerPageOptions={[10, 20, 50]}
+            />
+          </>
+        )}
+
+        <Box style={{ marginTop: 32, marginBottom: 8 }}>
           <Typography variant="h6" style={{ marginBottom: 12 }}>Saidas</Typography>
 
           <Grid container spacing={2} alignItems="flex-end" style={{ marginBottom: 8 }}>
@@ -988,6 +1319,7 @@ function FinancialPage() {
                   <TableCell>Forma de Pagamento</TableCell>
                   <TableCell>Data</TableCell>
                   <TableCell>Status</TableCell>
+                  <TableCell>Comprovante</TableCell>
                   <TableCell align="center">Acoes</TableCell>
                 </TableRow>
               </TableHead>
@@ -1102,6 +1434,22 @@ function FinancialPage() {
                           )}
                         </Box>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      {expense.receiptUrl ? (
+                        <Tooltip title="Abrir comprovante/NF">
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            component="a"
+                            href={expense.receiptUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <OpenInNewIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      ) : '-'}
                     </TableCell>
                     <TableCell align="center">
                       <Tooltip title="Editar Saida">
@@ -1489,12 +1837,133 @@ function FinancialPage() {
                 onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
               />
             </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Link do Comprovante / Nota Fiscal"
+                placeholder="https://..."
+                value={form.receiptUrl}
+                InputProps={{ startAdornment: <LinkIcon fontSize="small" style={{ marginRight: 8, color: '#888' }} /> }}
+                onChange={(event) => setForm((prev) => ({ ...prev, receiptUrl: event.target.value }))}
+              />
+            </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
           <Button onClick={closeFormDialog} disabled={saving}>Cancelar</Button>
           <Button onClick={saveExpense} variant="contained" color="primary" disabled={saving}>
             {editingExpenseId ? 'Atualizar' : 'Salvar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={manualEntryFormOpen} onClose={closeManualEntryDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>{editingManualEntryId ? 'Editar Entrada Manual' : 'Nova Entrada Manual'}</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} style={{ marginTop: 4 }}>
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel id="manual-entry-event-label">Evento (opcional)</InputLabel>
+                <Select
+                  labelId="manual-entry-event-label"
+                  value={manualEntryForm.eventId}
+                  label="Evento (opcional)"
+                  onChange={(event) => setManualEntryForm((prev) => ({ ...prev, eventId: event.target.value }))}
+                >
+                  <MenuItem value="">Nenhum</MenuItem>
+                  {activeEvents.map((event) => (
+                    <MenuItem key={event.id} value={event.id}>
+                      {event.title}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Descricao"
+                required
+                value={manualEntryForm.description}
+                onChange={(event) => setManualEntryForm((prev) => ({ ...prev, description: event.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                type="number"
+                label="Valor"
+                required
+                value={manualEntryForm.amount}
+                inputProps={{ min: 0, step: 0.01 }}
+                onChange={(event) => setManualEntryForm((prev) => ({ ...prev, amount: event.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel id="manual-entry-pm-label">Forma de Pagamento</InputLabel>
+                <Select
+                  labelId="manual-entry-pm-label"
+                  value={manualEntryForm.paymentMethod}
+                  label="Forma de Pagamento"
+                  onChange={(event) => setManualEntryForm((prev) => ({ ...prev, paymentMethod: event.target.value }))}
+                >
+                  {PAYMENT_METHOD_OPTIONS.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                type="date"
+                label="Data da Entrada"
+                InputLabelProps={{ shrink: true }}
+                value={manualEntryForm.entryDate}
+                onChange={(event) => setManualEntryForm((prev) => ({ ...prev, entryDate: event.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel id="manual-entry-settled-label">Situacao</InputLabel>
+                <Select
+                  labelId="manual-entry-settled-label"
+                  value={manualEntryForm.isSettled ? 'yes' : 'no'}
+                  label="Situacao"
+                  onChange={(event) => setManualEntryForm((prev) => ({ ...prev, isSettled: event.target.value === 'yes' }))}
+                >
+                  <MenuItem value="yes">Recebido</MenuItem>
+                  <MenuItem value="no">Pendente</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                multiline
+                minRows={2}
+                label="Observacao"
+                value={manualEntryForm.notes}
+                onChange={(event) => setManualEntryForm((prev) => ({ ...prev, notes: event.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Link do Comprovante"
+                placeholder="https://..."
+                value={manualEntryForm.receiptUrl}
+                InputProps={{ startAdornment: <LinkIcon fontSize="small" style={{ marginRight: 8, color: '#888' }} /> }}
+                onChange={(event) => setManualEntryForm((prev) => ({ ...prev, receiptUrl: event.target.value }))}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeManualEntryDialog} disabled={savingManualEntry}>Cancelar</Button>
+          <Button onClick={saveManualEntry} variant="contained" color="primary" disabled={savingManualEntry}>
+            {editingManualEntryId ? 'Atualizar' : 'Salvar'}
           </Button>
         </DialogActions>
       </Dialog>

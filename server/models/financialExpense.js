@@ -102,6 +102,10 @@ module.exports = (sequelize) => {
       type: DataTypes.TEXT,
       allowNull: true
     },
+    receiptUrl: {
+      type: DataTypes.STRING(500),
+      allowNull: true
+    },
     createdBy: {
       type: DataTypes.UUID,
       allowNull: true

@@ -14,5 +14,8 @@ router.get('/expenses/export', financialController.exportExpenses);
 router.post('/expenses', financialController.createExpense);
 router.put('/expenses/:id', financialController.updateExpense);
 router.delete('/expenses/:id', financialController.deleteExpense);
+router.post('/manual-entries', financialController.createManualEntry);
+router.put('/manual-entries/:id', financialController.updateManualEntry);
+router.delete('/manual-entries/:id', financialController.deleteManualEntry);
 
 module.exports = router;

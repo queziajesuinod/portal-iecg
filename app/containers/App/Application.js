@@ -126,8 +126,8 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/cultos/admin/campus-ministerios" component={CampusMinisteriosPage} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/cultos/admin/ministros" component={MinistrosPage} isAuthenticated={isAuthenticated} />
             {/* ===== Módulo: Voluntariado ===== */}
-            <ProtectedRoute exact path="/app/voluntariado/areas" component={AreaVoluntariadoPage} isAuthenticated={isAuthenticated} />
-            <ProtectedRoute exact path="/app/voluntariado" component={VoluntariadoPage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/voluntariado/areas" component={AreaVoluntariadoPage} isAuthenticated={isAuthenticated} requiredPermission="VOLUNTARIADO" />
+            <ProtectedRoute exact path="/app/voluntariado" component={VoluntariadoPage} isAuthenticated={isAuthenticated} requiredPermission="VOLUNTARIADO" />
           </Switch>
         </Dashboard>
       </Route>
