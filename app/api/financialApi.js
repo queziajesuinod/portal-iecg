@@ -56,3 +56,17 @@ export const exportarSaidasFinanceiras = (params = {}) => {
   const query = new URLSearchParams(filteredParams).toString();
   return fetchWithAuth(`${API_URL}/api/admin/financial/expenses/export${query ? `?${query}` : ''}`);
 };
+
+export const criarEntradaManual = (dados) => fetchWithAuth(`${API_URL}/api/admin/financial/manual-entries`, {
+  method: 'POST',
+  body: JSON.stringify(dados)
+});
+
+export const atualizarEntradaManual = (id, dados) => fetchWithAuth(`${API_URL}/api/admin/financial/manual-entries/${id}`, {
+  method: 'PUT',
+  body: JSON.stringify(dados)
+});
+
+export const deletarEntradaManual = (id) => fetchWithAuth(`${API_URL}/api/admin/financial/manual-entries/${id}`, {
+  method: 'DELETE'
+});

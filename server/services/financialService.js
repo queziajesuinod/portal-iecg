@@ -4,6 +4,7 @@ const {
   Registration,
   Event,
   FinancialExpense,
+  FinancialManualEntry,
   FinancialFeeConfig,
   User
 } = require('../models');
@@ -344,6 +345,7 @@ async function normalizeExpensePayload(payload = {}) {
 
   const notes = payload.notes ? String(payload.notes).trim() : null;
   const supplier = payload.supplier ? String(payload.supplier).trim() : null;
+  const receiptUrl = payload.receiptUrl ? String(payload.receiptUrl).trim() : null;
   const paymentType = payload.paymentType === 'com_entrada' ? 'com_entrada' : 'unico';
 
   if (paymentType === 'com_entrada') {
@@ -404,7 +406,8 @@ async function normalizeExpensePayload(payload = {}) {
       quitacaoDate: parsedQuitacaoDate.format('YYYY-MM-DD'),
       quitacaoIsSettled,
       quitacaoSettledAt: quitacaoIsSettled ? now() : null,
-      supplier
+      supplier,
+      receiptUrl
     };
   }
 
@@ -451,7 +454,8 @@ async function normalizeExpensePayload(payload = {}) {
     quitacaoDate: null,
     quitacaoIsSettled: false,
     quitacaoSettledAt: null,
-    supplier
+    supplier,
+    receiptUrl
   };
 }
 
@@ -464,12 +468,20 @@ async function listFinancialRecords(filters = {}) {
   const expensePage = Math.max(Number(filters.expensePage) || 1, 1);
   const expensePerPage = Math.min(Math.max(Number(filters.expensePerPage) || 10, 1), 100);
   const expenseOffset = (expensePage - 1) * expensePerPage;
+  const manualEntryPage = Math.max(Number(filters.manualEntryPage) || 1, 1);
+  const manualEntryPerPage = Math.min(Math.max(Number(filters.manualEntryPerPage) || 10, 1), 100);
+  const manualEntryOffset = (manualEntryPage - 1) * manualEntryPerPage;
   const paymentDateFilter = buildDateRange('createdAt', filters.dateFrom, filters.dateTo, { dateOnly: false });
 
   // filtros específicos de saídas (se fornecidos, substituem os globais para expenses)
   const expDateFrom = normalizeOptionalValue(filters.expenseDateFrom) || filters.dateFrom;
   const expDateTo = normalizeOptionalValue(filters.expenseDateTo) || filters.dateTo;
   const expenseDateFilter = buildDateRange('expenseDate', expDateFrom, expDateTo, { dateOnly: true });
+
+  // filtros específicos de entradas manuais
+  const manualEntryDateFrom = normalizeOptionalValue(filters.manualEntryDateFrom) || filters.dateFrom;
+  const manualEntryDateTo = normalizeOptionalValue(filters.manualEntryDateTo) || filters.dateTo;
+  const manualEntryDateFilter = buildDateRange('entryDate', manualEntryDateFrom, manualEntryDateTo, { dateOnly: true });
 
   const registrationWhere = {};
   const normalizedEventId = normalizeOptionalValue(filters.eventId);
@@ -478,6 +490,7 @@ async function listFinancialRecords(filters = {}) {
   }
   const normalizedPaymentMethod = normalizeOptionalValue(filters.paymentMethod);
   const normalizedExpenseEventId = normalizeOptionalValue(filters.expenseEventId) || normalizedEventId;
+  const normalizedManualEntryEventId = normalizeOptionalValue(filters.manualEntryEventId) || normalizedEventId;
 
   const summaryPaymentWhere = {
     status: 'confirmed',
@@ -491,17 +504,29 @@ async function listFinancialRecords(filters = {}) {
     ...expenseDateFilter
   };
 
+  const manualEntryWhere = {
+    ...manualEntryDateFilter
+  };
+
   if (normalizedPaymentMethod && ALLOWED_PAYMENT_METHODS.includes(normalizedPaymentMethod)) {
     summaryPaymentWhere.method = normalizedPaymentMethod;
     entriesPaymentWhere.method = normalizedPaymentMethod;
     expenseWhere.paymentMethod = normalizedPaymentMethod;
+    manualEntryWhere.paymentMethod = normalizedPaymentMethod;
   }
   if (normalizedExpenseEventId) {
     expenseWhere.eventId = normalizedExpenseEventId;
   }
+  if (normalizedManualEntryEventId) {
+    manualEntryWhere.eventId = normalizedManualEntryEventId;
+  }
   const expenseIsSettled = normalizeOptionalValue(filters.expenseIsSettled);
   if (expenseIsSettled === 'true') expenseWhere.isSettled = true;
   else if (expenseIsSettled === 'false') expenseWhere.isSettled = false;
+
+  const manualEntryIsSettled = normalizeOptionalValue(filters.manualEntryIsSettled);
+  if (manualEntryIsSettled === 'true') manualEntryWhere.isSettled = true;
+  else if (manualEntryIsSettled === 'false') manualEntryWhere.isSettled = false;
 
   // Usado para o resumo financeiro total (não paginado)
   const paymentsForSummary = await RegistrationPayment.findAll({
@@ -616,6 +641,42 @@ async function listFinancialRecords(filters = {}) {
     order: [['expenseDate', 'DESC'], ['createdAt', 'DESC']]
   });
 
+  const manualEntriesForSummary = await FinancialManualEntry.findAll({
+    where: manualEntryWhere,
+    attributes: ['id', 'amount', 'isSettled']
+  });
+
+  const paginatedManualEntries = await FinancialManualEntry.findAndCountAll({
+    where: manualEntryWhere,
+    include: [
+      { model: Event, as: 'event', attributes: ['id', 'title'] },
+      { model: User, as: 'creator', attributes: ['id', 'name'] },
+      { model: User, as: 'updater', attributes: ['id', 'name'] }
+    ],
+    order: [['entryDate', 'DESC'], ['createdAt', 'DESC']],
+    limit: manualEntryPerPage,
+    offset: manualEntryOffset,
+    distinct: true
+  });
+
+  const normalizedManualEntries = paginatedManualEntries.rows.map((entry) => ({
+    id: entry.id,
+    eventId: entry.eventId || null,
+    eventTitle: entry.event?.title || '-',
+    description: entry.description,
+    amount: toMoney(entry.amount),
+    paymentMethod: entry.paymentMethod,
+    isSettled: Boolean(entry.isSettled),
+    entryDate: entry.entryDate,
+    settledAt: entry.settledAt,
+    notes: entry.notes,
+    receiptUrl: entry.receiptUrl || null,
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+    createdBy: entry.creator ? { id: entry.creator.id, name: entry.creator.name } : null,
+    updatedBy: entry.updater ? { id: entry.updater.id, name: entry.updater.name } : null
+  }));
+
   const paginatedExpenses = await FinancialExpense.findAndCountAll({
     where: expenseWhere,
     include: [
@@ -652,6 +713,7 @@ async function listFinancialRecords(filters = {}) {
     quitacaoIsSettled: Boolean(expense.quitacaoIsSettled),
     quitacaoSettledAt: expense.quitacaoSettledAt || null,
     supplier: expense.supplier || null,
+    receiptUrl: expense.receiptUrl || null,
     createdAt: expense.createdAt,
     updatedAt: expense.updatedAt,
     createdBy: expense.creator ? { id: expense.creator.id, name: expense.creator.name } : null,
@@ -716,6 +778,19 @@ async function listFinancialRecords(filters = {}) {
     expensesTotal: 0
   });
 
+  const manualEntryTotals = manualEntriesForSummary.reduce((acc, entry) => {
+    const amount = toMoney(entry.amount);
+    if (entry.isSettled) {
+      acc.settled += amount;
+    } else {
+      acc.pending += amount;
+    }
+    acc.total += amount;
+    return acc;
+  }, { settled: 0, pending: 0, total: 0 });
+
+  const totalIncome = toMoney(ticketNet + manualEntryTotals.settled);
+
   return {
     summary: {
       ticketGross: ticketGrossTotal,
@@ -723,10 +798,14 @@ async function listFinancialRecords(filters = {}) {
       customerFees,
       processorFees,
       ticketNet,
+      manualEntriesSettled: toMoney(manualEntryTotals.settled),
+      manualEntriesPending: toMoney(manualEntryTotals.pending),
+      manualEntriesTotal: toMoney(manualEntryTotals.total),
+      totalNet: toMoney(totalIncome),
       expensesSettled: toMoney(expenseTotals.expensesSettled),
       expensesPending: toMoney(expenseTotals.expensesPending),
       expensesTotal: toMoney(expenseTotals.expensesTotal),
-      balance: toMoney(ticketNet - expenseTotals.expensesSettled)
+      balance: toMoney(totalIncome - expenseTotals.expensesSettled)
     },
     entries: ticketEntries,
     entriesPagination: {
@@ -734,6 +813,13 @@ async function listFinancialRecords(filters = {}) {
       perPage,
       total: Number(paginatedPayments.count || 0),
       totalPages: Math.ceil(Number(paginatedPayments.count || 0) / perPage)
+    },
+    manualEntries: normalizedManualEntries,
+    manualEntriesPagination: {
+      page: manualEntryPage,
+      perPage: manualEntryPerPage,
+      total: Number(paginatedManualEntries.count || 0),
+      totalPages: Math.ceil(Number(paginatedManualEntries.count || 0) / manualEntryPerPage)
     },
     expensesPagination: {
       page: expensePage,
@@ -839,9 +925,91 @@ async function getExpensesForExport(filters = {}) {
     quitacaoIsSettled: Boolean(e.quitacaoIsSettled),
     supplier: e.supplier || '',
     notes: e.notes || '',
+    receiptUrl: e.receiptUrl || null,
     createdBy: e.creator?.name || '-',
     createdAt: e.createdAt
   }));
+}
+
+async function normalizeManualEntryPayload(payload = {}) {
+  const description = String(payload.description || '').trim();
+  if (!description) {
+    throw new Error('Descricao e obrigatoria');
+  }
+
+  const amount = toMoney(payload.amount);
+  if (amount <= 0) {
+    throw new Error('Valor deve ser maior que zero');
+  }
+
+  const eventId = normalizeOptionalValue(payload.eventId) || null;
+  if (eventId) {
+    const event = await Event.findByPk(eventId, { attributes: ['id'] });
+    if (!event) {
+      throw new Error('Evento invalido para a entrada');
+    }
+  }
+
+  const paymentMethod = String(payload.paymentMethod || '').trim() || 'pix';
+  if (!ALLOWED_PAYMENT_METHODS.includes(paymentMethod)) {
+    throw new Error('Forma de pagamento invalida');
+  }
+
+  let { entryDate } = payload;
+  if (!entryDate) {
+    entryDate = todayDateOnly();
+  }
+  const parsedEntryDate = parseDateOnly(entryDate);
+  if (!parsedEntryDate) {
+    throw new Error('Data da entrada invalida');
+  }
+
+  const isSettled = Boolean(payload.isSettled);
+  const notes = payload.notes ? String(payload.notes).trim() : null;
+  const receiptUrl = payload.receiptUrl ? String(payload.receiptUrl).trim() : null;
+
+  return {
+    description,
+    amount,
+    eventId,
+    paymentMethod,
+    isSettled,
+    entryDate: parsedEntryDate.format('YYYY-MM-DD'),
+    settledAt: isSettled ? now() : null,
+    notes,
+    receiptUrl
+  };
+}
+
+async function createManualEntry(payload = {}, userId = null) {
+  const normalized = await normalizeManualEntryPayload(payload);
+  const entry = await FinancialManualEntry.create({
+    ...normalized,
+    createdBy: userId,
+    updatedBy: userId
+  });
+  return entry;
+}
+
+async function updateManualEntry(id, payload = {}, userId = null) {
+  const entry = await FinancialManualEntry.findByPk(id);
+  if (!entry) {
+    throw new Error('Entrada manual nao encontrada');
+  }
+  const normalized = await normalizeManualEntryPayload(payload);
+  await entry.update({
+    ...normalized,
+    updatedBy: userId
+  });
+  return entry;
+}
+
+async function deleteManualEntry(id) {
+  const entry = await FinancialManualEntry.findByPk(id);
+  if (!entry) {
+    throw new Error('Entrada manual nao encontrada');
+  }
+  await entry.destroy();
 }
 
 module.exports = {
@@ -851,5 +1019,8 @@ module.exports = {
   updateFeeConfig,
   createExpense,
   updateExpense,
-  deleteExpense
+  deleteExpense,
+  createManualEntry,
+  updateManualEntry,
+  deleteManualEntry
 };

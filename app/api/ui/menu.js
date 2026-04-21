@@ -168,13 +168,15 @@ module.exports = [
         key: 'voluntariadoLista',
         name: 'Voluntários',
         link: '/app/voluntariado',
-        icon: 'ion-ios-people-outline'
+        icon: 'ion-ios-people-outline',
+        permission: 'VOLUNTARIADO'
       },
       {
         key: 'voluntariadoAreas',
         name: 'Áreas de Voluntariado',
         link: '/app/voluntariado/areas',
-        icon: 'ion-ios-list-box-outline'
+        icon: 'ion-ios-list-box-outline',
+        permission: 'VOLUNTARIADO'
       }
     ]
   },
