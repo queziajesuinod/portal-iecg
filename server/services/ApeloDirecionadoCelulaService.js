@@ -1030,6 +1030,75 @@ class ApeloDirecionadoCelulaService {
       ]
     });
   }
+
+  async listarPendentesDirecionamento(filtro = {}) {
+    const where = {
+      status: { [Op.in]: ['DIRECIONADO_COM_SUCESSO', 'EM_CONSOLIDACAO'] }
+    };
+
+    if (filtro.id) {
+      where.id = filtro.id;
+    }
+    if (filtro.nome) {
+      where.nome = { [Op.iLike]: `%${filtro.nome}%` };
+    }
+    if (filtro.whatsapp) {
+      const sufixos = this._sufixosWhatsapp(this._normalizarWhatsappComparacao(filtro.whatsapp));
+      if (sufixos.length) {
+        where[Op.and] = [
+          where[Op.and],
+          {
+            [Op.or]: sufixos.map((sufixo) => Sequelize.where(
+              Sequelize.fn('regexp_replace', Sequelize.fn('coalesce', Sequelize.col('whatsapp'), ''), '\\D', '', 'g'),
+              { [Op.like]: `%${sufixo}` }
+            ))
+          }
+        ];
+      }
+    }
+
+    return ApeloDirecionadoCelula.findAll({
+      where,
+      order: [['data_direcionamento', 'ASC']],
+      include: [
+        {
+          model: Celula,
+          as: 'celulaAtual',
+          attributes: ['id', 'celula', 'rede', 'lider', 'cel_lider', 'dia', 'horario', 'bairro', 'campus']
+        }
+      ]
+    });
+  }
+
+  async atualizarStatusPublico(id, { status, motivo } = {}) {
+    if (!status) throw new Error('status é obrigatório');
+
+    const item = await this.buscarPorId(id);
+    const statusAnterior = item.status;
+
+    if (statusAnterior === status) {
+      throw new Error('O status informado é igual ao status atual');
+    }
+
+    return ApeloDirecionadoCelula.sequelize.transaction(async (transaction) => {
+      await item.update({ status }, { transaction });
+
+      await ApeloDirecionadoHistorico.create({
+        apelo_id: item.id,
+        status_anterior: statusAnterior || null,
+        status_novo: status,
+        data_movimento: new Date(),
+        tipo_evento: 'STATUS',
+        motivo: motivo || null
+      }, { transaction });
+
+      if (status === 'CONSOLIDADO_CELULA') {
+        await this._processarConsolidacaoDoApelo(item, transaction);
+      }
+
+      return item.reload({ transaction });
+    });
+  }
 }
 
 module.exports = new ApeloDirecionadoCelulaService();
