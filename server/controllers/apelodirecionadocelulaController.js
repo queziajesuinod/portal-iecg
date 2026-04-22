@@ -164,6 +164,30 @@ class ApeloDirecionadoCelulaController {
   async getStats(req, res) {
     return this.healthCheck(req, res);
   }
+
+  async listarPendentesDirecionamento(req, res) {
+    try {
+      const { id, nome, whatsapp } = req.query;
+      const lista = await ApeloDirecionadoCelulaService.listarPendentesDirecionamento({ id, nome, whatsapp });
+      return res.status(200).json(lista);
+    } catch (error) {
+      return res.status(500).json({ erro: 'Erro ao buscar registros' });
+    }
+  }
+
+  async atualizarStatusPublico(req, res) {
+    try {
+      const { id } = req.params;
+      const { status, motivo } = req.body;
+      if (!status) {
+        return res.status(400).json({ erro: 'status é obrigatório' });
+      }
+      const item = await ApeloDirecionadoCelulaService.atualizarStatusPublico(id, { status, motivo });
+      return res.status(200).json(item);
+    } catch (error) {
+      return res.status(400).json({ erro: error.message });
+    }
+  }
 }
 
 module.exports = new ApeloDirecionadoCelulaController();

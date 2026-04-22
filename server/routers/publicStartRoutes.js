@@ -9,6 +9,10 @@ const router = express.Router();
 
 // Rota publica para criar apelo direcionado (sem autenticacao)
 router.post('/direcionamentos', ApeloDirecionadoCelulaController.criar);
+// Lista apelos com status DIRECIONADO_COM_SUCESSO direcionados ha 3 dias
+router.get('/direcionamentos/pendentes', ApeloDirecionadoCelulaController.listarPendentesDirecionamento);
+// Atualiza status de um apelo e registra movimentacao (sem autenticacao)
+router.patch('/direcionamentos/:id/status', ApeloDirecionadoCelulaController.atualizarStatusPublico);
 // Rota publica para cadastrar uma celula (sem autenticacao)
 router.post('/celulas', CelulaPublicController.criar);
 // Rota publica de listagem de campus
