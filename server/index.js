@@ -52,6 +52,7 @@ const authMiddleware = (req, res, next) => {
 app.use(cors({
   origin: [
     'https://portal.iecg.com.br',
+    'https://start.iecg.com.br',
     'http://localhost:3000',
     'http://localhost:3005',
     'http://localhost:3007',
