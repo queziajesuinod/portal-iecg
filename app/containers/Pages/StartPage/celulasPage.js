@@ -618,6 +618,7 @@ const ListagemCelulasPage = () => {
 
   const statusConfig = {
     DIRECIONADO_COM_SUCESSO: { label: 'Direcionado', color: 'info' },
+    PRIMEIRO_CONTATO: { label: 'Primeiro Contato', color: 'default', sx: { bgcolor: '#0288d1', color: '#fff' } },
     ENVIO_LIDER_PENDENTE_WHATS_ERRADO: { label: 'Pendência de Envio para Líder', color: 'warning' },
     CONSOLIDADO_CELULA: { label: 'Consolidado na célula', color: 'success' },
     DIRECIONAMENTO_INCORRETO_REENVIO_PENDENTE: { label: 'Direcionamento incorreto', color: 'error' },

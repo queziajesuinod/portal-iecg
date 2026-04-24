@@ -413,8 +413,8 @@ class ApeloFilaService {
           {
             [Op.or]: [
               { status: null },
-              { status: { 
-                [Op.notIn]: ['DIRECIONADO_COM_SUCESSO', 'NAO_HAVERAR_DIRECIONAMENTO', 'CONSOLIDADO_CELULA'] 
+              { status: {
+                [Op.notIn]: ['DIRECIONADO_COM_SUCESSO', 'PRIMEIRO_CONTATO', 'NAO_HAVERAR_DIRECIONAMENTO', 'CONSOLIDADO_CELULA']
               }}
             ]
           }

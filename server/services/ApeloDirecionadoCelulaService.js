@@ -1033,7 +1033,7 @@ class ApeloDirecionadoCelulaService {
 
   async listarPendentesDirecionamento(filtro = {}) {
     const where = {
-      status: { [Op.in]: ['DIRECIONADO_COM_SUCESSO', 'EM_CONSOLIDACAO'] }
+      status: { [Op.in]: ['DIRECIONADO_COM_SUCESSO', 'PRIMEIRO_CONTATO', 'ENVIO_LIDER_PENDENTE', 'CONTATO_LIDER_SEM_RETORNO', 'EM_CONSOLIDACAO'] }
     };
 
     if (filtro.id) {
