@@ -85,6 +85,7 @@ const ApelosDirecionadosPage = () => {
   const [motivoStatus, setMotivoStatus] = useState('');
   const [sugestoes, setSugestoes] = useState([]);
   const [loadingSugestoes, setLoadingSugestoes] = useState(false);
+  const [limiteSugestoes, setLimiteSugestoes] = useState(5);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [detailApelo, setDetailApelo] = useState(null);
   const [detailForm, setDetailForm] = useState({
@@ -250,7 +251,7 @@ const ApelosDirecionadosPage = () => {
       distancia: haversine(parseFloat(coords.lat), parseFloat(coords.lon), parseFloat(c.lat), parseFloat(c.lon))
     }));
     calculadas.sort((a, b) => a.distancia - b.distancia);
-    setSugestoes(calculadas.slice(0, 5));
+    setSugestoes(calculadas);
     setLoadingSugestoes(false);
   };
 
@@ -259,6 +260,7 @@ const ApelosDirecionadosPage = () => {
     setCelulaDestinoId('');
     setMotivo('');
     setFiltroCelula('');
+    setLimiteSugestoes(5);
     setMoveDialogOpen(true);
     sugerirCelulasProximas(apelo);
   };
@@ -428,6 +430,7 @@ const ApelosDirecionadosPage = () => {
     APELO_CADASTRADO: { label: 'Novo', color: 'default' },
     NAO_HAVERAR_DIRECIONAMENTO: { label: 'Não direcionar para uma célula', color: 'error' },
     DIRECIONADO_COM_SUCESSO: { label: 'Direcionado', color: 'info' },
+    PRIMEIRO_CONTATO: { label: 'Primeiro Contato', color: 'default', sx: { bgcolor: '#0288d1', color: '#fff' } },
     ENVIO_LIDER_PENDENTE_WHATS_ERRADO: { label: 'Pendência de Envio para Líder', color: 'warning' },
     CONSOLIDADO_CELULA: { label: 'Consolidado na célula', color: 'success' },
     DIRECIONAMENTO_INCORRETO_REENVIO_PENDENTE: { label: 'Direcionamento incorreto', color: 'error' },
@@ -697,9 +700,16 @@ const ApelosDirecionadosPage = () => {
     return base;
   }, [apeloSelecionado, celulasRedeSemFiltro, apeloCoords]);
   const sugestoesFiltradas = useMemo(() => {
-    if (!filtroCelula) return sugestoes;
+    const filtradas = filtroCelula
+      ? sugestoes.filter((c) => normalizeSearchValue(c.celula).includes(normalizeSearchValue(filtroCelula)))
+      : sugestoes;
+    return filtradas.slice(0, limiteSugestoes);
+  }, [sugestoes, filtroCelula, limiteSugestoes]);
+
+  const totalSugestoesFiltradas = useMemo(() => {
+    if (!filtroCelula) return sugestoes.length;
     const termo = normalizeSearchValue(filtroCelula);
-    return sugestoes.filter((c) => normalizeSearchValue(c.celula).includes(termo));
+    return sugestoes.filter((c) => normalizeSearchValue(c.celula).includes(termo)).length;
   }, [sugestoes, filtroCelula]);
   const mostrarFallbackCelulas = !loadingSugestoes && sugestoes.length === 0 && celulasRedeOrdenadas.length > 0;
 
@@ -969,6 +979,17 @@ const ApelosDirecionadosPage = () => {
                 </Grid>
               ))}
             </Grid>
+            {!loadingSugestoes && limiteSugestoes < totalSugestoesFiltradas && (
+              <Box mt={1} display="flex" justifyContent="center">
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => setLimiteSugestoes((prev) => prev + 5)}
+                >
+                  Ver mais 5 sugestões
+                </Button>
+              </Box>
+            )}
             {mostrarFallbackCelulas && (
               <Box mt={2}>
                 <Typography variant="body2" gutterBottom>Lista completa da rede</Typography>
