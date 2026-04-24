@@ -924,7 +924,7 @@ class ApeloDirecionadoCelulaService {
     return ApeloDirecionadoCelula.sequelize.transaction(async (transaction) => {
       const atualizado = await item.update(dadosAtualizar, { transaction });
 
-      if (statusEnviado && statusNovo !== statusAnterior) {
+      if (statusEnviado && (statusNovo !== statusAnterior || motivoStatus)) {
         await ApeloDirecionadoHistorico.create({
           apelo_id: item.id,
           status_anterior: statusAnterior || null,
@@ -1075,10 +1075,6 @@ class ApeloDirecionadoCelulaService {
 
     const item = await this.buscarPorId(id);
     const statusAnterior = item.status;
-
-    if (statusAnterior === status) {
-      throw new Error('O status informado é igual ao status atual');
-    }
 
     return ApeloDirecionadoCelula.sequelize.transaction(async (transaction) => {
       await item.update({ status }, { transaction });
