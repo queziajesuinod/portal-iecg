@@ -35,6 +35,7 @@ export const updateBoardJournal = (journalId, data) => fetchWithAuth(`${BASE}/jo
 export const listSystemUsers = () => fetchWithAuth(`${API_URL}/users`);
 export const requestBoardJournalAccess = (journalId, note) => fetchWithAuth(`${BASE}/journals/${journalId}/request-access`, { method: 'POST', body: JSON.stringify({ note }) });
 export const listBoardJournalMembers = (journalId) => fetchWithAuth(`${BASE}/journals/${journalId}/members`);
+export const addBoardJournalMemberManually = (journalId, email, note) => fetchWithAuth(`${BASE}/journals/${journalId}/members/manual`, { method: 'POST', body: JSON.stringify({ email, note }) });
 export const approveBoardJournalMember = (journalId, memberId, note) => fetchWithAuth(`${BASE}/journals/${journalId}/members/${memberId}/approve`, { method: 'PUT', body: JSON.stringify({ note }) });
 export const rejectBoardJournalMember = (journalId, memberId, note) => fetchWithAuth(`${BASE}/journals/${journalId}/members/${memberId}/reject`, { method: 'PUT', body: JSON.stringify({ note }) });
 export const deleteBoardJournalMember = (journalId, memberId) => fetchWithAuth(`${BASE}/journals/${journalId}/members/${memberId}`, { method: 'DELETE' });

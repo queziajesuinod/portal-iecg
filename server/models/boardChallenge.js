@@ -91,7 +91,11 @@ module.exports = (sequelize) => {
     },
     createdBy: {
       type: DataTypes.UUID,
-      allowNull: false
+      allowNull: true
+    },
+    createdByEmail: {
+      type: DataTypes.STRING(255),
+      allowNull: true
     }
   }, {
     sequelize,

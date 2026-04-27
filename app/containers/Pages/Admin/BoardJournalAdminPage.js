@@ -55,6 +55,7 @@ import { Editor } from 'react-draft-wysiwyg';
 import brand from 'dan-api/dummy/brand';
 import 'react-draft-wysiwyg/dist/react-draft-wysiwyg.css';
 import {
+  addBoardJournalMemberManually,
   approveBoardJournalMember,
   createBoardJournal,
   createBoardBadge,
@@ -368,6 +369,10 @@ function BoardJournalAdminPage() {
   const [membersRowsPerPage, setMembersRowsPerPage] = useState(10);
   const [pendingPage, setPendingPage] = useState(0);
   const [pendingRowsPerPage, setPendingRowsPerPage] = useState(10);
+  const [addMemberOpen, setAddMemberOpen] = useState(false);
+  const [addMemberEmail, setAddMemberEmail] = useState('');
+  const [addMemberNote, setAddMemberNote] = useState('');
+  const [addMemberLoading, setAddMemberLoading] = useState(false);
   const [approvalsPage, setApprovalsPage] = useState(0);
   const [approvalsRowsPerPage, setApprovalsRowsPerPage] = useState(10);
   const [reviewsPage, setReviewsPage] = useState(0);
@@ -1175,13 +1180,24 @@ function BoardJournalAdminPage() {
 
               <Divider sx={{ my: 2 }} />
 
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-                <Typography variant="subtitle1">Solicitações de entrada do diário atual</Typography>
-                <Tooltip title="Atualizar solicitações">
-                  <IconButton size="small" onClick={loadMembers} disabled={loadingMembers}>
-                    <RefreshIcon fontSize="small" sx={{ animation: loadingMembers ? 'spin 1s linear infinite' : 'none', '@keyframes spin': { from: { transform: 'rotate(0deg)' }, to: { transform: 'rotate(360deg)' } } }} />
-                  </IconButton>
-                </Tooltip>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <Typography variant="subtitle1">Solicitações de entrada do diário atual</Typography>
+                  <Tooltip title="Atualizar solicitações">
+                    <IconButton size="small" onClick={loadMembers} disabled={loadingMembers}>
+                      <RefreshIcon fontSize="small" sx={{ animation: loadingMembers ? 'spin 1s linear infinite' : 'none', '@keyframes spin': { from: { transform: 'rotate(0deg)' }, to: { transform: 'rotate(360deg)' } } }} />
+                    </IconButton>
+                  </Tooltip>
+                </Stack>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={() => { setAddMemberEmail(''); setAddMemberNote(''); setAddMemberOpen(true); }}
+                  disabled={!selectedJournalId}
+                >
+                  Adicionar membro
+                </Button>
               </Stack>
               <Table size="small">
                 <TableHead>
@@ -2214,6 +2230,54 @@ function BoardJournalAdminPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDetailOpen(false)}>Fechar</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={addMemberOpen} onClose={() => setAddMemberOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>Adicionar membro manualmente</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="E-mail do usuário"
+              value={addMemberEmail}
+              onChange={(e) => setAddMemberEmail(e.target.value)}
+              fullWidth
+              size="small"
+              type="email"
+              placeholder="email@exemplo.com"
+            />
+            <TextField
+              label="Observação (opcional)"
+              value={addMemberNote}
+              onChange={(e) => setAddMemberNote(e.target.value)}
+              fullWidth
+              size="small"
+              multiline
+              rows={2}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddMemberOpen(false)} disabled={addMemberLoading}>Cancelar</Button>
+          <Button
+            variant="contained"
+            disabled={!addMemberEmail.trim() || addMemberLoading}
+            onClick={async () => {
+              setAddMemberLoading(true);
+              try {
+                await addBoardJournalMemberManually(selectedJournalId, addMemberEmail.trim(), addMemberNote.trim() || undefined);
+                setNotification('Membro adicionado com sucesso');
+                setAddMemberOpen(false);
+                loadData();
+              } catch (error) {
+                setNotification(error.message || 'Erro ao adicionar membro');
+              } finally {
+                setAddMemberLoading(false);
+              }
+            }}
+          >
+            {addMemberLoading ? 'Adicionando...' : 'Adicionar'}
+          </Button>
         </DialogActions>
       </Dialog>
 

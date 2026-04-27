@@ -5,7 +5,13 @@
       "Bash(grep -n \"import axios\\\\|const fetchWithAuth\" c:/Users/Quezia/Projetos/portal-iecg/app/api/*.js)",
       "Bash(ls -la /c/Users/Quezia/Projetos/portal-iecg/*.json)",
       "Bash(grep -l \"ENUM\\\\|JSONB\\\\|JSON\" /c/Users/Quezia/Projetos/portal-iecg/server/migrations/*.js)",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(npm install *)",
+      "Bash(npx sequelize-cli *)",
+      "Bash(node -e \"const models = require\\('./server/models'\\); console.log\\(Object.keys\\(models\\).filter\\(k => k !== 'sequelize' && k !== 'Sequelize'\\)\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3005/mia/buscar-por-cpf?cpf=00000000000)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:3005/mia/buscar-por-cpf?cpf=00000000000\")"
     ]
   }
 }

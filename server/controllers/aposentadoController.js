@@ -63,6 +63,16 @@ class AposentadoController {
       return res.status(400).json({ erro: error.message });
     }
   }
+
+  async buscarPorCpf(req, res) {
+    try {
+      const resultado = await AposentadoService.buscarPorCpf(req.query.cpf);
+      if (!resultado) return res.status(404).json({ mensagem: 'Nenhum registro encontrado para este CPF' });
+      return res.status(200).json(resultado);
+    } catch (error) {
+      return res.status(400).json({ erro: error.message });
+    }
+  }
 }
 
 module.exports = new AposentadoController();
