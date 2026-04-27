@@ -813,6 +813,54 @@ async function requestJournalAccess(journalId, userId, note = null) {
   return serializeJournalMember(membership);
 }
 
+async function addMemberManually(journalId, email, adminId, note = null) {
+  await ensureJournalExists(journalId);
+  const normalizedEmail = normalizeString(email);
+  if (!normalizedEmail) throw new Error('Email e obrigatorio');
+
+  const user = await User.findOne({ where: { email: normalizedEmail } });
+  if (!user) throw new Error('Usuario nao encontrado com este email');
+
+  const existing = await getJournalMembershipRow(journalId, user.id);
+  if (existing?.status === 'approved') {
+    throw new Error('Usuario ja possui acesso a este diario');
+  }
+
+  if (existing) {
+    await existing.update({
+      status: 'approved',
+      requestedAt: existing.requestedAt,
+      approvedAt: now(),
+      approvedBy: adminId,
+      note: normalizeString(note) || existing.note
+    });
+    const updated = await BoardJournalMember.findByPk(existing.id, {
+      include: [
+        { model: User, as: 'user', attributes: ['id', 'name', 'email'] },
+        { model: User, as: 'approver', attributes: ['id', 'name'] }
+      ]
+    });
+    return serializeJournalMember(updated);
+  }
+
+  const row = await BoardJournalMember.create({
+    journalId,
+    userId: user.id,
+    status: 'approved',
+    requestedAt: now(),
+    approvedAt: now(),
+    approvedBy: adminId,
+    note: normalizeString(note)
+  });
+  const created = await BoardJournalMember.findByPk(row.id, {
+    include: [
+      { model: User, as: 'user', attributes: ['id', 'name', 'email'] },
+      { model: User, as: 'approver', attributes: ['id', 'name'] }
+    ]
+  });
+  return serializeJournalMember(created);
+}
+
 async function getJournalMembers(journalId) {
   await ensureJournalExists(journalId);
   const rows = await BoardJournalMember.findAll({
@@ -1450,6 +1498,75 @@ async function createSubmission(payload, userId) {
   return record;
 }
 
+async function createPublicSubmission(payload) {
+  const normalizedEmail = normalizeString(payload.email);
+  if (!normalizedEmail) throw new Error('Email e obrigatorio');
+
+  const user = await User.findOne({ where: { email: normalizedEmail } });
+  if (!user) throw new Error('Usuario nao encontrado com este email');
+
+  const challengeId = normalizeString(payload.challengeId);
+  if (!challengeId) throw new Error('Desafio e obrigatorio');
+
+  const challenge = await BoardChallenge.findByPk(challengeId);
+  if (!challenge || !challenge.isActive) throw new Error('Desafio nao encontrado ou inativo');
+
+  if (!isChallengeWithinSchedule(challenge)) throw new Error('Desafio fora da janela programada');
+  if (challenge.dueDate && getEndOfDay(challenge.dueDate)?.getTime() < Date.now()) {
+    throw new Error('Prazo do desafio encerrado');
+  }
+
+  const latestSubmission = await BoardChallengeSubmission.findOne({
+    where: { userId: user.id, challengeId, journalId: challenge.journalId },
+    order: [['submittedAt', 'DESC']]
+  });
+  if (latestSubmission?.status === 'approved') {
+    throw new Error('Este desafio ja foi aprovado para este usuario');
+  }
+
+  const normalized = await normalizeSubmissionPayload(payload, challenge);
+
+  let record;
+  if (latestSubmission?.status === 'pending') {
+    await latestSubmission.update({
+      ...normalized,
+      feedback: null,
+      approvedAt: null,
+      approvedBy: null,
+      pointsAwarded: null,
+      submittedAt: now()
+    });
+    record = latestSubmission;
+  } else if (latestSubmission?.status === 'rejected') {
+    if (!canUseSecondChance(challenge, latestSubmission)) {
+      throw new Error('Desafio rejeitado e nao permite nova resposta');
+    }
+    record = await BoardChallengeSubmission.create({
+      userId: user.id,
+      journalId: challenge.journalId,
+      challengeId,
+      submittedAt: now(),
+      status: 'pending',
+      attemptNumber: Number(latestSubmission.attemptNumber || 1) + 1,
+      pointsAwarded: null,
+      ...normalized
+    });
+  } else {
+    record = await BoardChallengeSubmission.create({
+      userId: user.id,
+      journalId: challenge.journalId,
+      challengeId,
+      submittedAt: now(),
+      status: 'pending',
+      attemptNumber: 1,
+      pointsAwarded: null,
+      ...normalized
+    });
+  }
+
+  return serializeSubmission(record);
+}
+
 async function approveSubmission(submissionId, adminId, feedback = null) {
   return updateSubmissionReview(submissionId, adminId, {
     status: 'approved',
@@ -1810,6 +1927,118 @@ async function getUserStats(userId, journalId) {
   };
 }
 
+async function getPublicAnsweredByEmail(email, journalId) {
+  const normalizedEmail = normalizeString(email);
+  if (!normalizedEmail) throw new Error('Email e obrigatorio');
+  if (!normalizeString(journalId)) throw new Error('Diario e obrigatorio');
+  await ensureJournalExists(journalId);
+
+  const user = await User.findOne({ where: { email: normalizedEmail } });
+  if (!user) return [];
+
+  const records = await BoardChallengeSubmission.findAll({
+    where: { userId: user.id, journalId, status: 'approved' },
+    include: [
+      {
+        model: BoardChallenge,
+        as: 'challenge',
+        include: [{ model: BoardChallengeCategory, as: 'category' }]
+      }
+    ],
+    order: [['approvedAt', 'DESC']]
+  });
+
+  return records.map((r) => serializeSubmission(r));
+}
+
+async function getPublicPendingByEmail(email, journalId) {
+  const normalizedEmail = normalizeString(email);
+  if (!normalizedEmail) throw new Error('Email e obrigatorio');
+  if (!normalizeString(journalId)) throw new Error('Diario e obrigatorio');
+  await ensureJournalExists(journalId);
+
+  const user = await User.findOne({ where: { email: normalizedEmail } });
+
+  const challenges = await BoardChallenge.findAll({
+    where: { journalId, isActive: true },
+    include: [{ model: BoardChallengeCategory, as: 'category' }],
+    order: [['dueDate', 'ASC'], ['createdAt', 'DESC']]
+  });
+
+  const activeWithinSchedule = challenges.filter((c) => isChallengeWithinSchedule(c));
+
+  if (!user) {
+    return activeWithinSchedule.map((c) => serializeChallenge(c, null));
+  }
+
+  const approvedSubmissions = await BoardChallengeSubmission.findAll({
+    where: { userId: user.id, journalId, status: 'approved' },
+    attributes: ['challengeId']
+  });
+  const approvedIds = new Set(approvedSubmissions.map((s) => s.challengeId));
+
+  const latestSubmissions = await BoardChallengeSubmission.findAll({
+    where: { userId: user.id, journalId },
+    order: [['submittedAt', 'DESC']]
+  });
+  const latestByChallenge = latestSubmissions.reduce((acc, s) => {
+    if (!acc[s.challengeId]) acc[s.challengeId] = serializeSubmission(s);
+    return acc;
+  }, {});
+
+  return activeWithinSchedule
+    .filter((c) => !approvedIds.has(c.id))
+    .map((c) => serializeChallenge(c, latestByChallenge[c.id] || null));
+}
+
+async function createPublicChallenge(payload) {
+  const journalId = normalizeString(payload.journalId);
+  if (!journalId) throw new Error('Diario e obrigatorio');
+  await ensureJournalExists(journalId);
+
+  const title = normalizeString(payload.title, 255);
+  if (!title) throw new Error('Titulo e obrigatorio');
+
+  const categoryId = normalizeString(payload.categoryId);
+  if (!categoryId) throw new Error('Categoria e obrigatoria');
+  const category = await BoardChallengeCategory.findOne({ where: { id: categoryId, journalId } });
+  if (!category) throw new Error('Categoria invalida para este diario');
+
+  const points = normalizeInteger(payload.points, NaN);
+  if (!Number.isFinite(points) || points < 1) throw new Error('Pontuacao deve ser maior que zero');
+
+  const challengeType = normalizeString(payload.challengeType || 'text');
+  if (!CHALLENGE_TYPES.includes(challengeType)) throw new Error('Tipo de desafio invalido');
+
+  const createdByEmail = normalizeString(payload.createdByEmail, 255);
+
+  const record = await BoardChallenge.create({
+    journalId,
+    title,
+    description: normalizeString(payload.description),
+    points,
+    categoryId,
+    challengeType,
+    contentHtml: normalizeString(payload.contentHtml),
+    questionText: normalizeString(payload.questionText),
+    questionOptions: challengeType === 'question' ? (Array.isArray(payload.questionOptions) ? payload.questionOptions : null) : null,
+    fileTypes: challengeType === 'file' ? (normalizeString(payload.fileTypes, 255) || 'pdf,jpg,png,doc,docx') : null,
+    formSchema: ['form', 'lesson'].includes(challengeType) ? (Array.isArray(payload.formSchema) ? payload.formSchema : null) : null,
+    startDate: payload.startDate ? normalizeString(payload.startDate) : null,
+    endDate: payload.endDate ? normalizeString(payload.endDate) : null,
+    dueDate: payload.dueDate ? getEndOfDay(payload.dueDate) : null,
+    allowSecondChance: normalizeBoolean(payload.allowSecondChance, false),
+    secondChancePoints: normalizeBoolean(payload.allowSecondChance, false) ? normalizeInteger(payload.secondChancePoints, 0) : null,
+    isActive: true,
+    createdBy: null,
+    createdByEmail
+  });
+
+  return serializeChallenge(await BoardChallenge.findByPk(record.id, {
+    include: [{ model: BoardChallengeCategory, as: 'category' }]
+  }), null);
+}
+
 module.exports = {
   ADMIN_PERMISSIONS,
   hasAdminPermission,
@@ -1819,6 +2048,7 @@ module.exports = {
   createJournal,
   updateJournal,
   requestJournalAccess,
+  addMemberManually,
   getJournalMembers,
   approveJournalMember,
   rejectJournalMember,
@@ -1849,5 +2079,9 @@ module.exports = {
   getUserRanking,
   getChallengeStats,
   getUserStats,
-  getJournalPoints
+  getJournalPoints,
+  getPublicAnsweredByEmail,
+  getPublicPendingByEmail,
+  createPublicChallenge,
+  createPublicSubmission
 };

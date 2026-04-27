@@ -58,6 +58,16 @@ async function requestJournalAccess(req, res) {
   }
 }
 
+async function addJournalMemberManually(req, res) {
+  try {
+    const adminId = getCurrentUserId(req);
+    const data = await boardJournalService.addMemberManually(req.params.journalId, req.body?.email, adminId, req.body?.note);
+    res.status(201).json(data);
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Erro ao adicionar membro' });
+  }
+}
+
 async function listJournalMembers(req, res) {
   try {
     const data = await boardJournalService.getJournalMembers(req.params.journalId);
@@ -387,6 +397,7 @@ module.exports = {
   createJournal,
   updateJournal,
   requestJournalAccess,
+  addJournalMemberManually,
   listJournalMembers,
   approveJournalMember,
   rejectJournalMember,

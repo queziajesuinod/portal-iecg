@@ -24,6 +24,7 @@ router.get('/journals/:journalId', boardJournalController.getJournal);
 router.post('/journals', requireBoardAdmin, boardJournalController.createJournal);
 router.put('/journals/:journalId', requireBoardAdmin, boardJournalController.updateJournal);
 router.post('/journals/:journalId/request-access', boardJournalController.requestJournalAccess);
+router.post('/journals/:journalId/members/manual', requireBoardAdmin, boardJournalController.addJournalMemberManually);
 router.get('/journals/:journalId/members', requireBoardAdmin, boardJournalController.listJournalMembers);
 router.put('/journals/:journalId/members/:memberId/approve', requireBoardAdmin, boardJournalController.approveJournalMember);
 router.put('/journals/:journalId/members/:memberId/reject', requireBoardAdmin, boardJournalController.rejectJournalMember);

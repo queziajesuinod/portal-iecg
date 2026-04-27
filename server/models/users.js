@@ -51,7 +51,7 @@ module.exports = (sequelize) => {
     },
     passwordHash: DataTypes.STRING,
     salt: DataTypes.STRING,
-    image: DataTypes.STRING,
+    image: DataTypes.TEXT,
     username: DataTypes.STRING,
     points: {
       type: DataTypes.INTEGER,
@@ -110,6 +110,10 @@ module.exports = (sequelize) => {
     },
     escolas: {
       type: DataTypes.TEXT,
+      allowNull: true
+    },
+    rede_social: {
+      type: DataTypes.STRING(255),
       allowNull: true
     },
     cpf: {

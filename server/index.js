@@ -113,6 +113,8 @@ app.use('/api/public/checkin', require('./routers/publicCheckInRoutes'));
 app.use('/public', require('./routers/publicStartRoutes'));
 // Rotas públicas de voluntariado (sem autenticação)
 app.use('/api/public/voluntariado', require('./routers/publicVoluntariadoRoutes'));
+// Rotas públicas do Diário de Bordo (sem autenticação)
+app.use('/api/public/diario-bordo', require('./routers/publicBoardJournalRoutes'));
 // Rotas administrativas de eventos (protegidas)
 app.use('/api/admin/events', authMiddleware, require('./routers/eventRoutes'));
 // Rotas administrativas de membros (protegidas)

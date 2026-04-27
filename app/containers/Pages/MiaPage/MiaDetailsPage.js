@@ -117,7 +117,7 @@ const MiaDetailsPage = () => {
             />
             <Box>
               <Typography variant="h5" fontWeight="bold">{aposentado.user?.name}</Typography>
-              <Typography variant="body2" color="textSecondary" component="span">{aposentado.profissao || "Sem profissão"}</Typography>
+              <Typography variant="body2" color="textSecondary" component="span">{aposentado.user?.profissao || "Sem profissão"}</Typography>
             </Box>
           </Box>
 
@@ -146,19 +146,19 @@ const MiaDetailsPage = () => {
               <ListItemIcon><Person /></ListItemIcon>
               <ListItemText primary="Estado Civil" secondary={aposentado.user?.estado_civil || "Não informado"} />
             </ListItem>
-            {aposentado.estado_civil === "Casado" && (
+            <ListItem>
+              <ListItemIcon><Facebook /></ListItemIcon>
+              <ListItemText primary="Rede Social" secondary={aposentado.user?.rede_social || "Não informado"} />
+            </ListItem>
+            {aposentado.user?.estado_civil === "Casado" && (
               <ListItem>
                 <ListItemIcon><FamilyRestroom /></ListItemIcon>
                 <ListItemText primary="Nome do Esposo(a)" secondary={aposentado.user?.nome_esposo || "Não informado"} />
               </ListItem>
             )}
             <ListItem>
-              <ListItemIcon><Facebook /></ListItemIcon>
-              <ListItemText primary="Rede Social" secondary={aposentado.user?.rede_social || "Não informado"} />
-            </ListItem>
-            <ListItem>
               <ListItemIcon><School /></ListItemIcon>
-              <ListItemText primary="Escolas" secondary={aposentado.escolas || "Não informado"} />
+              <ListItemText primary="Escolas" secondary={aposentado.user?.escolas || "Não informado"} />
             </ListItem>
             <ListItem>
               <ListItemIcon><Healing /></ListItemIcon>

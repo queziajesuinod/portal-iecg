@@ -4,6 +4,7 @@ const MiaAttendanceController = require('../controllers/miaAttendanceController'
 
 const router = express.Router();
 
+router.get('/buscar-por-cpf', AposentadoController.buscarPorCpf);
 router.post('/', AposentadoController.criar);
 router.get('/listagemgeral', AposentadoController.listarTodos);
 router.get('/attendance', MiaAttendanceController.listar);

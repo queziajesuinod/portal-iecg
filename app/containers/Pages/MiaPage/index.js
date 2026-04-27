@@ -10,9 +10,12 @@ import {
   Typography,
   FormControlLabel,
   Checkbox,
-  IconButton
+  IconButton,
+  CircularProgress,
+  InputAdornment,
+  Tooltip
 } from '@mui/material';
-import { AddCircle, RemoveCircle } from '@mui/icons-material';
+import { AddCircle, RemoveCircle, SearchOutlined } from '@mui/icons-material';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import Webcam from 'react-webcam';
 import { useLocation } from 'react-router-dom';
@@ -62,7 +65,10 @@ const MiaPage = () => {
   const [notification, setNotification] = useState('');
   const [showWebcam, setShowWebcam] = useState(false);
   const [capturedImage, setCapturedImage] = useState('');
+  const [cpfLoading, setCpfLoading] = useState(false);
   const webcamRef = useRef(null);
+
+  const API_URL = (process.env.REACT_APP_API_URL?.trim() || window.location.origin).replace(/\/$/, '');
 
   useEffect(() => {
     if (isEdit && aposentadoEditando) {
@@ -76,23 +82,32 @@ const MiaPage = () => {
 
       const data = {
         ...formDataInicial,
-        ...aposentadoEditando,
-        ...userData,
-        image: userData.image || aposentadoEditando.image || '',
-        nome: userData.name || '',
+        // campos do aposentado
+        filhos: filhosFormatados,
+        indicacao: aposentadoEditando.indicacao || '',
+        patologia: aposentadoEditando.patologia || '',
+        plano_saude: aposentadoEditando.plano_saude || '',
+        hospital: aposentadoEditando.hospital || '',
+        remedios: Array.isArray(aposentadoEditando.remedios) ? aposentadoEditando.remedios : [],
+        habilidades: aposentadoEditando.habilidades || '',
+        analfabeto: Boolean(aposentadoEditando.analfabeto),
+        tipo_pessoa: aposentadoEditando.tipo_pessoa || '',
+        // campos do user
+        name: userData.name || '',
         email: userData.email || '',
-        cpf: formatCpf(userData.cpf || aposentadoEditando.cpf || ''),
+        cpf: formatCpf(userData.cpf || ''),
+        image: userData.image || '',
         data_nascimento: userData.data_nascimento || '',
         endereco: userData.endereco || '',
-        telefone: formatPhoneNumber(userData.telefone || aposentadoEditando.telefone || ''),
+        telefone: formatPhoneNumber(userData.telefone || ''),
         estado_civil: userData.estado_civil || '',
         nome_esposo: userData.nome_esposo || '',
         profissao: userData.profissao || '',
-        frequenta_celula: userData.frequenta_celula || false,
-        batizado: userData.batizado || false,
-        encontro: userData.encontro || false,
-        escolas: userData.escolas || '',
-        filhos: filhosFormatados
+        rede_social: userData.rede_social || '',
+        frequenta_celula: Boolean(userData.frequenta_celula),
+        batizado: Boolean(userData.batizado),
+        encontro: Boolean(userData.encontro),
+        escolas: userData.escolas || ''
       };
 
       setFormData(data);
@@ -132,6 +147,51 @@ const MiaPage = () => {
     }
   };
 
+  const buscarDadosPorCpf = async (cpfFormatado) => {
+    const cpfLimpo = cpfFormatado.replace(/\D/g, '');
+    if (cpfLimpo.length !== 11) return;
+    const token = localStorage.getItem('token');
+    setCpfLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/mia/buscar-por-cpf?cpf=${cpfLimpo}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (response.status === 404) {
+        setNotification('Nenhum dado encontrado para este CPF no cadastro de membros.');
+        return;
+      }
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        setNotification(`Erro ao buscar CPF: ${errData.erro || response.statusText}`);
+        return;
+      }
+      const dados = await response.json();
+      setFormData((prev) => ({
+        ...prev,
+        name: dados.name || prev.name,
+        email: dados.email || prev.email,
+        telefone: dados.telefone ? formatPhoneNumber(dados.telefone) : prev.telefone,
+        data_nascimento: dados.data_nascimento || prev.data_nascimento,
+        estado_civil: dados.estado_civil || prev.estado_civil,
+        endereco: dados.endereco || prev.endereco,
+        image: dados.image || prev.image,
+        batizado: dados.batizado !== undefined ? dados.batizado : prev.batizado,
+        encontro: dados.encontro !== undefined ? dados.encontro : prev.encontro,
+        frequenta_celula: dados.frequenta_celula !== undefined ? dados.frequenta_celula : prev.frequenta_celula,
+        profissao: dados.profissao || prev.profissao,
+        escolas: dados.escolas || prev.escolas,
+        rede_social: dados.rede_social || prev.rede_social,
+        nome_esposo: dados.nome_esposo || prev.nome_esposo
+      }));
+      if (dados.image) setCapturedImage(dados.image);
+      setNotification(`Dados encontrados e preenchidos automaticamente (origem: ${dados.fonte === 'member' ? 'cadastro de membros' : 'usuário'}).`);
+    } catch (err) {
+      setNotification(`Erro ao buscar dados do CPF: ${err.message}`);
+    } finally {
+      setCpfLoading(false);
+    }
+  };
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     let nextValue = value;
@@ -142,6 +202,10 @@ const MiaPage = () => {
       nextValue = formatPhoneNumber(value);
     } else if (name === 'cpf') {
       nextValue = formatCpf(value);
+      // Dispara busca automática quando CPF completar 11 dígitos
+      if (nextValue.replace(/\D/g, '').length === 11) {
+        buscarDadosPorCpf(nextValue);
+      }
     }
 
     setFormData({ ...formData, [name]: nextValue });
@@ -182,7 +246,6 @@ const MiaPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem('token');
-    const API_URL = process.env.REACT_APP_API_URL?.replace(/\/$/, '') || 'https://portal.iecg.com.br';
 
     const method = isEdit ? 'PUT' : 'POST';
     const endpoint = isEdit ? `${API_URL}/mia/${aposentadoId}` : `${API_URL}/mia`;
@@ -316,6 +379,25 @@ const MiaPage = () => {
                 value={formData.cpf}
                 onChange={handleChange}
                 required
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      {cpfLoading ? (
+                        <CircularProgress size={18} />
+                      ) : (
+                        <Tooltip title="Buscar dados pelo CPF">
+                          <IconButton
+                            size="small"
+                            onClick={() => buscarDadosPorCpf(formData.cpf)}
+                            disabled={formData.cpf.replace(/\D/g, '').length !== 11}
+                          >
+                            <SearchOutlined fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </InputAdornment>
+                  )
+                }}
               />
             </Grid>
             <Grid item xs={12} md={6}>
