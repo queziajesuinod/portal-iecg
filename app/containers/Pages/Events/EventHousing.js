@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import { useParams } from 'react-router-dom';
 import PropTypes from 'prop-types';
+import { formatDateTimeInAppTimezone } from '../../../utils/dateTime';
 import { PapperBlock, Notification } from 'dan-components';
 import {
   Grid,
@@ -772,7 +773,7 @@ export default function EventHousing() {
                           v{historyItem.fromVersion || '?'} → v{historyItem.toVersion || '?'} ({historyItem.source || 'manual'})
                         </Typography>
                         <Typography variant="caption" display="block" sx={{ mt: 0.25 }}>
-                          {historyItem.createdAt ? new Date(historyItem.createdAt).toLocaleString('pt-BR') : 'Data nao informada'}
+                          {formatDateTimeInAppTimezone(historyItem.createdAt, 'Data nao informada')}
                         </Typography>
                         <Box sx={{ mt: 0.75 }}>
                           <Button
@@ -812,7 +813,7 @@ export default function EventHousing() {
                           {item.valid ? 'Valida' : 'Invalida'} · v{item.customRulesVersion || '?'}
                         </Typography>
                         <Typography variant="caption" display="block" sx={{ mt: 0.25 }}>
-                          {item.createdAt ? new Date(item.createdAt).toLocaleString('pt-BR') : 'Data nao informada'}
+                          {formatDateTimeInAppTimezone(item.createdAt, 'Data nao informada')}
                         </Typography>
                         {item.notes && (
                           <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>

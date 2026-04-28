@@ -11,7 +11,25 @@
       "Bash(node -e \"const models = require\\('./server/models'\\); console.log\\(Object.keys\\(models\\).filter\\(k => k !== 'sequelize' && k !== 'Sequelize'\\)\\)\")",
       "Bash(node -e ' *)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3005/mia/buscar-por-cpf?cpf=00000000000)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:3005/mia/buscar-por-cpf?cpf=00000000000\")"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:3005/mia/buscar-por-cpf?cpf=00000000000\")",
+      "Bash(node -e \"const m = require\\('./server/models'\\); console.log\\(Object.keys\\(m\\).filter\\(k => k.startsWith\\('Member'\\)\\)\\)\")",
+      "Bash(node -e \"const s = require\\('./server/services/memberEventMilestoneService'\\); console.log\\(typeof s.processarInscricaoConfirmada\\);\")",
+      "Bash(node -e \"require\\('./server/services/registrationService'\\); console.log\\('OK'\\);\")",
+      "Bash(node -e \"const s = require\\('./server/services/memberEventMilestoneService'\\); console.log\\('OK'\\);\")",
+      "Bash(grep -E \"\\\\.js$|\\\\.jsx$\")",
+      "Bash(sed -n '1,8p' /Users/macbookair/Documents/GitHub/portal-iecg/app/containers/Pages/StartPage/MembroDetailsPage.js)",
+      "Bash(sed -n '82,102p' /Users/macbookair/Documents/GitHub/portal-iecg/app/containers/Pages/StartPage/MembroDetailsPage.js)",
+      "Bash(sed -n '1,8p' /Users/macbookair/Documents/GitHub/portal-iecg/app/containers/Pages/StartPage/MinhaJornadaPage.js)",
+      "Bash(sed -n '73,90p' /Users/macbookair/Documents/GitHub/portal-iecg/app/containers/Pages/StartPage/MinhaJornadaPage.js)",
+      "Bash(sed -n '1,8p' /Users/macbookair/Documents/GitHub/portal-iecg/app/containers/Pages/StartPage/ApelosDirecionadosPage.js)",
+      "Bash(sed -n '408,418p' /Users/macbookair/Documents/GitHub/portal-iecg/app/containers/Pages/StartPage/ApelosDirecionadosPage.js)",
+      "Bash(sed -n '1205,1210p' /Users/macbookair/Documents/GitHub/portal-iecg/app/containers/Pages/StartPage/ApelosDirecionadosPage.js)",
+      "Bash(sed -n '1,8p' /Users/macbookair/Documents/GitHub/portal-iecg/app/containers/Pages/Voluntariado/VoluntariadoPage.js)",
+      "Bash(sed -n '45,70p' /Users/macbookair/Documents/GitHub/portal-iecg/app/containers/Pages/Voluntariado/VoluntariadoPage.js)",
+      "Bash(sed -n '160,172p' /Users/macbookair/Documents/GitHub/portal-iecg/app/containers/Pages/Events/EventList.js)",
+      "Bash(sed -n '175,185p' /Users/macbookair/Documents/GitHub/portal-iecg/app/containers/Pages/Events/CouponsPage.js)",
+      "Bash(sed -n '30,35p' /Users/macbookair/Documents/GitHub/portal-iecg/app/containers/Pages/FilaApelosPage.js)",
+      "Bash(sed -n '30,35p' /Users/macbookair/Documents/GitHub/portal-iecg/app/containers/Pages/StartPage/FilaApelosPage.js)"
     ]
   }
 }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
+import { formatDateInAppTimezone } from '../../../utils/dateTime';
 import {
   Button,
   Table,
@@ -175,10 +176,7 @@ function CouponsPage() {
     }
   };
 
-  const formatarData = (data) => {
-    if (!data) return '-';
-    return new Date(data).toLocaleDateString('pt-BR');
-  };
+  const formatarData = (data) => formatDateInAppTimezone(data, '-');
 
   const formatarDesconto = (tipo, valor) => {
     if (tipo === 'percentage') {
