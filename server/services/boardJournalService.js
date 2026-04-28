@@ -1958,6 +1958,20 @@ async function getPublicPendingByEmail(email, journalId) {
   await ensureJournalExists(journalId);
 
   const user = await User.findOne({ where: { email: normalizedEmail } });
+  if (!user) {
+    const err = new Error('Email sem permissao para acessar este diario');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const membership = await BoardJournalMember.findOne({
+    where: { journalId, userId: user.id, status: 'approved' }
+  });
+  if (!membership) {
+    const err = new Error('Email sem permissao para acessar este diario');
+    err.statusCode = 403;
+    throw err;
+  }
 
   const challenges = await BoardChallenge.findAll({
     where: { journalId, isActive: true },
@@ -1966,10 +1980,6 @@ async function getPublicPendingByEmail(email, journalId) {
   });
 
   const activeWithinSchedule = challenges.filter((c) => isChallengeWithinSchedule(c));
-
-  if (!user) {
-    return activeWithinSchedule.map((c) => serializeChallenge(c, null));
-  }
 
   const approvedSubmissions = await BoardChallengeSubmission.findAll({
     where: { userId: user.id, journalId, status: 'approved' },

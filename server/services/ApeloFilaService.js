@@ -414,7 +414,7 @@ class ApeloFilaService {
             [Op.or]: [
               { status: null },
               { status: {
-                [Op.notIn]: ['DIRECIONADO_COM_SUCESSO', 'PRIMEIRO_CONTATO', 'NAO_HAVERAR_DIRECIONAMENTO', 'CONSOLIDADO_CELULA']
+                [Op.notIn]: ['DIRECIONADO_COM_SUCESSO', 'PRIMEIRO_CONTATO', 'NAO_HAVERAR_DIRECIONAMENTO', 'CONSOLIDADO_CELULA', 'SEM_CELULA_DISPONIVEL']
               }}
             ]
           }

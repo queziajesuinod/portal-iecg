@@ -17,11 +17,13 @@ async function getAnswered(req, res) {
 async function getPending(req, res) {
   try {
     const { email, journalId } = req.query;
+    if (!email) return res.status(400).json({ message: 'Email e obrigatorio' });
     if (!journalId) return res.status(400).json({ message: 'journalId e obrigatorio' });
     const data = await boardJournalService.getPublicPendingByEmail(email, journalId);
     return res.status(200).json(data);
   } catch (error) {
-    return res.status(400).json({ message: error.message || 'Erro ao listar perguntas pendentes' });
+    const status = error.statusCode === 403 ? 403 : 400;
+    return res.status(status).json({ message: error.message || 'Erro ao listar perguntas pendentes' });
   }
 }
 
