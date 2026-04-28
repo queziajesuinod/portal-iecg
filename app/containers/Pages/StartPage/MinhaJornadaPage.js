@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet';
+import { formatDateInAppTimezone, formatDateTimeInAppTimezone } from '../../../utils/dateTime';
 import {
   Autocomplete,
   Avatar,
@@ -72,19 +73,8 @@ const initialForm = {
   photoUrl: ''
 };
 
-const formatDate = (value) => {
-  if (!value) return 'Nao informado';
-  const [year, month, day] = String(value).slice(0, 10).split('-');
-  if (!year || !month || !day) return String(value);
-  return `${day}/${month}/${year}`;
-};
-
-const formatDateTime = (value) => {
-  if (!value) return 'Nao informado';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return String(value);
-  return parsed.toLocaleString('pt-BR');
-};
+const formatDate = (v) => formatDateInAppTimezone(v, 'Nao informado');
+const formatDateTime = (v) => formatDateTimeInAppTimezone(v, 'Nao informado');
 
 const getActivityObservation = (activity) => {
   const metadata = activity?.metadata;

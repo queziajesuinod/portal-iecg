@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useHistory } from "react-router-dom";
+import { formatDateInAppTimezone } from '../../../utils/dateTime';
 import { Helmet } from "react-helmet";
 import imageCompression from 'browser-image-compression';
 import dummyContents from 'dan-api/dummy/dummyContents'; // Importação correta
@@ -35,11 +36,7 @@ const ProfilePage = () => {
   const webcamRef = useRef(null);
   const history = useHistory();
 
-  const formatDate = (dateString) => {
-    if (!dateString) return "Não informado";
-    const [year, month, day] = dateString.split("-");
-    return `${day}/${month}/${year}`;
-  };
+  const formatDate = (v) => formatDateInAppTimezone(v, 'Não informado');
 
   const userStorage = JSON.parse(localStorage.getItem("user"));
   const id = userStorage?.id;

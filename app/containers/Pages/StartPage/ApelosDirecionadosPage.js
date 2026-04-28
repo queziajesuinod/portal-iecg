@@ -4,6 +4,7 @@ import React, {
   useRef,
   useState
 } from 'react';
+import { formatDateInAppTimezone, formatDateTimeInAppTimezone } from '../../../utils/dateTime';
 import {
   Box,
   Button,
@@ -407,12 +408,7 @@ const ApelosDirecionadosPage = () => {
     return baseSemAtual.filter((c) => normalizeSearchValue(c.celula).includes(termo));
   };
 
-  const formatDate = (value) => {
-    if (!value) return '-';
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return value;
-    return d.toLocaleDateString('pt-BR');
-  };
+  const formatDate = (v) => formatDateInAppTimezone(v, '-');
 
   const CHIP_COLOR_OPTIONS = [
     'default',
@@ -1204,7 +1200,7 @@ const ApelosDirecionadosPage = () => {
               />
               {historicoList.map((item, idx) => {
                 const isStatus = item.tipo_evento === 'STATUS' || item.status_anterior || item.status_novo;
-                const dataFmt = item.data_movimento ? new Date(item.data_movimento).toLocaleString('pt-BR') : '-';
+                const dataFmt = formatDateTimeInAppTimezone(item.data_movimento, '-');
                 return (
                   <Box key={item.id || idx} display="flex" mb={2} position="relative" alignItems="flex-start" gap={2}>
                     <Box minWidth={120} textAlign="right" pr={2}>

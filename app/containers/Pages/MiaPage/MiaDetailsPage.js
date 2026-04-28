@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useHistory } from "react-router-dom";
 import { Helmet } from "react-helmet";
+import { formatDateInAppTimezone } from '../../../utils/dateTime';
 import { PapperBlock } from 'dan-components';
 import {
   Paper,
@@ -34,11 +35,7 @@ const MiaDetailsPage = () => {
   const searchParams = new URLSearchParams(location.search);
   const id = searchParams.get("id");
 
-  const formatDate = (dateString) => {
-    if (!dateString) return "Não informado";
-    const [year, month, day] = dateString.split("-");
-    return `${day}/${month}/${year}`;
-  };
+  const formatDate = (v) => formatDateInAppTimezone(v, 'Não informado');
 
   const formatCPF = (cpf) => {
     if (!cpf) return "Não informado";

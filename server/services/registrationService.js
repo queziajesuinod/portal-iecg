@@ -25,6 +25,7 @@ const paymentService = require('./paymentService');
 const efiService = require('./efiService');
 const eventService = require('./eventService');
 const webhookEmitter = require('./webhookEmitter');
+const memberEventMilestoneService = require('./memberEventMilestoneService');
 const { getUserPermissionNames } = require('./permissionResolver');
 const {
   buildDayRange,
@@ -423,6 +424,13 @@ async function contarInscritosPorLote(registrationId) {
 async function ajustarContadoresDeStatus(registration, statusAnterior) {
   if (!registration) {
     return;
+  }
+
+  // Dispara vínculo com membro quando pagamento é confirmado pela primeira vez
+  if (registration.paymentStatus === 'confirmed' && statusAnterior !== 'confirmed') {
+    memberEventMilestoneService.processarInscricaoConfirmada(registration).catch((err) => {
+      console.error('[MemberEventMilestone] falha no disparo async:', err.message);
+    });
   }
 
   const novoStatusContabilizavel = isCountablePaymentStatus(registration.paymentStatus);

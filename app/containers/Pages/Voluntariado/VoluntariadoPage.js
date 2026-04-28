@@ -5,6 +5,7 @@ import React, {
   useRef,
   useState
 } from 'react';
+import { formatDateInAppTimezone } from '../../../utils/dateTime';
 import {
   Autocomplete,
   Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
@@ -44,10 +45,7 @@ const STATUS_CONFIG = {
   ENCERRADO: { label: 'Encerrado', color: 'default' },
 };
 
-const formatDate = (d) => {
-  if (!d) return '-';
-  return new Date(d).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
-};
+const formatDate = (d) => formatDateInAppTimezone(d, '-');
 const STATUS_POR_TAB = ['PENDENTE', 'APROVADO', 'ENCERRADO'];
 
 const getMemberGroupKey = (v) => v.memberId || v.membro?.id || `sem-membro:${v.id}`;

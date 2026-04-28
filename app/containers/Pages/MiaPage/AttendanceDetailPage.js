@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useHistory } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
+import { formatDateInAppTimezone } from '../../../utils/dateTime';
 import JsPDF from 'jspdf';
 import {
   Box,
@@ -33,19 +34,7 @@ const resolveApiUrl = () => {
   return `${protocol}//${hostname}${port ? `:${port}` : ''}`;
 };
 
-const formatDateBr = (value) => {
-  if (!value) return '-';
-  const parts = value.split('-');
-  if (parts.length === 3) {
-    const [year, month, day] = parts;
-    return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
-  }
-  try {
-    return new Date(value).toLocaleDateString('pt-BR');
-  } catch (error) {
-    return value;
-  }
-};
+const formatDateBr = (value) => formatDateInAppTimezone(value, '-');
 
 const AttendanceDetailPage = () => {
   const { id } = useParams();

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet';
 import { useHistory, useLocation } from 'react-router-dom';
+import { formatDateInAppTimezone, formatDateTimeInAppTimezone } from '../../../utils/dateTime';
 import {
   Avatar,
   Box,
@@ -84,19 +85,8 @@ const buildNowDateTimeInput = () => {
   return date.toISOString().slice(0, 16);
 };
 
-const formatDate = (value) => {
-  if (!value) return 'Nao informado';
-  const [year, month, day] = String(value).split('-');
-  if (!year || !month || !day) return value;
-  return `${day}/${month}/${year}`;
-};
-
-const formatDateTime = (value) => {
-  if (!value) return 'Nao informado';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return String(value);
-  return parsed.toLocaleString('pt-BR');
-};
+const formatDate = (v) => formatDateInAppTimezone(v, 'Nao informado');
+const formatDateTime = (v) => formatDateTimeInAppTimezone(v, 'Nao informado');
 
 const formatCpf = (value = '') => {
   const digits = String(value).replace(/\D/g, '').slice(0, 11);

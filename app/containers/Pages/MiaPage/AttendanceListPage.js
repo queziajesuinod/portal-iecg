@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet';
 import { useHistory } from 'react-router-dom';
+import { formatDateInAppTimezone } from '../../../utils/dateTime';
 import {
   Paper,
   Table,
@@ -41,19 +42,7 @@ const formInicial = {
   observacoes: ''
 };
 
-const formatDateBr = (value) => {
-  if (!value) return '-';
-  const parts = value.split('-');
-  if (parts.length === 3) {
-    const [year, month, day] = parts;
-    return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
-  }
-  try {
-    return new Date(value).toLocaleDateString('pt-BR');
-  } catch (error) {
-    return value;
-  }
-};
+const formatDateBr = (value) => formatDateInAppTimezone(value, '-');
 
 const AttendanceListPage = () => {
   const history = useHistory();
