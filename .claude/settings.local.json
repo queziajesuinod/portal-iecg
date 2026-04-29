@@ -29,7 +29,10 @@
       "Bash(sed -n '160,172p' /Users/macbookair/Documents/GitHub/portal-iecg/app/containers/Pages/Events/EventList.js)",
       "Bash(sed -n '175,185p' /Users/macbookair/Documents/GitHub/portal-iecg/app/containers/Pages/Events/CouponsPage.js)",
       "Bash(sed -n '30,35p' /Users/macbookair/Documents/GitHub/portal-iecg/app/containers/Pages/FilaApelosPage.js)",
-      "Bash(sed -n '30,35p' /Users/macbookair/Documents/GitHub/portal-iecg/app/containers/Pages/StartPage/FilaApelosPage.js)"
+      "Bash(sed -n '30,35p' /Users/macbookair/Documents/GitHub/portal-iecg/app/containers/Pages/StartPage/FilaApelosPage.js)",
+      "Bash(PGPASSWORD='kZ7oYab65fQITbyPPV6CLgrL5NIONpwZ' psql -h 62.72.63.137 -U root -d iecg_bd -c \"SELECT COUNT\\(*\\) FROM dev_iecg.voluntariado;\")",
+      "Bash(pkill -f \"node.*server\")",
+      "Bash(pkill -f \"nodemon\")"
     ]
   }
 }

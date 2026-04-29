@@ -11,6 +11,24 @@ class PublicVoluntariadoController {
     }
   }
 
+  async listarCampus(req, res) {
+    try {
+      const data = await PublicVoluntariadoService.listarCampus();
+      return res.status(200).json(data);
+    } catch (error) {
+      return res.status(500).json({ erro: error.message });
+    }
+  }
+
+  async listarMinisteriosPorCampus(req, res) {
+    try {
+      const data = await PublicVoluntariadoService.listarMinisteriosPorCampus(req.params.campusId);
+      return res.status(200).json(data);
+    } catch (error) {
+      return res.status(500).json({ erro: error.message });
+    }
+  }
+
   async cadastrarVoluntario(req, res) {
     try {
       const resultado = await PublicVoluntariadoService.cadastrarVoluntario(req.body);

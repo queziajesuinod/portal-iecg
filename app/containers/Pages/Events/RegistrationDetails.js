@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useConfirm } from '../../../utils/useConfirm';
 import { Helmet } from 'react-helmet';
 import { PapperBlock } from 'dan-components';
 import {
@@ -65,6 +66,7 @@ const OFFLINE_INSTALLMENT_OPTIONS = Array.from({ length: 12 }, (_value, index) =
 const PAYMENT_STATUSES_ALLOWED_FOR_CANCELLATION = ['pending', 'expired'];
 
 function RegistrationDetails() {
+  const { confirm, ConfirmDialog } = useConfirm();
   const history = useHistory();
   const { id } = useParams();
   const [inscricao, setInscricao] = useState(null);
@@ -304,9 +306,8 @@ function RegistrationDetails() {
       setNotification('Somente pagamentos pendentes ou expirados podem ser cancelados.');
       return;
     }
-    if (!window.confirm('Deseja cancelar este pagamento?')) {
-      return;
-    }
+    const ok = await confirm({ title: 'Cancelar pagamento', message: 'Deseja cancelar este pagamento?', confirmText: 'Cancelar pagamento', confirmColor: 'error', severity: 'error' });
+    if (!ok) return;
     try {
       await deletarPagamentoInscricao(id, payment.id);
       setNotification('Pagamento cancelado com sucesso!');
@@ -858,6 +859,7 @@ function RegistrationDetails() {
         </DialogActions>
       </Dialog>
       <Notification message={notification} close={() => setNotification('')} />
+      {ConfirmDialog}
     </div>
   );
 }

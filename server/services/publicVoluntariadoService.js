@@ -2,7 +2,8 @@
 
 const crypto = require('crypto');
 const { Op } = require('sequelize');
-const { sequelize, Member, MemberJourney, User, Voluntariado, AreaVoluntariado, Perfil } = require('../models');
+const { sequelize, Member, MemberJourney, User, Voluntariado, AreaVoluntariado, Campus, Perfil } = require('../models');
+const CampusMinisterioService = require('./campusMinisterioService');
 const { normalizeCpf } = require('../utils/cpf');
 
 const DEFAULT_MEMBER_PERFIL_ID = process.env.DEFAULT_MEMBER_PERFIL_ID || '7d47d03a-a7aa-4907-b8b9-8fcf87bd52dc';
@@ -30,6 +31,17 @@ const PublicVoluntariadoService = {
     });
   },
 
+  async listarCampus() {
+    return Campus.findAll({
+      attributes: ['id', 'nome'],
+      order: [['nome', 'ASC']]
+    });
+  },
+
+  async listarMinisteriosPorCampus(campusId) {
+    return CampusMinisterioService.listarMinisteriosPorCampus(campusId);
+  },
+
   /**
    * Cadastra voluntario publicamente.
    * - Busca membro por CPF ou e-mail
@@ -51,29 +63,59 @@ const PublicVoluntariadoService = {
       birthDate,
       areaVoluntariadoId,
       areaVoluntariadoIds,
+      campusId,
+      ministerioId,
+      vinculos,
+      voluntariados,
       dataInicio,
       observacao
     } = dados;
 
-    const requestedAreaIds = Array.isArray(areaVoluntariadoIds)
-      ? areaVoluntariadoIds
-      : (areaVoluntariadoIds
-        ? [areaVoluntariadoIds]
-        : (Array.isArray(areaVoluntariadoId)
-          ? areaVoluntariadoId
-          : (areaVoluntariadoId ? [areaVoluntariadoId] : [])));
+    // Suporta quatro formatos de entrada:
+    // 1. voluntariados: [{ areaVoluntariadoId, campusId, ministerioId }] — alias de vinculos
+    // 2. vinculos: [{ areaVoluntariadoId, campusId, ministerioId }]
+    // 3. areaVoluntariadoIds + campusId + ministerioId
+    // 4. areaVoluntariadoId — forma simples (retrocompatível)
+    const vinculosInput = (Array.isArray(vinculos) && vinculos.length ? vinculos : null)
+      || (Array.isArray(voluntariados) && voluntariados.length ? voluntariados : null);
 
-    const normalizedAreaIds = [...new Set(
-      requestedAreaIds
-        .map((id) => String(id || '').trim())
-        .filter(Boolean)
-    )];
+    let resolvedVinculos;
+    if (vinculosInput) {
+      resolvedVinculos = vinculosInput.map((v) => ({
+        areaVoluntariadoId: String(v.areaVoluntariadoId || '').trim(),
+        campusId: v.campusId || null,
+        ministerioId: v.ministerioId || null,
+        dataInicio: v.dataInicio || null,
+        observacao: v.observacao || null,
+      })).filter((v) => v.areaVoluntariadoId);
+    } else {
+      const requestedAreaIds = Array.isArray(areaVoluntariadoIds)
+        ? areaVoluntariadoIds
+        : (areaVoluntariadoIds
+          ? [areaVoluntariadoIds]
+          : (Array.isArray(areaVoluntariadoId)
+            ? areaVoluntariadoId
+            : (areaVoluntariadoId ? [areaVoluntariadoId] : [])));
+      resolvedVinculos = [...new Set(requestedAreaIds.map((id) => String(id || '').trim()).filter(Boolean))]
+        .map((id) => ({ areaVoluntariadoId: id, campusId: campusId || null, ministerioId: ministerioId || null }));
+    }
 
-    if (!fullName || !normalizedAreaIds.length || !dataInicio) {
-      throw new Error('Nome completo, area(s) de voluntariado e data de inicio sao obrigatorios');
+    const normalizedAreaIds = resolvedVinculos.map((v) => v.areaVoluntariadoId);
+
+    // dataInicio pode vir na raiz ou dentro de cada item do array
+    const dataInicioRaiz = dataInicio || resolvedVinculos[0]?.dataInicio || null;
+
+    if (!fullName) throw new Error('Campo obrigatorio ausente: fullName (nome completo)');
+    if (!dataInicioRaiz) throw new Error('Campo obrigatorio ausente: dataInicio (data de inicio) — informe na raiz ou dentro de cada item do array');
+    if (!normalizedAreaIds.length) {
+      throw new Error(
+        'Campo obrigatorio ausente: area de voluntariado. ' +
+        'Envie "vinculos": [{"areaVoluntariadoId": "uuid"}] ' +
+        'ou "areaVoluntariadoId": "uuid" no corpo da requisicao'
+      );
     }
     if (!cpf && !email && !phone) {
-      throw new Error('Informe ao menos CPF, e-mail ou telefone para identificacao');
+      throw new Error('Informe ao menos um identificador: cpf, email ou phone');
     }
 
     const areas = await AreaVoluntariado.findAll({
@@ -118,18 +160,11 @@ const PublicVoluntariadoService = {
           birthDate: birthDate || member.birthDate
         }, { transaction });
 
-        // Garante que o usuario vinculado existe e estÃ¡ ativo
+        // Garante que o usuario vinculado existe e está ativo — nunca altera senha existente
         if (member.userId) {
           user = await User.findByPk(member.userId, { transaction });
           if (user) {
-            const updates = { active: true };
-            // Se o usuario nao tem senha, define o telefone como senha agora
-            if (!user.salt || !user.passwordHash) {
-              const salt = crypto.randomBytes(16).toString('hex');
-              updates.salt = salt;
-              updates.passwordHash = hashSHA256WithSalt(senha, salt);
-            }
-            await user.update(updates, { transaction });
+            await user.update({ active: true }, { transaction });
           }
         }
 
@@ -161,19 +196,13 @@ const PublicVoluntariadoService = {
         }
 
         if (user) {
-          // Usuario jÃ¡ existe: atualiza dados e garante senha/ativo
-          const updates = {
+          // Usuario já existe — atualiza apenas dados cadastrais, nunca a senha
+          await user.update({
             name: fullName,
             telefone: phoneLimpo || user.telefone,
             cpf: cpfLimpo || user.cpf,
             active: true
-          };
-          if (!user.salt || !user.passwordHash) {
-            const salt = crypto.randomBytes(16).toString('hex');
-            updates.salt = salt;
-            updates.passwordHash = hashSHA256WithSalt(senha, salt);
-          }
-          await user.update(updates, { transaction });
+          }, { transaction });
         } else {
           // Cria novo User
           const salt = crypto.randomBytes(16).toString('hex');
@@ -212,20 +241,24 @@ const PublicVoluntariadoService = {
         }, { transaction });
       }
 
-      // -- 3. Vincular as areas de voluntariado --------------â”€
+      // -- 3. Vincular as areas de voluntariado --------------
       const voluntariados = await Voluntariado.bulkCreate(
-        selectedAreas.map((area) => ({
+        resolvedVinculos.map((v) => ({
           memberId: member.id,
-          areaVoluntariadoId: area.id,
-          dataInicio,
-          observacao: observacao || null,
+          areaVoluntariadoId: v.areaVoluntariadoId,
+          campusId: v.campusId || null,
+          ministerioId: v.ministerioId || null,
+          dataInicio: v.dataInicio || dataInicioRaiz,
+          observacao: v.observacao || observacao || null,
           status: 'PENDENTE'
         })),
         { transaction, returning: true }
       );
 
       const hasBackstage = selectedAreas.some((area) => String(area.nome || '').toUpperCase() === 'BACKSTAGE');
-      if (hasBackstage) {
+      // Só aplica o perfil BACKSTAGE se o usuário ainda tem o perfil padrão de membro
+      // (nunca rebaixa quem já tem uma permissão mais elevada)
+      if (hasBackstage && user.perfilId === DEFAULT_MEMBER_PERFIL_ID) {
         const perfilBackstage = await Perfil.findOne({ where: { descricao: 'BACKSTAGE' }, transaction });
         if (perfilBackstage) {
           await user.update({ perfilId: perfilBackstage.id }, { transaction });

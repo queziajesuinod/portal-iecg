@@ -8,8 +8,8 @@ import React, {
 import { formatDateInAppTimezone } from '../../../utils/dateTime';
 import {
   Autocomplete,
-  Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
-  IconButton, MenuItem, Paper, Tab, Table, TableBody, TableCell, TableContainer,
+  Box, Button, Chip, Collapse, Dialog, DialogActions, DialogContent, DialogTitle,
+  Grid, IconButton, MenuItem, Paper, Tab, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Tabs, TextField, Tooltip, Typography,
 } from '@mui/material';
 import { Helmet } from 'react-helmet';
@@ -18,6 +18,8 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import PapperBlock from 'dan-components/PapperBlock/PapperBlock';
 import Notification from 'dan-components/Notification/Notification';
 import {
@@ -28,16 +30,31 @@ import {
   encerrarVoluntariado,
   removerVoluntariado,
   listarAreas,
+  listarCampi,
 } from '../../../api/voluntariadoApi';
 import { listarMembros } from '../../../api/membersApi';
+import { listarMinisteriosPorCampus } from '../../../api/cultosApi';
 
-const FORM_VAZIO = {
-  memberId: '',
+const ENTRADA_VAZIA = {
   areaVoluntariadoId: '',
+  campiSelecionados: [],       // [{id, nome}]
+  ministeriosSelecionados: [], // [{id, nome}]
+  ministeriosDisponiveis: [],  // opções carregadas dos campus selecionados
   dataInicio: '',
-  dataFim: '',
-  observacao: ''
+  observacao: '',
 };
+
+// Gera todas as combinações (campus × ministério) de uma entrada
+const gerarCombos = (e) => {
+  const cIds = e.campiSelecionados.map((c) => c.id);
+  const mIds = e.ministeriosSelecionados.map((m) => m.id);
+  if (cIds.length === 0 && mIds.length === 0) return [{ campusId: null, ministerioId: null }];
+  if (cIds.length > 0 && mIds.length === 0) return cIds.map((cId) => ({ campusId: cId, ministerioId: null }));
+  if (cIds.length === 0 && mIds.length > 0) return mIds.map((mId) => ({ campusId: null, ministerioId: mId }));
+  return cIds.flatMap((cId) => mIds.map((mId) => ({ campusId: cId, ministerioId: mId })));
+};
+
+const contarCombos = (e) => gerarCombos(e).length;
 
 const STATUS_CONFIG = {
   PENDENTE: { label: 'Pendente', color: 'warning' },
@@ -68,16 +85,26 @@ const formatDateRange = (values = []) => {
 const VoluntariadoPage = () => {
   const [voluntariados, setVoluntariados] = useState([]);
   const [areas, setAreas] = useState([]);
+  const [campi, setCampi] = useState([]);
   const [membros, setMembros] = useState([]);
   const [loadingMembros, setLoadingMembros] = useState(false);
   const [inputMembro, setInputMembro] = useState('');
   const [notification, setNotification] = useState('');
   const [tabAtiva, setTabAtiva] = useState(0);
   const [filtroArea, setFiltroArea] = useState('');
+  const [filtroCampus, setFiltroCampus] = useState('');
+  const [filtroMinisterio, setFiltroMinisterio] = useState('');
+  const [ministeriosFiltro, setMinisteriosFiltro] = useState([]);
+  const [expandidos, setExpandidos] = useState(new Set());
+  const toggleExpandido = (key) => setExpandidos((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
   const [dialog, setDialog] = useState({ open: false, editando: null });
   const [dialogEncerrar, setDialogEncerrar] = useState({ open: false, ids: [], dataFim: '' });
   const [confirmDelete, setConfirmDelete] = useState(null);
-  const [form, setForm] = useState(FORM_VAZIO);
+  const [entradas, setEntradas] = useState([{ ...ENTRADA_VAZIA }]);
   const [membroSelecionado, setMembroSelecionado] = useState(null);
   const [loading, setLoading] = useState(false);
   const debounceRef = useRef(null);
@@ -86,11 +113,14 @@ const VoluntariadoPage = () => {
     setLoading(true);
     Promise.all([
       listarVoluntariados(),
-      listarAreas()
+      listarAreas(),
+      listarCampi()
     ])
-      .then(([vols, areasData]) => {
+      .then(([vols, areasData, campiData]) => {
         setVoluntariados(vols);
         setAreas(areasData);
+        const lista = Array.isArray(campiData) ? campiData : (campiData?.campuses || campiData?.data || []);
+        setCampi(lista);
       })
       .catch(() => setNotification('Erro ao carregar dados'))
       .finally(() => setLoading(false));
@@ -118,14 +148,25 @@ const VoluntariadoPage = () => {
   }, [inputMembro, dialog.open, buscarMembros]);
 
   // ── Filtros ──────────────────────────────────────────────
+  // When campus filter changes, reload ministry list for the filter and reset ministry filter
+  useEffect(() => {
+    setFiltroMinisterio('');
+    if (!filtroCampus) { setMinisteriosFiltro([]); return; }
+    listarMinisteriosPorCampus(filtroCampus)
+      .then((data) => setMinisteriosFiltro(Array.isArray(data) ? data : []))
+      .catch(() => setMinisteriosFiltro([]));
+  }, [filtroCampus]);
+
   const voluntariadosFiltrados = useMemo(() => {
     const statusAtivo = STATUS_POR_TAB[tabAtiva];
     return voluntariados.filter((v) => {
       if (v.status !== statusAtivo) return false;
       if (filtroArea && v.areaVoluntariadoId !== filtroArea) return false;
+      if (filtroCampus && v.campusId !== filtroCampus) return false;
+      if (filtroMinisterio && v.ministerioId !== filtroMinisterio) return false;
       return true;
     });
-  }, [voluntariados, tabAtiva, filtroArea]);
+  }, [voluntariados, tabAtiva, filtroArea, filtroCampus, filtroMinisterio]);
 
   const voluntariadosAgrupados = useMemo(() => {
     const groups = new Map();
@@ -163,9 +204,43 @@ const VoluntariadoPage = () => {
   // ── Helpers ──────────────────────────────────────────────
   const nomeExibicaoMembro = (group) => getMemberDisplayName(group.membro, group.memberId);
 
+  // ── Handlers de entrada (por índice) ─────────────────────
+  const handleEntradaChange = (idx, campo, valor) => {
+    setEntradas((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], [campo]: valor };
+      return next;
+    });
+  };
+
+  const handleEntradaCampiChange = (idx, campiSelecionados) => {
+    setEntradas((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], campiSelecionados, ministeriosSelecionados: [], ministeriosDisponiveis: [] };
+      return next;
+    });
+    if (!campiSelecionados.length) return;
+    Promise.all(campiSelecionados.map((c) => listarMinisteriosPorCampus(c.id)))
+      .then((results) => {
+        const map = new Map();
+        results.forEach((list) => (Array.isArray(list) ? list : []).forEach((m) => map.set(m.id, m)));
+        const ministerios = Array.from(map.values());
+        setEntradas((prev) => {
+          const next = [...prev];
+          if (next[idx]) next[idx] = { ...next[idx], ministeriosDisponiveis: ministerios };
+          return next;
+        });
+      })
+      .catch(() => {});
+  };
+
+  const adicionarEntrada = () => setEntradas((prev) => [...prev, { ...ENTRADA_VAZIA }]);
+
+  const removerEntrada = (idx) => setEntradas((prev) => prev.filter((_, i) => i !== idx));
+
   // ── Dialog cadastro/edição ────────────────────────────────
   const abrirNovo = () => {
-    setForm(FORM_VAZIO);
+    setEntradas([{ ...ENTRADA_VAZIA }]);
     setMembroSelecionado(null);
     setInputMembro('');
     setMembros([]);
@@ -173,20 +248,28 @@ const VoluntariadoPage = () => {
   };
 
   const abrirEditar = (v) => {
-    setForm({
-      memberId: v.memberId,
+    const campiSelecionados = v.campus ? [{ id: v.campusId, nome: v.campus.nome }] : [];
+    const ministeriosSelecionados = v.ministerio ? [{ id: v.ministerioId, nome: v.ministerio.nome }] : [];
+    const entrada = {
       areaVoluntariadoId: v.areaVoluntariadoId,
+      campiSelecionados,
+      ministeriosSelecionados,
+      ministeriosDisponiveis: ministeriosSelecionados,
       dataInicio: v.dataInicio || '',
-      dataFim: v.dataFim || '',
-      observacao: v.observacao || ''
-    });
+      observacao: v.observacao || '',
+    };
+    setEntradas([entrada]);
+    if (campiSelecionados.length) {
+      listarMinisteriosPorCampus(campiSelecionados[0].id)
+        .then((data) => setEntradas((prev) => {
+          const next = [...prev];
+          if (next[0]) next[0] = { ...next[0], ministeriosDisponiveis: Array.isArray(data) ? data : [] };
+          return next;
+        }))
+        .catch(() => {});
+    }
     const membroAtual = v.membro
-      ? {
-        id: v.memberId,
-        fullName: v.membro.fullName,
-        preferredName: v.membro.preferredName,
-        email: v.membro.email
-      }
+      ? { id: v.memberId, fullName: v.membro.fullName, preferredName: v.membro.preferredName, email: v.membro.email }
       : null;
     setMembroSelecionado(membroAtual);
     setInputMembro(membroAtual ? (membroAtual.preferredName || membroAtual.fullName || '') : '');
@@ -199,33 +282,65 @@ const VoluntariadoPage = () => {
     setMembroSelecionado(null);
     setInputMembro('');
     setMembros([]);
+    setEntradas([{ ...ENTRADA_VAZIA }]);
   };
 
   const handleSalvar = async () => {
-    if (!form.memberId || !form.areaVoluntariadoId || !form.dataInicio) {
-      setNotification('Membro, área e data de início são obrigatórios');
+    if (!membroSelecionado?.id) {
+      setNotification('Selecione um membro');
       return;
     }
+    const invalida = entradas.find((e) => !e.areaVoluntariadoId || !e.dataInicio);
+    if (invalida) {
+      setNotification('Área e data de início são obrigatórios em todas as entradas');
+      return;
+    }
+    const buildRegistros = () =>
+      entradas.flatMap((e) =>
+        gerarCombos(e).map((combo) => ({
+          memberId: membroSelecionado.id,
+          areaVoluntariadoId: e.areaVoluntariadoId,
+          campusId: combo.campusId,
+          ministerioId: combo.ministerioId,
+          dataInicio: e.dataInicio,
+          observacao: e.observacao || null
+        }))
+      );
+
     try {
-      const payload = {
-        memberId: form.memberId,
-        areaVoluntariadoId: form.areaVoluntariadoId,
-        dataInicio: form.dataInicio,
-        dataFim: form.dataFim || null,
-        observacao: form.observacao || null
-      };
       if (dialog.editando) {
-        await atualizarVoluntariado(dialog.editando.id, payload);
-        setNotification('Voluntariado atualizado com sucesso');
+        const todos = buildRegistros();
+        const [primeiro, ...extras] = todos;
+        await atualizarVoluntariado(dialog.editando.id, primeiro);
+        if (extras.length) await Promise.all(extras.map((r) => criarVoluntariado(r)));
+        const total = todos.length;
+        setNotification(total > 1
+          ? `Registro atualizado + ${extras.length} novo(s) vínculo(s) criado(s)`
+          : 'Voluntariado atualizado com sucesso');
       } else {
-        await criarVoluntariado(payload);
-        setNotification('Voluntariado cadastrado com sucesso — aguardando aprovação');
-        setTabAtiva(0); // volta para aba Pendente
+        const registros = buildRegistros();
+        const results = await Promise.allSettled(registros.map((r) => criarVoluntariado(r)));
+        const ok = results.filter((r) => r.status === 'fulfilled').length;
+        const fail = results.filter((r) => r.status === 'rejected').length;
+        if (fail > 0) {
+          setNotification(ok > 0
+            ? `${ok} vínculo(s) cadastrado(s), ${fail} falhou — verifique os dados`
+            : 'Erro ao cadastrar vínculos');
+        } else {
+          setNotification(ok > 1
+            ? `${ok} vínculos cadastrados — aguardando aprovação`
+            : 'Voluntariado cadastrado com sucesso — aguardando aprovação');
+        }
+        // Limpa filtros de campus/ministério para que todos os novos registros fiquem visíveis
+        setFiltroCampus('');
+        setFiltroMinisterio('');
+        setTabAtiva(0);
       }
-      fecharDialog();
-      loadData();
     } catch (err) {
       setNotification(err.message || 'Erro ao salvar');
+    } finally {
+      fecharDialog();
+      loadData();
     }
   };
 
@@ -308,7 +423,7 @@ const VoluntariadoPage = () => {
       <Helmet><title>Voluntários</title></Helmet>
       <PapperBlock title="Voluntários" icon="ion-ios-heart-outline" desc="Gerencie os vínculos de voluntariado dos membros">
 
-        {/* Cabeçalho com filtro e botão */}
+        {/* Cabeçalho com filtros e botão */}
         <Box display="flex" gap={2} alignItems="center" mb={2} flexWrap="wrap">
           <TextField
             select
@@ -316,13 +431,41 @@ const VoluntariadoPage = () => {
             value={filtroArea}
             onChange={(e) => setFiltroArea(e.target.value)}
             size="small"
-            sx={{ minWidth: 220 }}
+            sx={{ minWidth: 200 }}
           >
             <MenuItem value="">Todas as áreas</MenuItem>
             {areas.map((a) => (
               <MenuItem key={a.id} value={a.id}>{a.nome}</MenuItem>
             ))}
           </TextField>
+          <TextField
+            select
+            label="Filtrar por campus"
+            value={filtroCampus}
+            onChange={(e) => setFiltroCampus(e.target.value)}
+            size="small"
+            sx={{ minWidth: 200 }}
+          >
+            <MenuItem value="">Todos os campus</MenuItem>
+            {campi.map((c) => (
+              <MenuItem key={c.id} value={c.id}>{c.nome}</MenuItem>
+            ))}
+          </TextField>
+          {filtroCampus && (
+            <TextField
+              select
+              label="Filtrar por ministério"
+              value={filtroMinisterio}
+              onChange={(e) => setFiltroMinisterio(e.target.value)}
+              size="small"
+              sx={{ minWidth: 200 }}
+            >
+              <MenuItem value="">Todos os ministérios</MenuItem>
+              {ministeriosFiltro.map((m) => (
+                <MenuItem key={m.id} value={m.id}>{m.nome}</MenuItem>
+              ))}
+            </TextField>
+          )}
           <Box flex={1} />
           <Button variant="contained" startIcon={<AddIcon />} onClick={abrirNovo}>
             Vincular Voluntário
@@ -344,93 +487,139 @@ const VoluntariadoPage = () => {
           <Table size="small">
             <TableHead>
               <TableRow>
+                <TableCell padding="checkbox" />
                 <TableCell>Membro</TableCell>
-                <TableCell>Áreas</TableCell>
-                <TableCell>Início</TableCell>
-                <TableCell>Fim</TableCell>
+                <TableCell>Vínculos</TableCell>
                 <TableCell>Status</TableCell>
-                <TableCell>Observação</TableCell>
-                <TableCell align="center">Ações</TableCell>
+                <TableCell align="center">Ações do membro</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {voluntariadosAgrupados.length === 0 && !loading && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center">
-                    Nenhum registro encontrado
-                  </TableCell>
+                  <TableCell colSpan={5} align="center">Nenhum registro encontrado</TableCell>
                 </TableRow>
               )}
               {voluntariadosAgrupados.map((group) => {
                 const cfg = STATUS_CONFIG[group.status] || {};
-                const ids = group.items.map((item) => item.id);
-                const canEdit = group.items.length === 1 && group.status !== 'ENCERRADO';
-                const observacoes = group.items.map((item) => item.observacao).filter(Boolean);
+                const aberto = expandidos.has(group.key);
+                const memberName = nomeExibicaoMembro(group);
                 return (
-                  <TableRow key={group.key} hover>
-                    <TableCell>{nomeExibicaoMembro(group)}</TableCell>
-                    <TableCell>
-                      <Box display="flex" flexWrap="wrap" gap={0.5}>
-                        {group.items.map((item) => (
-                          <Chip key={item.id} label={item.area?.nome || '-'} size="small" variant="outlined" />
-                        ))}
-                      </Box>
-                    </TableCell>
-                    <TableCell>{formatDateRange(group.items.map((item) => item.dataInicio))}</TableCell>
-                    <TableCell>{formatDateRange(group.items.map((item) => item.dataFim))}</TableCell>
-                    <TableCell>
-                      <Chip label={cfg.label} size="small" color={cfg.color} />
-                    </TableCell>
-                    <TableCell
-                      sx={{
-                        maxWidth: 160,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}
+                  <React.Fragment key={group.key}>
+                    {/* ── Linha âncora do membro ── */}
+                    <TableRow
+                      hover
+                      onClick={() => toggleExpandido(group.key)}
+                      sx={{ cursor: 'pointer', bgcolor: aberto ? 'action.selected' : undefined }}
                     >
-                      {observacoes.length ? observacoes.join(' | ') : '-'}
-                    </TableCell>
-                    <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}>
-                      {/* Aprovar — apenas PENDENTE */}
-                      {group.status === 'PENDENTE' && (
-                        <Tooltip title={ids.length > 1 ? `Aprovar ${ids.length} vínculos` : 'Aprovar'}>
-                          <IconButton size="small" color="success" onClick={() => handleAprovar(ids)}>
-                            <CheckCircleIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                      {/* Encerrar — apenas APROVADO */}
-                      {group.status === 'APROVADO' && (
-                        <Tooltip title={ids.length > 1 ? `Encerrar ${ids.length} vínculos` : 'Dar saída / Encerrar'}>
-                          <IconButton size="small" color="warning" onClick={() => abrirEncerrar(group)}>
-                            <ExitToAppIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                      {/* Editar — PENDENTE e APROVADO */}
-                      {canEdit && (
-                        <Tooltip title="Editar">
-                          <IconButton size="small" onClick={() => abrirEditar(group.items[0])}>
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                      {/* Remover */}
-                      <Tooltip title={ids.length > 1 ? `Remover ${ids.length} vínculos` : 'Remover'}>
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() => setConfirmDelete({
-                            ids,
-                            memberName: nomeExibicaoMembro(group)
-                          })}
-                        >
-                          <DeleteIcon fontSize="small" />
+                      <TableCell padding="checkbox">
+                        <IconButton size="small">
+                          {aberto ? <KeyboardArrowUpIcon fontSize="small" /> : <KeyboardArrowDownIcon fontSize="small" />}
                         </IconButton>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight={600}>{memberName}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {group.items.length} vínculo{group.items.length !== 1 ? 's' : ''}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Box display="flex" flexWrap="wrap" gap={0.5}>
+                          {group.items.map((item) => (
+                            <Chip
+                              key={item.id}
+                              label={[item.area?.nome, item.campus?.nome, item.ministerio?.nome].filter(Boolean).join(' · ')}
+                              size="small"
+                              variant="outlined"
+                            />
+                          ))}
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        <Chip label={cfg.label} size="small" color={cfg.color} />
+                      </TableCell>
+                      <TableCell align="center" sx={{ whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
+                        {group.status === 'APROVADO' && group.items.length > 1 && (
+                          <Tooltip title="Dar saída em todos os vínculos">
+                            <IconButton size="small" color="warning" onClick={() => abrirEncerrar(group)}>
+                              <ExitToAppIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                      </TableCell>
+                    </TableRow>
+
+                    {/* ── Sub-tabela expandida ── */}
+                    <TableRow>
+                      <TableCell colSpan={5} sx={{ py: 0, bgcolor: 'grey.50' }}>
+                        <Collapse in={aberto} unmountOnExit>
+                          <Table size="small" sx={{ mx: 2, my: 1, width: 'calc(100% - 32px)' }}>
+                            <TableHead>
+                              <TableRow>
+                                <TableCell sx={{ color: 'text.secondary', fontWeight: 600 }}>Área</TableCell>
+                                <TableCell sx={{ color: 'text.secondary', fontWeight: 600 }}>Campus</TableCell>
+                                <TableCell sx={{ color: 'text.secondary', fontWeight: 600 }}>Ministério</TableCell>
+                                <TableCell sx={{ color: 'text.secondary', fontWeight: 600 }}>Início</TableCell>
+                                <TableCell sx={{ color: 'text.secondary', fontWeight: 600 }}>Fim</TableCell>
+                                <TableCell sx={{ color: 'text.secondary', fontWeight: 600 }}>Observação</TableCell>
+                                <TableCell align="center" sx={{ color: 'text.secondary', fontWeight: 600 }}>Ações</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {group.items.map((item) => (
+                                <TableRow key={item.id} hover>
+                                  <TableCell>{item.area?.nome || '-'}</TableCell>
+                                  <TableCell>{item.campus?.nome || '-'}</TableCell>
+                                  <TableCell>{item.ministerio?.nome || '-'}</TableCell>
+                                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                    {item.dataInicio ? formatDate(item.dataInicio) : '-'}
+                                  </TableCell>
+                                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                    {item.dataFim ? formatDate(item.dataFim) : '-'}
+                                  </TableCell>
+                                  <TableCell sx={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {item.observacao || '-'}
+                                  </TableCell>
+                                  <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}>
+                                    {item.status === 'PENDENTE' && (
+                                      <Tooltip title="Aprovar">
+                                        <IconButton size="small" color="success" onClick={() => handleAprovar([item.id])}>
+                                          <CheckCircleIcon fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                    )}
+                                    {item.status === 'APROVADO' && (
+                                      <Tooltip title="Dar saída / Encerrar">
+                                        <IconButton size="small" color="warning" onClick={() => abrirEncerrar({ items: [item] })}>
+                                          <ExitToAppIcon fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                    )}
+                                    {item.status !== 'ENCERRADO' && (
+                                      <Tooltip title="Editar">
+                                        <IconButton size="small" onClick={() => abrirEditar(item)}>
+                                          <EditIcon fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                    )}
+                                    <Tooltip title="Remover">
+                                      <IconButton
+                                        size="small"
+                                        color="error"
+                                        onClick={() => setConfirmDelete({ ids: [item.id], memberName, areaNome: item.area?.nome })}
+                                      >
+                                        <DeleteIcon fontSize="small" />
+                                      </IconButton>
+                                    </Tooltip>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </Collapse>
+                      </TableCell>
+                    </TableRow>
+                  </React.Fragment>
                 );
               })}
             </TableBody>
@@ -438,10 +627,12 @@ const VoluntariadoPage = () => {
         </TableContainer>
 
         {/* ── Dialog cadastro/edição ── */}
-        <Dialog open={dialog.open} onClose={fecharDialog} maxWidth="sm" fullWidth>
-          <DialogTitle>{dialog.editando ? 'Editar Voluntariado' : 'Vincular Voluntário'}</DialogTitle>
+        <Dialog open={dialog.open} onClose={fecharDialog} maxWidth="md" fullWidth>
+          <DialogTitle>{dialog.editando ? 'Editar Vínculo' : 'Vincular Voluntário'}</DialogTitle>
           <DialogContent>
             <Box display="flex" flexDirection="column" gap={2} mt={1}>
+
+              {/* Membro */}
               <Autocomplete
                 options={membros}
                 getOptionLabel={(m) => {
@@ -454,10 +645,8 @@ const VoluntariadoPage = () => {
                 inputValue={inputMembro}
                 onInputChange={(_, val) => setInputMembro(val)}
                 value={membroSelecionado}
-                onChange={(_, newValue) => {
-                  setMembroSelecionado(newValue);
-                  setForm((prev) => ({ ...prev, memberId: newValue?.id || '' }));
-                }}
+                onChange={(_, newValue) => setMembroSelecionado(newValue)}
+                disabled={Boolean(dialog.editando)}
                 noOptionsText={inputMembro.length < 2 ? 'Digite pelo menos 2 caracteres' : 'Nenhum membro encontrado'}
                 renderInput={(params) => (
                   <TextField
@@ -470,42 +659,147 @@ const VoluntariadoPage = () => {
                 isOptionEqualToValue={(option, value) => option.id === value?.id}
               />
 
-              <TextField
-                select
-                fullWidth
-                required
-                label="Área de Voluntariado"
-                value={form.areaVoluntariadoId}
-                onChange={(e) => setForm((prev) => ({ ...prev, areaVoluntariadoId: e.target.value }))}
+              {/* Lista de entradas */}
+              {entradas.map((entrada, idx) => {
+                const totalEntrada = contarCombos(entrada);
+                return (
+                  <Paper key={idx} variant="outlined" sx={{ p: 2 }}>
+                    <Box display="flex" alignItems="center" justifyContent="space-between" mb={1.5}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        {`Área ${idx + 1}`}
+                        {totalEntrada > 1 && (
+                          <Typography component="span" variant="caption" color="primary.main" sx={{ ml: 1 }}>
+                            ({totalEntrada} registros)
+                          </Typography>
+                        )}
+                      </Typography>
+                      {entradas.length > 1 && (
+                        <IconButton size="small" color="error" onClick={() => removerEntrada(idx)}>
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      )}
+                    </Box>
+
+                    <Grid container spacing={2}>
+                      {/* Área */}
+                      <Grid item xs={12} sm={4}>
+                        <TextField
+                          select fullWidth required size="small"
+                          label="Área de Voluntariado"
+                          value={entrada.areaVoluntariadoId}
+                          onChange={(e) => handleEntradaChange(idx, 'areaVoluntariadoId', e.target.value)}
+                        >
+                          {areas.filter((a) => a.ativo).map((a) => (
+                            <MenuItem key={a.id} value={a.id}>{a.nome}</MenuItem>
+                          ))}
+                        </TextField>
+                      </Grid>
+
+                      {/* Data início */}
+                      <Grid item xs={12} sm={4}>
+                        <TextField
+                          fullWidth required size="small"
+                          label="Data de Início"
+                          type="date"
+                          value={entrada.dataInicio}
+                          onChange={(e) => handleEntradaChange(idx, 'dataInicio', e.target.value)}
+                          InputLabelProps={{ shrink: true }}
+                        />
+                      </Grid>
+
+                      {/* Observação */}
+                      <Grid item xs={12} sm={4}>
+                        <TextField
+                          fullWidth size="small"
+                          label="Observação"
+                          value={entrada.observacao}
+                          onChange={(e) => handleEntradaChange(idx, 'observacao', e.target.value)}
+                        />
+                      </Grid>
+
+                      {/* Campus — multi-select */}
+                      <Grid item xs={12} sm={6}>
+                        <Autocomplete
+                          multiple
+                          options={campi}
+                          value={entrada.campiSelecionados}
+                          onChange={(_, val) => handleEntradaCampiChange(idx, val)}
+                          getOptionLabel={(o) => o.nome}
+                          isOptionEqualToValue={(a, b) => a.id === b.id}
+                          renderTags={(val, getTagProps) =>
+                            val.map((c, i) => (
+                              <Chip key={c.id} label={c.nome} size="small" {...getTagProps({ index: i })} />
+                            ))
+                          }
+                          renderInput={(params) => (
+                            <TextField
+                              {...params}
+                              size="small"
+                              label="Campus"
+                              placeholder={entrada.campiSelecionados.length ? '' : 'Nenhum (opcional)'}
+                            />
+                          )}
+                        />
+                      </Grid>
+
+                      {/* Ministério — multi-select, dependente do campus */}
+                      <Grid item xs={12} sm={6}>
+                        <Autocomplete
+                          multiple
+                          options={entrada.ministeriosDisponiveis}
+                          value={entrada.ministeriosSelecionados}
+                          onChange={(_, val) => handleEntradaChange(idx, 'ministeriosSelecionados', val)}
+                          disabled={!entrada.campiSelecionados.length}
+                          getOptionLabel={(o) => o.nome}
+                          isOptionEqualToValue={(a, b) => a.id === b.id}
+                          renderTags={(val, getTagProps) =>
+                            val.map((m, i) => (
+                              <Chip key={m.id} label={m.nome} size="small" {...getTagProps({ index: i })} />
+                            ))
+                          }
+                          renderInput={(params) => (
+                            <TextField
+                              {...params}
+                              size="small"
+                              label="Ministérios"
+                              placeholder={entrada.campiSelecionados.length ? '' : 'Selecione campus primeiro'}
+                              helperText={
+                                entrada.campiSelecionados.length && !entrada.ministeriosDisponiveis.length
+                                  ? 'Carregando...'
+                                  : ''
+                              }
+                            />
+                          )}
+                        />
+                      </Grid>
+                    </Grid>
+                  </Paper>
+                );
+              })}
+
+              {/* Botão adicionar entrada */}
+              <Button
+                variant="outlined"
+                startIcon={<AddIcon />}
+                onClick={adicionarEntrada}
+                size="small"
+                sx={{ alignSelf: 'flex-start' }}
               >
-                {areas.filter((a) => a.ativo).map((a) => (
-                  <MenuItem key={a.id} value={a.id}>{a.nome}</MenuItem>
-                ))}
-              </TextField>
-
-              <TextField
-                fullWidth
-                required
-                label="Data de Início"
-                type="date"
-                value={form.dataInicio}
-                onChange={(e) => setForm((prev) => ({ ...prev, dataInicio: e.target.value }))}
-                InputLabelProps={{ shrink: true }}
-              />
-
-              <TextField
-                fullWidth
-                label="Observação"
-                multiline
-                minRows={2}
-                value={form.observacao}
-                onChange={(e) => setForm((prev) => ({ ...prev, observacao: e.target.value }))}
-              />
+                Adicionar outra área
+              </Button>
             </Box>
           </DialogContent>
           <DialogActions>
             <Button onClick={fecharDialog}>Cancelar</Button>
-            <Button variant="contained" onClick={handleSalvar}>Salvar</Button>
+            <Button variant="contained" onClick={handleSalvar}>
+              {(() => {
+                const total = entradas.reduce((acc, e) => acc + contarCombos(e), 0);
+                if (dialog.editando) {
+                  return total > 1 ? `Salvar + criar (${total - 1} novo${total - 1 !== 1 ? 's' : ''})` : 'Salvar';
+                }
+                return total > 1 ? `Cadastrar (${total} registros)` : 'Cadastrar';
+              })()}
+            </Button>
           </DialogActions>
         </Dialog>
 
@@ -536,9 +830,9 @@ const VoluntariadoPage = () => {
           <DialogTitle>Confirmar remoção</DialogTitle>
           <DialogContent>
             <Typography>
-              {confirmDelete?.ids?.length > 1
-                ? `Deseja realmente remover ${confirmDelete.ids.length} vínculos de voluntariado de ${confirmDelete.memberName}?`
-                : 'Deseja realmente remover este vínculo de voluntariado?'}
+              {confirmDelete?.areaNome
+                ? `Remover o vínculo de ${confirmDelete.areaNome} de ${confirmDelete.memberName}?`
+                : `Remover vínculo de voluntariado de ${confirmDelete?.memberName || 'este membro'}?`}
             </Typography>
           </DialogContent>
           <DialogActions>

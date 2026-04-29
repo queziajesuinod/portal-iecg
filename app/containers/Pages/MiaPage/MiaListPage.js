@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useConfirm } from '../../../utils/useConfirm';
 import { Helmet } from 'react-helmet';
 import { useHistory } from 'react-router-dom';
 import { PapperBlock, Notification } from 'dan-components';
@@ -24,6 +25,7 @@ import {
 const MiaListPage = () => {
   const title = 'Listagem Ministério MIA';
   const description = 'Listagem de todos os Integrantes do MIA cadastrados';
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [aposentados, setAposentados] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -77,8 +79,8 @@ const MiaListPage = () => {
   }, [page, searchTerm]);
 
   const handleDelete = async (id) => {
-    const confirm = window.confirm('Tem certeza que deseja excluir este registro?');
-    if (!confirm) return;
+    const ok = await confirm({ title: 'Excluir registro', message: 'Tem certeza que deseja excluir este registro?', confirmText: 'Excluir', confirmColor: 'error', severity: 'error' });
+    if (!ok) return;
 
     const token = localStorage.getItem('token');
 
@@ -279,6 +281,7 @@ const MiaListPage = () => {
       </PapperBlock>
 
       <Notification message={notification} close={() => setNotification('')} />
+      {ConfirmDialog}
     </div>
   );
 };

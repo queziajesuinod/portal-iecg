@@ -14,6 +14,7 @@ import {
   criarRegistro, buscarRegistro, atualizarRegistro,
   listarMinistros, criarMinistro,
 } from '../../../api/cultosApi';
+import { listarVoluntariados } from '../../../api/voluntariadoApi';
 
 const resolveApiUrl = () => {
   if (process.env.REACT_APP_API_URL) return process.env.REACT_APP_API_URL.replace(/\/$/, '');
@@ -63,6 +64,8 @@ const RegistroCultoForm = () => {
   const [ministrosOptions, setMinistrosOptions] = useState([]);
   const [ministrosSelecionados, setMinistrosSelecionados] = useState([]);
   const [loadingMinistro, setLoadingMinistro] = useState(false);
+
+  const [voluntariosAprovados, setVoluntariosAprovados] = useState(null);
 
   const [loading, setLoading] = useState(false);
   const [loadingInit, setLoadingInit] = useState(true);
@@ -199,6 +202,14 @@ const RegistroCultoForm = () => {
       setLoadingMinistro(false);
     }
   };
+
+  // Busca contagem de voluntários aprovados para o campus + ministério selecionados
+  useEffect(() => {
+    if (!form.campusId || !form.ministerioId) { setVoluntariosAprovados(null); return; }
+    listarVoluntariados({ campusId: form.campusId, ministerioId: form.ministerioId, status: 'APROVADO' })
+      .then((data) => setVoluntariosAprovados(Array.isArray(data) ? data.length : null))
+      .catch(() => setVoluntariosAprovados(null));
+  }, [form.campusId, form.ministerioId]);
 
   const exibeCriancas = ministerioSelecionado ? ministerioSelecionado.exibeCriancas : true;
   const exibeBebes = ministerioSelecionado ? ministerioSelecionado.exibeBebes : true;
@@ -441,6 +452,7 @@ const RegistroCultoForm = () => {
               <TextField
                 fullWidth required type="number" label="Voluntários" name="qtdVoluntarios"
                 value={form.qtdVoluntarios} onChange={handleChange} inputProps={{ min: 0 }}
+                helperText={voluntariosAprovados !== null ? `${voluntariosAprovados} aprovado(s) cadastrado(s)` : ''}
               />
             </Grid>
 

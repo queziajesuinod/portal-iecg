@@ -12,6 +12,9 @@ const resolveApiUrl = () => {
 const API_URL = resolveApiUrl();
 const BASE = `${API_URL}/api/admin/voluntariado`;
 
+// ===== Campus =====
+export const listarCampi = () => fetchWithAuth(`${API_URL}/start/campus`);
+
 // ===== Áreas de Voluntariado =====
 export const listarAreas = (apenasAtivos = false) =>
   fetchWithAuth(`${BASE}/areas${apenasAtivos ? '?ativo=true' : ''}`);

@@ -39,17 +39,13 @@ function formatCpf(v) {
 
 function extractBuyerInfo(buyerData) {
   if (!buyerData) return {};
-  const phone = normalizePhone(
-    buyerData.buyer_phone || buyerData.phone || buyerData.telefone || buyerData.whatsapp || ''
-  );
-  const whatsapp = normalizePhone(
-    buyerData.whatsapp || buyerData.buyer_phone || buyerData.phone || ''
-  );
+  const phoneRaw = buyerData.buyer_phone || buyerData.buyer_whatsapp || buyerData.phone || buyerData.telefone || buyerData.whatsapp || '';
+  const whatsappRaw = buyerData.buyer_whatsapp || buyerData.whatsapp || buyerData.buyer_phone || buyerData.phone || '';
   return {
     name: String(buyerData.buyer_name || buyerData.nome || buyerData.name || '').trim() || null,
     email: normalizeEmail(buyerData.buyer_email || buyerData.email || buyerData.usuarioEmail || ''),
-    phone,
-    whatsapp,
+    phone: normalizePhone(phoneRaw),
+    whatsapp: normalizePhone(whatsappRaw),
     cpf: formatCpf(buyerData.buyer_document || buyerData.cpf || buyerData.documento || buyerData.document || '')
   };
 }
@@ -69,6 +65,15 @@ async function findMember(buyer, transaction) {
   if (buyer.email) {
     const byEmail = await Member.findOne({ where: { email: buyer.email }, transaction });
     if (byEmail) return byEmail;
+  }
+
+  if (buyer.cpf) {
+    const cpfDigits = sanitizeDigits(buyer.cpf);
+    const byCpf = await Member.findOne({
+      where: { [Op.or]: [{ cpf: buyer.cpf }, { cpf: cpfDigits }] },
+      transaction
+    });
+    if (byCpf) return byCpf;
   }
 
   const phoneConditions = [
@@ -118,15 +123,16 @@ async function ensureJourney(memberId, transaction) {
 }
 
 async function ensureActivity(memberId, registrationId, eventId, eventName, transaction) {
-  // Idempotência por registrationId no metadata
-  const existing = await MemberActivity.findOne({
-    where: {
-      memberId,
-      activityType: ACTIVITY_TYPE,
-      metadata: { [Op.contains]: { registrationId } }
-    },
-    transaction
-  });
+  const where = { memberId, activityType: ACTIVITY_TYPE };
+
+  // Se tem eventId, uma atividade por evento é suficiente (ignora compras duplicadas)
+  if (eventId) {
+    where.eventId = eventId;
+  } else {
+    where.metadata = { [Op.contains]: { registrationId } };
+  }
+
+  const existing = await MemberActivity.findOne({ where, transaction });
   if (existing) return false;
 
   const typeRef = await MemberActivityType.findOne({
@@ -171,10 +177,14 @@ async function ensureMilestoneEncontro(memberId, description, transaction) {
 // ── ponto de entrada ──────────────────────────────────────────────────────────
 
 async function processarInscricaoConfirmada(registration) {
+  if (registration.paymentStatus !== 'confirmed') {
+    return;
+  }
+
   const buyer = extractBuyerInfo(registration.buyerData);
 
   if (!buyer.email && !buyer.phone && !buyer.whatsapp) {
-    return; // sem identificador para vincular ao membro
+    return;
   }
 
   const t = await sequelize.transaction();

@@ -16,6 +16,18 @@ module.exports = (sequelize) => {
           as: 'area'
         });
       }
+      if (models.Campus) {
+        Voluntariado.belongsTo(models.Campus, {
+          foreignKey: 'campusId',
+          as: 'campus'
+        });
+      }
+      if (models.Ministerio) {
+        Voluntariado.belongsTo(models.Ministerio, {
+          foreignKey: 'ministerioId',
+          as: 'ministerio'
+        });
+      }
     }
   }
 
@@ -47,6 +59,14 @@ module.exports = (sequelize) => {
         type: DataTypes.ENUM('PENDENTE', 'APROVADO', 'ENCERRADO'),
         allowNull: false,
         defaultValue: 'PENDENTE'
+      },
+      campusId: {
+        type: DataTypes.UUID,
+        allowNull: true
+      },
+      ministerioId: {
+        type: DataTypes.UUID,
+        allowNull: true
       },
       observacao: {
         type: DataTypes.TEXT,

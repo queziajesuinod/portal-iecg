@@ -223,6 +223,66 @@ const definition = {
           ativo: { type: 'boolean' },
         },
       },
+      Voluntariado: {
+        type: 'object',
+        properties: {
+          id: { $ref: '#/components/schemas/UUID' },
+          memberId: { $ref: '#/components/schemas/UUID' },
+          areaVoluntariadoId: { $ref: '#/components/schemas/UUID' },
+          campusId: { allOf: [{ $ref: '#/components/schemas/UUID' }], nullable: true },
+          ministerioId: { allOf: [{ $ref: '#/components/schemas/UUID' }], nullable: true },
+          dataInicio: { type: 'string', format: 'date', example: '2025-01-01' },
+          dataFim: { type: 'string', format: 'date', nullable: true },
+          status: { type: 'string', enum: ['PENDENTE', 'APROVADO', 'ENCERRADO'] },
+          observacao: { type: 'string', nullable: true },
+          membro: {
+            type: 'object',
+            properties: {
+              id: { $ref: '#/components/schemas/UUID' },
+              fullName: { type: 'string' },
+              preferredName: { type: 'string', nullable: true },
+              email: { type: 'string' },
+              phone: { type: 'string', nullable: true },
+            },
+          },
+          area: {
+            type: 'object',
+            properties: {
+              id: { $ref: '#/components/schemas/UUID' },
+              nome: { type: 'string' },
+              ativo: { type: 'boolean' },
+            },
+          },
+          campus: {
+            type: 'object',
+            nullable: true,
+            properties: {
+              id: { $ref: '#/components/schemas/UUID' },
+              nome: { type: 'string' },
+            },
+          },
+          ministerio: {
+            type: 'object',
+            nullable: true,
+            properties: {
+              id: { $ref: '#/components/schemas/UUID' },
+              nome: { type: 'string' },
+            },
+          },
+        },
+      },
+      VoluntariadoInput: {
+        type: 'object',
+        required: ['memberId', 'areaVoluntariadoId', 'dataInicio'],
+        properties: {
+          memberId: { $ref: '#/components/schemas/UUID' },
+          areaVoluntariadoId: { $ref: '#/components/schemas/UUID' },
+          campusId: { allOf: [{ $ref: '#/components/schemas/UUID' }], nullable: true, description: 'Campus do vínculo (opcional)' },
+          ministerioId: { allOf: [{ $ref: '#/components/schemas/UUID' }], nullable: true, description: 'Ministério do vínculo (opcional, requer campusId)' },
+          dataInicio: { type: 'string', format: 'date', example: '2025-01-01' },
+          observacao: { type: 'string', nullable: true },
+        },
+      },
     },
   },
 
@@ -519,25 +579,227 @@ const definition = {
     },
 
     // ═══════════════════════════════════════════════════════════════
-    // VOLUNTARIADO
+    // VOLUNTARIADO — PÚBLICO
+    // ═══════════════════════════════════════════════════════════════
+    '/api/public/voluntariado/areas': {
+      get: {
+        tags: ['Voluntariado'],
+        summary: 'Listar áreas de voluntariado ativas (público)',
+        security: [],
+        responses: {
+          200: { description: 'Lista de áreas ativas', content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/AreaVoluntariado' } } } } },
+        },
+      },
+    },
+    '/api/public/voluntariado/campus': {
+      get: {
+        tags: ['Voluntariado'],
+        summary: 'Listar campus (público)',
+        security: [],
+        responses: {
+          200: {
+            description: 'Lista de campus',
+            content: { 'application/json': { schema: { type: 'array', items: { type: 'object', properties: { id: { $ref: '#/components/schemas/UUID' }, nome: { type: 'string' } } } } } },
+          },
+        },
+      },
+    },
+    '/api/public/voluntariado/campus/{campusId}/ministerios': {
+      get: {
+        tags: ['Voluntariado'],
+        summary: 'Listar ministérios de um campus (público)',
+        security: [],
+        parameters: [{ name: 'campusId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }],
+        responses: {
+          200: {
+            description: 'Ministérios vinculados ao campus',
+            content: { 'application/json': { schema: { type: 'array', items: { type: 'object', properties: { id: { $ref: '#/components/schemas/UUID' }, nome: { type: 'string' } } } } } },
+          },
+        },
+      },
+    },
+    '/api/public/voluntariado': {
+      post: {
+        tags: ['Voluntariado'],
+        summary: 'Cadastrar voluntário (público)',
+        security: [],
+        description: 'Cria ou atualiza um membro e vincula às áreas de voluntariado informadas. Aceita `vinculos[]` para múltiplas combinações área+campus+ministério.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['fullName', 'dataInicio'],
+                properties: {
+                  fullName: { type: 'string', example: 'João da Silva' },
+                  preferredName: { type: 'string', nullable: true },
+                  email: { type: 'string', format: 'email', nullable: true },
+                  cpf: { type: 'string', example: '123.456.789-00', nullable: true },
+                  phone: { type: 'string', example: '67912345678', nullable: true },
+                  birthDate: { type: 'string', format: 'date', nullable: true },
+                  dataInicio: { type: 'string', format: 'date', example: '2025-01-01' },
+                  observacao: { type: 'string', nullable: true },
+                  vinculos: {
+                    type: 'array',
+                    description: 'Combinações área+campus+ministério. Use este campo para registrar múltiplos vínculos com campus/ministério distintos.',
+                    items: {
+                      type: 'object',
+                      required: ['areaVoluntariadoId'],
+                      properties: {
+                        areaVoluntariadoId: { $ref: '#/components/schemas/UUID' },
+                        campusId: { allOf: [{ $ref: '#/components/schemas/UUID' }], nullable: true },
+                        ministerioId: { allOf: [{ $ref: '#/components/schemas/UUID' }], nullable: true },
+                      },
+                    },
+                  },
+                  areaVoluntariadoId: { allOf: [{ $ref: '#/components/schemas/UUID' }], nullable: true, description: 'Retrocompatível — use `vinculos` para múltiplas áreas' },
+                  areaVoluntariadoIds: { type: 'array', items: { $ref: '#/components/schemas/UUID' }, nullable: true, description: 'Retrocompatível — use `vinculos` para múltiplas áreas' },
+                  campusId: { allOf: [{ $ref: '#/components/schemas/UUID' }], nullable: true, description: 'Aplicado a todas as áreas quando não usar `vinculos`' },
+                  ministerioId: { allOf: [{ $ref: '#/components/schemas/UUID' }], nullable: true, description: 'Aplicado a todas as áreas quando não usar `vinculos`' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Cadastro realizado',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    memberId: { $ref: '#/components/schemas/UUID' },
+                    voluntariadoIds: { type: 'array', items: { $ref: '#/components/schemas/UUID' } },
+                    status: { type: 'string', example: 'PENDENTE' },
+                    areas: { type: 'array', items: { type: 'string' } },
+                    mensagem: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Dados inválidos' },
+        },
+      },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // VOLUNTARIADO — ADMIN
     // ═══════════════════════════════════════════════════════════════
     '/api/admin/voluntariado/areas': {
       get: { tags: ['Voluntariado'], summary: 'Listar áreas de voluntariado', responses: { 200: { description: 'Áreas', content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/AreaVoluntariado' } } } } } } },
       post: { tags: ['Voluntariado'], summary: 'Criar área de voluntariado', requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AreaVoluntariado' } } } }, responses: { 201: { description: 'Área criada' } } },
     },
     '/api/admin/voluntariado/areas/{id}': {
-      get: { tags: ['Voluntariado'], summary: 'Buscar área por ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Área' } } },
-      put: { tags: ['Voluntariado'], summary: 'Atualizar área', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AreaVoluntariado' } } } }, responses: { 200: { description: 'Área atualizada' } } },
+      get: { tags: ['Voluntariado'], summary: 'Buscar área por ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Área', content: { 'application/json': { schema: { $ref: '#/components/schemas/AreaVoluntariado' } } } }, 404: { description: 'Não encontrada' } } },
+      put: { tags: ['Voluntariado'], summary: 'Atualizar área', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AreaVoluntariado' } } } }, responses: { 200: { description: 'Área atualizada', content: { 'application/json': { schema: { $ref: '#/components/schemas/AreaVoluntariado' } } } } } },
+    },
+    '/api/admin/voluntariado/areas/{id}/ativo': {
+      patch: {
+        tags: ['Voluntariado'],
+        summary: 'Alternar status ativo/inativo da área',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }],
+        responses: {
+          200: { description: 'Status alternado', content: { 'application/json': { schema: { $ref: '#/components/schemas/AreaVoluntariado' } } } },
+          404: { description: 'Área não encontrada' },
+        },
+      },
     },
     '/api/admin/voluntariado': {
-      get: { tags: ['Voluntariado'], summary: 'Listar voluntariados', responses: { 200: { description: 'Vínculos de voluntariado' } } },
-      post: { tags: ['Voluntariado'], summary: 'Criar vínculo de voluntariado', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { memberId: { $ref: '#/components/schemas/UUID' }, areaId: { $ref: '#/components/schemas/UUID' } } } } } }, responses: { 201: { description: 'Vínculo criado' } } },
+      get: {
+        tags: ['Voluntariado'],
+        summary: 'Listar vínculos de voluntariado',
+        parameters: [
+          { name: 'memberId', in: 'query', schema: { $ref: '#/components/schemas/UUID' }, description: 'Filtrar por membro' },
+          { name: 'areaVoluntariadoId', in: 'query', schema: { $ref: '#/components/schemas/UUID' }, description: 'Filtrar por área' },
+          { name: 'campusId', in: 'query', schema: { $ref: '#/components/schemas/UUID' }, description: 'Filtrar por campus' },
+          { name: 'ministerioId', in: 'query', schema: { $ref: '#/components/schemas/UUID' }, description: 'Filtrar por ministério' },
+          { name: 'status', in: 'query', schema: { type: 'string', enum: ['PENDENTE', 'APROVADO', 'ENCERRADO'] }, description: 'Filtrar por status' },
+        ],
+        responses: {
+          200: { description: 'Lista de vínculos', content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/Voluntariado' } } } } },
+        },
+      },
+      post: {
+        tags: ['Voluntariado'],
+        summary: 'Criar vínculo de voluntariado',
+        description: 'Cria um vínculo com status PENDENTE. Envie múltiplos POSTs para registrar combinações campus × ministério distintas.',
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/VoluntariadoInput' } } } },
+        responses: {
+          201: { description: 'Vínculo criado', content: { 'application/json': { schema: { $ref: '#/components/schemas/Voluntariado' } } } },
+          400: { description: 'Dados inválidos (memberId, areaVoluntariadoId e dataInicio são obrigatórios)' },
+        },
+      },
+    },
+    '/api/admin/voluntariado/{id}': {
+      get: {
+        tags: ['Voluntariado'],
+        summary: 'Buscar vínculo por ID',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }],
+        responses: {
+          200: { description: 'Vínculo encontrado', content: { 'application/json': { schema: { $ref: '#/components/schemas/Voluntariado' } } } },
+          404: { description: 'Vínculo não encontrado' },
+        },
+      },
+      put: {
+        tags: ['Voluntariado'],
+        summary: 'Atualizar vínculo de voluntariado',
+        description: 'Atualiza campos editáveis. O campo status não pode ser alterado por este endpoint.',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/VoluntariadoInput' } } } },
+        responses: {
+          200: { description: 'Vínculo atualizado', content: { 'application/json': { schema: { $ref: '#/components/schemas/Voluntariado' } } } },
+          400: { description: 'Erro na atualização' },
+        },
+      },
+      delete: {
+        tags: ['Voluntariado'],
+        summary: 'Remover vínculo de voluntariado',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }],
+        responses: {
+          204: { description: 'Removido com sucesso' },
+          400: { description: 'Erro ao remover' },
+        },
+      },
     },
     '/api/admin/voluntariado/{id}/aprovar': {
-      patch: { tags: ['Voluntariado'], summary: 'Aprovar voluntariado', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Aprovado' } } },
+      patch: {
+        tags: ['Voluntariado'],
+        summary: 'Aprovar vínculo de voluntariado',
+        description: 'Muda o status de PENDENTE para APROVADO e registra um marco (MemberMilestone) do tipo VOLUNTARIADO.',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }],
+        responses: {
+          200: { description: 'Vínculo aprovado', content: { 'application/json': { schema: { $ref: '#/components/schemas/Voluntariado' } } } },
+          400: { description: 'Vínculo não está PENDENTE ou não encontrado' },
+        },
+      },
     },
     '/api/admin/voluntariado/{id}/encerrar': {
-      patch: { tags: ['Voluntariado'], summary: 'Encerrar voluntariado', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Encerrado' } } },
+      patch: {
+        tags: ['Voluntariado'],
+        summary: 'Encerrar vínculo de voluntariado',
+        description: 'Muda o status para ENCERRADO, registra dataFim e cria uma MemberActivity do tipo FIM_VOLUNTARIADO.',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  dataFim: { type: 'string', format: 'date', description: 'Data de encerramento (padrão: hoje)' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Vínculo encerrado', content: { 'application/json': { schema: { $ref: '#/components/schemas/Voluntariado' } } } },
+          400: { description: 'Vínculo já encerrado ou não encontrado' },
+        },
+      },
     },
 
     // ═══════════════════════════════════════════════════════════════

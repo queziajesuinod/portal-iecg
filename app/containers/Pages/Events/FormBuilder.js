@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useConfirm } from '../../../utils/useConfirm';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
 import {
@@ -63,6 +64,7 @@ const TIPOS_CAMPO = [
 ];
 
 function FormBuilder() {
+  const { confirm, ConfirmDialog } = useConfirm();
   const history = useHistory();
   const { id } = useParams();
   const [evento, setEvento] = useState(null);
@@ -225,7 +227,8 @@ function FormBuilder() {
   };
 
   const handleDeletarCampo = async (campo) => {
-    if (window.confirm(`Tem certeza que deseja deletar o campo "${campo.fieldLabel}"?`)) {
+    const okCampo = await confirm({ title: 'Deletar campo', message: `Tem certeza que deseja deletar o campo "${campo.fieldLabel}"?`, confirmText: 'Deletar', confirmColor: 'error', severity: 'error' });
+    if (okCampo) {
       if (campo.id.toString().startsWith('temp_')) {
         // Campo temporário (não salvo ainda)
         setCampos(prev => prev.filter(c => c.id !== campo.id));
@@ -709,6 +712,7 @@ function FormBuilder() {
         </DialogActions>
       </Dialog>
       <Notification message={notification} close={() => setNotification('')} />
+      {ConfirmDialog}
     </div>
   );
 }

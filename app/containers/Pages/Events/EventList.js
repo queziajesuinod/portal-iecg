@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useConfirm } from '../../../utils/useConfirm';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
 import { formatDateInAppTimezone } from '../../../utils/dateTime';
@@ -51,6 +52,7 @@ import {
 import { EVENT_TYPE_LABELS } from '../../../constants/eventTypes';
 
 function EventList() {
+  const { confirm, ConfirmDialog } = useConfirm();
   const history = useHistory();
   const [eventos, setEventos] = useState([]);
   const [eventosFiltrados, setEventosFiltrados] = useState([]);
@@ -136,23 +138,21 @@ function EventList() {
   };
 
   const handleDeletar = async (id, titulo) => {
-    if (window.confirm(`Tem certeza que deseja deletar o evento "${titulo}"?`)) {
-      try {
-        await deletarEvento(id);
-        setNotification('Evento deletado com sucesso!');
-        carregarEventos();
-      } catch (error) {
-        const mensagem = error.message || 'Erro ao deletar evento';
-        setNotification(mensagem);
-        alert(mensagem);
-      }
+    const ok = await confirm({ title: 'Deletar evento', message: `Tem certeza que deseja deletar o evento "${titulo}"?`, confirmText: 'Deletar', confirmColor: 'error', severity: 'error' });
+    if (!ok) return;
+    try {
+      await deletarEvento(id);
+      setNotification('Evento deletado com sucesso!');
+      carregarEventos();
+    } catch (error) {
+      const mensagem = error.message || 'Erro ao deletar evento';
+      setNotification(mensagem);
     }
   };
 
   const handleDuplicar = async (evento) => {
-    if (!window.confirm(`Deseja duplicar o evento "${evento.title}"?`)) {
-      return;
-    }
+    const ok = await confirm({ title: 'Duplicar evento', message: `Deseja duplicar o evento "${evento.title}"?`, confirmText: 'Duplicar', confirmColor: 'primary', severity: 'info' });
+    if (!ok) return;
     try {
       await duplicarEvento(evento.id);
       setNotification('Evento duplicado com sucesso!');
@@ -535,6 +535,7 @@ function EventList() {
         )}
       </PapperBlock>
       <Notification message={notification} close={() => setNotification('')} />
+      {ConfirmDialog}
     </div>
   );
 }

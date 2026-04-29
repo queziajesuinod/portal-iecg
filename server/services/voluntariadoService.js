@@ -1,5 +1,5 @@
 'use strict';
-const { Voluntariado, AreaVoluntariado, Member, MemberActivity, MemberMilestone, Perfil, User } = require('../models');
+const { Voluntariado, AreaVoluntariado, Campus, Ministerio, Member, MemberActivity, MemberMilestone, Perfil, User } = require('../models');
 
 const includeAssociations = [
   {
@@ -11,6 +11,18 @@ const includeAssociations = [
     model: AreaVoluntariado,
     as: 'area',
     attributes: ['id', 'nome', 'ativo']
+  },
+  {
+    model: Campus,
+    as: 'campus',
+    attributes: ['id', 'nome'],
+    required: false
+  },
+  {
+    model: Ministerio,
+    as: 'ministerio',
+    attributes: ['id', 'nome'],
+    required: false
   }
 ];
 
@@ -19,6 +31,8 @@ const VoluntariadoService = {
     const where = {};
     if (filtros.memberId) where.memberId = filtros.memberId;
     if (filtros.areaVoluntariadoId) where.areaVoluntariadoId = filtros.areaVoluntariadoId;
+    if (filtros.campusId) where.campusId = filtros.campusId;
+    if (filtros.ministerioId) where.ministerioId = filtros.ministerioId;
     if (filtros.status) where.status = filtros.status;
 
     return Voluntariado.findAll({
@@ -41,20 +55,25 @@ const VoluntariadoService = {
     try {
       const area = await AreaVoluntariado.findByPk(dados.areaVoluntariadoId);
 
-      // Se a area for BACKSTAGE, atualiza o perfil do usuario vinculado ao membro
+      // Se a area for BACKSTAGE, aplica perfil BACKSTAGE somente se o usuario
+      // ainda tem o perfil padrao de membro (nunca rebaixa permissoes existentes)
       if (area && area.nome.toUpperCase() === 'BACKSTAGE') {
         const member = await Member.findByPk(dados.memberId, { attributes: ['id', 'userId'] });
         if (member && member.userId) {
-          const perfilBackstage = await Perfil.findOne({
-            where: { descricao: 'BACKSTAGE' }
-          });
-          if (perfilBackstage) {
-            await User.update(
-              { perfilId: perfilBackstage.id },
-              { where: { id: member.userId } }
-            );
-          } else {
-            console.warn('[VoluntariadoService] Perfil BACKSTAGE nao encontrado na tabela Perfis');
+          const user = await User.findByPk(member.userId, { attributes: ['id', 'perfilId'] });
+          const defaultPerfilId = process.env.DEFAULT_MEMBER_PERFIL_ID || '7d47d03a-a7aa-4907-b8b9-8fcf87bd52dc';
+          if (user && user.perfilId === defaultPerfilId) {
+            const perfilBackstage = await Perfil.findOne({
+              where: { descricao: 'BACKSTAGE' }
+            });
+            if (perfilBackstage) {
+              await User.update(
+                { perfilId: perfilBackstage.id },
+                { where: { id: member.userId } }
+              );
+            } else {
+              console.warn('[VoluntariadoService] Perfil BACKSTAGE nao encontrado na tabela Perfis');
+            }
           }
         }
       }
