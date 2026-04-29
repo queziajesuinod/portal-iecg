@@ -66,6 +66,12 @@ const sanitizePhone = (value) => {
   return digits || null;
 };
 
+const phoneLastDigits = (value, n = 4) => {
+  const digits = sanitizePhone(value);
+  if (!digits || digits.length < n) return null;
+  return digits.slice(-n);
+};
+
 const normalizeEmail = (value) => {
   if (!value) return '';
   return String(value).trim().toLowerCase();
@@ -178,6 +184,13 @@ class MemberService {
     }
     if (primaryPhone && duplicatePhone && primaryPhone === duplicatePhone) {
       reasons.push({ type: 'phone', label: 'Mesmo telefone' });
+    } else {
+      // Telefones diferentes mas com os mesmos 4 últimos dígitos (variações de prefixo/DDD)
+      const primarySuffix = phoneLastDigits(primary?.phone || primary?.whatsapp);
+      const duplicateSuffix = phoneLastDigits(duplicate?.phone || duplicate?.whatsapp);
+      if (primarySuffix && duplicateSuffix && primarySuffix === duplicateSuffix) {
+        reasons.push({ type: 'phone_suffix', label: 'Finais de telefone iguais' });
+      }
     }
     if (this.areNamesSimilar(primary?.fullName, duplicate?.fullName)) {
       reasons.push({ type: 'name', label: 'Nome parecido' });
@@ -191,6 +204,7 @@ class MemberService {
       if (reason.type === 'cpf') return total + 100;
       if (reason.type === 'email') return total + 80;
       if (reason.type === 'phone') return total + 70;
+      if (reason.type === 'phone_suffix') return total + 40;
       if (reason.type === 'name') return total + 45;
       return total;
     }, 0);
@@ -1035,9 +1049,15 @@ class MemberService {
 
           const reasons = this.buildDuplicateReasons(older, newer);
           const hasStrongMatch = reasons.some((reason) => ['cpf', 'email', 'phone'].includes(reason.type));
+          const hasPhoneSuffix = reasons.some((r) => r.type === 'phone_suffix');
           const hasNameOnlyMatch = reasons.length === 1 && reasons[0].type === 'name';
 
-          if (!reasons.length || hasNameOnlyMatch || (!hasStrongMatch && reasons.length < 2)) {
+          // phone_suffix sozinho só mostra se tiver nome parecido junto
+          const phoneSuffixAloneInsufficient = hasPhoneSuffix && !hasStrongMatch
+            && !reasons.some((r) => r.type === 'name');
+
+          if (!reasons.length || hasNameOnlyMatch || phoneSuffixAloneInsufficient
+            || (!hasStrongMatch && !hasPhoneSuffix && reasons.length < 2)) {
             continue;
           }
 

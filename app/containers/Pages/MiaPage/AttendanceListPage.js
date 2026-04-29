@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useConfirm } from '../../../utils/useConfirm';
 import { Helmet } from 'react-helmet';
 import { useHistory } from 'react-router-dom';
 import { formatDateInAppTimezone } from '../../../utils/dateTime';
@@ -47,6 +48,7 @@ const formatDateBr = (value) => formatDateInAppTimezone(value, '-');
 const AttendanceListPage = () => {
   const history = useHistory();
   const API_URL = resolveApiUrl();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [listas, setListas] = useState([]);
   const [page, setPage] = useState(1);
@@ -123,9 +125,8 @@ const AttendanceListPage = () => {
   };
 
   const handleDelete = async (lista) => {
-    if (!window.confirm('Excluir esta lista? Essa ação só é permitida enquanto não houver presenças salvas.')) {
-      return;
-    }
+    const ok = await confirm({ title: 'Excluir lista', message: 'Excluir esta lista? Essa ação só é permitida enquanto não houver presenças salvas.', confirmText: 'Excluir', confirmColor: 'error', severity: 'error' });
+    if (!ok) return;
     const token = localStorage.getItem('token');
     setLoadingDelete(true);
     try {
@@ -272,6 +273,7 @@ const AttendanceListPage = () => {
       </Dialog>
 
       <Notification message={notification} close={() => setNotification('')} />
+      {ConfirmDialog}
     </div>
   );
 };

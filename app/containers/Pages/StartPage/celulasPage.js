@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useConfirm } from '../../../utils/useConfirm';
 import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableFooter,
   Paper, Toolbar, Typography, Pagination, IconButton, Tooltip, TextField, Box, MenuItem,
@@ -93,6 +94,7 @@ const CSV_TEMPLATE_URL = '/templates/celulas-modelo.csv';
 const ListagemCelulasPage = () => {
   const { classes, cx } = useStyles();
   const history = useHistory();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [celulas, setCelulas] = useState([]);
   const [page, setPage] = useState(1);
@@ -898,7 +900,7 @@ const ListagemCelulasPage = () => {
   };
 
   const handleDelete = async (id) => {
-    const confirmDelete = window.confirm('Tem certeza que deseja excluir esta célula?');
+    const confirmDelete = await confirm({ title: 'Excluir célula', message: 'Tem certeza que deseja excluir esta célula?', confirmText: 'Excluir', confirmColor: 'error', severity: 'error' });
     if (!confirmDelete) return;
 
     const token = localStorage.getItem('token');
@@ -982,7 +984,7 @@ const ListagemCelulasPage = () => {
   };
 
   const migrateCelulaLeaders = async () => {
-    const confirma = window.confirm('Deseja sincronizar líderes e células agora?');
+    const confirma = await confirm({ title: 'Sincronizar líderes', message: 'Deseja sincronizar líderes e células agora?', confirmText: 'Sincronizar', confirmColor: 'primary', severity: 'info' });
     if (!confirma) return;
     setNotification('');
     setMigratingLeaders(true);
@@ -1432,9 +1434,8 @@ const ListagemCelulasPage = () => {
                         <IconButton
                           color={c.ativo === false ? 'success' : 'warning'}
                           onClick={() => {
-                            const confirma = c.ativo === false || window.confirm('Confirmar inativação desta célula?');
-                            if (!confirma) return;
-                            alternarStatusCelula(c, c.ativo === false);
+                            if (c.ativo === false) { alternarStatusCelula(c, true); return; }
+                            confirm({ title: 'Inativar célula', message: 'Confirmar inativação desta célula?', confirmText: 'Inativar', confirmColor: 'warning', severity: 'warning' }).then((ok) => { if (ok) alternarStatusCelula(c, false); });
                           }}
                         >
                           <PowerSettingsNewIcon />
@@ -1660,6 +1661,7 @@ const ListagemCelulasPage = () => {
       </Dialog>
 
       <Notification message={notification} close={() => setNotification('')} />
+      {ConfirmDialog}
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useConfirm } from '../../../utils/useConfirm';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
 import {
@@ -138,6 +139,7 @@ const defaultManualEntryForm = () => ({
 });
 
 function FinancialPage() {
+  const { confirm, ConfirmDialog } = useConfirm();
   const [loading, setLoading] = useState(true);
   const [notification, setNotification] = useState('');
   const [events, setEvents] = useState([]);
@@ -682,9 +684,8 @@ function FinancialPage() {
   };
 
   const removeExpense = async (expense) => {
-    if (!window.confirm(`Deseja remover a Saida "${expense.description}"?`)) {
-      return;
-    }
+    const ok = await confirm({ title: 'Remover saída', message: `Deseja remover a saída "${expense.description}"?`, confirmText: 'Remover', confirmColor: 'error', severity: 'error' });
+    if (!ok) return;
 
     try {
       await deletarSaidaFinanceira(expense.id);
@@ -765,9 +766,8 @@ function FinancialPage() {
   };
 
   const removeManualEntry = async (entry) => {
-    if (!window.confirm(`Deseja remover a entrada "${entry.description}"?`)) {
-      return;
-    }
+    const ok = await confirm({ title: 'Remover entrada', message: `Deseja remover a entrada "${entry.description}"?`, confirmText: 'Remover', confirmColor: 'error', severity: 'error' });
+    if (!ok) return;
     try {
       await deletarEntradaManual(entry.id);
       setNotification('Entrada manual removida com sucesso');
@@ -1969,6 +1969,7 @@ function FinancialPage() {
       </Dialog>
 
       <Notification message={notification} close={() => setNotification('')} />
+      {ConfirmDialog}
     </div>
   );
 }

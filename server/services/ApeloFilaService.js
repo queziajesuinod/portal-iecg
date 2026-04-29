@@ -832,15 +832,17 @@ class ApeloFilaService {
     };
   }
 
-  async processarFila() {
+  async processarFila(profundidade = 0) {
+    const MAX_PROFUNDIDADE = 5;
+
     const apelo = await this.proximoApelo();
-    
+
     if (!apelo) {
       return { mensagem: 'Nenhum apelo aguardando direcionamento.' };
     }
 
     console.log('\n' + '='.repeat(80));
-    console.log(`🔄 PROCESSANDO APELO #${apelo.id}`);
+    console.log(`🔄 PROCESSANDO APELO #${apelo.id} (profundidade ${profundidade})`);
     console.log(`   Nome: ${apelo.nome || 'N/A'}`);
     console.log(`   Rede: ${apelo.rede || 'N/A'}`);
     console.log(`   CEP: ${apelo.cep_apelo || 'N/A'}`);
@@ -850,12 +852,23 @@ class ApeloFilaService {
     console.log('='.repeat(80));
 
     const selecionada = await this.melhorCelula(apelo);
-    
+
     if (!selecionada) {
-      console.log('❌ Nenhuma célula disponível/compatível encontrada\n');
-      return { 
-        mensagem: 'Nenhuma célula disponível/compatível encontrada.', 
+      console.log(`❌ Nenhuma célula disponível para "${apelo.nome || apelo.id}" — marcando SEM_CELULA_DISPONIVEL e pulando\n`);
+      try {
+        await ApeloDirecionadoCelulaService.atualizar(apelo.id, { status: 'SEM_CELULA_DISPONIVEL' });
+      } catch (err) {
+        console.warn('⚠️  Não foi possível atualizar status do apelo:', err.message);
+      }
+
+      if (profundidade < MAX_PROFUNDIDADE) {
+        return this.processarFila(profundidade + 1);
+      }
+
+      return {
+        mensagem: 'Nenhuma célula disponível/compatível encontrada.',
         apeloId: apelo.id,
+        apeloNome: apelo.nome || null,
         motivo: 'Nenhuma célula da mesma rede com capacidade disponível ou dentro do raio máximo'
       };
     }
@@ -895,6 +908,7 @@ class ApeloFilaService {
     return {
       mensagem: 'Apelo direcionado com sucesso',
       apeloId: apelo.id,
+      apeloNome: apelo.nome || null,
       celula: {
         id: celula.id,
         nome: celula.celula,

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useConfirm } from '../../../utils/useConfirm';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
 import { formatDateInAppTimezone } from '../../../utils/dateTime';
@@ -39,6 +40,7 @@ import {
 } from '../../../api/eventsApi';
 
 function CouponsPage() {
+  const { confirm, ConfirmDialog } = useConfirm();
   const [cupons, setCupons] = useState([]);
   const [eventos, setEventos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -148,23 +150,22 @@ function CouponsPage() {
   };
 
   const handleDeletar = async (id, code) => {
-    if (window.confirm(`Tem certeza que deseja deletar o cupom "${code}"?`)) {
-      try {
-        await deletarCupom(id);
-        setNotification('Cupom deletado com sucesso!');
-        carregarDados();
-      } catch (error) {
-        console.error('Erro ao deletar cupom:', error);
-        setNotification(error.message || 'Erro ao deletar cupom');
-      }
+    const ok = await confirm({ title: 'Deletar cupom', message: `Tem certeza que deseja deletar o cupom "${code}"?`, confirmText: 'Deletar', confirmColor: 'error', severity: 'error' });
+    if (!ok) return;
+    try {
+      await deletarCupom(id);
+      setNotification('Cupom deletado com sucesso!');
+      carregarDados();
+    } catch (error) {
+      console.error('Erro ao deletar cupom:', error);
+      setNotification(error.message || 'Erro ao deletar cupom');
     }
   };
 
   const handleAlternarStatus = async (cupom) => {
     const acao = cupom.isActive ? 'inativar' : 'reativar';
-    if (!window.confirm(`Tem certeza que deseja ${acao} o cupom "${cupom.code}"?`)) {
-      return;
-    }
+    const ok = await confirm({ title: `${acao.charAt(0).toUpperCase() + acao.slice(1)} cupom`, message: `Tem certeza que deseja ${acao} o cupom "${cupom.code}"?`, confirmText: acao.charAt(0).toUpperCase() + acao.slice(1), confirmColor: 'warning', severity: 'warning' });
+    if (!ok) return;
 
     try {
       await atualizarCupom(cupom.id, { isActive: !cupom.isActive });
@@ -402,6 +403,7 @@ function CouponsPage() {
         </DialogActions>
       </Dialog>
       <Notification message={notification} close={() => setNotification('')} />
+      {ConfirmDialog}
     </div>
   );
 }

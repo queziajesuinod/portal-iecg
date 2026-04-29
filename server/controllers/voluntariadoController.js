@@ -7,6 +7,8 @@ class VoluntariadoController {
       const filtros = {};
       if (req.query.memberId) filtros.memberId = req.query.memberId;
       if (req.query.areaVoluntariadoId) filtros.areaVoluntariadoId = req.query.areaVoluntariadoId;
+      if (req.query.campusId) filtros.campusId = req.query.campusId;
+      if (req.query.ministerioId) filtros.ministerioId = req.query.ministerioId;
       if (req.query.status) filtros.status = req.query.status;
       const data = await VoluntariadoService.listar(filtros);
       return res.status(200).json(data);

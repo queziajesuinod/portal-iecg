@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useConfirm } from '../../../utils/useConfirm';
 import PropTypes from 'prop-types';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
@@ -91,6 +92,7 @@ TabPanel.propTypes = {
 };
 
 function EventDetails() {
+  const { confirm, ConfirmDialog } = useConfirm();
   const history = useHistory();
   const { id } = useParams();
   const [tabAtiva, setTabAtiva] = useState(0);
@@ -392,9 +394,8 @@ function EventDetails() {
 
   const handleAlternarStatusLote = async (lote) => {
     const acao = lote.isActive ? 'inativar' : 'reativar';
-    if (!window.confirm(`Deseja ${acao} o lote "${lote.name}"?`)) {
-      return;
-    }
+    const ok = await confirm({ title: `${acao.charAt(0).toUpperCase() + acao.slice(1)} lote`, message: `Deseja ${acao} o lote "${lote.name}"?`, confirmText: acao.charAt(0).toUpperCase() + acao.slice(1), confirmColor: 'warning', severity: 'warning' });
+    if (!ok) return;
 
     try {
       await atualizarLote(lote.id, { isActive: !lote.isActive });
@@ -522,7 +523,8 @@ function EventDetails() {
   };
 
   const handleDeletarPagamento = async (pagamentoId, tipo) => {
-    if (window.confirm(`Tem certeza que deseja deletar a forma de pagamento "${tipo}"?`)) {
+    const okDeletar = await confirm({ title: 'Deletar forma de pagamento', message: `Tem certeza que deseja deletar a forma de pagamento "${tipo}"?`, confirmText: 'Deletar', confirmColor: 'error', severity: 'error' });
+    if (okDeletar) {
       try {
         await deletarFormaPagamento(pagamentoId);
         setNotification('Forma de pagamento deletada com sucesso!');
@@ -1968,6 +1970,7 @@ function EventDetails() {
       </Dialog>
 
       <Notification message={notification} close={() => setNotification('')} />
+      {ConfirmDialog}
     </div>
   );
 }

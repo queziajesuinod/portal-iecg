@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useConfirm } from '../../../utils/useConfirm';
 import { Helmet } from 'react-helmet';
 import { useHistory, useLocation } from 'react-router-dom';
 import { formatDateInAppTimezone, formatDateTimeInAppTimezone } from '../../../utils/dateTime';
@@ -147,6 +148,7 @@ const emptyActivityTypeForm = {
 };
 
 const MembroDetailsPage = () => {
+  const { confirm, ConfirmDialog } = useConfirm();
   const [member, setMember] = useState(null);
   const [activityTypes, setActivityTypes] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -351,7 +353,7 @@ const MembroDetailsPage = () => {
     if (!member?.id || !activity?.id) return;
 
     const activityName = activityTypeNameByCode[activity.activityType] || activity.activityType;
-    const confirmed = window.confirm(`Deseja excluir a atividade "${activityName}"?`);
+    const confirmed = await confirm({ title: 'Excluir atividade', message: `Deseja excluir a atividade "${activityName}"?`, confirmText: 'Excluir', confirmColor: 'error', severity: 'error' });
     if (!confirmed) return;
 
     setDeletingActivityId(activity.id);
@@ -509,6 +511,7 @@ const MembroDetailsPage = () => {
   const journeyDialogTitleByTab = ['Registrar atividade', 'Registrar marco', 'Atualizar jornada'];
 
   return (
+    <>
     <PapperBlock title="Detalhes do Membro" desc="Informacoes completas do membro e jornada">
       <Helmet>
         <title>Detalhes do Membro</title>
@@ -597,7 +600,11 @@ const MembroDetailsPage = () => {
                     </ListItem>
                     <ListItem>
                       <ListItemIcon><Home /></ListItemIcon>
-                      <ListItemText primary="Endereco" secondary={formatEndereco(member)} />
+                      <ListItemText
+                        primary="Endereco"
+                        secondary={formatEndereco(member)}
+                        secondaryTypographyProps={{ sx: { wordBreak: 'break-word', whiteSpace: 'normal' } }}
+                      />
                     </ListItem>
                     <ListItem>
                       <ListItemIcon><LocationOn /></ListItemIcon>
@@ -1106,6 +1113,8 @@ const MembroDetailsPage = () => {
         </DialogActions>
       </Dialog>
     </PapperBlock>
+    {ConfirmDialog}
+    </>
   );
 };
 

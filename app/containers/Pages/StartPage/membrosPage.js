@@ -33,7 +33,9 @@ import {
   FormControlLabel,
   IconButton,
   Tooltip,
-  Autocomplete
+  Autocomplete,
+  Divider,
+  DialogContentText
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -41,9 +43,11 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
+import MergeIcon from '@mui/icons-material/MergeType';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import Webcam from 'react-webcam';
 import imageCompression from 'browser-image-compression';
-import { PapperBlock } from 'dan-components';
+import { PapperBlock, Notification } from 'dan-components';
 import { useHistory } from 'react-router-dom';
 import { fetchGeocode } from '../../../utils/googleGeocode';
 import {
@@ -53,7 +57,8 @@ import {
   atualizarMembro,
   deletarMembro,
   fundirMembrosDuplicados,
-  desconsiderarMembrosDuplicados
+  desconsiderarMembrosDuplicados,
+  buscarMembro
 } from '../../../api/membersApi';
 
 const ESCOLARIDADE_OPTIONS = [
@@ -288,6 +293,8 @@ const MembrosPage = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [message, setMessage] = useState('');
+  const [messageType, setMessageType] = useState('success');
+  const notify = (msg, type = 'success') => { setMessage(msg); setMessageType(type); };
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState(initialFormState);
@@ -297,6 +304,8 @@ const MembrosPage = () => {
   const [showWebcam, setShowWebcam] = useState(false);
   const [mergingPairKey, setMergingPairKey] = useState('');
   const [dismissingPairKey, setDismissingPairKey] = useState('');
+  const [mergeConfirmOpen, setMergeConfirmOpen] = useState(false);
+  const [pendingMergeSuggestion, setPendingMergeSuggestion] = useState(null);
   const webcamRef = useRef(null);
 
   const loadMembers = async () => {
@@ -322,7 +331,7 @@ const MembrosPage = () => {
 
       setMembers([...firstMembers, ...remainingMembers]);
     } catch (err) {
-      setMessage(err.message || 'Erro ao carregar membros');
+      notify(err.message || 'Erro ao carregar membros', 'error');
     } finally {
       setLoading(false);
     }
@@ -335,7 +344,7 @@ const MembrosPage = () => {
       setDuplicateSuggestions(Array.isArray(payload) ? payload : []);
     } catch (err) {
       setDuplicateSuggestions([]);
-      setMessage(err.message || 'Erro ao carregar duplicados');
+      notify(err.message || 'Erro ao carregar duplicados', 'error');
     } finally {
       setDuplicatesLoading(false);
     }
@@ -436,9 +445,9 @@ const MembrosPage = () => {
     try {
       const dataUrl = await toWebpDataUrl(file);
       handleFormChange('photoUrl', dataUrl);
-      setMessage('Foto convertida para WEBP');
+      notify('Foto convertida para WEBP');
     } catch (error) {
-      setMessage('Erro ao processar a foto');
+      notify('Erro ao processar a foto', 'error');
     }
   };
 
@@ -454,27 +463,27 @@ const MembrosPage = () => {
       const dataUrl = await toWebpDataUrl(file);
       handleFormChange('photoUrl', dataUrl);
       setShowWebcam(false);
-      setMessage('Foto capturada em WEBP');
+      notify('Foto capturada em WEBP');
     } catch (error) {
-      setMessage('Erro ao capturar foto');
+      notify('Erro ao capturar foto', 'error');
     }
   };
 
   const handleSaveMember = async () => {
     if (!form.name.trim()) {
-      setMessage('Nome e obrigatorio');
+      notify('Nome e obrigatorio', 'warning');
       return;
     }
     if (!isValidCpf(form.cpf)) {
-      setMessage('CPF invalido. Use 000.000.000-00');
+      notify('CPF invalido. Use 000.000.000-00', 'warning');
       return;
     }
     if (!isValidEmail(form.email)) {
-      setMessage('E-mail invalido');
+      notify('E-mail invalido', 'warning');
       return;
     }
     if (form.estado && form.estado.length !== 2) {
-      setMessage('UF deve ter 2 caracteres');
+      notify('UF deve ter 2 caracteres', 'warning');
       return;
     }
 
@@ -485,52 +494,63 @@ const MembrosPage = () => {
       delete payload.statusReason;
       if (memberEdicao?.id) {
         await atualizarMembro(memberEdicao.id, payload);
-        setMessage('Membro atualizado com sucesso');
+        notify('Membro atualizado com sucesso');
       } else {
         await criarMembro(payload);
-        setMessage('Membro cadastrado com sucesso');
+        notify('Membro cadastrado com sucesso');
       }
       setDialogOpen(false);
       resetForm();
       await loadMembers();
       await loadDuplicateSuggestions();
     } catch (error) {
-      setMessage(error.message || 'Erro ao salvar membro');
+      notify(error.message || 'Erro ao salvar membro', 'error');
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDeleteMember = async (member) => {
-    if (!window.confirm(`Tem certeza que deseja excluir o membro "${member.fullName}"?`)) {
-      return;
-    }
+    const ok = await confirm({ title: 'Excluir membro', message: `Tem certeza que deseja excluir o membro "${member.fullName}"?`, confirmText: 'Excluir', confirmColor: 'error', severity: 'error' });
+    if (!ok) return;
     try {
       await deletarMembro(member.id);
-      setMessage('Membro excluido com sucesso');
+      notify('Membro excluido com sucesso');
       await loadMembers();
       await loadDuplicateSuggestions();
     } catch (error) {
-      setMessage(error.message || 'Erro ao excluir membro');
+      notify(error.message || 'Erro ao excluir membro', 'error');
     }
   };
 
-  const handleMergeDuplicates = async (suggestion) => {
-    const keepName = suggestion?.olderMember?.fullName || 'Cadastro antigo';
-    const removeName = suggestion?.newerMember?.fullName || 'Cadastro recente';
-    const confirmed = window.confirm(`Fundir "${removeName}" em "${keepName}"?\n\nO cadastro mais antigo sera mantido e o mais recente sera excluido.`);
-    if (!confirmed) return;
+  const handleMergeDuplicates = (suggestion) => {
+    setPendingMergeSuggestion(suggestion);
+    setMergeConfirmOpen(true);
+  };
+
+  const handleMergeConfirm = async () => {
+    const suggestion = pendingMergeSuggestion;
+    if (!suggestion) return;
+    setMergeConfirmOpen(false);
+    setPendingMergeSuggestion(null);
 
     const pairKey = `${suggestion.keepMemberId}:${suggestion.removeMemberId}`;
     setMergingPairKey(pairKey);
     setMessage('');
     try {
       await fundirMembrosDuplicados(suggestion.keepMemberId, suggestion.removeMemberId);
-      setMessage('Membros fundidos com sucesso');
-      await loadMembers();
-      await loadDuplicateSuggestions();
+      notify('Membros fundidos com sucesso');
+
+      setDuplicateSuggestions((prev) => prev.filter((s) => `${s.keepMemberId}:${s.removeMemberId}` !== pairKey));
+
+      const updatedKeep = await buscarMembro(suggestion.keepMemberId).catch(() => null);
+      setMembers((prev) => {
+        const sem = prev.filter((m) => m.id !== suggestion.removeMemberId);
+        if (!updatedKeep) return sem;
+        return sem.map((m) => (m.id === suggestion.keepMemberId ? updatedKeep : m));
+      });
     } catch (error) {
-      setMessage(error.message || 'Erro ao fundir membros duplicados');
+      notify(error.message || 'Erro ao fundir membros duplicados', 'error');
     } finally {
       setMergingPairKey('');
     }
@@ -543,9 +563,9 @@ const MembrosPage = () => {
     try {
       await desconsiderarMembrosDuplicados(suggestion.keepMemberId, suggestion.removeMemberId);
       setDuplicateSuggestions((prev) => prev.filter((item) => `${item.keepMemberId}:${item.removeMemberId}` !== pairKey));
-      setMessage('Sugestao desconsiderada com sucesso');
+      notify('Sugestao desconsiderada com sucesso');
     } catch (error) {
-      setMessage(error.message || 'Erro ao desconsiderar sugestao');
+      notify(error.message || 'Erro ao desconsiderar sugestao', 'error');
     } finally {
       setDismissingPairKey('');
     }
@@ -572,9 +592,9 @@ const MembrosPage = () => {
     try {
       await atualizarMembro(member.id, { status: nextActive ? 'MEMBRO' : 'INATIVO' });
       setMembers((prev) => prev.map((item) => (item.id === member.id ? { ...item, status: nextActive ? 'MEMBRO' : 'INATIVO' } : item)));
-      setMessage(nextActive ? 'Membro ativado com sucesso' : 'Membro inativado com sucesso');
+      notify(nextActive ? 'Membro ativado com sucesso' : 'Membro inativado com sucesso');
     } catch (error) {
-      setMessage(error.message || 'Erro ao atualizar status do membro');
+      notify(error.message || 'Erro ao atualizar status do membro', 'error');
     } finally {
       setUpdatingMemberId('');
     }
@@ -583,7 +603,7 @@ const MembrosPage = () => {
   const handleCompleteAddressFromCep = async () => {
     const rawCep = (form.cep || '').replace(/\D/g, '');
     if (rawCep.length < 8) {
-      setMessage('Informe um CEP valido para completar o endereco');
+      notify('Informe um CEP valido para completar o endereco', 'warning');
       return;
     }
     setGeoLoading(true);
@@ -591,7 +611,7 @@ const MembrosPage = () => {
     try {
       const geocodeResult = await fetchGeocode(rawCep);
       if (!geocodeResult) {
-        setMessage('Nenhum resultado encontrado para o CEP informado');
+        notify('Nenhum resultado encontrado para o CEP informado', 'info');
         return;
       }
       setForm((prev) => ({
@@ -665,7 +685,6 @@ const MembrosPage = () => {
         </Stack>
       )}
 
-      {message && <Box mb={2}><Typography color="primary">{message}</Typography></Box>}
 
       {activeTab === 1 && (
         <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: 'background.default' }}>
@@ -1002,6 +1021,89 @@ const MembrosPage = () => {
           <Button onClick={() => setDialogOpen(false)} disabled={submitting}>Cancelar</Button>
           <Button variant="contained" color="primary" onClick={handleSaveMember} disabled={submitting}>
             {submitting ? 'Salvando...' : 'Salvar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Notification
+        open={!!message}
+        message={message || ''}
+        type={messageType}
+        close={() => setMessage('')}
+      />
+
+      {/* Dialog de confirmação de fusão */}
+      <Dialog
+        open={mergeConfirmOpen}
+        onClose={() => { setMergeConfirmOpen(false); setPendingMergeSuggestion(null); }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <MergeIcon color="warning" />
+          Confirmar fusão de cadastros
+        </DialogTitle>
+        <DialogContent>
+          {pendingMergeSuggestion && (
+            <Stack spacing={2}>
+              <DialogContentText variant="body2">
+                O cadastro mais recente será excluído e seus dados serão incorporados ao mais antigo.
+              </DialogContentText>
+
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                {/* Membro mantido */}
+                <Paper variant="outlined" sx={{ flex: 1, p: 1.5, borderColor: 'success.main' }}>
+                  <Typography variant="caption" color="success.main" fontWeight={600}>MANTER</Typography>
+                  <Stack direction="row" spacing={1} alignItems="center" mt={0.5}>
+                    <Avatar src={pendingMergeSuggestion.olderMember.photoUrl || ''} sx={{ width: 36, height: 36 }} />
+                    <Box>
+                      <Typography variant="body2" fontWeight={600}>{pendingMergeSuggestion.olderMember.fullName}</Typography>
+                      <Typography variant="caption" color="textSecondary">
+                        {pendingMergeSuggestion.olderMember.email || pendingMergeSuggestion.olderMember.phone || '-'}
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </Paper>
+
+                <ArrowForwardIcon color="action" />
+
+                {/* Membro removido */}
+                <Paper variant="outlined" sx={{ flex: 1, p: 1.5, borderColor: 'error.main' }}>
+                  <Typography variant="caption" color="error.main" fontWeight={600}>EXCLUIR</Typography>
+                  <Stack direction="row" spacing={1} alignItems="center" mt={0.5}>
+                    <Avatar src={pendingMergeSuggestion.newerMember.photoUrl || ''} sx={{ width: 36, height: 36 }} />
+                    <Box>
+                      <Typography variant="body2" fontWeight={600}>{pendingMergeSuggestion.newerMember.fullName}</Typography>
+                      <Typography variant="caption" color="textSecondary">
+                        {pendingMergeSuggestion.newerMember.email || pendingMergeSuggestion.newerMember.phone || '-'}
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </Paper>
+              </Stack>
+
+              {pendingMergeSuggestion.reasons?.length > 0 && (
+                <>
+                  <Divider />
+                  <Box>
+                    <Typography variant="caption" color="textSecondary" mb={0.5} display="block">Motivos da sugestão</Typography>
+                    <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                      {pendingMergeSuggestion.reasons.map((r) => (
+                        <Chip key={r.type} size="small" label={r.label} variant="outlined" />
+                      ))}
+                    </Stack>
+                  </Box>
+                </>
+              )}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => { setMergeConfirmOpen(false); setPendingMergeSuggestion(null); }}>
+            Cancelar
+          </Button>
+          <Button variant="contained" color="warning" startIcon={<MergeIcon />} onClick={handleMergeConfirm}>
+            Confirmar fusão
           </Button>
         </DialogActions>
       </Dialog>

@@ -31,7 +31,7 @@ const FilaApelosPage = () => {
         throw new Error(data?.erro || 'Falha ao processar fila.');
       }
       const entry = `[${new Date().toLocaleTimeString('pt-BR')}] ${data.mensagem}${
-        data.apeloId ? ` | Apelo: ${data.apeloId}` : ''
+        data.apeloId ? ` | Apelo: ${data.apeloNome || data.apeloId}` : ''
       }${data.celula ? ` | Célula: ${data.celula.nome || data.celula.id}` : ''}`;
       setLogs((prev) => [entry, ...prev].slice(0, 20));
       return data;
