@@ -14,6 +14,7 @@ const {
   parseDateOnly,
   todayDateOnly
 } = require('../utils/dateTime');
+const { buildUnfinishedEventWhere } = require('./eventService');
 
 const ALLOWED_PAYMENT_METHODS = [
   'pix',
@@ -369,13 +370,13 @@ async function normalizeExpensePayload(payload = {}) {
       throw new Error('Forma de pagamento da quitacao invalida');
     }
 
-    let entradaDate = payload.entradaDate || todayDateOnly();
+    const entradaDate = payload.entradaDate || todayDateOnly();
     const parsedEntradaDate = parseDateOnly(entradaDate);
     if (!parsedEntradaDate) {
       throw new Error('Data da entrada invalida');
     }
 
-    let quitacaoDate = payload.quitacaoDate || todayDateOnly();
+    const quitacaoDate = payload.quitacaoDate || todayDateOnly();
     const parsedQuitacaoDate = parseDateOnly(quitacaoDate);
     if (!parsedQuitacaoDate) {
       throw new Error('Data da quitacao invalida');
@@ -485,8 +486,21 @@ async function listFinancialRecords(filters = {}) {
 
   const registrationWhere = {};
   const normalizedEventId = normalizeOptionalValue(filters.eventId);
+  const shouldRestrictTicketEvents = !normalizedEventId;
+  const unfinishedEvents = shouldRestrictTicketEvents
+    || !normalizeOptionalValue(filters.expenseEventId)
+    || !normalizeOptionalValue(filters.manualEntryEventId)
+    ? await Event.findAll({
+      where: buildUnfinishedEventWhere(),
+      attributes: ['id'],
+      raw: true
+    })
+    : [];
+  const unfinishedEventIds = unfinishedEvents.map(event => event.id);
   if (normalizedEventId) {
     registrationWhere.eventId = normalizedEventId;
+  } else {
+    registrationWhere.eventId = unfinishedEventIds.length ? { [Op.in]: unfinishedEventIds } : null;
   }
   const normalizedPaymentMethod = normalizeOptionalValue(filters.paymentMethod);
   const normalizedExpenseEventId = normalizeOptionalValue(filters.expenseEventId) || normalizedEventId;
@@ -516,9 +530,16 @@ async function listFinancialRecords(filters = {}) {
   }
   if (normalizedExpenseEventId) {
     expenseWhere.eventId = normalizedExpenseEventId;
+  } else {
+    expenseWhere.eventId = unfinishedEventIds.length ? { [Op.in]: unfinishedEventIds } : null;
   }
   if (normalizedManualEntryEventId) {
     manualEntryWhere.eventId = normalizedManualEntryEventId;
+  } else {
+    manualEntryWhere[Op.or] = [
+      { eventId: null },
+      { eventId: unfinishedEventIds.length ? { [Op.in]: unfinishedEventIds } : null }
+    ];
   }
   const expenseIsSettled = normalizeOptionalValue(filters.expenseIsSettled);
   if (expenseIsSettled === 'true') expenseWhere.isSettled = true;

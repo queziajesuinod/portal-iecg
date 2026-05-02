@@ -1,4 +1,5 @@
-const uuid = require("uuid");
+const uuid = require('uuid');
+const { Op, QueryTypes } = require('sequelize');
 const {
   Event,
   EventBatch,
@@ -9,59 +10,60 @@ const {
   RegistrationAttendee,
   User,
   sequelize,
-} = require("../models");
-const { Op, QueryTypes } = require("sequelize");
-const webhookEmitter = require("./webhookEmitter");
-const cache = require("../utils/cache");
+} = require('../models');
+const webhookEmitter = require('./webhookEmitter');
+const cache = require('../utils/cache');
+const { COUNTABLE_PAYMENT_STATUSES } = require('../constants/registrationStatuses');
+const { toStartOfDay, todayDateOnly } = require('../utils/dateTime');
 
 const camposPadraoComprador = [
   {
-    fieldType: "text",
-    fieldLabel: "Nome do Comprador",
-    fieldName: "buyer_name",
-    placeholder: "Nome completo",
+    fieldType: 'text',
+    fieldLabel: 'Nome do Comprador',
+    fieldName: 'buyer_name',
+    placeholder: 'Nome completo',
     isRequired: true,
     order: 0,
-    section: "buyer",
+    section: 'buyer',
   },
   {
-    fieldType: "cpf",
-    fieldLabel: "CPF ou CNPJ",
-    fieldName: "buyer_document",
-    placeholder: "CPF ou CNPJ",
+    fieldType: 'cpf',
+    fieldLabel: 'CPF ou CNPJ',
+    fieldName: 'buyer_document',
+    placeholder: 'CPF ou CNPJ',
     isRequired: true,
     order: 1,
-    section: "buyer",
+    section: 'buyer',
   },
   {
-    fieldType: "email",
-    fieldLabel: "Email do Comprador",
-    fieldName: "buyer_email",
-    placeholder: "E-mail do comprador",
+    fieldType: 'email',
+    fieldLabel: 'Email do Comprador',
+    fieldName: 'buyer_email',
+    placeholder: 'E-mail do comprador',
     isRequired: true,
     order: 2,
-    section: "buyer",
+    section: 'buyer',
   },
   {
-    fieldType: "phone",
-    fieldLabel: "WhatsApp do Comprador",
-    fieldName: "buyer_whatsapp",
-    placeholder: "WhatsApp com DDD",
+    fieldType: 'phone',
+    fieldLabel: 'WhatsApp do Comprador',
+    fieldName: 'buyer_whatsapp',
+    placeholder: 'WhatsApp com DDD',
     isRequired: true,
     order: 3,
-    section: "buyer",
+    section: 'buyer',
   },
 ];
 
 const camposPadraoInscrito = [
   {
-    fieldType: "text",
-    fieldLabel: "Nome Completo",
-    fieldName: "nome_completo",
-    placeholder: "Nome completo do inscrito",
+    fieldType: 'text',
+    fieldLabel: 'Nome Completo',
+    fieldName: 'nome_completo',
+    placeholder: 'Nome completo do inscrito',
     isRequired: true,
     order: 0,
-    section: "attendee",
+    section: 'attendee',
   },
 ];
 
@@ -74,7 +76,7 @@ async function garantirCamposPadraoFormulario(eventId, options = {}) {
       eventId,
       fieldName: fieldNames,
     },
-    attributes: ["fieldName"],
+    attributes: ['fieldName'],
     transaction: options.transaction,
   });
   const existentesSet = new Set(existentes.map((campo) => campo.fieldName));
@@ -100,51 +102,81 @@ async function garantirCamposPadraoFormulario(eventId, options = {}) {
 
 // ============= EVENT CRUD =============
 
-async function listarEventos() {
+function buildUnfinishedEventWhere() {
+  const todayStart = toStartOfDay(todayDateOnly());
+  return {
+    [Op.or]: [
+      { endDate: { [Op.gte]: todayStart } },
+      {
+        endDate: null,
+        startDate: { [Op.gte]: todayStart }
+      },
+      {
+        endDate: null,
+        startDate: null
+      }
+    ]
+  };
+}
+
+async function listarEventos(options = {}) {
+  const includeFinished = Boolean(options.includeFinished);
+  const eventWhere = includeFinished ? {} : buildUnfinishedEventWhere();
   const [eventos, registrationsTotal] = await Promise.all([
     Event.findAll({
+      where: eventWhere,
       attributes: [
-        "id",
-        "title",
-        "startDate",
-        "isActive",
-        "requiresPayment",
-        "maxRegistrations",
-        "createdAt",
+        'id',
+        'title',
+        'endDate',
+        'startDate',
+        'isActive',
+        'requiresPayment',
+        'maxRegistrations',
+        'createdAt',
       ],
       include: [
         {
           model: User,
-          as: "creator",
-          attributes: ["id", "name", "email"],
+          as: 'creator',
+          attributes: ['id', 'name', 'email'],
         },
         {
           model: EventBatch,
-          as: "batches",
+          as: 'batches',
           attributes: [
-            "id",
-            "name",
-            "price",
-            "maxQuantity",
-            "startDate",
-            "endDate",
-            "isActive",
-            "order",
+            'id',
+            'name',
+            'price',
+            'maxQuantity',
+            'startDate',
+            'endDate',
+            'isActive',
+            'order',
           ],
-          order: [["order", "ASC"]],
+          order: [['order', 'ASC']],
         },
       ],
-      order: [["createdAt", "DESC"]],
+      order: [['createdAt', 'DESC']],
     }),
     Registration.findAll({
       where: {
-        paymentStatus: { [Op.in]: ["pending", "confirmed"] },
+        paymentStatus: { [Op.in]: COUNTABLE_PAYMENT_STATUSES },
       },
       attributes: [
-        "eventId",
-        [sequelize.fn("SUM", sequelize.col("quantity")), "totalQuantity"],
+        'eventId',
+        [sequelize.fn('SUM', sequelize.col('quantity')), 'totalQuantity'],
       ],
-      group: ["eventId"],
+      include: includeFinished ? [] : [
+        {
+          model: Event,
+          as: 'event',
+          attributes: [],
+          where: eventWhere,
+          required: true,
+        },
+      ],
+      group: ['eventId'],
       raw: true,
     }),
   ]);
@@ -156,7 +188,7 @@ async function listarEventos() {
 
   eventos.forEach((event) => {
     const countableRegistrations = totalsByEvent[event.id] || 0;
-    event.setDataValue("currentRegistrations", countableRegistrations);
+    event.setDataValue('currentRegistrations', countableRegistrations);
   });
 
   return eventos;
@@ -219,38 +251,38 @@ async function buscarEventoPorId(id) {
     include: [
       {
         model: User,
-        as: "creator",
-        attributes: ["id", "name", "email"],
+        as: 'creator',
+        attributes: ['id', 'name', 'email'],
       },
       {
         model: EventBatch,
-        as: "batches",
+        as: 'batches',
         attributes: [
-          "id",
-          "name",
-          "price",
-          "maxQuantity",
-          "startDate",
-          "endDate",
-          "isActive",
-          "order",
+          'id',
+          'name',
+          'price',
+          'maxQuantity',
+          'startDate',
+          'endDate',
+          'isActive',
+          'order',
         ],
         required: false,
         separate: false, // Força JOIN ao invés de query separada
       },
       {
         model: FormField,
-        as: "formFields",
+        as: 'formFields',
         attributes: [
-          "id",
-          "fieldType",
-          "fieldLabel",
-          "fieldName",
-          "placeholder",
-          "isRequired",
-          "options",
-          "order",
-          "section",
+          'id',
+          'fieldType',
+          'fieldLabel',
+          'fieldName',
+          'placeholder',
+          'isRequired',
+          'options',
+          'order',
+          'section',
         ],
         required: false,
         separate: false, // Força JOIN ao invés de query separada
@@ -258,34 +290,37 @@ async function buscarEventoPorId(id) {
     ],
     // Ordenação correta no nível superior
     order: [
-      [{ model: EventBatch, as: "batches" }, "order", "ASC"],
-      [{ model: FormField, as: "formFields" }, "order", "ASC"],
+      [{ model: EventBatch, as: 'batches' }, 'order', 'ASC'],
+      [{ model: FormField, as: 'formFields' }, 'order', 'ASC'],
     ],
   });
 
   if (!event) {
-    throw new Error("Evento não encontrado");
+    throw new Error('Evento não encontrado');
   }
 
   const stats = await obterResumoInscricoesPorEvento(id);
-  event.setDataValue("registrationStats", stats);
+  event.setDataValue('registrationStats', stats);
 
   return event;
 }
 
 async function listarEventosPublicos() {
   return Event.findAll({
-    where: { isActive: true },
+    where: {
+      isActive: true,
+      ...buildUnfinishedEventWhere()
+    },
     include: [
       {
         model: EventBatch,
-        as: "batches",
+        as: 'batches',
         where: { isActive: true },
         required: false,
-        order: [["order", "ASC"]],
+        order: [['order', 'ASC']],
       },
     ],
-    order: [["startDate", "DESC"]],
+    order: [['startDate', 'DESC']],
   });
 }
 
@@ -301,41 +336,45 @@ async function buscarEventoPublicoPorId(id, options = {}) {
   // Ganho estimado: 10-13 segundos para requisições em cache
   // ============================================
   const fetchEvent = async () => {
-      console.log(`[DB QUERY] Buscando evento ${id} do banco de dados...`);
-      
-      // ============================================
-      // OTIMIZAÇÃO: Query com JOINs otimizados
-      // ============================================
-      const event = await Event.findOne({
-        where: { id, isActive: true },
-        include: [
-          {
-            model: EventBatch,
-            as: "batches",
-            where: { isActive: true },
-            required: false,
-            separate: false, // Força JOIN ao invés de query separada
-          },
-          {
-            model: FormField,
-            as: "formFields",
-            required: false,
-            separate: false, // Força JOIN ao invés de query separada
-          },
-        ],
-        // Ordenação no nível superior
-        order: [
-          [{ model: EventBatch, as: "batches" }, "order", "ASC"],
-          [{ model: FormField, as: "formFields" }, "order", "ASC"],
-        ],
-      });
+    console.log(`[DB QUERY] Buscando evento ${id} do banco de dados...`);
 
-      if (!event) {
-        throw new Error("Evento não encontrado ou inativo");
-      }
+    // ============================================
+    // OTIMIZAÇÃO: Query com JOINs otimizados
+    // ============================================
+    const event = await Event.findOne({
+      where: {
+        id,
+        isActive: true,
+        ...buildUnfinishedEventWhere()
+      },
+      include: [
+        {
+          model: EventBatch,
+          as: 'batches',
+          where: { isActive: true },
+          required: false,
+          separate: false, // Força JOIN ao invés de query separada
+        },
+        {
+          model: FormField,
+          as: 'formFields',
+          required: false,
+          separate: false, // Força JOIN ao invés de query separada
+        },
+      ],
+      // Ordenação no nível superior
+      order: [
+        [{ model: EventBatch, as: 'batches' }, 'order', 'ASC'],
+        [{ model: FormField, as: 'formFields' }, 'order', 'ASC'],
+      ],
+    });
 
-      return event;
-    };
+    if (!event) {
+      throw new Error('Evento não encontrado ou inativo');
+    }
+
+    return event;
+  };
 
   const result = useCache
     ? await cache.getOrSet(cacheKey, fetchEvent, cache.DEFAULT_TTL)
@@ -348,13 +387,31 @@ async function buscarEventoPublicoPorId(id, options = {}) {
 }
 
 async function obterEstatisticasGerais() {
-  const [totalEventos, eventosAtivos, totalInscricoes, receitaTotalRaw] =
-    await Promise.all([
-      Event.count(),
-      Event.count({ where: { isActive: true } }),
-      Registration.sum("quantity", { where: { paymentStatus: "confirmed" } }),
-      Registration.sum("finalPrice", { where: { paymentStatus: "confirmed" } }),
-    ]);
+  const unfinishedEventWhere = buildUnfinishedEventWhere();
+  const [totalEventos, eventosAtivos, totalInscricoes, receitaTotalRaw] = await Promise.all([
+    Event.count({ where: unfinishedEventWhere }),
+    Event.count({ where: { isActive: true, ...unfinishedEventWhere } }),
+    Registration.sum('quantity', {
+      where: { paymentStatus: { [Op.in]: COUNTABLE_PAYMENT_STATUSES } },
+      include: [{
+        model: Event,
+        as: 'event',
+        attributes: [],
+        where: unfinishedEventWhere,
+        required: true
+      }]
+    }),
+    Registration.sum('finalPrice', {
+      where: { paymentStatus: 'confirmed' },
+      include: [{
+        model: Event,
+        as: 'event',
+        attributes: [],
+        where: unfinishedEventWhere,
+        required: true
+      }]
+    }),
+  ]);
   const receitaTotal = Number(parseFloat(receitaTotalRaw || 0).toFixed(2));
 
   return {
@@ -380,7 +437,10 @@ async function obterResumoIngressosPorEvento(eventId) {
     return { batches: [], totals: {} };
   }
 
-  const [batches, registrations, attendees, payments] = await Promise.all([
+  const [event, batches, registrations, attendees, payments] = await Promise.all([
+    Event.findByPk(eventId, {
+      attributes: ['id', 'registrationPaymentMode']
+    }),
     EventBatch.findAll({
       where: { eventId },
       attributes: ['id', 'name', 'price', 'maxQuantity', 'order'],
@@ -418,6 +478,9 @@ async function obterResumoIngressosPorEvento(eventId) {
       raw: true
     })
   ]);
+  const soldStatuses = event?.registrationPaymentMode === 'BALANCE_DUE'
+    ? ['confirmed', 'partial']
+    : ['confirmed'];
 
   const batchesById = new Map();
   const summaryByBatchId = new Map();
@@ -440,7 +503,7 @@ async function obterResumoIngressosPorEvento(eventId) {
 
   const attendeeCountsByRegistration = attendees.reduce((acc, attendee) => {
     const regId = attendee.registrationId;
-    const batchId = attendee.batchId;
+    const { batchId } = attendee;
     if (!regId || !batchId || !summaryByBatchId.has(batchId)) return acc;
     if (!acc[regId]) acc[regId] = {};
     acc[regId][batchId] = (acc[regId][batchId] || 0) + 1;
@@ -451,11 +514,10 @@ async function obterResumoIngressosPorEvento(eventId) {
   registrations.forEach((registration) => {
     const regId = registration.id;
     const counts = attendeeCountsByRegistration[regId];
-    const isConfirmedRegistration = registration.paymentStatus === 'confirmed';
+    const isSoldRegistration = soldStatuses.includes(registration.paymentStatus);
 
-    // "Vendidos" deve refletir inscritos confirmados, em linha com a KPI.
     const incrementarVendidos = (batchId, quantidade) => {
-      if (!isConfirmedRegistration || !batchId) return;
+      if (!isSoldRegistration || !batchId) return;
       const row = summaryByBatchId.get(batchId);
       if (!row) return;
       row.sold += Math.max(0, Number(quantidade || 0));
@@ -576,13 +638,13 @@ async function criarEvento(body, userId) {
   } = body;
 
   if (!title) {
-    throw new Error("Título do evento é obrigatório");
+    throw new Error('Título do evento é obrigatório');
   }
 
   const eventRequiresPayment = requiresPayment !== false;
   const normalizedPaymentMode = eventRequiresPayment
-    ? (registrationPaymentMode || "SINGLE")
-    : "SINGLE";
+    ? (registrationPaymentMode || 'SINGLE')
+    : 'SINGLE';
 
   const event = await Event.create({
     id: uuid.v4(),
@@ -600,7 +662,7 @@ async function criarEvento(body, userId) {
     cep,
     latitude,
     longitude,
-    eventType: eventType || "ACAMP",
+    eventType: eventType || 'ACAMP',
     requiresPayment: eventRequiresPayment,
     registrationPaymentMode: normalizedPaymentMode,
     minDepositAmount: eventRequiresPayment && normalizedPaymentMode === 'BALANCE_DUE' ? (minDepositAmount || null) : null,
@@ -611,7 +673,7 @@ async function criarEvento(body, userId) {
   });
 
   await garantirCamposPadraoFormulario(event.id);
-  webhookEmitter.emit("event.created", {
+  webhookEmitter.emit('event.created', {
     id: event.id,
     data: body,
   });
@@ -623,7 +685,7 @@ async function atualizarEvento(id, body) {
   const event = await Event.findByPk(id);
 
   if (!event) {
-    throw new Error("Evento não encontrado");
+    throw new Error('Evento não encontrado');
   }
 
   const nextRequiresPayment = body.requiresPayment != null
@@ -631,44 +693,36 @@ async function atualizarEvento(id, body) {
     : event.requiresPayment;
 
   event.title = body.title != null ? body.title : event.title;
-  event.description =
-    body.description != null ? body.description : event.description;
+  event.description = body.description != null ? body.description : event.description;
   event.startDate = body.startDate != null ? body.startDate : event.startDate;
   event.endDate = body.endDate != null ? body.endDate : event.endDate;
   event.location = body.location != null ? body.location : event.location;
   event.imageUrl = body.imageUrl != null ? body.imageUrl : event.imageUrl;
-  event.maxRegistrations =
-    body.maxRegistrations != null
-      ? body.maxRegistrations
-      : event.maxRegistrations;
-  event.maxPerBuyer =
-    body.maxPerBuyer != null ? body.maxPerBuyer : event.maxPerBuyer;
-  event.addressNumber =
-    body.addressNumber != null ? body.addressNumber : event.addressNumber;
-  event.neighborhood =
-    body.neighborhood != null ? body.neighborhood : event.neighborhood;
+  event.maxRegistrations = body.maxRegistrations != null
+    ? body.maxRegistrations
+    : event.maxRegistrations;
+  event.maxPerBuyer = body.maxPerBuyer != null ? body.maxPerBuyer : event.maxPerBuyer;
+  event.addressNumber = body.addressNumber != null ? body.addressNumber : event.addressNumber;
+  event.neighborhood = body.neighborhood != null ? body.neighborhood : event.neighborhood;
   event.city = body.city != null ? body.city : event.city;
   event.cep = body.cep != null ? body.cep : event.cep;
   event.latitude = body.latitude != null ? body.latitude : event.latitude;
   event.longitude = body.longitude != null ? body.longitude : event.longitude;
   event.eventType = body.eventType != null ? body.eventType : event.eventType;
   event.requiresPayment = nextRequiresPayment;
-  event.registrationPaymentMode =
-    nextRequiresPayment
-      ? (body.registrationPaymentMode != null
-        ? body.registrationPaymentMode
-        : event.registrationPaymentMode)
-      : 'SINGLE';
-  event.minDepositAmount =
-    nextRequiresPayment && event.registrationPaymentMode === 'BALANCE_DUE'
-      ? (body.minDepositAmount != null
-        ? body.minDepositAmount
-        : event.minDepositAmount)
-      : null;
-  event.maxPaymentCount =
-    nextRequiresPayment && event.registrationPaymentMode === 'BALANCE_DUE'
-      ? (body.maxPaymentCount != null ? body.maxPaymentCount : event.maxPaymentCount)
-      : null;
+  event.registrationPaymentMode = nextRequiresPayment
+    ? (body.registrationPaymentMode != null
+      ? body.registrationPaymentMode
+      : event.registrationPaymentMode)
+    : 'SINGLE';
+  event.minDepositAmount = nextRequiresPayment && event.registrationPaymentMode === 'BALANCE_DUE'
+    ? (body.minDepositAmount != null
+      ? body.minDepositAmount
+      : event.minDepositAmount)
+    : null;
+  event.maxPaymentCount = nextRequiresPayment && event.registrationPaymentMode === 'BALANCE_DUE'
+    ? (body.maxPaymentCount != null ? body.maxPaymentCount : event.maxPaymentCount)
+    : null;
   event.isActive = body.isActive != null ? body.isActive : event.isActive;
 
   await event.save();
@@ -677,11 +731,11 @@ async function atualizarEvento(id, body) {
   }
   const changes = {};
   Object.keys(body).forEach((key) => {
-    if (["id", "createdAt", "updatedAt"].includes(key)) return;
+    if (['id', 'createdAt', 'updatedAt'].includes(key)) return;
     if (body[key] === undefined) return;
     changes[key] = event[key];
   });
-  webhookEmitter.emit("event.updated", {
+  webhookEmitter.emit('event.updated', {
     id: event.id,
     data: body,
   });
@@ -692,7 +746,7 @@ async function deletarEvento(id) {
   const event = await Event.findByPk(id);
 
   if (!event) {
-    throw new Error("Evento não encontrado");
+    throw new Error('Evento não encontrado');
   }
 
   const registrationCount = await Registration.count({
@@ -701,12 +755,12 @@ async function deletarEvento(id) {
 
   if (registrationCount > 0) {
     throw new Error(
-      "Não é possível deletar evento com inscrições. Desative o evento ao invés de deletar."
+      'Não é possível deletar evento com inscrições. Desative o evento ao invés de deletar.'
     );
   }
 
   await event.destroy();
-  webhookEmitter.emit("event.deleted", {
+  webhookEmitter.emit('event.deleted', {
     id: event.id,
   });
 }
@@ -716,27 +770,26 @@ async function duplicarEvento(eventId, userId) {
     include: [
       {
         model: EventBatch,
-        as: "batches",
+        as: 'batches',
       },
       {
         model: FormField,
-        as: "formFields",
+        as: 'formFields',
       },
       {
         model: PaymentOption,
-        as: "paymentOptions",
+        as: 'paymentOptions',
       },
     ],
   });
 
   if (!event) {
-    throw new Error("Evento não encontrado");
+    throw new Error('Evento não encontrado');
   }
 
-  const copyTitle =
-    event.title && event.title.includes("(Duplicado)")
-      ? event.title
-      : `${event.title} (Duplicado)`;
+  const copyTitle = event.title && event.title.includes('(Duplicado)')
+    ? event.title
+    : `${event.title} (Duplicado)`;
 
   return sequelize.transaction(async (transaction) => {
     const newEvent = await Event.create(
@@ -768,62 +821,59 @@ async function duplicarEvento(eventId, userId) {
       { transaction }
     );
 
-    const batchPromises = (event.batches || []).map((batch) =>
-      EventBatch.create(
-        {
-          id: uuid.v4(),
-          eventId: newEvent.id,
-          name: batch.name,
-          price: newEvent.requiresPayment === false ? 0 : batch.price,
-          maxQuantity: batch.maxQuantity,
-          startDate: batch.startDate,
-          endDate: batch.endDate,
-          isActive: batch.isActive,
-          order: batch.order,
-        },
-        { transaction }
-      )
+    const batchPromises = (event.batches || []).map((batch) => EventBatch.create(
+      {
+        id: uuid.v4(),
+        eventId: newEvent.id,
+        name: batch.name,
+        price: newEvent.requiresPayment === false ? 0 : batch.price,
+        maxQuantity: batch.maxQuantity,
+        startDate: batch.startDate,
+        endDate: batch.endDate,
+        isActive: batch.isActive,
+        order: batch.order,
+      },
+      { transaction }
+    )
     );
 
-    const fieldPromises = (event.formFields || []).map((field) =>
-      FormField.create(
-        {
-          id: uuid.v4(),
-          eventId: newEvent.id,
-          fieldType: field.fieldType,
-          fieldLabel: field.fieldLabel,
-          fieldName: field.fieldName,
-          placeholder: field.placeholder,
-          isRequired: field.isRequired,
-          options: field.options,
-          order: field.order,
-          section: field.section,
-          validationRules: field.validationRules,
-        },
-        { transaction }
-      )
+    const fieldPromises = (event.formFields || []).map((field) => FormField.create(
+      {
+        id: uuid.v4(),
+        eventId: newEvent.id,
+        fieldType: field.fieldType,
+        fieldLabel: field.fieldLabel,
+        fieldName: field.fieldName,
+        placeholder: field.placeholder,
+        isRequired: field.isRequired,
+        options: field.options,
+        order: field.order,
+        section: field.section,
+        validationRules: field.validationRules,
+      },
+      { transaction }
+    )
     );
 
-    const paymentPromises = (event.paymentOptions || []).map((option) =>
-      PaymentOption.create(
-        {
-          id: uuid.v4(),
-          eventId: newEvent.id,
-          paymentType: option.paymentType,
-          maxInstallments: option.maxInstallments,
-          interestRate: option.interestRate,
-          interestType: option.interestType,
-          installmentInterestRates: option.installmentInterestRates || {},
-          isActive: option.isActive,
-        },
-        { transaction }
-      )
+    const paymentPromises = (event.paymentOptions || []).map((option) => PaymentOption.create(
+      {
+        id: uuid.v4(),
+        eventId: newEvent.id,
+        paymentType: option.paymentType,
+        maxInstallments: option.maxInstallments,
+        interestRate: option.interestRate,
+        interestType: option.interestType,
+        installmentInterestRates: option.installmentInterestRates || {},
+        isActive: option.isActive,
+      },
+      { transaction }
+    )
     );
 
     await Promise.all([...batchPromises, ...fieldPromises, ...paymentPromises]);
     await garantirCamposPadraoFormulario(newEvent.id, { transaction });
 
-    webhookEmitter.emit("event.duplicated", {
+    webhookEmitter.emit('event.duplicated', {
       originalEventId: eventId,
       newEventId: newEvent.id,
       createdBy: userId,
@@ -842,6 +892,7 @@ module.exports = {
   listarEventosPublicos,
   buscarEventoPublicoPorId,
   obterEstatisticasGerais,
+  buildUnfinishedEventWhere,
   obterResumoIngressosPorEvento,
   duplicarEvento,
 };

@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useConfirm } from '../../../utils/useConfirm';
 import { Helmet } from 'react-helmet';
 import { PapperBlock } from 'dan-components';
 import {
@@ -35,6 +34,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useHistory, useParams } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
+import { useConfirm } from '../../../utils/useConfirm';
 import {
   buscarInscricao,
   cancelarInscricao,
@@ -306,7 +306,9 @@ function RegistrationDetails() {
       setNotification('Somente pagamentos pendentes ou expirados podem ser cancelados.');
       return;
     }
-    const ok = await confirm({ title: 'Cancelar pagamento', message: 'Deseja cancelar este pagamento?', confirmText: 'Cancelar pagamento', confirmColor: 'error', severity: 'error' });
+    const ok = await confirm({
+      title: 'Cancelar pagamento', message: 'Deseja cancelar este pagamento?', confirmText: 'Cancelar pagamento', confirmColor: 'error', severity: 'error'
+    });
     if (!ok) return;
     try {
       await deletarPagamentoInscricao(id, payment.id);
@@ -599,6 +601,7 @@ function RegistrationDetails() {
                         <TableCell>Método</TableCell>
                         <TableCell>Status</TableCell>
                         <TableCell align="right">Valor</TableCell>
+                        <TableCell align="right">Taxa</TableCell>
                         <TableCell align="center">Ações</TableCell>
                       </TableRow>
                     </TableHead>
@@ -625,6 +628,7 @@ function RegistrationDetails() {
                             />
                           </TableCell>
                           <TableCell align="right">{formatarPreco(payment.amount)}</TableCell>
+                          <TableCell align="right">{formatarPreco(payment.taxa || 0)}</TableCell>
                           <TableCell align="center">
                             {canRegisterOffline && payment.channel === 'OFFLINE' && (
                               <Tooltip title="Editar pagamento offline">

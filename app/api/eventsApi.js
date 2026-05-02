@@ -16,7 +16,10 @@ const API_URL = resolveApiUrl();
 
 // ===== EVENTOS =====
 
-export const listarEventos = () => fetchWithAuth(`${API_URL}/api/admin/events`);
+export const listarEventos = (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  return fetchWithAuth(`${API_URL}/api/admin/events${query ? `?${query}` : ''}`);
+};
 
 export const listarEstatisticas = () => fetchWithAuth(`${API_URL}/api/admin/events/stats`);
 export const listarResumoIngressosEvento = (eventId) => fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/tickets-summary`);
