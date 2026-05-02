@@ -2,7 +2,8 @@ const eventService = require('../services/eventService');
 
 async function listar(req, res) {
   try {
-    const eventos = await eventService.listarEventos();
+    const includeFinished = String(req.query.includeFinished || '').toLowerCase() === 'true';
+    const eventos = await eventService.listarEventos({ includeFinished });
     res.status(200).json(eventos);
   } catch (err) {
     console.error('Erro ao listar eventos:', err);

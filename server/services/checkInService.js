@@ -1,4 +1,6 @@
-﻿const {
+const { Op } = require('sequelize');
+const moment = require('moment-timezone');
+const {
   EventCheckIn,
   EventCheckInSchedule,
   EventCheckInStation,
@@ -8,8 +10,6 @@
   User,
   sequelize
 } = require('../models');
-const { Op } = require('sequelize');
-const moment = require('moment-timezone');
 
 // Timezone de Campo Grande, MS
 const TIMEZONE = 'America/Campo_Grande';
@@ -18,6 +18,13 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 class CheckInService {
   obterEventId(payload = {}) {
     return payload.eventId || payload.event_id || null;
+  }
+
+  isInscricaoConfirmada(registration) {
+    if (registration.paymentStatus === 'confirmed') return true;
+    if (registration.paymentStatus === 'partial'
+        && registration.event?.registrationPaymentMode === 'BALANCE_DUE') return true;
+    return false;
   }
 
   obterNomeAttendee(attendee, fallback = 'Inscrito') {
@@ -54,7 +61,9 @@ class CheckInService {
    * Criar agendamento de check-in
    */
   async criarAgendamento(dados) {
-    const { eventId, name, startTime, endTime, isActive = true } = dados;
+    const {
+      eventId, name, startTime, endTime, isActive = true
+    } = dados;
 
     if (!eventId || !name || !startTime || !endTime) {
       throw new Error('Campos obrigatÃ³rios: eventId, name, startTime, endTime');
@@ -140,7 +149,9 @@ class CheckInService {
    * Criar estaÃ§Ã£o de check-in
    */
   async criarEstacao(dados) {
-    const { eventId, name, latitude, longitude, nfcTagId, isActive = true } = dados;
+    const {
+      eventId, name, latitude, longitude, nfcTagId, isActive = true
+    } = dados;
 
     if (!eventId || !name) {
       throw new Error('Campos obrigatÃ³rios: eventId, name');
@@ -275,6 +286,7 @@ class CheckInService {
 
     return checkInExistente;
   }
+
   /**
    * Realizar check-in manual (por staff)
    */
@@ -320,7 +332,7 @@ class CheckInService {
       throw new Error('Codigo de inscricao nao pertence a este evento');
     }
 
-    if (registration.paymentStatus !== 'confirmed') {
+    if (!this.isInscricaoConfirmada(registration)) {
       throw new Error('Inscricao nao esta confirmada. Status: ' + registration.paymentStatus);
     }
 
@@ -357,6 +369,7 @@ class CheckInService {
       notes
     });
   }
+
   /**
    * Realizar check-in via QR Code
    */
@@ -391,7 +404,7 @@ class CheckInService {
       throw new Error('Codigo de inscricao nao pertence a este evento');
     }
 
-    if (registration.paymentStatus !== 'confirmed') {
+    if (!this.isInscricaoConfirmada(registration)) {
       throw new Error('Inscricao nao esta confirmada');
     }
 
@@ -425,6 +438,7 @@ class CheckInService {
       deviceInfo
     });
   }
+
   /**
    * Realizar check-in via NFC
    */
@@ -451,7 +465,7 @@ class CheckInService {
       throw new Error('Tag NFC nao encontrada ou inativa');
     }
 
-    const eventId = station.eventId;
+    const { eventId } = station;
 
     const registration = await Registration.findOne({
       where: { orderCode },
@@ -469,7 +483,7 @@ class CheckInService {
       throw new Error('Codigo de inscricao nao pertence a este evento');
     }
 
-    if (registration.paymentStatus !== 'confirmed') {
+    if (!this.isInscricaoConfirmada(registration)) {
       throw new Error('Inscricao nao esta confirmada');
     }
 
@@ -503,6 +517,7 @@ class CheckInService {
       deviceInfo
     });
   }
+
   /**
    * Listar check-ins de um evento
    */
@@ -577,10 +592,15 @@ class CheckInService {
   async obterEstatisticas(eventId) {
     const totalCheckIns = await EventCheckIn.count({ where: { eventId } });
 
+    const event = await Event.findByPk(eventId, { attributes: ['registrationPaymentMode'] });
+    const confirmedStatuses = event?.registrationPaymentMode === 'BALANCE_DUE'
+      ? ['confirmed', 'partial']
+      : ['confirmed'];
+
     const totalInscricoes = await Registration.count({
       where: {
         eventId,
-        paymentStatus: 'confirmed'
+        paymentStatus: { [Op.in]: confirmedStatuses }
       }
     });
 
@@ -704,6 +724,7 @@ class CheckInService {
       registration: resultado.registration
     };
   }
+
   /**
    * Validar cÃ³digo de inscriÃ§Ã£o (para QR Code scanner)
    */
@@ -723,7 +744,7 @@ class CheckInService {
       };
     }
 
-    if (registration.paymentStatus !== 'confirmed') {
+    if (!this.isInscricaoConfirmada(registration)) {
       return {
         valido: false,
         mensagem: 'Inscricao nao esta confirmada',
@@ -802,4 +823,3 @@ class CheckInService {
 }
 
 module.exports = new CheckInService();
-

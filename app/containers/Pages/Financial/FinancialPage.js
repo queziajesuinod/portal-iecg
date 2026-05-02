@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useConfirm } from '../../../utils/useConfirm';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
 import {
@@ -42,6 +41,7 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import LinkIcon from '@mui/icons-material/Link';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import brand from 'dan-api/dummy/brand';
+import * as XLSX from 'xlsx';
 import { listarEventos } from '../../../api/eventsApi';
 import {
   atualizarSaidaFinanceira,
@@ -55,7 +55,7 @@ import {
   atualizarEntradaManual,
   deletarEntradaManual
 } from '../../../api/financialApi';
-import * as XLSX from 'xlsx';
+import { useConfirm } from '../../../utils/useConfirm';
 import {
   formatDateInAppTimezone,
   formatDateTimeInAppTimezone,
@@ -248,7 +248,7 @@ function FinancialPage() {
 
   const loadEvents = async () => {
     try {
-      const response = await listarEventos();
+      const response = await listarEventos({ includeFinished: true });
       setEvents(Array.isArray(response) ? response : []);
     } catch (error) {
       console.error('Erro ao carregar eventos da financeiro:', error);
@@ -369,7 +369,9 @@ function FinancialPage() {
   };
 
   const handleClearExpenseFilters = () => {
-    const reset = { dateFrom: '', dateTo: '', eventId: '', isSettled: '' };
+    const reset = {
+      dateFrom: '', dateTo: '', eventId: '', isSettled: ''
+    };
     setExpenseFilters(reset);
     setExpensesPage(0);
     loadData(filters, entriesPage, entriesRowsPerPage, 0, expensesRowsPerPage, reset, manualEntriesPage, manualEntriesRowsPerPage, manualEntryFilters);
@@ -385,7 +387,9 @@ function FinancialPage() {
   };
 
   const handleClearManualEntryFilters = () => {
-    const reset = { dateFrom: '', dateTo: '', eventId: '', isSettled: '' };
+    const reset = {
+      dateFrom: '', dateTo: '', eventId: '', isSettled: ''
+    };
     setManualEntryFilters(reset);
     setManualEntriesPage(0);
     loadData(filters, entriesPage, entriesRowsPerPage, expensesPage, expensesRowsPerPage, expenseFilters, 0, manualEntriesRowsPerPage, reset);
@@ -684,7 +688,9 @@ function FinancialPage() {
   };
 
   const removeExpense = async (expense) => {
-    const ok = await confirm({ title: 'Remover saída', message: `Deseja remover a saída "${expense.description}"?`, confirmText: 'Remover', confirmColor: 'error', severity: 'error' });
+    const ok = await confirm({
+      title: 'Remover saída', message: `Deseja remover a saída "${expense.description}"?`, confirmText: 'Remover', confirmColor: 'error', severity: 'error'
+    });
     if (!ok) return;
 
     try {
@@ -766,7 +772,9 @@ function FinancialPage() {
   };
 
   const removeManualEntry = async (entry) => {
-    const ok = await confirm({ title: 'Remover entrada', message: `Deseja remover a entrada "${entry.description}"?`, confirmText: 'Remover', confirmColor: 'error', severity: 'error' });
+    const ok = await confirm({
+      title: 'Remover entrada', message: `Deseja remover a entrada "${entry.description}"?`, confirmText: 'Remover', confirmColor: 'error', severity: 'error'
+    });
     if (!ok) return;
     try {
       await deletarEntradaManual(entry.id);
@@ -957,7 +965,7 @@ function FinancialPage() {
                 onChange={(event) => handleFilterChange('eventId', event.target.value)}
               >
                 <MenuItem value="">Todos</MenuItem>
-                {activeEvents.map((event) => (
+                {events.map((event) => (
                   <MenuItem key={event.id} value={event.id}>
                     {event.title}
                   </MenuItem>

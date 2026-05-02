@@ -229,6 +229,10 @@ function normalizarValor(valor) {
   return Number(numero.toFixed(2));
 }
 
+function calcularValorCobradoPagamento(payment = {}) {
+  return normalizarValor(Number(payment.amount || 0) + Number(payment.taxa || 0));
+}
+
 function calcularValorComJurosPorParcelas(valorBase, paymentOption, parcelas) {
   const valor = normalizarValor(valorBase);
   const installments = Number(parcelas) || 1;
@@ -258,12 +262,84 @@ function calcularValorComJurosPorParcelas(valorBase, paymentOption, parcelas) {
   return normalizarValor(valor + (valor * (legacyRate / 100)));
 }
 
+function obterRegraJurosParcelamento(paymentOption, parcelas) {
+  const installments = Number(parcelas) || 1;
+  if (paymentOption?.paymentType !== 'credit_card' || installments <= 1) {
+    return null;
+  }
+
+  const installmentRates = paymentOption.installmentInterestRates && typeof paymentOption.installmentInterestRates === 'object'
+    ? paymentOption.installmentInterestRates
+    : {};
+  const perInstallmentRate = Number(installmentRates[String(installments)]);
+  if (Number.isFinite(perInstallmentRate) && perInstallmentRate > 0) {
+    return { type: 'percentage', value: perInstallmentRate };
+  }
+
+  const legacyRate = Number(paymentOption.interestRate || 0);
+  if (!Number.isFinite(legacyRate) || legacyRate <= 0) {
+    return null;
+  }
+
+  return {
+    type: paymentOption.interestType === 'fixed' ? 'fixed' : 'percentage',
+    value: legacyRate
+  };
+}
+
+function calcularValorBaseAPartirDoTotal(valorTotal, paymentOption, parcelas) {
+  const valor = normalizarValor(valorTotal);
+  const regra = obterRegraJurosParcelamento(paymentOption, parcelas);
+  if (!regra) {
+    return valor;
+  }
+
+  if (regra.type === 'fixed') {
+    return normalizarValor(Math.max(0, valor - regra.value));
+  }
+
+  return normalizarValor(valor / (1 + (regra.value / 100)));
+}
+
+function normalizarValorBasePagamentoInformado(valorInformado, paymentOption, parcelas, limiteBase = null) {
+  const valor = normalizarValor(valorInformado);
+  const valorBaseEstimado = calcularValorBaseAPartirDoTotal(valor, paymentOption, parcelas);
+  const valorTotalEstimado = calcularValorComJurosPorParcelas(valorBaseEstimado, paymentOption, parcelas);
+  const pareceTotalComTaxa = Math.abs(valorTotalEstimado - valor) <= 0.01;
+
+  if (
+    pareceTotalComTaxa
+    && valorBaseEstimado > 0
+    && limiteBase !== null
+    && valor > normalizarValor(limiteBase)
+  ) {
+    return valorBaseEstimado;
+  }
+
+  return valor;
+}
+
 function calcularResumoPagamentos(registration, payments = []) {
-  const paidTotal = payments.reduce((sum, payment) => (
-    payment.status === 'confirmed' ? sum + Number(payment.amount || 0) : sum
-  ), 0);
+  if (['cancelled', 'refunded'].includes(registration.paymentStatus)) {
+    return {
+      paidTotal: 0,
+      taxaTotal: 0,
+      remaining: normalizarValor(registration.finalPrice || 0),
+      derivedStatus: registration.paymentStatus
+    };
+  }
+
+  const confirmedPayments = payments.filter(p => p.status === 'confirmed');
+
+  // Soma apenas o valor base (sem taxa) para calcular saldo restante
+  const paidTotal = confirmedPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  // Soma das taxas pagas separadamente
+  const taxaTotal = confirmedPayments.reduce((sum, p) => sum + Number(p.taxa || 0), 0);
+
   const totalPago = normalizarValor(paidTotal);
+  const totalTaxa = normalizarValor(taxaTotal);
   const precoFinal = normalizarValor(registration.finalPrice || 0);
+  // Restante sempre calculado sobre o preço base, sem taxa
   const remaining = normalizarValor(Math.max(0, precoFinal - totalPago));
   const hasPending = payments.some(payment => ['pending', 'authorized'].includes(payment.status));
   const hasDenied = payments.some(payment => payment.status === 'denied');
@@ -284,6 +360,7 @@ function calcularResumoPagamentos(registration, payments = []) {
 
   return {
     paidTotal: totalPago,
+    taxaTotal: totalTaxa,
     remaining,
     derivedStatus
   };
@@ -300,6 +377,7 @@ async function anexarResumoPagamentos(registration, options = {}) {
   const resumo = calcularResumoPagamentos(registration, payments);
   registration.setDataValue('payments', payments);
   registration.setDataValue('paidTotal', resumo.paidTotal);
+  registration.setDataValue('taxaTotal', resumo.taxaTotal);
   registration.setDataValue('remaining', resumo.remaining);
   registration.setDataValue('paymentStatusDerived', resumo.derivedStatus);
   return resumo;
@@ -699,23 +777,25 @@ async function processarInscricao(dadosInscricao) {
 
   // 8.1. Calcular valor final com juros (se houver parcelas)
   const paymentMode = evento.registrationPaymentMode || 'SINGLE';
+  const parcelas = paymentData.installments || 1;
+  const paymentMethod = paymentOption.paymentType;
   const valorInformado = normalizarValor(paymentData.amount || paymentData.valor || 0);
+  const valorInformadoBase = valorInformado > 0
+    ? normalizarValorBasePagamentoInformado(valorInformado, paymentOption, parcelas, precoFinal)
+    : 0;
   if (paymentMode === 'BALANCE_DUE' && valorInformado > 0) {
-    if (valorInformado > precoFinal) {
+    if (valorInformadoBase > precoFinal) {
       throw new Error('Valor do pagamento não pode ser maior que o total da inscrição');
     }
-    if (evento.minDepositAmount && valorInformado < Number(evento.minDepositAmount)) {
+    if (evento.minDepositAmount && valorInformadoBase < Number(evento.minDepositAmount)) {
       throw new Error(`Valor mínimo de sinal é R$ ${Number(evento.minDepositAmount).toFixed(2).replace('.', ',')}`);
     }
   }
 
-  const valorBasePagamento = paymentMode === 'BALANCE_DUE' && valorInformado > 0
-    ? valorInformado
+  const valorBasePagamento = paymentMode === 'BALANCE_DUE' && valorInformadoBase > 0
+    ? valorInformadoBase
     : precoFinal;
   let valorFinalComJuros = valorBasePagamento;
-  const parcelas = paymentData.installments || 1;
-  const paymentMethod = paymentOption.paymentType;
-
   valorFinalComJuros = calcularValorComJurosPorParcelas(valorBasePagamento, paymentOption, parcelas);
 
   // 8.2. Processar pagamento conforme o tipo
@@ -788,7 +868,7 @@ async function processarInscricao(dadosInscricao) {
     buyerData,
     originalPrice: precoOriginal,
     discountAmount: desconto,
-    finalPrice: paymentMode === 'BALANCE_DUE' ? precoFinal : valorFinalComJuros,
+    finalPrice: precoFinal,
     paymentStatus: paymentService.mapearStatusCielo(resultadoPagamento.status),
     paymentId: resultadoPagamento.paymentId,
     paymentMethod,
@@ -826,12 +906,15 @@ async function processarInscricao(dadosInscricao) {
   registration.attendees = attendees;
   await prepararRegistroComCampos(registration);
 
+  const taxaPagamento = normalizarValor(valorFinalComJuros - valorBasePagamento);
+
   const paymentRecord = await RegistrationPayment.create({
     id: uuid.v4(),
     registrationId: registration.id,
     channel: 'ONLINE',
     method: paymentMethod,
-    amount: valorFinalComJuros,
+    amount: valorBasePagamento,
+    taxa: taxaPagamento,
     status: paymentService.mapearStatusCielo(resultadoPagamento.status),
     provider: 'cielo',
     providerPaymentId: resultadoPagamento.paymentId,
@@ -1118,9 +1201,14 @@ async function listarInscritosConfirmadosPorEvento(eventId, options = {}) {
   const limit = Number(options.limit) || 20;
   const offset = Number(options.offset) || 0;
 
+  const event = await Event.findByPk(eventId, { attributes: ['registrationPaymentMode'] });
+  const confirmedStatuses = event?.registrationPaymentMode === 'BALANCE_DUE'
+    ? ['confirmed', 'partial']
+    : ['confirmed'];
+
   const registrationWhere = {
     eventId,
-    paymentStatus: 'confirmed'
+    paymentStatus: { [Op.in]: confirmedStatuses }
   };
   const batchWhere = {};
   const attendeeWhere = {};
@@ -1160,7 +1248,7 @@ async function listarInscritosConfirmadosPorEvento(eventId, options = {}) {
     order: [
       [
         sequelize.literal(
-          `LOWER(COALESCE("RegistrationAttendee"."attendeeData"->>'nome_completo', "RegistrationAttendee"."attendeeData"->>'nome', "RegistrationAttendee"."attendeeData"->>'name', ''))`
+          'LOWER(COALESCE("RegistrationAttendee"."attendeeData"->>\'nome_completo\', "RegistrationAttendee"."attendeeData"->>\'nome\', "RegistrationAttendee"."attendeeData"->>\'name\', \'\'))'
         ),
         'ASC'
       ],
@@ -1302,10 +1390,11 @@ async function criarPagamentoOnline(registrationId, payload = {}) {
   const pagamentosExistentes = registration.getDataValue('payments') || [];
   const remaining = resumoAtual?.remaining ?? normalizarValor(registration.finalPrice || 0);
 
-  const amount = normalizarValor(payload.amount || 0);
-  if (amount <= 0) {
+  const amountInformado = normalizarValor(payload.amount || 0);
+  if (amountInformado <= 0) {
     throw new Error('Valor do pagamento deve ser maior que zero');
   }
+  let amount = Math.min(amountInformado, remaining);
 
   if (amount > remaining) {
     throw new Error('Valor do pagamento não pode ser maior que o saldo restante');
@@ -1331,6 +1420,16 @@ async function criarPagamentoOnline(registrationId, payload = {}) {
 
   const paymentData = payload.paymentData || {};
   const parcelas = paymentData.installments || 1;
+  amount = normalizarValorBasePagamentoInformado(amountInformado, paymentOption, parcelas, remaining);
+  if (amount > remaining) {
+    throw new Error('Valor do pagamento nÃ£o pode ser maior que o saldo restante');
+  }
+
+  if (registration.event?.minDepositAmount && resumoAtual?.paidTotal === 0) {
+    if (amount < Number(registration.event.minDepositAmount)) {
+      throw new Error(`Valor mÃ­nimo de sinal Ã© R$ ${Number(registration.event.minDepositAmount).toFixed(2).replace('.', ',')}`);
+    }
+  }
   const valorFinalComJuros = calcularValorComJurosPorParcelas(amount, paymentOption, parcelas);
 
   const merchantOrderId = `${registration.orderCode}-P${pagamentosExistentes.length + 1}`;
@@ -1371,12 +1470,15 @@ async function criarPagamentoOnline(registrationId, payload = {}) {
     throw new Error(`Erro no pagamento: ${resultadoPagamento.erro}`);
   }
 
+  const taxaPagamento = normalizarValor(valorFinalComJuros - amount);
+
   const paymentRecord = await RegistrationPayment.create({
     id: uuid.v4(),
     registrationId: registration.id,
     channel: 'ONLINE',
     method: paymentOption.paymentType,
-    amount: valorFinalComJuros,
+    amount,
+    taxa: taxaPagamento,
     status: paymentService.mapearStatusCielo(resultadoPagamento.status),
     provider: 'cielo',
     providerPaymentId: resultadoPagamento.paymentId,
@@ -1763,7 +1865,8 @@ async function cancelarInscricao(id) {
       continue;
     }
 
-    const amountCentavos = paymentService.converterParaCentavos(payment.amount);
+    const valorCobrado = calcularValorCobradoPagamento(payment);
+    const amountCentavos = paymentService.converterParaCentavos(valorCobrado);
     const cancelamento = await cancelarNoCielo(payment.providerPaymentId, amountCentavos, payment.status);
     if (!cancelamento.sucesso) {
       throw new Error(`Erro ao cancelar pagamento ${payment.providerPaymentId || payment.id}: ${cancelamento.erro}`);
@@ -1790,7 +1893,7 @@ async function cancelarInscricao(id) {
       {
         ...cancelamento,
         paymentId: payment.providerPaymentId,
-        amount: payment.amount
+        amount: valorCobrado
       }
     );
 
@@ -1802,11 +1905,20 @@ async function cancelarInscricao(id) {
     throw new Error('Nenhum pagamento de cartão encontrado para cancelamento');
   }
 
+  const pagamentosAtualizados = await RegistrationPayment.findAll({
+    where: { registrationId: registration.id }
+  });
+  const aindaTemPagamentoConfirmado = pagamentosAtualizados.some(payment => payment.status === 'confirmed');
+  const resumoAtualizado = calcularResumoPagamentos(registration, pagamentosAtualizados);
+
   const statusAnterior = registration.paymentStatus;
-  const teveReembolso = cancelamentosConcluidos.some((item) => item.type === 'refund');
-  registration.paymentStatus = teveReembolso ? 'refunded' : 'cancelled';
+  registration.paymentStatus = aindaTemPagamentoConfirmado
+    ? resumoAtualizado.derivedStatus
+    : 'cancelled';
   await registration.save();
-  await atualizarPagamentosPorCancelamento(registration.paymentStatus);
+  if (registration.paymentStatus === 'cancelled') {
+    await atualizarPagamentosPorCancelamento('cancelled');
+  }
 
   await ajustarContadoresDeStatus(registration, statusAnterior);
   await emitirWebhookRegistroAtualizado(registration.id, {
@@ -1820,8 +1932,8 @@ async function cancelarInscricao(id) {
 async function obterInfoCancelamento(id) {
   const registration = await buscarInscricaoPorId(id);
   const needsRefund = Boolean(
-    registration.paymentId &&
-    ['confirmed', 'paid'].includes(registration.paymentStatus)
+    registration.paymentId
+    && ['confirmed', 'paid'].includes(registration.paymentStatus)
   );
   const creditCardPayments = await RegistrationPayment.findAll({
     where: {

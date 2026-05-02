@@ -37,6 +37,12 @@ module.exports = (sequelize) => {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false
     },
+    taxa: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false,
+      defaultValue: 0.0,
+      comment: 'Taxa/juros de cartão de crédito (separada do valor base)'
+    },
     status: {
       type: DataTypes.ENUM(
         'pending',

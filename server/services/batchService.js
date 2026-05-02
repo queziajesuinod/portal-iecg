@@ -10,6 +10,11 @@ async function listarLotesPorEvento(eventId) {
 
   const { RegistrationAttendee, Registration } = require('../models');
 
+  const event = await Event.findByPk(eventId, { attributes: ['registrationPaymentMode'] });
+  const confirmedStatuses = event?.registrationPaymentMode === 'BALANCE_DUE'
+    ? ['confirmed', 'partial']
+    : ['confirmed'];
+
   const lotesComVagas = await Promise.all(lotes.map(async (lote) => {
     const inscritosOcupados = await RegistrationAttendee.count({
       where: { batchId: lote.id },
@@ -29,7 +34,7 @@ async function listarLotesPorEvento(eventId) {
         model: Registration,
         as: 'registration',
         where: {
-          paymentStatus: 'confirmed'
+          paymentStatus: confirmedStatuses
         },
         attributes: []
       }]
