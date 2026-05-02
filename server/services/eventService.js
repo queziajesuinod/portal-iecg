@@ -206,19 +206,31 @@ async function obterResumoInscricoesPorEvento(eventId) {
     };
   }
 
+  const event = await Event.findByPk(eventId, { attributes: ['registrationPaymentMode'] });
+  const isBalanceDue = event?.registrationPaymentMode === 'BALANCE_DUE';
+
   const registrationTable = Registration.getTableName();
   const quotedTable = typeof registrationTable === 'object'
     ? `"${registrationTable.schema}"."${registrationTable.tableName}"`
     : `"${registrationTable}"`;
+
+  // Em eventos com sinal (BALANCE_DUE), parcial é considerado inscrito confirmado
+  const confirmedFilter = isBalanceDue
+    ? '"paymentStatus" IN (\'confirmed\', \'partial\')'
+    : '"paymentStatus" = \'confirmed\'';
+
+  const pendingFilter = isBalanceDue
+    ? '"paymentStatus" IN (\'pending\', \'authorized\')'
+    : '"paymentStatus" IN (\'pending\', \'authorized\', \'partial\')';
 
   const [summary] = await sequelize.query(
     `
     SELECT
       COALESCE(SUM("quantity"), 0) AS "totalRegistrations",
       COALESCE(SUM("finalPrice") FILTER (WHERE "paymentStatus" = 'confirmed'), 0) AS "confirmedTotalValue",
-      COALESCE(SUM("quantity") FILTER (WHERE "paymentStatus" IN ('pending', 'authorized', 'partial')), 0) AS "pendingCount",
+      COALESCE(SUM("quantity") FILTER (WHERE ${pendingFilter}), 0) AS "pendingCount",
       COALESCE(SUM("quantity") FILTER (WHERE "paymentStatus" IN ('denied', 'cancelled')), 0) AS "deniedCancelled",
-      COALESCE(SUM("quantity") FILTER (WHERE "paymentStatus" = 'confirmed'), 0) AS "confirmedCount",
+      COALESCE(SUM("quantity") FILTER (WHERE ${confirmedFilter}), 0) AS "confirmedCount",
       COALESCE(SUM("quantity") FILTER (WHERE "paymentStatus" = 'expired'), 0) AS "expiredCount"
     FROM ${quotedTable}
     WHERE "eventId" = :eventId

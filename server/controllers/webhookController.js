@@ -1,7 +1,11 @@
+const { Op } = require('sequelize');
 const WebhookService = require('../services/WebhookService');
 const registrationService = require('../services/registrationService');
 const paymentService = require('../services/paymentService');
-const { Registration, RegistrationPayment, Event, sequelize } = require('../models');
+const webhookEmitter = require('../services/webhookEmitter');
+const {
+  Registration, RegistrationPayment, Event, sequelize
+} = require('../models');
 
 const WebhookController = {
   async list(req, res) {
@@ -221,6 +225,75 @@ const WebhookController = {
         message: 'Erro ao processar webhook',
         error: error.message
       });
+    }
+  },
+
+  /**
+   * Listar inscrições de um evento para reenvio de webhook
+   * GET /webhooks/resend/events/:eventId/registrations
+   */
+  async listarInscricoesParaReenvio(req, res) {
+    try {
+      const { eventId } = req.params;
+      const { paymentStatus, limit = 100, offset = 0 } = req.query;
+
+      const where = { eventId };
+      if (paymentStatus) {
+        where.paymentStatus = Array.isArray(paymentStatus)
+          ? { [Op.in]: paymentStatus }
+          : paymentStatus;
+      }
+
+      const registrations = await Registration.findAll({
+        where,
+        attributes: ['id', 'orderCode', 'paymentStatus', 'quantity', 'createdAt', 'buyerData'],
+        include: [{ model: Event, as: 'event', attributes: ['id', 'title'] }],
+        order: [['createdAt', 'DESC']],
+        limit: Number(limit),
+        offset: Number(offset)
+      });
+
+      return res.status(200).json(registrations);
+    } catch (err) {
+      return res.status(500).json({ erro: err.message });
+    }
+  },
+
+  /**
+   * Reenviar webhook registration.created para inscrições selecionadas
+   * POST /webhooks/resend/registrations
+   * body: { registrationIds: string[] }
+   */
+  async reenviarWebhookInscricoes(req, res) {
+    try {
+      const { registrationIds } = req.body || {};
+      if (!Array.isArray(registrationIds) || !registrationIds.length) {
+        return res.status(400).json({ erro: 'registrationIds é obrigatório e deve ser um array' });
+      }
+
+      const resultados = [];
+
+      for (const registrationId of registrationIds) {
+        try {
+          const registrationPayload = await registrationService.montarPayloadWebhookInscricao(registrationId);
+          await webhookEmitter.emit('registration.created', {
+            registrationId,
+            registration: registrationPayload,
+            reenvio: true
+          });
+          resultados.push({ registrationId, sucesso: true });
+        } catch (err) {
+          resultados.push({ registrationId, sucesso: false, erro: err.message });
+        }
+      }
+
+      const totalSucesso = resultados.filter((r) => r.sucesso).length;
+      return res.status(200).json({
+        mensagem: `${totalSucesso} de ${registrationIds.length} webhooks enviados`,
+        resultados
+      });
+    } catch (err) {
+      return res.status(500).json({ erro: err.message });
     }
   }
 };

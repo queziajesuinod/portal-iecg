@@ -1986,5 +1986,6 @@ module.exports = {
   ajustarContadoresDeStatus,
   atualizarStatusPagamentoPorPagamentos,
   anexarResumoPagamentos,
-  emitirWebhookRegistroAtualizado
+  emitirWebhookRegistroAtualizado,
+  montarPayloadWebhookInscricao
 };

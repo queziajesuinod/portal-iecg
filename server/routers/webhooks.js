@@ -11,5 +11,7 @@ router.patch('/:id', WebhookController.update);
 router.get('/event-definitions', webhookEventDefinitionController.list);
 router.post('/event-definitions', webhookEventDefinitionController.create);
 router.post('/events', WebhookController.sendEvent);
+router.get('/resend/events/:eventId/registrations', WebhookController.listarInscricoesParaReenvio);
+router.post('/resend/registrations', WebhookController.reenviarWebhookInscricoes);
 
 module.exports = router;
