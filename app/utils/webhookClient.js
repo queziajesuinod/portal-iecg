@@ -119,6 +119,32 @@ export const sendWebhookEvent = async (event, payload, options = {}) => {
   }
 };
 
+export const listarInscricoesParaReenvio = async (eventId, params = {}) => {
+  const query = new URLSearchParams();
+  if (params.paymentStatus) query.set('paymentStatus', params.paymentStatus);
+  if (params.limit) query.set('limit', params.limit);
+  if (params.offset) query.set('offset', params.offset);
+  const qs = query.toString() ? `?${query.toString()}` : '';
+  const res = await fetch(`${API_URL}/webhooks/resend/events/${eventId}/registrations${qs}`, {
+    headers: { 'Content-Type': 'application/json', ...authHeaders() }
+  });
+  if (!res.ok) throw new Error('Falha ao carregar inscrições');
+  return res.json();
+};
+
+export const reenviarWebhookInscricoes = async (registrationIds) => {
+  const res = await fetch(`${API_URL}/webhooks/resend/registrations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ registrationIds })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.erro || 'Falha ao reenviar webhooks');
+  }
+  return res.json();
+};
+
 export const updateWebhook = async (id, payload) => {
   const res = await fetch(`${API_URL}/webhooks/${id}`, {
     method: 'PATCH',
@@ -143,5 +169,7 @@ export default {
   sendWebhookEvent,
   updateWebhook,
   fetchEventDefinitions,
-  createEventDefinition
+  createEventDefinition,
+  listarInscricoesParaReenvio,
+  reenviarWebhookInscricoes
 };

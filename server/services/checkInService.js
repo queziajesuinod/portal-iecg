@@ -15,16 +15,16 @@ const {
 const TIMEZONE = 'America/Campo_Grande';
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+function isInscricaoConfirmada(registration) {
+  if (registration.paymentStatus === 'confirmed') return true;
+  if (registration.paymentStatus === 'partial'
+      && registration.event?.registrationPaymentMode === 'BALANCE_DUE') return true;
+  return false;
+}
+
 class CheckInService {
   obterEventId(payload = {}) {
     return payload.eventId || payload.event_id || null;
-  }
-
-  isInscricaoConfirmada(registration) {
-    if (registration.paymentStatus === 'confirmed') return true;
-    if (registration.paymentStatus === 'partial'
-        && registration.event?.registrationPaymentMode === 'BALANCE_DUE') return true;
-    return false;
   }
 
   obterNomeAttendee(attendee, fallback = 'Inscrito') {
@@ -332,7 +332,7 @@ class CheckInService {
       throw new Error('Codigo de inscricao nao pertence a este evento');
     }
 
-    if (!this.isInscricaoConfirmada(registration)) {
+    if (!isInscricaoConfirmada(registration)) {
       throw new Error('Inscricao nao esta confirmada. Status: ' + registration.paymentStatus);
     }
 
@@ -404,7 +404,7 @@ class CheckInService {
       throw new Error('Codigo de inscricao nao pertence a este evento');
     }
 
-    if (!this.isInscricaoConfirmada(registration)) {
+    if (!isInscricaoConfirmada(registration)) {
       throw new Error('Inscricao nao esta confirmada');
     }
 
@@ -483,7 +483,7 @@ class CheckInService {
       throw new Error('Codigo de inscricao nao pertence a este evento');
     }
 
-    if (!this.isInscricaoConfirmada(registration)) {
+    if (!isInscricaoConfirmada(registration)) {
       throw new Error('Inscricao nao esta confirmada');
     }
 
@@ -744,7 +744,7 @@ class CheckInService {
       };
     }
 
-    if (!this.isInscricaoConfirmada(registration)) {
+    if (!isInscricaoConfirmada(registration)) {
       return {
         valido: false,
         mensagem: 'Inscricao nao esta confirmada',

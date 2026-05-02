@@ -2,14 +2,19 @@ import React, { useEffect, useState } from 'react';
 import {
   Box,
   Button,
+  Checkbox,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   Grid,
+  InputLabel,
   MenuItem,
   Paper,
+  Select,
   Switch,
   Table,
   TableBody,
@@ -17,6 +22,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Tab,
+  Tabs,
   TextField,
   Tooltip,
   Typography
@@ -30,8 +37,22 @@ import {
   fetchEventDefinitions,
   createEventDefinition,
   sendWebhookEvent,
-  updateWebhook
+  updateWebhook,
+  listarInscricoesParaReenvio,
+  reenviarWebhookInscricoes
 } from '../../../utils/webhookClient';
+import { listarEventos } from '../../../api/eventsApi';
+
+const PAYMENT_STATUS_LABELS = {
+  pending: 'Pendente',
+  authorized: 'Autorizado',
+  partial: 'Parcial (sinal)',
+  confirmed: 'Confirmado',
+  denied: 'Negado',
+  cancelled: 'Cancelado',
+  expired: 'Expirado',
+  refunded: 'Reembolsado'
+};
 
 const DEFAULT_EVENT_DEFINITIONS = [
   {
@@ -127,11 +148,22 @@ const INITIAL_DEFINITION_FORM = {
 const WEBHOOK_BASE = 'https://portal.iecg.com.br/webhook/';
 
 const WebhooksPage = () => {
+  const [activeTab, setActiveTab] = useState(0);
   const [webhooks, setWebhooks] = useState([]);
   const [eventDefinitions, setEventDefinitions] = useState(DEFAULT_EVENT_DEFINITIONS);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState('');
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+
+  // --- Reenvio ---
+  const [eventos, setEventos] = useState([]);
+  const [reenvioEventoId, setReenvioEventoId] = useState('');
+  const [reenvioStatus, setReenvioStatus] = useState('');
+  const [reenvioInscricoes, setReenvioInscricoes] = useState([]);
+  const [reenvioSelecionados, setReenvioSelecionados] = useState([]);
+  const [reenvioLoading, setReenvioLoading] = useState(false);
+  const [reenviando, setReenviando] = useState(false);
+  const [reenvioResultado, setReenvioResultado] = useState(null);
   const [form, setForm] = useState({
     name: '',
     url: '',
@@ -193,7 +225,58 @@ const WebhooksPage = () => {
   useEffect(() => {
     loadData();
     loadEventDefinitions();
+    listarEventos({ includeFinished: true }).then((data) => {
+      setEventos(Array.isArray(data) ? data : (data?.rows || data?.eventos || []));
+    }).catch(() => {});
   }, []);
+
+  const handleBuscarInscricoes = async () => {
+    if (!reenvioEventoId) return;
+    setReenvioLoading(true);
+    setReenvioInscricoes([]);
+    setReenvioSelecionados([]);
+    setReenvioResultado(null);
+    try {
+      const data = await listarInscricoesParaReenvio(reenvioEventoId, {
+        paymentStatus: reenvioStatus || undefined,
+        limit: 200
+      });
+      setReenvioInscricoes(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setNotification(err.message || 'Erro ao buscar inscrições');
+    } finally {
+      setReenvioLoading(false);
+    }
+  };
+
+  const handleToggleSelecionado = (id) => {
+    setReenvioSelecionados((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
+    );
+  };
+
+  const handleSelecionarTodos = () => {
+    if (reenvioSelecionados.length === reenvioInscricoes.length) {
+      setReenvioSelecionados([]);
+    } else {
+      setReenvioSelecionados(reenvioInscricoes.map((r) => r.id));
+    }
+  };
+
+  const handleReenviar = async () => {
+    if (!reenvioSelecionados.length) return;
+    setReenviando(true);
+    setReenvioResultado(null);
+    try {
+      const resultado = await reenviarWebhookInscricoes(reenvioSelecionados);
+      setReenvioResultado(resultado);
+      setNotification(resultado.mensagem || 'Webhooks enviados');
+      setReenvioSelecionados([]);
+    } catch (err) {
+      setNotification(err.message || 'Erro ao reenviar webhooks');
+    } finally {
+      setReenviando(false);
+    }
+  };
 
   const handleToggleEvent = (eventValue) => {
     setForm((prev) => {
@@ -330,7 +413,9 @@ const WebhooksPage = () => {
       });
       setNotification('Webhook criado com sucesso.');
       setCreateDialogOpen(false);
-      setForm({ name: '', url: '', events: ['apelo.created'], secret: '' });
+      setForm({
+        name: '', url: '', events: ['apelo.created'], secret: ''
+      });
       loadData();
     } catch (err) {
       setNotification(err.message || 'Erro ao criar webhook.');
@@ -353,83 +438,224 @@ const WebhooksPage = () => {
         <title>Webhooks</title>
       </Helmet>
       <PapperBlock title="Webhooks" desc="Gerencie URLs que receberão eventos do portal.">
-        <Box display="flex" justifyContent="space-between" alignItems="center" mb={2} flexWrap="wrap" gap={1}>
-          <Typography variant="body1">
-            Eventos disponíveis: {eventDefinitions.length
-              ? eventDefinitions.map((evt) => evt.label || evt.eventKey).join(', ')
-              : 'Nenhum evento configurado'}
-            .
-          </Typography>
-          <Box display="flex" gap={1} flexWrap="wrap" alignItems="center">
-            <Button variant="outlined" color="secondary" onClick={() => setDefinitionDialogOpen(true)}>
-              Eventos dinâmicos
-            </Button>
-            <Button variant="contained" color="primary" onClick={() => setCreateDialogOpen(true)}>
-              Novo webhook
-            </Button>
-          </Box>
-        </Box>
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-                <TableRow>
-                  <TableCell>Nome</TableCell>
-                  <TableCell>URL</TableCell>
-                  <TableCell>Eventos</TableCell>
-                  <TableCell align="center">Ativo</TableCell>
-                  <TableCell align="center">Ações</TableCell>
-                </TableRow>
-            </TableHead>
-            <TableBody>
-              {(!webhooks || !webhooks.length) && (
-                <TableRow>
-                  <TableCell colSpan={4} align="center">
-                    {loading ? 'Carregando...' : 'Nenhum webhook cadastrado.'}
-                  </TableCell>
-                </TableRow>
-              )}
-              {webhooks.map((hook) => (
-                <TableRow key={hook.id}>
-                  <TableCell>{hook.name}</TableCell>
-                  <TableCell>{hook.url}</TableCell>
-                  <TableCell>
-                    {(hook.events || []).map((evt) => (
-                      <Chip key={evt} label={evt} size="small" sx={{ mr: 1, mb: 0.5 }} />
+        <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2 }}>
+          <Tab label="Webhooks configurados" />
+          <Tab label="Reenviar inscrições" />
+        </Tabs>
+
+        {activeTab === 1 && (
+          <Box>
+            <Typography variant="body2" color="textSecondary" gutterBottom>
+              Selecione um evento e as inscrições para as quais deseja reenviar o webhook <strong>registration.created</strong>.
+            </Typography>
+            <Grid container spacing={2} alignItems="flex-end" sx={{ mb: 2 }}>
+              <Grid item xs={12} sm={5}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Evento</InputLabel>
+                  <Select
+                    label="Evento"
+                    value={reenvioEventoId}
+                    onChange={(e) => { setReenvioEventoId(e.target.value); setReenvioInscricoes([]); setReenvioSelecionados([]); }}
+                  >
+                    <MenuItem value=""><em>Selecione</em></MenuItem>
+                    {eventos.map((ev) => (
+                      <MenuItem key={ev.id} value={ev.id}>{ev.title}</MenuItem>
                     ))}
-                  </TableCell>
-                  <TableCell align="center">
-                    <Switch
-                      color="primary"
-                      checked={!!hook.active}
-                      onChange={() => handleToggleActive(hook)}
-                    />
-                  </TableCell>
-                  <TableCell align="center">
-                    <Box display="flex" justifyContent="center" gap={1} flexWrap="wrap">
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="primary"
-                        onClick={() => handleTestWebhook(hook)}
-                        disabled={testingWebhookId === hook.id || !(hook.events && hook.events.length)}
-                      >
-                        {testingWebhookId === hook.id ? 'Testando...' : 'Testar'}
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="text"
-                        color="secondary"
-                        onClick={() => handleOpenUrlEditor(hook)}
-                      >
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Status</InputLabel>
+                  <Select
+                    label="Status"
+                    value={reenvioStatus}
+                    onChange={(e) => setReenvioStatus(e.target.value)}
+                  >
+                    <MenuItem value="">Todos</MenuItem>
+                    {Object.entries(PAYMENT_STATUS_LABELS).map(([val, label]) => (
+                      <MenuItem key={val} value={val}>{label}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={2}>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  onClick={handleBuscarInscricoes}
+                  disabled={!reenvioEventoId || reenvioLoading}
+                >
+                  {reenvioLoading ? <CircularProgress size={18} /> : 'Buscar'}
+                </Button>
+              </Grid>
+              <Grid item xs={12} sm={2}>
+                <Button
+                  fullWidth
+                  variant="contained"
+                  color="primary"
+                  onClick={handleReenviar}
+                  disabled={!reenvioSelecionados.length || reenviando}
+                >
+                  {reenviando ? <CircularProgress size={18} /> : `Reenviar (${reenvioSelecionados.length})`}
+                </Button>
+              </Grid>
+            </Grid>
+
+            {reenvioResultado && (
+              <Box mb={2} p={1.5} bgcolor="grey.100" borderRadius={1}>
+                <Typography variant="body2"><strong>{reenvioResultado.mensagem}</strong></Typography>
+                {reenvioResultado.resultados?.filter((r) => !r.sucesso).map((r) => (
+                  <Typography key={r.registrationId} variant="caption" color="error" display="block">
+                    {r.registrationId}: {r.erro}
+                  </Typography>
+                ))}
+              </Box>
+            )}
+
+            {reenvioInscricoes.length > 0 && (
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell padding="checkbox">
+                        <Checkbox
+                          checked={reenvioSelecionados.length === reenvioInscricoes.length && reenvioInscricoes.length > 0}
+                          indeterminate={reenvioSelecionados.length > 0 && reenvioSelecionados.length < reenvioInscricoes.length}
+                          onChange={handleSelecionarTodos}
+                        />
+                      </TableCell>
+                      <TableCell>Código</TableCell>
+                      <TableCell>Comprador</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Qtd</TableCell>
+                      <TableCell>Data</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {reenvioInscricoes.map((reg) => {
+                      const nome = reg.buyerData?.buyer_name || reg.buyerData?.nome || reg.buyerData?.name || '-';
+                      const resultado = reenvioResultado?.resultados?.find((r) => r.registrationId === reg.id);
+                      return (
+                        <TableRow
+                          key={reg.id}
+                          selected={reenvioSelecionados.includes(reg.id)}
+                          sx={resultado ? { bgcolor: resultado.sucesso ? 'success.light' : 'error.light' } : {}}
+                        >
+                          <TableCell padding="checkbox">
+                            <Checkbox
+                              checked={reenvioSelecionados.includes(reg.id)}
+                              onChange={() => handleToggleSelecionado(reg.id)}
+                            />
+                          </TableCell>
+                          <TableCell>{reg.orderCode}</TableCell>
+                          <TableCell>{nome}</TableCell>
+                          <TableCell>
+                            <Chip
+                              label={PAYMENT_STATUS_LABELS[reg.paymentStatus] || reg.paymentStatus}
+                              size="small"
+                              color={reg.paymentStatus === 'confirmed' ? 'success' : reg.paymentStatus === 'partial' ? 'warning' : 'default'}
+                            />
+                          </TableCell>
+                          <TableCell>{reg.quantity}</TableCell>
+                          <TableCell>{new Date(reg.createdAt).toLocaleDateString('pt-BR')}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+
+            {!reenvioLoading && reenvioEventoId && reenvioInscricoes.length === 0 && (
+              <Typography variant="body2" color="textSecondary" sx={{ mt: 2 }}>
+                Nenhuma inscrição encontrada. Clique em &quot;Buscar&quot; para carregar.
+              </Typography>
+            )}
+          </Box>
+        )}
+
+        {activeTab === 0 && (
+          <Box>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2} flexWrap="wrap" gap={1}>
+              <Typography variant="body1">
+            Eventos disponíveis: {eventDefinitions.length
+                  ? eventDefinitions.map((evt) => evt.label || evt.eventKey).join(', ')
+                  : 'Nenhum evento configurado'}
+            .
+              </Typography>
+              <Box display="flex" gap={1} flexWrap="wrap" alignItems="center">
+                <Button variant="outlined" color="secondary" onClick={() => setDefinitionDialogOpen(true)}>
+              Eventos dinâmicos
+                </Button>
+                <Button variant="contained" color="primary" onClick={() => setCreateDialogOpen(true)}>
+              Novo webhook
+                </Button>
+              </Box>
+            </Box>
+            <TableContainer component={Paper}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Nome</TableCell>
+                    <TableCell>URL</TableCell>
+                    <TableCell>Eventos</TableCell>
+                    <TableCell align="center">Ativo</TableCell>
+                    <TableCell align="center">Ações</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {(!webhooks || !webhooks.length) && (
+                    <TableRow>
+                      <TableCell colSpan={4} align="center">
+                        {loading ? 'Carregando...' : 'Nenhum webhook cadastrado.'}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {webhooks.map((hook) => (
+                    <TableRow key={hook.id}>
+                      <TableCell>{hook.name}</TableCell>
+                      <TableCell>{hook.url}</TableCell>
+                      <TableCell>
+                        {(hook.events || []).map((evt) => (
+                          <Chip key={evt} label={evt} size="small" sx={{ mr: 1, mb: 0.5 }} />
+                        ))}
+                      </TableCell>
+                      <TableCell align="center">
+                        <Switch
+                          color="primary"
+                          checked={!!hook.active}
+                          onChange={() => handleToggleActive(hook)}
+                        />
+                      </TableCell>
+                      <TableCell align="center">
+                        <Box display="flex" justifyContent="center" gap={1} flexWrap="wrap">
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="primary"
+                            onClick={() => handleTestWebhook(hook)}
+                            disabled={testingWebhookId === hook.id || !(hook.events && hook.events.length)}
+                          >
+                            {testingWebhookId === hook.id ? 'Testando...' : 'Testar'}
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="text"
+                            color="secondary"
+                            onClick={() => handleOpenUrlEditor(hook)}
+                          >
                         Editar URL
-                      </Button>
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                          </Button>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        )}
       </PapperBlock>
 
       <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} fullWidth maxWidth="sm">
@@ -463,27 +689,27 @@ const WebhooksPage = () => {
               />
             </Grid>
             <Grid item xs={12}>
-            <Typography variant="subtitle2" gutterBottom>Eventos</Typography>
-            <Typography variant="body2" color="textSecondary" gutterBottom>
+              <Typography variant="subtitle2" gutterBottom>Eventos</Typography>
+              <Typography variant="body2" color="textSecondary" gutterBottom>
               Os eventos s?o mapeados para tabelas/campos espec?ficos; clique em &quot;Eventos din?micos&quot; para registrar novos gatilhos.
-            </Typography>
-            <Box display="flex" flexWrap="wrap" gap={1}>
-              {eventDefinitions.map((evt) => (
-                <Tooltip
-                  key={evt.eventKey}
-                  title={`${evt.tableName || 'Tabela não informada'} · ${evt.fieldName || 'Campo não informado'} (${evt.changeType})`}
-                >
-                  <Chip
-                    label={evt.label || evt.eventKey}
-                    color={form.events.includes(evt.eventKey) ? 'primary' : 'default'}
-                    onClick={() => handleToggleEvent(evt.eventKey)}
-                    variant={form.events.includes(evt.eventKey) ? 'filled' : 'outlined'}
-                    size="small"
-                    sx={{ cursor: 'pointer' }}
-                  />
-                </Tooltip>
-              ))}
-            </Box>
+              </Typography>
+              <Box display="flex" flexWrap="wrap" gap={1}>
+                {eventDefinitions.map((evt) => (
+                  <Tooltip
+                    key={evt.eventKey}
+                    title={`${evt.tableName || 'Tabela não informada'} · ${evt.fieldName || 'Campo não informado'} (${evt.changeType})`}
+                  >
+                    <Chip
+                      label={evt.label || evt.eventKey}
+                      color={form.events.includes(evt.eventKey) ? 'primary' : 'default'}
+                      onClick={() => handleToggleEvent(evt.eventKey)}
+                      variant={form.events.includes(evt.eventKey) ? 'filled' : 'outlined'}
+                      size="small"
+                      sx={{ cursor: 'pointer' }}
+                    />
+                  </Tooltip>
+                ))}
+              </Box>
             </Grid>
           </Grid>
         </DialogContent>
