@@ -1,5 +1,3 @@
-'use strict';
-
 const { Op } = require('sequelize');
 const {
   sequelize,
@@ -93,10 +91,9 @@ async function findMember(buyer, transaction) {
 }
 
 async function createMember(buyer, transaction) {
-  const displayName =
-    buyer.name ||
-    (buyer.email ? buyer.email.split('@')[0] : null) ||
-    (buyer.phone ? `Visitante ${buyer.phone}` : 'Visitante');
+  const displayName = buyer.name
+    || (buyer.email ? buyer.email.split('@')[0] : null)
+    || (buyer.phone ? `Visitante ${buyer.phone}` : 'Visitante');
 
   return Member.create({
     fullName: displayName,
@@ -150,7 +147,8 @@ async function ensureActivity(memberId, registrationId, eventId, eventName, tran
     metadata: {
       source: 'event_registration',
       registrationId,
-      eventName: eventName || null
+      eventName: eventName || null,
+      description: eventName ? `Inscrito no Evento ${eventName}` : 'Inscrito em Evento'
     }
   }, { transaction });
 
@@ -224,10 +222,10 @@ async function processarInscricaoConfirmada(registration) {
     await t.commit();
 
     console.log(
-      `[MemberEventMilestone] membro=${memberCreated ? 'criado' : 'vinculado'} id=${member.id}` +
-      ` | atividade=${activityCreated ? 'criada' : 'ja_existe'}` +
-      ` | marco_encontro=${milestoneCreated ? 'criado' : 'n/a'}` +
-      ` | evento=${event?.title || registration.eventId}`
+      `[MemberEventMilestone] membro=${memberCreated ? 'criado' : 'vinculado'} id=${member.id}`
+      + ` | atividade=${activityCreated ? 'criada' : 'ja_existe'}`
+      + ` | marco_encontro=${milestoneCreated ? 'criado' : 'n/a'}`
+      + ` | evento=${event?.title || registration.eventId}`
     );
   } catch (err) {
     if (!t.finished) await t.rollback();
