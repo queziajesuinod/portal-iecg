@@ -380,6 +380,17 @@ async function anexarResumoPagamentos(registration, options = {}) {
   registration.setDataValue('taxaTotal', resumo.taxaTotal);
   registration.setDataValue('remaining', resumo.remaining);
   registration.setDataValue('paymentStatusDerived', resumo.derivedStatus);
+
+  const pagamentoPendentePix = [...payments]
+    .filter(p => ['pending', 'authorized'].includes(p.status) && p.pixQrCode)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+
+  if (pagamentoPendentePix) {
+    registration.setDataValue('pixQrCode', pagamentoPendentePix.pixQrCode);
+    registration.setDataValue('pixQrCodeBase64', pagamentoPendentePix.pixQrCodeBase64 || null);
+    registration.setDataValue('activePaymentId', pagamentoPendentePix.id);
+  }
+
   return resumo;
 }
 
@@ -1406,7 +1417,8 @@ async function criarPagamentoOnline(registrationId, payload = {}) {
     }
   }
 
-  if (registration.event?.maxPaymentCount && pagamentosExistentes.length >= registration.event.maxPaymentCount) {
+  const pagamentosAtivos = pagamentosExistentes.filter(p => !['cancelled', 'denied', 'expired', 'refunded'].includes(p.status));
+  if (registration.event?.maxPaymentCount && pagamentosAtivos.length >= registration.event.maxPaymentCount) {
     throw new Error('Quantidade máxima de pagamentos atingida');
   }
 
