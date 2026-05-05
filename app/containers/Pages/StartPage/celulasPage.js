@@ -12,6 +12,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import PowerSettingsNewIcon from '@mui/icons-material/PowerSettingsNew';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import ListAltIcon from '@mui/icons-material/ListAlt';
+import MergeIcon from '@mui/icons-material/MergeType';
 import { useHistory } from 'react-router-dom';
 import useStyles from 'dan-components/Tables/tableStyle-jss';
 import Notification from 'dan-components/Notification/Notification';
@@ -130,6 +131,10 @@ const ListagemCelulasPage = () => {
   const [apeloSelecionado, setApeloSelecionado] = useState(null);
   const [motivoStatus, setMotivoStatus] = useState('');
   const [migratingLeaders, setMigratingLeaders] = useState(false);
+  const [duplicadosDialogOpen, setDuplicadosDialogOpen] = useState(false);
+  const [duplicadosLoading, setDuplicadosLoading] = useState(false);
+  const [gruposDuplicados, setGruposDuplicados] = useState([]);
+  const [mesclandoId, setMesclandoId] = useState(null);
   const [referenceAddress, setReferenceAddress] = useState({
     endereco: '',
     numero: '',
@@ -1015,6 +1020,63 @@ const ListagemCelulasPage = () => {
     }
   };
 
+  const verificarDuplicados = async () => {
+    setDuplicadosLoading(true);
+    setDuplicadosDialogOpen(true);
+    setGruposDuplicados([]);
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${API_URL}/start/celula/duplicados`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Falha ao buscar duplicados.');
+      const data = await res.json();
+      setGruposDuplicados(data || []);
+    } catch (err) {
+      console.error(err);
+      setNotification(err.message || 'Erro ao buscar células duplicadas.');
+    } finally {
+      setDuplicadosLoading(false);
+    }
+  };
+
+  const mesclarCelulas = async (celulaMantenerId, celulaRemoverId) => {
+    const confirmMesclar = await confirm({
+      title: 'Unificar células',
+      message: 'Os direcionamentos da célula removida serão transferidos para a célula mantida. A célula duplicada será excluída. Deseja continuar?',
+      confirmText: 'Unificar',
+      confirmColor: 'primary',
+      severity: 'warning'
+    });
+    if (!confirmMesclar) return;
+
+    setMesclandoId(celulaRemoverId);
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${API_URL}/start/celula/mesclar`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ celulaMantenerId, celulaRemoverId })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.erro || 'Erro ao unificar células.');
+      const movidos = data.direcionamentosMovidos || 0;
+      setNotification(`Células unificadas! ${movidos} direcionamento(s) transferido(s).`);
+      setGruposDuplicados((prev) => prev
+        .map((grupo) => grupo.filter((c) => c.id !== celulaRemoverId))
+        .filter((grupo) => grupo.length > 1));
+      fetchCelulas();
+    } catch (err) {
+      console.error(err);
+      setNotification(err.message || 'Erro ao unificar células.');
+    } finally {
+      setMesclandoId(null);
+    }
+  };
+
   return (
     <div>
       <Helmet>
@@ -1057,6 +1119,14 @@ const ListagemCelulasPage = () => {
             disabled={migratingLeaders}
           >
             {migratingLeaders ? 'Sincronizando...' : 'Sincronizar líder e célula'}
+          </Button>
+          <Button
+            variant="outlined"
+            color="warning"
+            startIcon={<MergeIcon />}
+            onClick={verificarDuplicados}
+          >
+            Verificar duplicados
           </Button>
         </Box>
       </Toolbar>
@@ -1657,6 +1727,67 @@ const ListagemCelulasPage = () => {
         <DialogActions>
           <Button onClick={() => setStatusDialogOpen(false)}>Cancelar</Button>
           <Button variant="contained" onClick={salvarStatusApelo}>Salvar</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={duplicadosDialogOpen} onClose={() => !duplicadosLoading && setDuplicadosDialogOpen(false)} fullWidth maxWidth="lg">
+        <DialogTitle>Verificar células duplicadas</DialogTitle>
+        <DialogContent dividers>
+          {duplicadosLoading && <Typography variant="body2">Buscando duplicados...</Typography>}
+          {!duplicadosLoading && gruposDuplicados.length === 0 && (
+            <Typography variant="body2" color="textSecondary">Nenhum duplicado encontrado.</Typography>
+          )}
+          {!duplicadosLoading && gruposDuplicados.map((grupo, gi) => (
+            <Box key={gi} mb={3}>
+              <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                Grupo {gi + 1}: {grupo[0]?.celula} — {grupo[0]?.rede || 'sem rede'} ({grupo.length} registros)
+              </Typography>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Nome</TableCell>
+                    <TableCell>Rede</TableCell>
+                    <TableCell>Líder</TableCell>
+                    <TableCell>Campus</TableCell>
+                    <TableCell>Bairro</TableCell>
+                    <TableCell>Atualizado em</TableCell>
+                    <TableCell>Ação</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {grupo.map((c, ci) => (
+                    <TableRow key={c.id} sx={ci === 0 ? { bgcolor: 'action.hover' } : {}}>
+                      <TableCell>{c.celula}</TableCell>
+                      <TableCell>{c.rede || '-'}</TableCell>
+                      <TableCell>{c.lider || '-'}</TableCell>
+                      <TableCell>{c.campusRef?.nome || c.campus || '-'}</TableCell>
+                      <TableCell>{c.bairro || '-'}</TableCell>
+                      <TableCell>{c.updatedAt ? new Date(c.updatedAt).toLocaleDateString('pt-BR') : '-'}</TableCell>
+                      <TableCell>
+                        {grupo.map((outro) => outro.id !== c.id && (
+                          <Button
+                            key={outro.id}
+                            size="small"
+                            variant="contained"
+                            color="primary"
+                            disabled={mesclandoId === outro.id}
+                            onClick={() => mesclarCelulas(c.id, outro.id)}
+                            sx={{ mr: 0.5, mb: 0.5 }}
+                          >
+                            {mesclandoId === outro.id ? 'Unificando...' : 'Manter esta, remover outra'}
+                          </Button>
+                        ))}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {gi < gruposDuplicados.length - 1 && <Divider sx={{ mt: 2 }} />}
+            </Box>
+          ))}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDuplicadosDialogOpen(false)} disabled={duplicadosLoading}>Fechar</Button>
         </DialogActions>
       </Dialog>
 

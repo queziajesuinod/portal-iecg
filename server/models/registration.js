@@ -122,6 +122,12 @@ module.exports = (sequelize) => {
       allowNull: true,
       comment: 'EndToEndId retornado pela integracao Pix da Cielo'
     },
+    webhookEventLog: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Registro de webhooks já enviados: { "registration.updated:confirmed": "2026-05-04T..." }'
+    },
   }, {
     sequelize,
     modelName: 'Registration',

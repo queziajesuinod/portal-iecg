@@ -8,6 +8,8 @@ router.post('/celula/', CelulaController.criar);
 router.get('/celula/listagemgeral', CelulaController.listarTodas);
 router.get('/celula/', CelulaController.listar);
 router.get('/celula/leader/contact', CelulaController.buscarPorLeaderContact);
+router.get('/celula/duplicados', CelulaController.buscarDuplicados);
+router.post('/celula/mesclar', CelulaController.mesclar);
 router.get('/celula/:id', CelulaController.buscarPorId);
 router.put('/celula/:id', CelulaController.atualizar);
 router.delete('/celula/:id', CelulaController.deletar);

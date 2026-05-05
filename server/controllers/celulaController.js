@@ -222,6 +222,33 @@ class CelulaController {
     }
   }
 
+  async buscarDuplicados(req, res) {
+    try {
+      const grupos = await CelulaService.buscarDuplicados();
+      return res.status(200).json(grupos.map((grupo) => grupo.map(serializeCelula)));
+    } catch (error) {
+      console.error('Erro ao buscar duplicados:', error);
+      return res.status(500).json({ erro: 'Erro ao buscar células duplicadas' });
+    }
+  }
+
+  async mesclar(req, res) {
+    try {
+      const { celulaMantenerId, celulaRemoverId } = req.body;
+      if (!celulaMantenerId || !celulaRemoverId) {
+        return res.status(400).json({ erro: 'celulaMantenerId e celulaRemoverId são obrigatórios.' });
+      }
+      if (celulaMantenerId === celulaRemoverId) {
+        return res.status(400).json({ erro: 'As células devem ser diferentes.' });
+      }
+      const resultado = await CelulaService.mesclarCelulas(celulaMantenerId, celulaRemoverId);
+      return res.status(200).json(resultado);
+    } catch (error) {
+      console.error('Erro ao mesclar células:', error);
+      return res.status(400).json({ erro: error.message });
+    }
+  }
+
   async deletar(req, res) {
     try {
       if (!req.params.id) {
