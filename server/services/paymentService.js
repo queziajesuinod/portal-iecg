@@ -7,14 +7,18 @@ const CIELO_MERCHANT_ID = process.env.CIELO_MERCHANT_ID || '';
 const CIELO_MERCHANT_KEY = process.env.CIELO_MERCHANT_KEY || '';
 const CIELO_ENVIRONMENT = process.env.CIELO_ENVIRONMENT || 'sandbox'; // 'sandbox' ou 'production'
 const CIELO_PIX_PROVIDER = process.env.CIELO_PIX_PROVIDER || 'Cielo2';
+const parsedPixTimeoutMinutes = Number(process.env.PIX_PENDING_TIMEOUT_MINUTES);
+const pixTimeoutSeconds = Number.isFinite(parsedPixTimeoutMinutes) && parsedPixTimeoutMinutes > 0
+  ? parsedPixTimeoutMinutes * 60
+  : 7200;
 const parsedPixQrCodeExpiration = Number(
   process.env.CIELO_PIX_QRCODE_EXPIRATION
   || process.env.CIELO_PIX_QRCODE_EXPIRATION_SECONDS
-  || 7200
+  || pixTimeoutSeconds
 );
 const CIELO_PIX_QRCODE_EXPIRATION = Number.isFinite(parsedPixQrCodeExpiration) && parsedPixQrCodeExpiration > 0
   ? parsedPixQrCodeExpiration
-  : 7200;
+  : pixTimeoutSeconds;
 
 const CIELO_ENDPOINTS = {
   sandbox: 'https://apisandbox.cieloecommerce.cielo.com.br',

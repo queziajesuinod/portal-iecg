@@ -209,6 +209,27 @@ async function montarPayloadWebhookInscricao(registrationId) {
 }
 
 async function emitirWebhookRegistroAtualizado(registrationId, extra = {}) {
+  const registration = await Registration.findByPk(registrationId, { attributes: ['id', 'paymentStatus', 'webhookEventLog'] });
+  if (!registration) return;
+
+  const previousStatus = extra.previousStatus || null;
+  const currentStatus = extra.currentStatus || registration.paymentStatus;
+  const logKey = `registration.updated:${previousStatus}:${currentStatus}`;
+  const logKeyBackfill = `registration.updated:null:${currentStatus}`;
+  const eventLog = registration.webhookEventLog || {};
+
+  if (eventLog[logKey] || eventLog[logKeyBackfill]) {
+    console.log(`[webhookEmitter] Webhook ${logKey} já enviado para registration ${registrationId}, ignorando duplicata`);
+    return;
+  }
+
+  await registration.update({
+    webhookEventLog: {
+      ...eventLog,
+      [logKey]: { previousStatus, currentStatus, sentAt: new Date().toISOString() }
+    }
+  });
+
   const registrationPayload = await montarPayloadWebhookInscricao(registrationId);
   webhookEmitter.emit('registration.updated', {
     registrationId,

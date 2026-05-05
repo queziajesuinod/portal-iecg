@@ -1,4 +1,4 @@
-const { Celula, Campus, Member } = require('../models');
+const { Celula, Campus, Member, ApeloDirecionadoCelula } = require('../models');
 const { Op } = require('sequelize');
 const webhookEmitter = require('./webhookEmitter');
 
@@ -307,6 +307,74 @@ const CelulaService = {
     return { mensagem: 'Célula removida com sucesso' };
   }
 ,
+
+  async buscarDuplicados() {
+    const celulas = await Celula.findAll({
+      where: { ativo: true },
+      attributes: ['id', 'celula', 'rede', 'lider', 'email_lider', 'cel_lider', 'bairro', 'campus', 'campusId', 'lideranca', 'pastor_geracao', 'pastor_campus', 'dia', 'horario', 'endereco', 'numero', 'cep', 'cidade', 'estado', 'lat', 'lon', 'liderMemberId', 'updatedAt', 'createdAt'],
+      include: [{ model: Campus, as: 'campusRef', attributes: ['id', 'nome'] }],
+      order: [['celula', 'ASC']]
+    });
+
+    const normalizar = (v) => String(v || '').replace(/\D/g, '').toLowerCase();
+    const normalizarTexto = (v) => String(v || '').trim().toLowerCase();
+
+    const grupos = {};
+    celulas.forEach((c) => {
+      const endereco = normalizarTexto(c.endereco);
+      const lider = normalizarTexto(c.lider);
+      const celLider = normalizar(c.cel_lider);
+      if (!endereco || !lider || !celLider) return;
+      const chave = `${endereco}||${lider}||${celLider}`;
+      if (!grupos[chave]) grupos[chave] = [];
+      grupos[chave].push(c);
+    });
+
+    return Object.values(grupos).filter((grupo) => grupo.length > 1);
+  },
+
+  async mesclarCelulas(celulaMantenerId, celulaRemoverId) {
+    const sequelize = Celula.sequelize;
+    const t = await sequelize.transaction();
+    try {
+      const [mantener, remover] = await Promise.all([
+        CelulaService.buscarCelulaPorId(celulaMantenerId, { transaction: t }),
+        CelulaService.buscarCelulaPorId(celulaRemoverId, { transaction: t })
+      ]);
+
+      const campos = ['lider', 'email_lider', 'cel_lider', 'anfitriao', 'campus', 'campusId', 'endereco', 'numero', 'cep', 'bairro', 'cidade', 'estado', 'lideranca', 'pastor_geracao', 'pastor_campus', 'dia', 'horario', 'lat', 'lon', 'liderMemberId'];
+      const updates = {};
+      campos.forEach((campo) => {
+        const valAtual = mantener[campo];
+        const valRemover = remover[campo];
+        const vazio = (v) => v === null || v === undefined || v === '';
+        if (vazio(valAtual) && !vazio(valRemover)) {
+          updates[campo] = valRemover;
+        }
+      });
+
+      if (Object.keys(updates).length) {
+        await mantener.update(updates, { transaction: t });
+      }
+
+      const totalMovidos = await ApeloDirecionadoCelula.update(
+        { celula_id: celulaMantenerId },
+        { where: { celula_id: celulaRemoverId }, transaction: t }
+      );
+
+      await remover.destroy({ transaction: t });
+      await t.commit();
+
+      return {
+        mensagem: 'Células unificadas com sucesso.',
+        direcionamentosMovidos: totalMovidos[0],
+        camposAtualizados: Object.keys(updates)
+      };
+    } catch (err) {
+      await t.rollback();
+      throw err;
+    }
+  },
 
   async buscarPorContatoLeader({ email, telefone }) {
     if (!email && !telefone) {
