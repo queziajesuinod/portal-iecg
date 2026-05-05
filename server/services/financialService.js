@@ -533,6 +533,20 @@ async function listFinancialRecords(filters = {}) {
     ]
   });
 
+  // Registrations confirmed/partial que não têm RegistrationPayment confirmado
+  // (pagamentos antigos registrados direto na Registration)
+  const confirmedRegistrationIds = new Set(paymentsForSummary.map((p) => p.registrationId));
+  const registrationsWithoutPayment = await Registration.findAll({
+    where: {
+      ...registrationWhere,
+      paymentStatus: { [Op.in]: ['confirmed', 'partial'] },
+      ...(confirmedRegistrationIds.size
+        ? { id: { [Op.notIn]: [...confirmedRegistrationIds] } }
+        : {})
+    },
+    attributes: ['id', 'finalPrice', 'paymentMethod']
+  });
+
   // Lista paginada de entradas de tickets
   const paginatedPayments = await RegistrationPayment.findAndCountAll({
     where: {
@@ -693,6 +707,11 @@ async function listFinancialRecords(filters = {}) {
     totalFees: 0,
     customerFees: 0,
     processorFees: 0
+  });
+
+  // Adiciona registrations confirmed/partial sem RegistrationPayment ao gross
+  registrationsWithoutPayment.forEach((reg) => {
+    totals.ticketGross += toMoney(reg.finalPrice || 0);
   });
 
   const ticketGrossTotal = toMoney(totals.ticketGross);
