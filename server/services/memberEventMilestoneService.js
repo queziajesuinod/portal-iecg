@@ -8,6 +8,7 @@ const {
   MemberMilestone,
   Event
 } = require('../models');
+const { parseLegacyNotes } = require('../utils/memberUserSync');
 
 const ACTIVITY_TYPE = 'EVENTO_INSCRICAO';
 const MILESTONE_ENCONTRO = 'ENCONTRO_COM_DEUS';
@@ -148,10 +149,27 @@ async function ensureActivity(memberId, registrationId, eventId, eventName, tran
       source: 'event_registration',
       registrationId,
       eventName: eventName || null,
-      description: eventName ? `Inscrito no Evento ${eventName}` : 'Inscrito em Evento'
+      description: eventName || null
     }
   }, { transaction });
 
+  return true;
+}
+
+async function marcarEncontroNaMembro(member, transaction) {
+  const legacy = parseLegacyNotes(member.notes);
+  if (legacy.encontro === true) return false;
+
+  const currentNotes = member.notes
+    ? (() => { try { return JSON.parse(member.notes); } catch { return {}; } })()
+    : {};
+
+  const updatedNotes = JSON.stringify({
+    ...currentNotes,
+    legacy: { ...legacy, encontro: true }
+  });
+
+  await member.update({ notes: updatedNotes }, { transaction });
   return true;
 }
 
@@ -215,8 +233,10 @@ async function processarInscricaoConfirmada(registration) {
     );
 
     let milestoneCreated = false;
+    let encontroMarcado = false;
     if (event?.eventType === 'ENCONTRO') {
       milestoneCreated = await ensureMilestoneEncontro(member.id, milestoneDescription, t);
+      encontroMarcado = await marcarEncontroNaMembro(member, t);
     }
 
     await t.commit();
@@ -225,6 +245,7 @@ async function processarInscricaoConfirmada(registration) {
       `[MemberEventMilestone] membro=${memberCreated ? 'criado' : 'vinculado'} id=${member.id}`
       + ` | atividade=${activityCreated ? 'criada' : 'ja_existe'}`
       + ` | marco_encontro=${milestoneCreated ? 'criado' : 'n/a'}`
+      + ` | encontro_marcado=${encontroMarcado ? 'sim' : 'ja_estava'}`
       + ` | evento=${event?.title || registration.eventId}`
     );
   } catch (err) {

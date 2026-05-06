@@ -1194,6 +1194,12 @@ class MemberService {
           payload.userId = transferredUserId;
         }
 
+        // Clear unique fields from newer before assigning to older to avoid immediate
+        // unique-constraint violations (PostgreSQL checks constraints per-statement, not at commit)
+        if (payload.cpf) {
+          await newer.update({ cpf: null }, { transaction });
+        }
+
         if (Object.keys(payload).length) {
           await older.update(payload, { transaction });
         }
@@ -1318,7 +1324,8 @@ class MemberService {
         throw error;
       }
     } catch (error) {
-      throw new Error(`Erro ao fundir membros duplicados: ${error.message}`);
+      const detail = error.errors ? error.errors.map((e) => e.message).join('; ') : error.message;
+      throw new Error(`Erro ao fundir membros duplicados: ${detail}`);
     }
   }
 

@@ -227,7 +227,7 @@ async function obterResumoInscricoesPorEvento(eventId) {
     `
     SELECT
       COALESCE(SUM("quantity"), 0) AS "totalRegistrations",
-      COALESCE(SUM("finalPrice") FILTER (WHERE "paymentStatus" = 'confirmed'), 0) AS "confirmedTotalValue",
+      COALESCE(SUM("finalPrice") FILTER (WHERE "paymentStatus" IN ('confirmed', 'partial')), 0) AS "confirmedTotalValue",
       COALESCE(SUM("quantity") FILTER (WHERE ${pendingFilter}), 0) AS "pendingCount",
       COALESCE(SUM("quantity") FILTER (WHERE "paymentStatus" IN ('denied', 'cancelled')), 0) AS "deniedCancelled",
       COALESCE(SUM("quantity") FILTER (WHERE ${confirmedFilter}), 0) AS "confirmedCount",

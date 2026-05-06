@@ -41,6 +41,12 @@ import EventHousing from '../Pages/Events/EventHousing';
 import EventTeams from '../Pages/Events/EventTeams';
 import RegistrationRules from '../Pages/Events/RegistrationRules';
 import FinancialPage from '../Pages/Financial/FinancialPage';
+import NotificacoesGruposPage from '../Pages/Notificacoes/NotificacoesGruposPage';
+import NotificacoesTemplatesPage from '../Pages/Notificacoes/NotificacoesTemplatesPage';
+import NotificacoesCampanhasPage from '../Pages/Notificacoes/NotificacoesCampanhasPage';
+import NotificacoesHistoricoPage from '../Pages/Notificacoes/NotificacoesHistoricoPage';
+import NotificacoesSequenciasPage from '../Pages/Notificacoes/NotificacoesSequenciasPage';
+import CampanhaMonitorPage from '../Pages/Notificacoes/CampanhaMonitorPage';
 import RegistroCultoList from '../Pages/Cultos/RegistroCultoList';
 import RegistroCultoForm from '../Pages/Cultos/RegistroCultoForm';
 import CultosDashboard from '../Pages/Cultos/CultosDashboard';
@@ -111,6 +117,12 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/events/:id/notificacoes" component={NotificationsManagement} isAuthenticated={isAuthenticated} requiredPermission="EVENTS_ACESS" />
             <ProtectedRoute exact path="/app/cupons" component={CouponsPage} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/financeiro" component={FinancialPage} isAuthenticated={isAuthenticated} requiredPermission="EVENTS_ACESS" />
+            <ProtectedRoute exact path="/app/notificacoes/grupos" component={NotificacoesGruposPage} isAuthenticated={isAuthenticated} requiredPermission="NOTIFICACOES_VIEW" />
+            <ProtectedRoute exact path="/app/notificacoes/templates" component={NotificacoesTemplatesPage} isAuthenticated={isAuthenticated} requiredPermission="NOTIFICACOES_VIEW" />
+            <ProtectedRoute exact path="/app/notificacoes/campanhas" component={NotificacoesCampanhasPage} isAuthenticated={isAuthenticated} requiredPermission="NOTIFICACOES_VIEW" />
+            <ProtectedRoute exact path="/app/notificacoes/historico/:id" component={NotificacoesHistoricoPage} isAuthenticated={isAuthenticated} requiredPermission="NOTIFICACOES_VIEW" />
+            <ProtectedRoute exact path="/app/notificacoes/monitor/:id" component={CampanhaMonitorPage} isAuthenticated={isAuthenticated} requiredPermission="NOTIFICACOES_VIEW" />
+            <ProtectedRoute exact path="/app/notificacoes/sequencias" component={NotificacoesSequenciasPage} isAuthenticated={isAuthenticated} requiredPermission="NOTIFICACOES_VIEW" />
             <ProtectedRoute exact path="/app/events/:id/formulario" component={FormBuilder} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/:id/regras-inscricao" component={RegistrationRules} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/registrations/:id" component={RegistrationDetails} isAuthenticated={isAuthenticated} />

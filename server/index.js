@@ -121,8 +121,10 @@ app.use('/api/admin/events', authMiddleware, require('./routers/eventRoutes'));
 app.use('/api/admin/members', authMiddleware, require('./routers/memberRoutes'));
 // Rotas administrativas de check-in (protegidas)
 app.use('/api/admin/checkin', authMiddleware, require('./routers/checkInRoutes'));
-// Rotas administrativas de notificações (protegidas)
+// Rotas administrativas de notificações de eventos (protegidas)
 app.use('/api/admin/notifications', authMiddleware, require('./routers/notificationRoutes'));
+// Módulo de notificações global (grupos, templates, campanhas)
+app.use('/api/admin/notificacoes', authMiddleware, require('./routers/notificacoesRoutes'));
 // Rotas administrativas financeiras (protegidas)
 app.use('/api/admin/financial', authMiddleware, require('./routers/financialRoutes'));
 app.use('/api/admin/diario-bordo', authMiddleware, require('./routers/boardJournalRoutes'));
@@ -156,6 +158,13 @@ app.get('*.js', (req, res, next) => {
   res.set('Content-Encoding', 'gzip');
   next();
 });
+
+// Scheduler de campanhas agendadas
+require('./scheduler').startScheduler();
+
+// Hooks de sincronização automática de audiência
+const db = require('./models');
+require('./hooks/audienceAutoSync').setupAudienceAutoSync(db);
 
 // Iniciar servidor
 app.listen(port, host, async (err) => {

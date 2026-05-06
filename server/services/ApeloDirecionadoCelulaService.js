@@ -15,6 +15,8 @@ const {
   Sequelize
 } = require('../models');
 
+const { parseLegacyNotes } = require('../utils/memberUserSync');
+
 const { GOOGLE_GEOCODE_KEY } = process.env;
 const GEO_TIMEOUT_MS = 5000;
 const geocodeCache = new Map();
@@ -543,12 +545,22 @@ class ApeloDirecionadoCelulaService {
       return null;
     }
 
-    if (member.status !== 'MEMBRO') {
-      await member.update({
-        status: 'MEMBRO',
-        statusChangeDate: new Date(),
-        statusReason: 'Consolidado na celula via apelo direcionado'
-      }, { transaction });
+    const legacy = parseLegacyNotes(member.notes);
+    const currentNotes = member.notes
+      ? (() => { try { return JSON.parse(member.notes); } catch { return {}; } })()
+      : {};
+    const notesPayload = {
+      status: member.status !== 'MEMBRO' ? 'MEMBRO' : undefined,
+      statusChangeDate: member.status !== 'MEMBRO' ? new Date() : undefined,
+      statusReason: member.status !== 'MEMBRO' ? 'Consolidado na celula via apelo direcionado' : undefined,
+      notes: legacy.frequenta_celula !== true
+        ? JSON.stringify({ ...currentNotes, legacy: { ...legacy, frequenta_celula: true } })
+        : undefined
+    };
+    const updatePayload = Object.fromEntries(Object.entries(notesPayload).filter(([, v]) => v !== undefined));
+
+    if (Object.keys(updatePayload).length) {
+      await member.update(updatePayload, { transaction });
     }
 
     const journey = await this._ensureMemberJourney(member.id, transaction);
