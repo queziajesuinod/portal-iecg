@@ -148,7 +148,7 @@ module.exports = [
         name: 'Meu Diário',
         link: '/app/diario-bordo',
         icon: 'ion-ios-compose-outline',
-        
+
       },
       {
         key: 'gestaoDiarioBordo',
@@ -177,6 +177,42 @@ module.exports = [
         link: '/app/voluntariado/areas',
         icon: 'ion-ios-list-box-outline',
         permission: 'VOLUNTARIADO'
+      }
+    ]
+  },
+  {
+    key: 'notificacoes',
+    name: 'Notificações',
+    icon: 'ion-ios-chatbubbles-outline',
+    permission: 'NOTIFICACOES_VIEW',
+    child: [
+      {
+        key: 'notificacoesGrupos',
+        name: 'Grupos de Audiência',
+        link: '/app/notificacoes/grupos',
+        icon: 'ion-ios-people-outline',
+        permission: 'NOTIFICACOES_VIEW'
+      },
+      {
+        key: 'notificacoesTemplates',
+        name: 'Templates',
+        link: '/app/notificacoes/templates',
+        icon: 'ion-ios-paper-outline',
+        permission: 'NOTIFICACOES_VIEW'
+      },
+      {
+        key: 'notificacoesCampanhas',
+        name: 'Campanhas',
+        link: '/app/notificacoes/campanhas',
+        icon: 'ion-ios-send',
+        permission: 'NOTIFICACOES_VIEW'
+      },
+      {
+        key: 'notificacoesSequencias',
+        name: 'Sequências',
+        link: '/app/notificacoes/sequencias',
+        icon: 'ion-ios-list-box-outline',
+        permission: 'NOTIFICACOES_VIEW'
       }
     ]
   },

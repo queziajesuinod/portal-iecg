@@ -17,6 +17,7 @@ const PERMISSOES = [
   { nome: 'DIARIO_BORDO_ADMIN', descricao: 'Gerenciar o modulo Diario de Bordo' },
   { nome: 'DIARIO_BORDO_MANAGER', descricao: 'Gerenciar o diario atribuido como gestor' },
   { nome: 'ADMIN_FULL_ACCESS', descricao: 'Acesso total ao menu e rotas' },
+  { nome: 'NOTIFICACOES_VIEW', descricao: 'Acessar o módulo de Notificações' },
 ];
 
 const ADMIN_PERFIL_DESCRICAO = 'Administrador';
@@ -127,4 +128,3 @@ async function run() {
 }
 
 run();
-
