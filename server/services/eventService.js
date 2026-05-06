@@ -214,6 +214,11 @@ async function obterResumoInscricoesPorEvento(eventId) {
     ? `"${registrationTable.schema}"."${registrationTable.tableName}"`
     : `"${registrationTable}"`;
 
+  const paymentTable = RegistrationPayment.getTableName();
+  const quotedPaymentTable = typeof paymentTable === 'object'
+    ? `"${paymentTable.schema}"."${paymentTable.tableName}"`
+    : `"${paymentTable}"`;
+
   // Em eventos com sinal (BALANCE_DUE), parcial é considerado inscrito confirmado
   const confirmedFilter = isBalanceDue
     ? '"paymentStatus" IN (\'confirmed\', \'partial\')'
@@ -227,11 +232,18 @@ async function obterResumoInscricoesPorEvento(eventId) {
     `
     SELECT
       COALESCE(SUM("quantity"), 0) AS "totalRegistrations",
-      COALESCE(SUM("finalPrice") FILTER (WHERE "paymentStatus" IN ('confirmed', 'partial')), 0) AS "confirmedTotalValue",
       COALESCE(SUM("quantity") FILTER (WHERE ${pendingFilter}), 0) AS "pendingCount",
       COALESCE(SUM("quantity") FILTER (WHERE "paymentStatus" IN ('denied', 'cancelled')), 0) AS "deniedCancelled",
       COALESCE(SUM("quantity") FILTER (WHERE ${confirmedFilter}), 0) AS "confirmedCount",
-      COALESCE(SUM("quantity") FILTER (WHERE "paymentStatus" = 'expired'), 0) AS "expiredCount"
+      COALESCE(SUM("quantity") FILTER (WHERE "paymentStatus" = 'expired'), 0) AS "expiredCount",
+      (
+        SELECT COALESCE(SUM(rp."amount"), 0)
+        FROM ${quotedPaymentTable} rp
+        WHERE rp."registrationId" IN (
+          SELECT "id" FROM ${quotedTable} WHERE "eventId" = :eventId
+        )
+        AND rp."status" = 'confirmed'
+      ) AS "confirmedTotalValue"
     FROM ${quotedTable}
     WHERE "eventId" = :eventId
     `,
@@ -413,14 +425,20 @@ async function obterEstatisticasGerais() {
         required: true
       }]
     }),
-    Registration.sum('finalPrice', {
-      where: { paymentStatus: 'confirmed' },
+    RegistrationPayment.sum('amount', {
+      where: { status: 'confirmed' },
       include: [{
-        model: Event,
-        as: 'event',
+        model: Registration,
+        as: 'registration',
         attributes: [],
-        where: unfinishedEventWhere,
-        required: true
+        required: true,
+        include: [{
+          model: Event,
+          as: 'event',
+          attributes: [],
+          where: unfinishedEventWhere,
+          required: true
+        }]
       }]
     }),
   ]);
