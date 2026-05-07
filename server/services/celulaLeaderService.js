@@ -1,5 +1,24 @@
-const { Celula, User, Member } = require('../models');
+/* eslint-disable camelcase */
 const { Op } = require('sequelize');
+const { Celula, User, Member } = require('../models');
+
+const ESTADO_CIVIL_NORMALIZED = {
+  solteiro: 'Solteiro',
+  casado: 'Casado',
+  viuvo: 'Viúvo',
+  divorciado: 'Divorciado',
+  uniao_estavel: 'Casado',
+  uniao: 'Casado'
+};
+
+const normalizeEstadoCivil = (value) => {
+  if (!value) return null;
+  const key = String(value)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '');
+  return ESTADO_CIVIL_NORMALIZED[key] || null;
+};
 
 const MEMBER_PROFILE_ID = '7d47d03a-a7aa-4907-b8b9-8fcf87bd52dc';
 
@@ -23,7 +42,9 @@ const createUsername = (name, email, suffix = '') => {
   return `celula-lider${suffix}`;
 };
 
-const buildLeaderAttributes = ({ name, email, telefone, celulaId }) => {
+const buildLeaderAttributes = ({
+  name, email, telefone, celulaId
+}) => {
   const suffix = celulaId ? `-${celulaId.slice(0, 8)}` : '';
   return {
     name: name || 'Líder de Célula',
@@ -244,7 +265,7 @@ class CelulaLeaderService {
     const leaderExtras = {
       ...(data_nascimento ? { data_nascimento } : {}),
       ...(cpf ? { cpf } : {}),
-      ...(estado_civil ? { estado_civil } : {}),
+      ...(estado_civil ? { estado_civil: normalizeEstadoCivil(estado_civil) } : {}),
       ...(profissao ? { profissao } : {}),
       ...(typeof batizado === 'boolean' ? { batizado } : {}),
       ...(typeof encontro === 'boolean' ? { encontro } : {}),
@@ -325,5 +346,3 @@ class CelulaLeaderService {
 }
 
 module.exports = CelulaLeaderService;
-
-

@@ -1,4 +1,13 @@
+/* eslint-disable camelcase */
 const CelulaService = require('../services/celulaService');
+
+const MARITAL_STATUS_TO_ESTADO_CIVIL = {
+  SOLTEIRO: 'Solteiro',
+  CASADO: 'Casado',
+  DIVORCIADO: 'Divorciado',
+  VIUVO: 'Viúvo',
+  UNIAO_ESTAVEL: 'Casado'
+};
 
 const serializeCelula = (celula) => {
   if (!celula) {
@@ -83,7 +92,7 @@ class CelulaController {
           isLeader: celulas.length > 0,
           data_nascimento: leader.birthDate,
           cpf: leader.cpf,
-          estado_civil: leader.maritalStatus,
+          estado_civil: MARITAL_STATUS_TO_ESTADO_CIVIL[leader.maritalStatus] || null,
           profissao: null,
           batizado: null,
           encontro: null,
