@@ -262,10 +262,11 @@ class CelulaLeaderService {
       });
     }
 
+    const estadoCivilNorm = normalizeEstadoCivil(estado_civil);
     const leaderExtras = {
       ...(data_nascimento ? { data_nascimento } : {}),
       ...(cpf ? { cpf } : {}),
-      ...(estado_civil ? { estado_civil: normalizeEstadoCivil(estado_civil) } : {}),
+      ...(estadoCivilNorm ? { estado_civil: estadoCivilNorm } : {}),
       ...(profissao ? { profissao } : {}),
       ...(typeof batizado === 'boolean' ? { batizado } : {}),
       ...(typeof encontro === 'boolean' ? { encontro } : {}),
