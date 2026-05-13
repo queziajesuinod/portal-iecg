@@ -40,6 +40,8 @@ router.put('/campus/:campusId/ministerios/:ministerioId/config', campusMinisteri
 router.get('/validacao', validacaoMinisterioController.verificar);
 router.post('/validacao/notificar', validacaoMinisterioController.notificar);
 router.post('/validacao/notificar-todos', validacaoMinisterioController.notificarTodos);
+router.post('/validacao/justificar', validacaoMinisterioController.justificar);
+router.delete('/validacao/justificar', validacaoMinisterioController.removerJustificativa);
 
 // ===== Registros de Culto =====
 router.get('/registros', registroCultoController.listar);

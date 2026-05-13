@@ -1,6 +1,6 @@
 const { Op } = require('sequelize');
 const {
-  CampusMinisterio, RegistroCulto, Ministerio, Campus, Member
+  CampusMinisterio, RegistroCulto, Ministerio, Campus, Member, CultoAusenciaJustificada,
 } = require('../models');
 const evolutionApiService = require('./evolutionApiService');
 
@@ -51,17 +51,23 @@ const ValidacaoMinisterioService = {
 
     const datasEsperadas = calcularDatasEsperadas(vinculo.diasPadrao, mes, ano);
 
-    const registros = await RegistroCulto.findAll({
-      where: {
-        campusId,
-        ministerioId,
-        data: { [Op.in]: datasEsperadas },
-      },
-      attributes: ['data'],
-    });
+    const [registros, justificativas] = await Promise.all([
+      RegistroCulto.findAll({
+        where: { campusId, ministerioId, data: { [Op.in]: datasEsperadas } },
+        attributes: ['data'],
+      }),
+      CultoAusenciaJustificada.findAll({
+        where: { campusId, ministerioId, data: { [Op.in]: datasEsperadas } },
+        attributes: ['data', 'motivo'],
+      }),
+    ]);
 
     const datasRegistradas = new Set(registros.map((r) => r.data));
-    const datasAusentes = datasEsperadas.filter((d) => !datasRegistradas.has(d));
+    const datasJustificadas = new Map(justificativas.map((j) => [j.data, j.motivo || '']));
+
+    const datasAusentes = datasEsperadas.filter(
+      (d) => !datasRegistradas.has(d) && !datasJustificadas.has(d)
+    );
 
     return {
       campus: vinculo.campus,
@@ -73,6 +79,7 @@ const ValidacaoMinisterioService = {
       ano,
       datasEsperadas,
       datasRegistradas: [...datasRegistradas].filter((d) => datasEsperadas.includes(d)).sort(),
+      datasJustificadas: Object.fromEntries(datasJustificadas),
       datasAusentes: datasAusentes.sort(),
     };
   },
@@ -94,12 +101,9 @@ const ValidacaoMinisterioService = {
       ],
     });
 
-    const resultados = await Promise.all(
-      vinculos.map((v) => this.verificarPorCampusMinisterio(campusId, v.ministerioId, mes, ano)
-      )
+    return Promise.all(
+      vinculos.map((v) => this.verificarPorCampusMinisterio(campusId, v.ministerioId, mes, ano))
     );
-
-    return resultados;
   },
 
   async verificarTodosComValidacaoAtiva(mes, ano) {
@@ -120,11 +124,26 @@ const ValidacaoMinisterioService = {
     });
 
     const resultados = await Promise.all(
-      vinculos.map((v) => this.verificarPorCampusMinisterio(v.campusId, v.ministerioId, mes, ano)
-      )
+      vinculos.map((v) => this.verificarPorCampusMinisterio(v.campusId, v.ministerioId, mes, ano))
     );
 
     return resultados.filter((r) => r.datasAusentes.length > 0);
+  },
+
+  async justificarAusencia(campusId, ministerioId, data, motivo, userId) {
+    const [registro] = await CultoAusenciaJustificada.findOrCreate({
+      where: { campusId, ministerioId, data },
+      defaults: { motivo: motivo || null, criadoPorUserId: userId || null },
+    });
+    if (motivo !== undefined) await registro.update({ motivo: motivo || null });
+    return registro;
+  },
+
+  async removerJustificativa(campusId, ministerioId, data) {
+    const removidos = await CultoAusenciaJustificada.destroy({
+      where: { campusId, ministerioId, data },
+    });
+    if (removidos === 0) throw new Error('Justificativa não encontrada');
   },
 
   async enviarNotificacao(campusId, ministerioId, mes, ano) {
@@ -175,14 +194,8 @@ const ValidacaoMinisterioService = {
     const resultados = [];
     for (const item of pendentes) {
       if (!item.responsavel) continue;
-
       try {
-        const envio = await this.enviarNotificacao(
-          item.campus.id,
-          item.ministerio.id,
-          mes,
-          ano
-        );
+        const envio = await this.enviarNotificacao(item.campus.id, item.ministerio.id, mes, ano);
         resultados.push({ ...envio, ministerio: item.ministerio.nome, campus: item.campus.nome });
       } catch (err) {
         resultados.push({

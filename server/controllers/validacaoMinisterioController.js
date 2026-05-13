@@ -57,6 +57,36 @@ class ValidacaoMinisterioController {
       return res.status(500).json({ erro: error.message });
     }
   }
+
+  async justificar(req, res) {
+    try {
+      const {
+        campusId, ministerioId, data, motivo
+      } = req.body;
+      if (!campusId || !ministerioId || !data) {
+        return res.status(400).json({ erro: 'campusId, ministerioId e data são obrigatórios' });
+      }
+      const registro = await ValidacaoMinisterioService.justificarAusencia(
+        campusId, ministerioId, data, motivo, req.user?.id
+      );
+      return res.status(200).json(registro);
+    } catch (error) {
+      return res.status(400).json({ erro: error.message });
+    }
+  }
+
+  async removerJustificativa(req, res) {
+    try {
+      const { campusId, ministerioId, data } = req.body;
+      if (!campusId || !ministerioId || !data) {
+        return res.status(400).json({ erro: 'campusId, ministerioId e data são obrigatórios' });
+      }
+      await ValidacaoMinisterioService.removerJustificativa(campusId, ministerioId, data);
+      return res.status(200).json({ ok: true });
+    } catch (error) {
+      return res.status(400).json({ erro: error.message });
+    }
+  }
 }
 
 module.exports = new ValidacaoMinisterioController();

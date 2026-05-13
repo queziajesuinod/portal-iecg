@@ -105,3 +105,13 @@ export const notificarTodosMinisterios = (dados) => fetchWithAuth(`${BASE}/valid
   method: 'POST',
   body: JSON.stringify(dados),
 });
+
+export const justificarAusencia = (dados) => fetchWithAuth(`${BASE}/validacao/justificar`, {
+  method: 'POST',
+  body: JSON.stringify(dados),
+});
+
+export const removerJustificativa = (dados) => fetchWithAuth(`${BASE}/validacao/justificar`, {
+  method: 'DELETE',
+  body: JSON.stringify(dados),
+});

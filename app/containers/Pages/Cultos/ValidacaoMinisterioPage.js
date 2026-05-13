@@ -14,7 +14,11 @@ import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import PapperBlock from 'dan-components/PapperBlock/PapperBlock';
 import Notification from 'dan-components/Notification/Notification';
 import PropTypes from 'prop-types';
-import { verificarValidacao, notificarMinisterio, notificarTodosMinisterios } from '../../../api/cultosApi';
+import BlockIcon from '@mui/icons-material/Block';
+import UndoIcon from '@mui/icons-material/Undo';
+import {
+  verificarValidacao, notificarMinisterio, notificarTodosMinisterios, justificarAusencia, removerJustificativa
+} from '../../../api/cultosApi';
 
 const resolveApiUrl = () => {
   if (process.env.REACT_APP_API_URL) return process.env.REACT_APP_API_URL.replace(/\/$/, '');
@@ -37,11 +41,14 @@ function formatarData(dataStr) {
   return `${dia}/${mes}/${ano}`;
 }
 
-function CardMinisterio({ item, onNotificar, notificando }) {
+function CardMinisterio({
+  item, onNotificar, notificando, onJustificar, onRemoverJustificativa,
+}) {
   const [expandido, setExpandido] = useState(false);
   const temAusentes = item.datasAusentes.length > 0;
   const totalEsperado = item.datasEsperadas.length;
   const totalRegistrado = item.datasRegistradas.length;
+  const totalJustificado = Object.keys(item.datasJustificadas || {}).length;
 
   return (
     <Paper
@@ -70,12 +77,23 @@ function CardMinisterio({ item, onNotificar, notificando }) {
 
         <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
           {totalEsperado > 0 ? (
-            <Chip
-              size="small"
-              label={`${totalRegistrado}/${totalEsperado} registrados`}
-              color={temAusentes ? 'error' : 'success'}
-              variant="outlined"
-            />
+            <>
+              <Chip
+                size="small"
+                label={`${totalRegistrado}/${totalEsperado} registrados`}
+                color={temAusentes ? 'error' : 'success'}
+                variant="outlined"
+              />
+              {totalJustificado > 0 && (
+                <Chip
+                  size="small"
+                  icon={<BlockIcon fontSize="small" />}
+                  label={`${totalJustificado} sem culto`}
+                  color="default"
+                  variant="outlined"
+                />
+              )}
+            </>
           ) : (
             <Chip size="small" label="Sem dias padrão configurados" color="default" variant="outlined" />
           )}
@@ -122,19 +140,62 @@ function CardMinisterio({ item, onNotificar, notificando }) {
         <Grid container spacing={1}>
           {item.datasEsperadas.map((data) => {
             const registrada = item.datasRegistradas.includes(data);
+            const justificada = data in (item.datasJustificadas || {});
+            const motivo = item.datasJustificadas?.[data];
+
+            if (registrada) {
+              return (
+                <Grid item key={data}>
+                  <Chip
+                    size="small"
+                    label={formatarData(data)}
+                    color="success"
+                    variant="filled"
+                    icon={<CheckCircleIcon />}
+                  />
+                </Grid>
+              );
+            }
+
+            if (justificada) {
+              return (
+                <Grid item key={data}>
+                  <Tooltip title={motivo ? `Motivo: ${motivo}` : 'Sem culto (justificado)'}>
+                    <Chip
+                      size="small"
+                      label={formatarData(data)}
+                      color="default"
+                      variant="outlined"
+                      icon={<BlockIcon />}
+                      onDelete={() => onRemoverJustificativa(item.ministerio.id, data)}
+                      deleteIcon={<Tooltip title="Desfazer"><UndoIcon /></Tooltip>}
+                    />
+                  </Tooltip>
+                </Grid>
+              );
+            }
+
             return (
               <Grid item key={data}>
-                <Chip
-                  size="small"
-                  label={formatarData(data)}
-                  color={registrada ? 'success' : 'error'}
-                  variant={registrada ? 'filled' : 'outlined'}
-                  icon={registrada ? <CheckCircleIcon /> : <ErrorIcon />}
-                />
+                <Tooltip title="Clique para marcar que não teve culto nesta data">
+                  <Chip
+                    size="small"
+                    label={formatarData(data)}
+                    color="error"
+                    variant="outlined"
+                    icon={<ErrorIcon />}
+                    onClick={() => onJustificar(item.ministerio.id, data)}
+                  />
+                </Tooltip>
               </Grid>
             );
           })}
         </Grid>
+        {item.datasAusentes.length > 0 && (
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+            Clique numa data vermelha para marcar como &quot;não teve culto&quot;
+          </Typography>
+        )}
       </Collapse>
     </Paper>
   );
@@ -147,12 +208,15 @@ CardMinisterio.propTypes = {
     datasEsperadas: PropTypes.arrayOf(PropTypes.string),
     datasRegistradas: PropTypes.arrayOf(PropTypes.string),
     datasAusentes: PropTypes.arrayOf(PropTypes.string),
+    datasJustificadas: PropTypes.objectOf(PropTypes.string),
     responsavel: PropTypes.shape({
       preferredName: PropTypes.string,
       fullName: PropTypes.string,
     }),
   }).isRequired,
   onNotificar: PropTypes.func.isRequired,
+  onJustificar: PropTypes.func.isRequired,
+  onRemoverJustificativa: PropTypes.func.isRequired,
   notificando: PropTypes.bool,
 };
 
@@ -208,6 +272,24 @@ const ValidacaoMinisterioPage = () => {
       setNotification(err.message || 'Erro ao enviar notificação');
     } finally {
       setNotificando(null);
+    }
+  };
+
+  const handleJustificar = async (ministerioId, data) => {
+    try {
+      await justificarAusencia({ campusId, ministerioId, data });
+      await handleVerificar();
+    } catch (err) {
+      setNotification(err.message || 'Erro ao justificar ausência');
+    }
+  };
+
+  const handleRemoverJustificativa = async (ministerioId, data) => {
+    try {
+      await removerJustificativa({ campusId, ministerioId, data });
+      await handleVerificar();
+    } catch (err) {
+      setNotification(err.message || 'Erro ao remover justificativa');
     }
   };
 
@@ -321,6 +403,8 @@ const ValidacaoMinisterioPage = () => {
                     key={item.ministerio?.id}
                     item={item}
                     onNotificar={handleNotificar}
+                    onJustificar={handleJustificar}
+                    onRemoverJustificativa={handleRemoverJustificativa}
                     notificando={notificando === item.ministerio?.id}
                   />
                 ))}
@@ -338,6 +422,8 @@ const ValidacaoMinisterioPage = () => {
                     key={item.ministerio?.id}
                     item={item}
                     onNotificar={handleNotificar}
+                    onJustificar={handleJustificar}
+                    onRemoverJustificativa={handleRemoverJustificativa}
                     notificando={notificando === item.ministerio?.id}
                   />
                 ))}
@@ -355,6 +441,8 @@ const ValidacaoMinisterioPage = () => {
                     key={item.ministerio?.id}
                     item={item}
                     onNotificar={handleNotificar}
+                    onJustificar={handleJustificar}
+                    onRemoverJustificativa={handleRemoverJustificativa}
                     notificando={notificando === item.ministerio?.id}
                   />
                 ))}
