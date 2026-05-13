@@ -2,8 +2,12 @@ const { Op } = require('sequelize');
 const { NotificationCampaign, NotificationSequenceStep, NotificationSequence } = require('./models');
 const NotificationCampaignService = require('./services/notificationCampaignService');
 const NotificationSequenceService = require('./services/notificationSequenceService');
+const ValidacaoMinisterioService = require('./services/validacaoMinisterioService');
 
 const dispatching = new Set();
+
+// Controle para não disparar o job de validação mais de uma vez por dia
+let ultimaValidacaoData = null;
 
 async function tickCampaigns() {
   const now = new Date();
@@ -35,7 +39,6 @@ async function tickCampaigns() {
 
 async function tickSequences() {
   const now = new Date();
-  // Busca steps pendentes com scheduledAt passado de sequências ativas
   const dueSteps = await NotificationSequenceStep.findAll({
     where: {
       status: 'pending',
@@ -68,9 +71,40 @@ async function tickSequences() {
   }
 }
 
+async function tickValidacaoCultos() {
+  const agora = new Date();
+  const hoje = agora.toISOString().slice(0, 10);
+
+  // Só executa uma vez por dia, toda segunda-feira às 8h
+  if (ultimaValidacaoData === hoje) return;
+  if (agora.getDay() !== 1) return; // 1 = segunda-feira
+  if (agora.getHours() < 8) return;
+
+  ultimaValidacaoData = hoje;
+
+  console.log('[Scheduler] Verificando cultos ausentes com validação automática ativa...');
+
+  try {
+    // Verifica o mês anterior se estamos nos primeiros 7 dias do mês, senão verifica o mês atual
+    let mes = agora.getMonth() + 1;
+    let ano = agora.getFullYear();
+    if (agora.getDate() <= 7) {
+      mes = mes === 1 ? 12 : mes - 1;
+      if (mes === 12) ano -= 1;
+    }
+
+    const resultados = await ValidacaoMinisterioService.enviarNotificacoesAutomaticas(mes, ano);
+    const enviados = resultados.filter((r) => r.enviado).length;
+    const falhas = resultados.filter((r) => !r.enviado).length;
+    console.log(`[Scheduler] Validação de cultos concluída — notificações enviadas: ${enviados}, falhas: ${falhas}`);
+  } catch (err) {
+    console.error('[Scheduler] Erro na validação de cultos:', err.message);
+  }
+}
+
 async function tick() {
   try {
-    await Promise.all([tickCampaigns(), tickSequences()]);
+    await Promise.all([tickCampaigns(), tickSequences(), tickValidacaoCultos()]);
   } catch (err) {
     console.error('[Scheduler] Erro no tick:', err.message);
   }

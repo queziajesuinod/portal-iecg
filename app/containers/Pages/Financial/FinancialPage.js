@@ -50,11 +50,13 @@ import {
   criarSaidaFinanceira,
   deletarSaidaFinanceira,
   exportarSaidasFinanceiras,
+  exportarEntradasFinanceiras,
   listarRegistrosFinanceiros,
   criarEntradaManual,
   atualizarEntradaManual,
   deletarEntradaManual
 } from '../../../api/financialApi';
+import { getPaymentStatusLabel, getPaymentStatusChipSx } from '../../../constants/paymentStatus';
 import { useConfirm } from '../../../utils/useConfirm';
 import {
   formatDateInAppTimezone,
@@ -187,7 +189,8 @@ function FinancialPage() {
     dateFrom: '',
     dateTo: '',
     eventId: '',
-    paymentMethod: ''
+    paymentMethod: '',
+    paymentStatus: []
   }));
   const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -201,6 +204,7 @@ function FinancialPage() {
     isSettled: ''
   });
   const [exportingExpenses, setExportingExpenses] = useState(false);
+  const [exportingEntries, setExportingEntries] = useState(false);
 
   const title = `${brand.name} - Financeiro`;
 
@@ -352,7 +356,8 @@ function FinancialPage() {
       dateFrom: '',
       dateTo: '',
       eventId: '',
-      paymentMethod: ''
+      paymentMethod: '',
+      paymentStatus: []
     };
     setFilters(reset);
     setEntriesPage(0);
@@ -396,6 +401,135 @@ function FinancialPage() {
   };
 
   const PAYMENT_METHOD_LABELS_MAP = PAYMENT_METHOD_OPTIONS.reduce((acc, o) => { acc[o.value] = o.label; return acc; }, {});
+
+  const formatValorExportacao = (value, fieldName = '') => {
+    if (value === null || value === undefined || value === '') return '';
+    if (typeof value === 'boolean') return value ? 'Sim' : 'Nao';
+    if (Array.isArray(value)) {
+      return value.map((item) => formatValorExportacao(item, fieldName)).join(' | ');
+    }
+    if (typeof value === 'object') {
+      try { return JSON.stringify(value); } catch (_e) { return String(value); }
+    }
+    if (fieldName === 'method' || fieldName.endsWith('.method')) {
+      return getPaymentMethodLabel(value);
+    }
+    if (fieldName === 'status' || fieldName.endsWith('.status') || fieldName === 'paymentStatus') {
+      return getPaymentStatusLabel(value);
+    }
+    if (fieldName === 'amount' || fieldName === 'taxa' || fieldName === 'finalPrice'
+      || fieldName === 'originalPrice' || fieldName === 'discountAmount'
+      || fieldName.endsWith('.amount') || fieldName.endsWith('.price')) {
+      return Number(value || 0).toFixed(2);
+    }
+    if (fieldName === 'installments' || fieldName.endsWith('.installments')) {
+      return `${Number(value) || 1}x`;
+    }
+    if (/At$/i.test(fieldName)) return formatDateTime(value);
+    if (/Date$/i.test(fieldName)) return formatDate(value);
+    return String(value);
+  };
+
+  const exportEntriesExcel = async () => {
+    try {
+      setExportingEntries(true);
+      const statusParam = Array.isArray(filters.paymentStatus) && filters.paymentStatus.length
+        ? filters.paymentStatus.join(',')
+        : undefined;
+      const data = await exportarEntradasFinanceiras({
+        eventId: filters.eventId || undefined,
+        dateFrom: filters.dateFrom || undefined,
+        dateTo: filters.dateTo || undefined,
+        paymentMethod: filters.paymentMethod || undefined,
+        paymentStatus: statusParam
+      });
+
+      const registrations = Array.isArray(data) ? data : [];
+      if (!registrations.length) {
+        setNotification('Nenhuma entrada encontrada para exportar com os filtros atuais.');
+        return;
+      }
+
+      const buyerKeys = new Set();
+      const attendeeKeys = new Set();
+      const paymentKeys = new Set();
+
+      registrations.forEach((reg) => {
+        const buyerData = reg.buyerData && typeof reg.buyerData === 'object' ? reg.buyerData : {};
+        Object.keys(buyerData).forEach((k) => buyerKeys.add(k));
+
+        (reg.attendees || []).forEach((attendee) => {
+          const attendeeData = attendee?.attendeeData && typeof attendee.attendeeData === 'object' ? attendee.attendeeData : {};
+          Object.keys(attendeeData).forEach((k) => attendeeKeys.add(k));
+        });
+
+        (reg.payments || []).forEach((payment) => {
+          Object.keys(payment || {}).forEach((k) => {
+            if (k !== 'id') paymentKeys.add(k);
+          });
+        });
+      });
+
+      const sortedBuyerKeys = Array.from(buyerKeys).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+      const sortedAttendeeKeys = Array.from(attendeeKeys).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+      const sortedPaymentKeys = Array.from(paymentKeys).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+      const baseColumns = ['evento', 'orderCode', 'statusInscricao', 'formaPagamento', 'quantidade', 'valorOriginal', 'desconto', 'valorFinal', 'dataInscricao'];
+      const buyerColumns = sortedBuyerKeys.map((k) => `comprador.${k}`);
+      const attendeeColumns = ['inscrito.numero', ...sortedAttendeeKeys.map((k) => `inscrito.dados.${k}`)];
+      const paymentColumns = sortedPaymentKeys.map((k) => `pagamento.${k}`);
+      const headers = [...baseColumns, ...buyerColumns, ...attendeeColumns, ...paymentColumns];
+
+      const rows = [];
+      registrations.forEach((reg) => {
+        const buyerData = reg.buyerData && typeof reg.buyerData === 'object' ? reg.buyerData : {};
+        const attendees = Array.isArray(reg.attendees) && reg.attendees.length ? reg.attendees : [null];
+        const payments = Array.isArray(reg.payments) && reg.payments.length ? reg.payments : [null];
+
+        attendees.forEach((attendee) => {
+          payments.forEach((payment) => {
+            const attendeeData = attendee?.attendeeData && typeof attendee.attendeeData === 'object' ? attendee.attendeeData : {};
+
+            const row = {
+              evento: reg.eventTitle,
+              orderCode: reg.orderCode,
+              statusInscricao: getPaymentStatusLabel(reg.paymentStatus),
+              formaPagamento: getPaymentMethodLabel(reg.paymentMethod),
+              quantidade: reg.quantity ?? '',
+              valorOriginal: Number(reg.originalPrice || 0).toFixed(2),
+              desconto: Number(reg.discountAmount || 0).toFixed(2),
+              valorFinal: Number(reg.finalPrice || 0).toFixed(2),
+              dataInscricao: formatDateTime(reg.createdAt),
+              'inscrito.numero': attendee?.attendeeNumber ?? ''
+            };
+
+            sortedBuyerKeys.forEach((k) => {
+              row[`comprador.${k}`] = formatValorExportacao(buyerData[k], k);
+            });
+            sortedAttendeeKeys.forEach((k) => {
+              row[`inscrito.dados.${k}`] = formatValorExportacao(attendeeData[k], k);
+            });
+            sortedPaymentKeys.forEach((k) => {
+              row[`pagamento.${k}`] = formatValorExportacao(payment?.[k], k);
+            });
+
+            rows.push(row);
+          });
+        });
+      });
+
+      const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Entradas');
+      const hoje = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(wb, `entradas_financeiro_${hoje}.xlsx`);
+    } catch (error) {
+      console.error('Erro ao exportar entradas:', error);
+      setNotification(error.message || 'Erro ao exportar entradas');
+    } finally {
+      setExportingEntries(false);
+    }
+  };
 
   const exportExpensesToExcel = async () => {
     try {
@@ -991,6 +1125,29 @@ function FinancialPage() {
               </Select>
             </FormControl>
           </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <FormControl fullWidth>
+              <InputLabel id="financial-status-filter">Status</InputLabel>
+              <Select
+                labelId="financial-status-filter"
+                multiple
+                value={filters.paymentStatus}
+                label="Status"
+                onChange={(event) => handleFilterChange('paymentStatus', event.target.value)}
+                renderValue={(selected) => (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    {selected.map((s) => (
+                      <Chip key={s} label={getPaymentStatusLabel(s)} size="small" sx={getPaymentStatusChipSx(s)} />
+                    ))}
+                  </Box>
+                )}
+              >
+                {['pending', 'authorized', 'partial', 'confirmed', 'denied', 'expired', 'cancelled', 'refunded'].map((s) => (
+                  <MenuItem key={s} value={s}>{getPaymentStatusLabel(s)}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
           <Grid item xs={12}>
             <Box display="flex" gap={1}>
               <Button variant="contained" color="primary" onClick={handleApplyFilters}>
@@ -1005,6 +1162,15 @@ function FinancialPage() {
 
         <Box display="flex" justifyContent="space-between" alignItems="center" style={{ marginBottom: 8 }}>
           <Typography variant="h6">Entradas de Tickets</Typography>
+          <Button
+            variant="outlined"
+            startIcon={<FileDownloadIcon />}
+            onClick={exportEntriesExcel}
+            disabled={exportingEntries}
+            size="small"
+          >
+            {exportingEntries ? 'Exportando...' : 'Exportar Excel'}
+          </Button>
         </Box>
 
         {loading ? (

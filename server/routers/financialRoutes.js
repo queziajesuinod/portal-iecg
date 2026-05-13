@@ -8,6 +8,7 @@ const requireFinancialAccess = requirePermission(['EVENTS_ACESS', 'EVENTS_ACCESS
 router.use(requireFinancialAccess);
 
 router.get('/records', financialController.listRecords);
+router.get('/entries/export', financialController.exportEntries);
 router.get('/fee-config', financialController.getFeeConfig);
 router.put('/fee-config', financialController.updateFeeConfig);
 router.get('/expenses/export', financialController.exportExpenses);

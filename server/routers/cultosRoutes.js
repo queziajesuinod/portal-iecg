@@ -1,10 +1,10 @@
-'use strict';
 const { Router } = require('express');
 const ministerioController = require('../controllers/ministerioController');
 const tipoEventoController = require('../controllers/tipoEventoController');
 const campusMinisterioController = require('../controllers/campusMinisterioController');
 const registroCultoController = require('../controllers/registroCultoController');
 const ministroController = require('../controllers/ministroController');
+const validacaoMinisterioController = require('../controllers/validacaoMinisterioController');
 
 const router = Router();
 
@@ -33,6 +33,13 @@ router.patch('/tipos-evento/:id/ativo', tipoEventoController.alternarAtivo);
 router.get('/campus/:campusId/ministerios', campusMinisterioController.listarMinisteriosPorCampus);
 router.get('/campus/:campusId/vinculos', campusMinisterioController.listarVinculosPorCampus);
 router.put('/campus/:campusId/vinculos', campusMinisterioController.salvarVinculos);
+router.get('/campus/:campusId/ministerios/:ministerioId/config', campusMinisterioController.buscarVinculo);
+router.put('/campus/:campusId/ministerios/:ministerioId/config', campusMinisterioController.atualizarConfiguracao);
+
+// ===== Validação de Cultos =====
+router.get('/validacao', validacaoMinisterioController.verificar);
+router.post('/validacao/notificar', validacaoMinisterioController.notificar);
+router.post('/validacao/notificar-todos', validacaoMinisterioController.notificarTodos);
 
 // ===== Registros de Culto =====
 router.get('/registros', registroCultoController.listar);

@@ -1,11 +1,12 @@
-'use strict';
-const { Voluntariado, AreaVoluntariado, Campus, Ministerio, Member, MemberActivity, MemberMilestone, Perfil, User } = require('../models');
+const {
+  Voluntariado, AreaVoluntariado, Campus, Ministerio, Member, MemberActivity, MemberMilestone, Perfil, User
+} = require('../models');
 
 const includeAssociations = [
   {
     model: Member,
     as: 'membro',
-    attributes: ['id', 'fullName', 'preferredName', 'email', 'phone']
+    attributes: ['id', 'fullName', 'preferredName', 'email', 'phone', 'whatsapp']
   },
   {
     model: AreaVoluntariado,
