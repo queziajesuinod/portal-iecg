@@ -315,7 +315,8 @@ class NotificationService {
       channel = 'whatsapp',
       customMessage,
       customSubject,
-      customMediaUrl
+      customMediaUrl,
+      evolutionInstance
     } = dados;
 
     // Buscar inscrição
@@ -409,7 +410,7 @@ class NotificationService {
       }
 
       if (channel === 'whatsapp') {
-        const validation = await evolutionApiService.validarNumeroWhatsapp(normalizedPhone);
+        const validation = await evolutionApiService.validarNumeroWhatsapp(normalizedPhone, evolutionInstance);
         if (!isWhatsappValid(validation)) {
           throw new Error(validation?.message || 'Número de WhatsApp inválido ou desconectado');
         }
@@ -447,10 +448,11 @@ class NotificationService {
             recipient,
             message,
             mediaUrl,
-            'image'
+            'image',
+            evolutionInstance
           );
         } else {
-          resultado = await evolutionApiService.enviarMensagemTexto(recipient, message);
+          resultado = await evolutionApiService.enviarMensagemTexto(recipient, message, evolutionInstance);
         }
 
         if (resultado.sucesso) {
@@ -624,53 +626,46 @@ class NotificationService {
    * Processar webhook da Evolution API
    */
   async processarWebhook(webhookData) {
-    const info = evolutionApiService.processarWebhook(webhookData);
+    const infos = evolutionApiService.processarWebhook(webhookData);
 
-    if (!info || !info.messageId) {
-      return { message: 'Webhook ignorado - sem messageId' };
+    if (!infos || !infos.length) {
+      return { message: 'Webhook ignorado - sem dados reconhecidos' };
     }
 
-    const updates = { status: info.status };
-    if (info.status === 'delivered') {
-      updates.deliveredAt = moment.tz(TIMEZONE).toDate();
-    } else if (info.status === 'read') {
-      updates.readAt = moment.tz(TIMEZONE).toDate();
-    }
+    const allResults = [];
 
-    const results = [];
+    for (const info of infos) {
+      const now = moment.tz(TIMEZONE).toDate();
 
-    const notification = await EventNotification.findOne({
-      where: { externalId: info.messageId }
-    });
-    if (notification) {
-      await notification.update(updates);
-      results.push('event_notification');
-    }
-
-    if (NotificationCampaignRecipient) {
-      const recipient = await NotificationCampaignRecipient.findOne({
-        where: { externalId: info.messageId }
-      });
-      if (recipient) {
-        const recipientUpdates = { status: info.status };
-        if (info.status === 'delivered' && !recipient.deliveredAt) {
-          recipientUpdates.deliveredAt = moment.tz(TIMEZONE).toDate();
-        } else if (info.status === 'read' && !recipient.readAt) {
-          recipientUpdates.readAt = moment.tz(TIMEZONE).toDate();
-          if (!recipient.deliveredAt) {
-            recipientUpdates.deliveredAt = moment.tz(TIMEZONE).toDate();
-          }
+      const buildUpdates = (current = {}) => {
+        const u = { status: info.status };
+        if (info.status === 'delivered' && !current.deliveredAt) {
+          u.deliveredAt = now;
+        } else if (info.status === 'read') {
+          if (!current.readAt) u.readAt = now;
+          if (!current.deliveredAt) u.deliveredAt = now;
         }
-        await recipient.update(recipientUpdates);
-        results.push('campaign_recipient');
+        return u;
+      };
+
+      const notification = await EventNotification.findOne({ where: { externalId: info.messageId } });
+      if (notification) {
+        await notification.update(buildUpdates(notification));
+        allResults.push('event_notification');
+      }
+
+      const recipient = await NotificationCampaignRecipient.findOne({ where: { externalId: info.messageId } });
+      if (recipient) {
+        await recipient.update(buildUpdates(recipient));
+        allResults.push('campaign_recipient');
       }
     }
 
-    if (!results.length) {
+    if (!allResults.length) {
       return { message: 'Notificação não encontrada' };
     }
 
-    return { message: 'Webhook processado com sucesso', updated: results };
+    return { message: 'Webhook processado com sucesso', updated: allResults };
   }
 }
 

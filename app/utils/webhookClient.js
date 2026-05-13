@@ -162,6 +162,14 @@ export const updateWebhook = async (id, payload) => {
   return res.json();
 };
 
+export const fetchEvolutionWebhookLogs = async (limit = 50, offset = 0) => {
+  const res = await fetch(`${API_URL}/api/admin/evolution-webhook-logs?limit=${limit}&offset=${offset}`, {
+    headers: { 'Content-Type': 'application/json', ...authHeaders() }
+  });
+  if (!res.ok) throw new Error('Falha ao carregar logs');
+  return res.json();
+};
+
 export default {
   fetchWebhooks,
   createWebhook,
@@ -171,5 +179,6 @@ export default {
   fetchEventDefinitions,
   createEventDefinition,
   listarInscricoesParaReenvio,
-  reenviarWebhookInscricoes
+  reenviarWebhookInscricoes,
+  fetchEvolutionWebhookLogs
 };

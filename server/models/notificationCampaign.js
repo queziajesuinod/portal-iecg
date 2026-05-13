@@ -24,6 +24,7 @@ module.exports = (sequelize) => {
     totalSent: { type: DataTypes.INTEGER, allowNull: true },
     totalFailed: { type: DataTypes.INTEGER, allowNull: true },
     createdBy: { type: DataTypes.UUID, allowNull: true },
+    evolutionInstance: { type: DataTypes.STRING(100), allowNull: true },
     sendDelayMs: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 500 },
     recurrenceType: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'once' },
     recurrenceDays: { type: DataTypes.JSONB, allowNull: true },

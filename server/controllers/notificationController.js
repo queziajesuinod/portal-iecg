@@ -1,4 +1,6 @@
 const notificationService = require('../services/notificationService');
+const { EvolutionWebhookLog } = require('../models');
+const evolutionApiService = require('../services/evolutionApiService');
 
 class NotificationController {
   // ========== GRUPOS ==========
@@ -172,11 +174,39 @@ class NotificationController {
 
   async processarWebhook(req, res) {
     try {
-      const resultado = await notificationService.processarWebhook(req.body);
+      const { body } = req;
+      const resultado = await notificationService.processarWebhook(body);
+
+      const infos = evolutionApiService.processarWebhook(body);
+      const logEntry = {
+        event: body.event || null,
+        instance: body.instance || null,
+        messageId: infos[0]?.messageId || null,
+        mappedStatus: infos[0]?.status || null,
+        updatedRecords: resultado?.updated || [],
+        rawPayload: body
+      };
+      EvolutionWebhookLog.create(logEntry).catch(() => {});
+
       return res.status(200).json(resultado);
     } catch (error) {
       console.error('Erro ao processar webhook:', error);
       return res.status(400).json({ erro: error.message });
+    }
+  }
+
+  async listarWebhookLogs(req, res) {
+    try {
+      const limit = Math.min(Number(req.query.limit) || 50, 200);
+      const offset = Number(req.query.offset) || 0;
+      const { count, rows } = await EvolutionWebhookLog.findAndCountAll({
+        order: [['createdAt', 'DESC']],
+        limit,
+        offset
+      });
+      return res.json({ total: count, logs: rows });
+    } catch (error) {
+      return res.status(500).json({ erro: error.message });
     }
   }
 }

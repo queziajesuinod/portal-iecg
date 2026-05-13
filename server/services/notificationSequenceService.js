@@ -56,7 +56,7 @@ const NotificationSequenceService = {
         {
           model: NotificationSequenceStep,
           as: 'steps',
-          attributes: ['id', 'stepOrder', 'name', 'scheduledAt', 'status', 'totalSent', 'totalFailed']
+          attributes: ['id', 'stepOrder', 'name', 'templateId', 'customMessage', 'scheduledAt', 'status', 'totalSent', 'totalFailed']
         },
         { model: User, as: 'creator', attributes: ['id', 'name'] }
       ],
@@ -73,7 +73,7 @@ const NotificationSequenceService = {
 
   async criar(dados, userId = null) {
     const {
-      name, description, channel, audienceType, audienceConfig, sendDelayMs, steps = []
+      name, description, channel, audienceType, audienceConfig, sendDelayMs, evolutionInstance, steps = []
     } = dados;
     if (!name?.trim()) throw new Error('Nome é obrigatório');
 
@@ -84,6 +84,7 @@ const NotificationSequenceService = {
       audienceType: audienceType || 'filter',
       audienceConfig: audienceConfig || {},
       sendDelayMs: sendDelayMs != null ? sendDelayMs : 500,
+      evolutionInstance: evolutionInstance || null,
       status: 'draft',
       createdBy: userId
     });
@@ -109,7 +110,7 @@ const NotificationSequenceService = {
     if (sequence.status === 'completed') throw new Error('Sequência concluída não pode ser editada');
 
     const {
-      name, description, channel, audienceType, audienceConfig, sendDelayMs, steps
+      name, description, channel, audienceType, audienceConfig, sendDelayMs, evolutionInstance, steps
     } = dados;
     await sequence.update({
       ...(name !== undefined ? { name: name.trim() } : {}),
@@ -117,7 +118,8 @@ const NotificationSequenceService = {
       ...(channel !== undefined ? { channel } : {}),
       ...(audienceType !== undefined ? { audienceType } : {}),
       ...(audienceConfig !== undefined ? { audienceConfig } : {}),
-      ...(sendDelayMs !== undefined ? { sendDelayMs } : {})
+      ...(sendDelayMs !== undefined ? { sendDelayMs } : {}),
+      ...(evolutionInstance !== undefined ? { evolutionInstance: evolutionInstance || null } : {})
     });
 
     if (steps !== undefined) {
@@ -217,7 +219,7 @@ const NotificationSequenceService = {
       for (const r of allRecipients) {
         try {
           if (sequence.channel === 'whatsapp') {
-            const response = await evolutionApi.enviarMensagemTexto(r.contact, r.resolvedMessage);
+            const response = await evolutionApi.enviarMensagemTexto(r.contact, r.resolvedMessage, sequence.evolutionInstance);
             await r.update({ status: 'sent', sentAt: new Date(), providerResponse: response });
           } else {
             await r.update({ status: 'sent', sentAt: new Date() });

@@ -198,6 +198,7 @@ export default function NotificacoesSequenciasPage() {
   const [nome, setNome] = useState('');
   const [descricao, setDescricao] = useState('');
   const [channel, setChannel] = useState('whatsapp');
+  const [evolutionInstance, setEvolutionInstance] = useState('');
   const [sendDelaySeconds, setSendDelaySeconds] = useState('0.5');
   const [audienceType, setAudienceType] = useState('filter');
   const [groupId, setGroupId] = useState('');
@@ -241,7 +242,7 @@ export default function NotificacoesSequenciasPage() {
   useEffect(() => { fetchAll(); }, []);
 
   const resetForm = () => {
-    setNome(''); setDescricao(''); setChannel('whatsapp'); setSendDelaySeconds('0.5');
+    setNome(''); setDescricao(''); setChannel('whatsapp'); setEvolutionInstance(''); setSendDelaySeconds('0.5');
     setAudienceType('filter'); setGroupId(''); setIndividualContact(''); setIndividualName('');
     setFilterSources([emptySource()]); setFilterDeduplicateBy('phone');
     setSteps([emptyStep(1)]);
@@ -251,7 +252,7 @@ export default function NotificacoesSequenciasPage() {
 
   const abrirEditar = (seq) => {
     setEditando(seq);
-    setNome(seq.name); setDescricao(seq.description || ''); setChannel(seq.channel);
+    setNome(seq.name); setDescricao(seq.description || ''); setChannel(seq.channel); setEvolutionInstance(seq.evolutionInstance || '');
     setSendDelaySeconds(String((seq.sendDelayMs ?? 500) / 1000));
     setAudienceType(seq.audienceType);
     setGroupId(seq.audienceType === 'group' ? (seq.audienceConfig?.groupId || '') : '');
@@ -311,7 +312,7 @@ export default function NotificacoesSequenciasPage() {
   const handleSalvar = async () => {
     if (!nome.trim()) { setNotification('Informe o nome da sequência.'); return; }
     if (!steps.length) { setNotification('Adicione ao menos um step.'); return; }
-    const hasMsg = steps.every((s) => s.templateId || s.customMessage?.trim());
+    const hasMsg = steps.every((s) => s.id || s.templateId || s.customMessage?.trim());
     if (!hasMsg) { setNotification('Todos os steps precisam ter uma mensagem ou template.'); return; }
     setSaving(true);
     const delayMs = Math.round(parseFloat(sendDelaySeconds || '0') * 1000);
@@ -322,6 +323,7 @@ export default function NotificacoesSequenciasPage() {
       audienceType,
       audienceConfig: buildAudienceConfig(),
       sendDelayMs: Number.isFinite(delayMs) && delayMs >= 0 ? delayMs : 500,
+      evolutionInstance: evolutionInstance || null,
       steps: steps.map((s, i) => ({
         stepOrder: i + 1,
         name: s.name || null,
@@ -505,7 +507,7 @@ export default function NotificacoesSequenciasPage() {
                       Retomar
                     </Button>
                   )}
-                  {['draft', 'paused'].includes(seq.status) && (
+                  {seq.status !== 'completed' && (
                     <Tooltip title="Editar">
                       <IconButton size="small" onClick={() => abrirEditar(seq)}><EditIcon /></IconButton>
                     </Tooltip>
@@ -536,6 +538,13 @@ export default function NotificacoesSequenciasPage() {
                 <MenuItem value="whatsapp">WhatsApp</MenuItem>
                 <MenuItem value="email">E-mail</MenuItem>
               </TextField>
+              {channel === 'whatsapp' && (
+                <TextField select label="Instância Evolution" value={evolutionInstance} onChange={(e) => setEvolutionInstance(e.target.value)} sx={{ minWidth: 200 }}>
+                  <MenuItem value="">Padrão do servidor</MenuItem>
+                  <MenuItem value="IECG">IECG</MenuItem>
+                  <MenuItem value="START_IECG">START_IECG</MenuItem>
+                </TextField>
+              )}
               <TextField label="Intervalo entre envios (s)" type="number" size="small"
                 value={sendDelaySeconds} onChange={(e) => setSendDelaySeconds(e.target.value)}
                 inputProps={{ min: 0, step: 0.1 }} sx={{ maxWidth: 200 }}

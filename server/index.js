@@ -134,6 +134,8 @@ app.use('/api/admin/voluntariado', authMiddleware, require('./routers/voluntaria
 app.use('/api/webhooks', require('./routers/webhookRoutes'));
 // Webhook Evolution API (pública - sem autenticação)
 app.use('/api/webhooks/notifications', require('./routers/evolutionWebhookRoutes'));
+// Logs de webhooks Evolution (protegido)
+app.get('/api/admin/evolution-webhook-logs', authMiddleware, (req, res) => require('./controllers/notificationController').listarWebhookLogs(req, res));
 
 // Assets utilitários
 app.use('/api/icons', (req, res) => {
