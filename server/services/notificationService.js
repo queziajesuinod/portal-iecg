@@ -1,3 +1,5 @@
+const { Op } = require('sequelize');
+const moment = require('moment-timezone');
 const {
   EventNotification,
   EventNotificationTemplate,
@@ -9,16 +11,15 @@ const {
   EventBatch,
   EventCheckIn,
   User,
+  NotificationCampaignRecipient,
   sequelize
 } = require('../models');
-const { Op } = require('sequelize');
-const moment = require('moment-timezone');
 const evolutionApiService = require('./evolutionApiService');
 
 const TIMEZONE = 'America/Campo_Grande';
 const GROUP_SEND_DELAY_MS = Number(process.env.NOTIFICATION_GROUP_DELAY_MS || 1200);
 
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
 const normalizeWhatsappDigits = (value) => {
   if (!value) return null;
@@ -60,7 +61,9 @@ class NotificationService {
    * Criar grupo de notificação
    */
   async criarGrupo(dados) {
-    const { eventId, name, description, filterCriteria } = dados;
+    const {
+      eventId, name, description, filterCriteria
+    } = dados;
 
     if (!eventId || !name) {
       throw new Error('Campos obrigatórios: eventId, name');
@@ -117,14 +120,13 @@ class NotificationService {
 
     // Usar upsert para evitar duplicatas
     const results = await Promise.allSettled(
-      membersToAdd.map(member => 
-        EventNotificationGroupMember.findOrCreate({
-          where: {
-            groupId: member.groupId,
-            registrationId: member.registrationId
-          },
-          defaults: member
-        })
+      membersToAdd.map(member => EventNotificationGroupMember.findOrCreate({
+        where: {
+          groupId: member.groupId,
+          registrationId: member.registrationId
+        },
+        defaults: member
+      })
       )
     );
 
@@ -198,7 +200,9 @@ class NotificationService {
    * Criar template de notificação
    */
   async criarTemplate(dados) {
-    const { eventId, name, type, channel, subject, message, mediaUrl } = dados;
+    const {
+      eventId, name, type, channel, subject, message, mediaUrl
+    } = dados;
 
     if (!name || !type || !channel || !message) {
       throw new Error('Campos obrigatórios: name, type, channel, message');
@@ -392,27 +396,27 @@ class NotificationService {
 
     // Obter destinatário e validar WhatsApp
     let recipient = '';
-      if (channel === 'whatsapp' || channel === 'sms') {
-        const rawPhone = extractBuyerPhone(registration.buyerData);
-        const normalizedPhone = normalizeWhatsappDigits(rawPhone);
-        console.log('[Notification] Número recebido', {
-          rawPhone,
-          normalizedPhone,
-          registrationId: registration.id
-        });
-        if (!normalizedPhone) {
-          throw new Error('Telefone não encontrado na inscrição');
-        }
+    if (channel === 'whatsapp' || channel === 'sms') {
+      const rawPhone = extractBuyerPhone(registration.buyerData);
+      const normalizedPhone = normalizeWhatsappDigits(rawPhone);
+      console.log('[Notification] Número recebido', {
+        rawPhone,
+        normalizedPhone,
+        registrationId: registration.id
+      });
+      if (!normalizedPhone) {
+        throw new Error('Telefone não encontrado na inscrição');
+      }
 
-        if (channel === 'whatsapp') {
-          const validation = await evolutionApiService.validarNumeroWhatsapp(normalizedPhone);
-          if (!isWhatsappValid(validation)) {
-            throw new Error(validation?.message || 'Número de WhatsApp inválido ou desconectado');
-          }
+      if (channel === 'whatsapp') {
+        const validation = await evolutionApiService.validarNumeroWhatsapp(normalizedPhone);
+        if (!isWhatsappValid(validation)) {
+          throw new Error(validation?.message || 'Número de WhatsApp inválido ou desconectado');
         }
+      }
 
-        recipient = normalizedPhone;
-      } else if (channel === 'email') {
+      recipient = normalizedPhone;
+    } else if (channel === 'email') {
       recipient = registration.buyerData?.email;
       if (!recipient) {
         throw new Error('Email não encontrado na inscrição');
@@ -519,9 +523,9 @@ class NotificationService {
           registrationId: member.registrationId,
           groupId
         }, userId);
-        resultados.enviados++;
+        resultados.enviados += 1;
       } catch (error) {
-        resultados.falhas++;
+        resultados.falhas += 1;
         resultados.erros.push({
           registrationId: member.registrationId,
           erro: error.message
@@ -621,32 +625,52 @@ class NotificationService {
    */
   async processarWebhook(webhookData) {
     const info = evolutionApiService.processarWebhook(webhookData);
-    
+
     if (!info || !info.messageId) {
       return { message: 'Webhook ignorado - sem messageId' };
     }
 
-    // Buscar notificação pelo externalId
-    const notification = await EventNotification.findOne({
-      where: { externalId: info.messageId }
-    });
-
-    if (!notification) {
-      return { message: 'Notificação não encontrada' };
-    }
-
-    // Atualizar status
     const updates = { status: info.status };
-
     if (info.status === 'delivered') {
       updates.deliveredAt = moment.tz(TIMEZONE).toDate();
     } else if (info.status === 'read') {
       updates.readAt = moment.tz(TIMEZONE).toDate();
     }
 
-    await notification.update(updates);
+    const results = [];
 
-    return { message: 'Webhook processado com sucesso', notification };
+    const notification = await EventNotification.findOne({
+      where: { externalId: info.messageId }
+    });
+    if (notification) {
+      await notification.update(updates);
+      results.push('event_notification');
+    }
+
+    if (NotificationCampaignRecipient) {
+      const recipient = await NotificationCampaignRecipient.findOne({
+        where: { externalId: info.messageId }
+      });
+      if (recipient) {
+        const recipientUpdates = { status: info.status };
+        if (info.status === 'delivered' && !recipient.deliveredAt) {
+          recipientUpdates.deliveredAt = moment.tz(TIMEZONE).toDate();
+        } else if (info.status === 'read' && !recipient.readAt) {
+          recipientUpdates.readAt = moment.tz(TIMEZONE).toDate();
+          if (!recipient.deliveredAt) {
+            recipientUpdates.deliveredAt = moment.tz(TIMEZONE).toDate();
+          }
+        }
+        await recipient.update(recipientUpdates);
+        results.push('campaign_recipient');
+      }
+    }
+
+    if (!results.length) {
+      return { message: 'Notificação não encontrada' };
+    }
+
+    return { message: 'Webhook processado com sucesso', updated: results };
   }
 }
 

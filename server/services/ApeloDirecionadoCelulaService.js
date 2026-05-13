@@ -507,6 +507,14 @@ class ApeloDirecionadoCelulaService {
       return null;
     }
 
+    const existing = await MemberActivity.findOne({
+      where: { memberId, activityType },
+      transaction
+    });
+    if (existing) {
+      return existing;
+    }
+
     const points = await this._resolveActivityPoints(activityType, transaction);
     return MemberActivity.create({
       memberId,
