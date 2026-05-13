@@ -5,8 +5,6 @@ import {
 } from '@mui/material';
 import { PapperBlock } from 'dan-components';
 
-const MEMBER_PROFILE_ID = '7d47d03a-a7aa-4907-b8b9-8fcf87bd52dc';
-
 const fallbackHost = `${window.location.protocol}//${window.location.host}`;
 const API_URL = (process.env.REACT_APP_API_URL && process.env.REACT_APP_API_URL.replace(/\/$/, '')) || fallbackHost || 'https://portal.iecg.com.br';
 
@@ -23,13 +21,6 @@ const fetchJson = async (url, headers) => {
     throw new Error(`Falha ao consultar ${url}`);
   }
   return response.json();
-};
-
-const isMember = (user) => {
-  const hasMainPerfil = user?.perfilId === MEMBER_PROFILE_ID;
-  const hasJoinedPerfil = Array.isArray(user?.perfis)
-    && user.perfis.some((perfil) => perfil?.id === MEMBER_PROFILE_ID);
-  return hasMainPerfil || hasJoinedPerfil;
 };
 
 const hasKpiAccessProfile = (user) => {
@@ -96,18 +87,16 @@ const WelcomePage = () => {
           encaminhamentoResponse,
           decisaoResponse,
           voltaResponse,
-          usersResponse
+          membrosResponse
         ] = await Promise.all([
           fetchJson(`${API_URL}/start/celula?ativo=true&page=1&limit=1`, headers),
           fetchJson(`${API_URL}/start/direcionamentos?year=${currentYear}&decisao=encaminhamento_celula&page=1&limit=1`, headers),
           fetchJson(`${API_URL}/start/direcionamentos?year=${currentYear}&decisao=apelo_decisao&page=1&limit=1`, headers),
           fetchJson(`${API_URL}/start/direcionamentos?year=${currentYear}&decisao=apelo_volta&page=1&limit=1`, headers),
-          fetchJson(`${API_URL}/users`, headers)
+          fetchJson(`${API_URL}/api/admin/members?status=MEMBRO&page=1&limit=1`, headers)
         ]);
 
-        const activeMembers = Array.isArray(usersResponse)
-          ? usersResponse.filter((user) => isMember(user) && user.active).length
-          : 0;
+        const activeMembers = Number(membrosResponse?.total || 0);
 
         setKpis({
           activeCells: Number(celulasResponse?.totalRegistros || 0),

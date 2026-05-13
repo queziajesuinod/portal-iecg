@@ -17,12 +17,21 @@ async function listarPorEvento(req, res) {
     const perPage = Math.min(Math.max(parseInt(req.query.perPage, 10) || 20, 1), 100);
     const offset = (page - 1) * perPage;
     const filters = {};
-    ['orderCode', 'buyerName', 'buyerDocument', 'buyerData.buyer_name', 'buyerData.buyer_document', 'paymentStatus', 'dateFrom', 'dateTo', 'checkinStatus'].forEach((key) => {
+    ['orderCode', 'buyerName', 'buyerDocument', 'buyerData.buyer_name', 'buyerData.buyer_document', 'dateFrom', 'dateTo', 'checkinStatus'].forEach((key) => {
       const value = req.query[key];
       if (value && value !== 'undefined') {
         filters[key] = value;
       }
     });
+    const statusParam = req.query.paymentStatus;
+    if (statusParam && statusParam !== 'undefined') {
+      const statuses = statusParam.split(',').map((s) => s.trim()).filter(Boolean);
+      if (statuses.length === 1) {
+        [filters.paymentStatus] = statuses;
+      } else if (statuses.length > 1) {
+        filters.paymentStatus = statuses;
+      }
+    }
     const { rows, count } = await registrationService.listarInscricoesPorEvento(req.params.eventId, {
       limit: perPage,
       offset,

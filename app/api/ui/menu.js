@@ -135,6 +135,13 @@ module.exports = [
         link: '/app/cultos/admin/ministros',
         icon: 'ion-ios-mic-outline',
         permission: 'SAUDE_CULTOS'
+      },
+      {
+        key: 'cultosValidacao',
+        name: 'Validação de Cultos',
+        link: '/app/cultos/validacao',
+        icon: 'ion-ios-checkmark-circle-outline',
+        permission: 'SAUDE_CULTOS'
       }
     ]
   },

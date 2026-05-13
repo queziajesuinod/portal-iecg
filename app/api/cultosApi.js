@@ -24,56 +24,41 @@ const appendFiltros = (params, filtros = {}) => {
 };
 
 // ===== Ministros (pregadores) =====
-export const listarMinistros = (apenasAtivos = false) =>
-  fetchWithAuth(`${BASE}/ministros${apenasAtivos ? '?ativo=true' : ''}`);
+export const listarMinistros = (apenasAtivos = false) => fetchWithAuth(`${BASE}/ministros${apenasAtivos ? '?ativo=true' : ''}`);
 
-export const criarMinistro = (dados) =>
-  fetchWithAuth(`${BASE}/ministros`, { method: 'POST', body: JSON.stringify(dados) });
+export const criarMinistro = (dados) => fetchWithAuth(`${BASE}/ministros`, { method: 'POST', body: JSON.stringify(dados) });
 
-export const atualizarMinistro = (id, dados) =>
-  fetchWithAuth(`${BASE}/ministros/${id}`, { method: 'PUT', body: JSON.stringify(dados) });
+export const atualizarMinistro = (id, dados) => fetchWithAuth(`${BASE}/ministros/${id}`, { method: 'PUT', body: JSON.stringify(dados) });
 
-export const alternarAtivoMinistro = (id) =>
-  fetchWithAuth(`${BASE}/ministros/${id}/ativo`, { method: 'PATCH' });
+export const alternarAtivoMinistro = (id) => fetchWithAuth(`${BASE}/ministros/${id}/ativo`, { method: 'PATCH' });
 
 // ===== Ministérios =====
-export const listarMinisterios = (apenasAtivos = false) =>
-  fetchWithAuth(`${BASE}/ministerios${apenasAtivos ? '?ativo=true' : ''}`);
+export const listarMinisterios = (apenasAtivos = false) => fetchWithAuth(`${BASE}/ministerios${apenasAtivos ? '?ativo=true' : ''}`);
 
-export const criarMinisterio = (dados) =>
-  fetchWithAuth(`${BASE}/ministerios`, { method: 'POST', body: JSON.stringify(dados) });
+export const criarMinisterio = (dados) => fetchWithAuth(`${BASE}/ministerios`, { method: 'POST', body: JSON.stringify(dados) });
 
-export const atualizarMinisterio = (id, dados) =>
-  fetchWithAuth(`${BASE}/ministerios/${id}`, { method: 'PUT', body: JSON.stringify(dados) });
+export const atualizarMinisterio = (id, dados) => fetchWithAuth(`${BASE}/ministerios/${id}`, { method: 'PUT', body: JSON.stringify(dados) });
 
-export const alternarAtivoMinisterio = (id) =>
-  fetchWithAuth(`${BASE}/ministerios/${id}/ativo`, { method: 'PATCH' });
+export const alternarAtivoMinisterio = (id) => fetchWithAuth(`${BASE}/ministerios/${id}/ativo`, { method: 'PATCH' });
 
 // ===== Tipos de Evento =====
-export const listarTiposEvento = (apenasAtivos = false) =>
-  fetchWithAuth(`${BASE}/tipos-evento${apenasAtivos ? '?ativo=true' : ''}`);
+export const listarTiposEvento = (apenasAtivos = false) => fetchWithAuth(`${BASE}/tipos-evento${apenasAtivos ? '?ativo=true' : ''}`);
 
-export const criarTipoEvento = (dados) =>
-  fetchWithAuth(`${BASE}/tipos-evento`, { method: 'POST', body: JSON.stringify(dados) });
+export const criarTipoEvento = (dados) => fetchWithAuth(`${BASE}/tipos-evento`, { method: 'POST', body: JSON.stringify(dados) });
 
-export const atualizarTipoEvento = (id, dados) =>
-  fetchWithAuth(`${BASE}/tipos-evento/${id}`, { method: 'PUT', body: JSON.stringify(dados) });
+export const atualizarTipoEvento = (id, dados) => fetchWithAuth(`${BASE}/tipos-evento/${id}`, { method: 'PUT', body: JSON.stringify(dados) });
 
-export const alternarAtivoTipoEvento = (id) =>
-  fetchWithAuth(`${BASE}/tipos-evento/${id}/ativo`, { method: 'PATCH' });
+export const alternarAtivoTipoEvento = (id) => fetchWithAuth(`${BASE}/tipos-evento/${id}/ativo`, { method: 'PATCH' });
 
 // ===== Vínculos Campus × Ministério =====
-export const listarMinisteriosPorCampus = (campusId) =>
-  fetchWithAuth(`${BASE}/campus/${campusId}/ministerios`);
+export const listarMinisteriosPorCampus = (campusId) => fetchWithAuth(`${BASE}/campus/${campusId}/ministerios`);
 
-export const listarVinculosPorCampus = (campusId) =>
-  fetchWithAuth(`${BASE}/campus/${campusId}/vinculos`);
+export const listarVinculosPorCampus = (campusId) => fetchWithAuth(`${BASE}/campus/${campusId}/vinculos`);
 
-export const salvarVinculos = (campusId, ministerioIds) =>
-  fetchWithAuth(`${BASE}/campus/${campusId}/vinculos`, {
-    method: 'PUT',
-    body: JSON.stringify({ ministerioIds }),
-  });
+export const salvarVinculos = (campusId, ministerioIds) => fetchWithAuth(`${BASE}/campus/${campusId}/vinculos`, {
+  method: 'PUT',
+  body: JSON.stringify({ ministerioIds }),
+});
 
 // ===== Registros de Culto =====
 export const listarRegistros = (filtros = {}) => {
@@ -84,17 +69,39 @@ export const listarRegistros = (filtros = {}) => {
 
 export const buscarRegistro = (id) => fetchWithAuth(`${BASE}/registros/${id}`);
 
-export const criarRegistro = (dados) =>
-  fetchWithAuth(`${BASE}/registros`, { method: 'POST', body: JSON.stringify(dados) });
+export const criarRegistro = (dados) => fetchWithAuth(`${BASE}/registros`, { method: 'POST', body: JSON.stringify(dados) });
 
-export const atualizarRegistro = (id, dados) =>
-  fetchWithAuth(`${BASE}/registros/${id}`, { method: 'PUT', body: JSON.stringify(dados) });
+export const atualizarRegistro = (id, dados) => fetchWithAuth(`${BASE}/registros/${id}`, { method: 'PUT', body: JSON.stringify(dados) });
 
-export const deletarRegistro = (id) =>
-  fetchWithAuth(`${BASE}/registros/${id}`, { method: 'DELETE' });
+export const deletarRegistro = (id) => fetchWithAuth(`${BASE}/registros/${id}`, { method: 'DELETE' });
 
 export const buscarDashboard = (filtros = {}) => {
   const params = new URLSearchParams();
   appendFiltros(params, filtros);
   return fetchWithAuth(`${BASE}/registros/dashboard?${params}`);
 };
+
+// ===== Configuração de vínculo Campus × Ministério =====
+export const buscarConfiguracaoVinculo = (campusId, ministerioId) => fetchWithAuth(`${BASE}/campus/${campusId}/ministerios/${ministerioId}/config`);
+
+export const atualizarConfiguracaoVinculo = (campusId, ministerioId, dados) => fetchWithAuth(`${BASE}/campus/${campusId}/ministerios/${ministerioId}/config`, {
+  method: 'PUT',
+  body: JSON.stringify(dados),
+});
+
+// ===== Validação de Cultos =====
+export const verificarValidacao = (filtros = {}) => {
+  const params = new URLSearchParams();
+  appendFiltros(params, filtros);
+  return fetchWithAuth(`${BASE}/validacao?${params}`);
+};
+
+export const notificarMinisterio = (dados) => fetchWithAuth(`${BASE}/validacao/notificar`, {
+  method: 'POST',
+  body: JSON.stringify(dados),
+});
+
+export const notificarTodosMinisterios = (dados) => fetchWithAuth(`${BASE}/validacao/notificar-todos`, {
+  method: 'POST',
+  body: JSON.stringify(dados),
+});

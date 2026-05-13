@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useConfirm } from '../../../utils/useConfirm';
 import PropTypes from 'prop-types';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
@@ -54,6 +53,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import { useHistory, useParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import brand from 'dan-api/dummy/brand';
+import { useConfirm } from '../../../utils/useConfirm';
 import {
   buscarEvento,
   listarLotesPorEvento,
@@ -104,7 +104,7 @@ function EventDetails() {
     orderCode: '',
     buyerName: '',
     buyerDocument: '',
-    paymentStatus: '',
+    paymentStatus: [],
     dateFrom: '',
     dateTo: ''
   });
@@ -229,13 +229,16 @@ function EventDetails() {
     if (!id) return;
     setRegistrationsLoading(true);
     try {
+      const statusParam = Array.isArray(currentFilters.paymentStatus)
+        ? currentFilters.paymentStatus.join(',') || undefined
+        : currentFilters.paymentStatus || undefined;
       const params = {
         page: page + 1,
         perPage,
         orderCode: currentFilters.orderCode || undefined,
         buyerName: currentFilters.buyerName || undefined,
         buyerDocument: currentFilters.buyerDocument || undefined,
-        paymentStatus: currentFilters.paymentStatus || undefined,
+        paymentStatus: statusParam,
         dateFrom: currentFilters.dateFrom || undefined,
         dateTo: currentFilters.dateTo || undefined
       };
@@ -394,7 +397,9 @@ function EventDetails() {
 
   const handleAlternarStatusLote = async (lote) => {
     const acao = lote.isActive ? 'inativar' : 'reativar';
-    const ok = await confirm({ title: `${acao.charAt(0).toUpperCase() + acao.slice(1)} lote`, message: `Deseja ${acao} o lote "${lote.name}"?`, confirmText: acao.charAt(0).toUpperCase() + acao.slice(1), confirmColor: 'warning', severity: 'warning' });
+    const ok = await confirm({
+      title: `${acao.charAt(0).toUpperCase() + acao.slice(1)} lote`, message: `Deseja ${acao} o lote "${lote.name}"?`, confirmText: acao.charAt(0).toUpperCase() + acao.slice(1), confirmColor: 'warning', severity: 'warning'
+    });
     if (!ok) return;
 
     try {
@@ -523,7 +528,9 @@ function EventDetails() {
   };
 
   const handleDeletarPagamento = async (pagamentoId, tipo) => {
-    const okDeletar = await confirm({ title: 'Deletar forma de pagamento', message: `Tem certeza que deseja deletar a forma de pagamento "${tipo}"?`, confirmText: 'Deletar', confirmColor: 'error', severity: 'error' });
+    const okDeletar = await confirm({
+      title: 'Deletar forma de pagamento', message: `Tem certeza que deseja deletar a forma de pagamento "${tipo}"?`, confirmText: 'Deletar', confirmColor: 'error', severity: 'error'
+    });
     if (okDeletar) {
       try {
         await deletarFormaPagamento(pagamentoId);
@@ -685,7 +692,9 @@ function EventDetails() {
           orderCode: filters.orderCode || undefined,
           buyerName: filters.buyerName || undefined,
           buyerDocument: filters.buyerDocument || undefined,
-          paymentStatus: filters.paymentStatus || undefined,
+          paymentStatus: Array.isArray(filters.paymentStatus)
+            ? filters.paymentStatus.join(',') || undefined
+            : filters.paymentStatus || undefined,
           dateFrom: filters.dateFrom || undefined,
           dateTo: filters.dateTo || undefined
         });
@@ -1431,13 +1440,21 @@ function EventDetails() {
                 <InputLabel id="status-filter-label">Status</InputLabel>
                 <Select
                   labelId="status-filter-label"
+                  multiple
                   value={filters.paymentStatus}
                   label="Status"
                   onChange={(event) => handleFilterChange('paymentStatus', event.target.value)}
+                  renderValue={(selected) => (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {selected.map((s) => (
+                        <Chip key={s} label={getPaymentStatusLabel(s)} size="small" sx={getPaymentStatusChipSx(s)} />
+                      ))}
+                    </Box>
+                  )}
                 >
-                  {statusOptions.map((status) => (
+                  {statusOptions.filter(Boolean).map((status) => (
                     <MenuItem key={status} value={status}>
-                      {status ? getPaymentStatusLabel(status) : 'Todos'}
+                      {getPaymentStatusLabel(status)}
                     </MenuItem>
                   ))}
                 </Select>

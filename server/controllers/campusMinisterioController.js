@@ -1,4 +1,3 @@
-'use strict';
 const CampusMinisterioService = require('../services/campusMinisterioService');
 
 class CampusMinisterioController {
@@ -30,6 +29,26 @@ class CampusMinisterioController {
       return res.status(200).json({ ok: true });
     } catch (error) {
       return res.status(400).json({ erro: error.message });
+    }
+  }
+
+  async atualizarConfiguracao(req, res) {
+    try {
+      const { campusId, ministerioId } = req.params;
+      const vinculo = await CampusMinisterioService.atualizarConfiguracao(campusId, ministerioId, req.body);
+      return res.status(200).json(vinculo);
+    } catch (error) {
+      return res.status(400).json({ erro: error.message });
+    }
+  }
+
+  async buscarVinculo(req, res) {
+    try {
+      const { campusId, ministerioId } = req.params;
+      const vinculo = await CampusMinisterioService.buscarVinculo(campusId, ministerioId);
+      return res.status(200).json(vinculo);
+    } catch (error) {
+      return res.status(404).json({ erro: error.message });
     }
   }
 }

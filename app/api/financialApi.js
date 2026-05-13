@@ -47,6 +47,16 @@ export const deletarSaidaFinanceira = (id) => fetchWithAuth(`${API_URL}/api/admi
   method: 'DELETE'
 });
 
+export const exportarEntradasFinanceiras = (params = {}) => {
+  const filteredParams = Object.entries(params).reduce((acc, [key, value]) => {
+    if (value === undefined || value === null || value === '') return acc;
+    acc[key] = value;
+    return acc;
+  }, {});
+  const query = new URLSearchParams(filteredParams).toString();
+  return fetchWithAuth(`${API_URL}/api/admin/financial/entries/export${query ? `?${query}` : ''}`);
+};
+
 export const exportarSaidasFinanceiras = (params = {}) => {
   const filteredParams = Object.entries(params).reduce((acc, [key, value]) => {
     if (value === undefined || value === null || value === '') return acc;

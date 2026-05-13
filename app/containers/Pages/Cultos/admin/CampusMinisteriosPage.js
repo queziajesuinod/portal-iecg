@@ -2,12 +2,21 @@ import React, { useEffect, useState } from 'react';
 import {
   Box, Button, Checkbox, CircularProgress, Divider, FormControlLabel,
   FormGroup, Grid, MenuItem, Paper, Select, Switch, Typography,
-  FormControl, InputLabel, Chip,
+  FormControl, InputLabel, Chip, Dialog, DialogTitle, DialogContent,
+  DialogActions, Autocomplete, TextField, ToggleButton, ToggleButtonGroup,
+  Tooltip, IconButton,
 } from '@mui/material';
 import { Helmet } from 'react-helmet';
+import SettingsIcon from '@mui/icons-material/Settings';
 import PapperBlock from 'dan-components/PapperBlock/PapperBlock';
 import Notification from 'dan-components/Notification/Notification';
-import { listarVinculosPorCampus, salvarVinculos } from '../../../../api/cultosApi';
+import PropTypes from 'prop-types';
+import {
+  listarVinculosPorCampus,
+  salvarVinculos,
+  atualizarConfiguracaoVinculo,
+} from '../../../../api/cultosApi';
+import { listarAreas, listarVoluntariados } from '../../../../api/voluntariadoApi';
 
 const resolveApiUrl = () => {
   if (process.env.REACT_APP_API_URL) return process.env.REACT_APP_API_URL.replace(/\/$/, '');
@@ -16,6 +25,207 @@ const resolveApiUrl = () => {
   return `${protocol}//${hostname}${port ? `:${port}` : ''}`;
 };
 const API_URL = resolveApiUrl();
+
+const DIAS_SEMANA = [
+  { valor: 0, label: 'Dom' },
+  { valor: 1, label: 'Seg' },
+  { valor: 2, label: 'Ter' },
+  { valor: 3, label: 'Qua' },
+  { valor: 4, label: 'Qui' },
+  { valor: 5, label: 'Sex' },
+  { valor: 6, label: 'Sáb' },
+];
+
+function DialogConfigurarVinculo({
+  aberto, ministerio, campusId, onFechar, onSalvo
+}) {
+  const [diasPadrao, setDiasPadrao] = useState([]);
+  const [responsavelMemberId, setResponsavelMemberId] = useState(null);
+  const [validacaoAtiva, setValidacaoAtiva] = useState(false);
+  const [membros, setMembros] = useState([]);
+  const [buscaMembro, setBuscaMembro] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [carregandoMembros, setCarregandoMembros] = useState(false);
+
+  useEffect(() => {
+    if (!aberto || !ministerio) return;
+    setDiasPadrao(ministerio.diasPadrao || []);
+    setResponsavelMemberId(ministerio.responsavelMemberId || null);
+    setValidacaoAtiva(ministerio.validacaoAtiva || false);
+    setBuscaMembro('');
+  }, [aberto, ministerio]);
+
+  useEffect(() => {
+    if (!aberto) return;
+    setCarregandoMembros(true);
+    listarAreas(true)
+      .then((areas) => {
+        const backstage = areas.find((a) => a.nome.toUpperCase() === 'BACKSTAGE');
+        if (!backstage) return [];
+        return listarVoluntariados({ areaVoluntariadoId: backstage.id, status: 'APROVADO' });
+      })
+      .then((voluntariados) => {
+        const membrosUnicos = [];
+        const ids = new Set();
+        (voluntariados || []).forEach((v) => {
+          if (v.membro && !ids.has(v.membro.id)) {
+            ids.add(v.membro.id);
+            membrosUnicos.push(v.membro);
+          }
+        });
+        setMembros(membrosUnicos);
+      })
+      .catch(() => setMembros([]))
+      .finally(() => setCarregandoMembros(false));
+  }, [aberto]);
+
+  const handleDiaToggle = (_, novosDias) => {
+    setDiasPadrao(novosDias.map(Number));
+  };
+
+  const handleSalvar = async () => {
+    setSalvando(true);
+    try {
+      await atualizarConfiguracaoVinculo(campusId, ministerio.id, {
+        diasPadrao,
+        responsavelMemberId,
+        validacaoAtiva,
+      });
+      onSalvo();
+      onFechar();
+    } catch (err) {
+      // erro tratado pelo caller
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const membroSelecionado = membros.find((m) => m.id === responsavelMemberId) || null;
+
+  return (
+    <Dialog open={aberto} onClose={onFechar} maxWidth="sm" fullWidth>
+      <DialogTitle>
+        Configurar: {ministerio?.nome}
+      </DialogTitle>
+      <DialogContent>
+        <Box sx={{
+          mt: 1, display: 'flex', flexDirection: 'column', gap: 3
+        }}>
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>
+              Dias padrão de culto
+            </Typography>
+            <ToggleButtonGroup
+              value={diasPadrao}
+              onChange={handleDiaToggle}
+              size="small"
+              sx={{ flexWrap: 'wrap', gap: 0.5 }}
+            >
+              {DIAS_SEMANA.map((d) => (
+                <ToggleButton key={d.valor} value={d.valor} selected={diasPadrao.includes(d.valor)}>
+                  {d.label}
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+              Selecione os dias em que o culto ocorre regularmente neste ministério
+            </Typography>
+          </Box>
+
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>
+              Responsável pelo ministério
+            </Typography>
+            <Autocomplete
+              options={membros}
+              loading={carregandoMembros}
+              value={membroSelecionado}
+              onChange={(_, novo) => setResponsavelMemberId(novo?.id || null)}
+              inputValue={buscaMembro}
+              onInputChange={(_, v) => setBuscaMembro(v)}
+              getOptionLabel={(m) => m.preferredName || m.fullName || ''}
+              isOptionEqualToValue={(a, b) => a.id === b.id}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Buscar voluntário Backstage"
+                  size="small"
+                  InputProps={{
+                    ...params.InputProps,
+                    endAdornment: (
+                      <>
+                        {carregandoMembros ? <CircularProgress size={16} /> : null}
+                        {params.InputProps.endAdornment}
+                      </>
+                    ),
+                  }}
+                />
+              )}
+              renderOption={(props, m) => (
+                <li {...props} key={m.id}>
+                  <Box>
+                    <Typography variant="body2">{m.preferredName || m.fullName}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {m.whatsapp || m.phone || 'Sem WhatsApp cadastrado'}
+                    </Typography>
+                  </Box>
+                </li>
+              )}
+              noOptionsText="Nenhum voluntário Backstage aprovado encontrado"
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+              Apenas voluntários Backstage aprovados são listados. O responsável receberá notificações via WhatsApp sobre cultos não registrados.
+            </Typography>
+          </Box>
+
+          <Box>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={validacaoAtiva}
+                  onChange={(e) => setValidacaoAtiva(e.target.checked)}
+                />
+              }
+              label="Validação automática ativa"
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4 }}>
+              Quando ativo, o sistema notificará automaticamente toda segunda-feira sobre cultos não registrados
+            </Typography>
+          </Box>
+        </Box>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onFechar} disabled={salvando}>Cancelar</Button>
+        <Button
+          variant="contained"
+          onClick={handleSalvar}
+          disabled={salvando}
+          startIcon={salvando ? <CircularProgress size={16} color="inherit" /> : null}
+        >
+          Salvar configuração
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+DialogConfigurarVinculo.propTypes = {
+  aberto: PropTypes.bool.isRequired,
+  ministerio: PropTypes.shape({
+    id: PropTypes.string,
+    nome: PropTypes.string,
+    diasPadrao: PropTypes.arrayOf(PropTypes.number),
+    responsavelMemberId: PropTypes.string,
+    validacaoAtiva: PropTypes.bool,
+  }),
+  campusId: PropTypes.string.isRequired,
+  onFechar: PropTypes.func.isRequired,
+  onSalvo: PropTypes.func.isRequired,
+};
+
+DialogConfigurarVinculo.defaultProps = {
+  ministerio: null,
+};
 
 const CampusMinisteriosPage = () => {
   const [campi, setCampi] = useState([]);
@@ -27,6 +237,7 @@ const CampusMinisteriosPage = () => {
   const [notification, setNotification] = useState('');
   const [transmiteOnline, setTransmiteOnline] = useState(false);
   const [savingOnline, setSavingOnline] = useState(false);
+  const [dialogMinisterio, setDialogMinisterio] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -36,11 +247,7 @@ const CampusMinisteriosPage = () => {
       .catch(() => setNotification('Erro ao carregar campi'));
   }, []);
 
-  const handleCampusChange = async (e) => {
-    const id = e.target.value;
-    setCampusId(id);
-    setDadosCampus(null);
-    setSelecionados([]);
+  const carregarDadosCampus = async (id) => {
     if (!id) return;
     setLoadingCampus(true);
     try {
@@ -55,11 +262,18 @@ const CampusMinisteriosPage = () => {
     }
   };
 
+  const handleCampusChange = async (e) => {
+    const id = e.target.value;
+    setCampusId(id);
+    setDadosCampus(null);
+    setSelecionados([]);
+    await carregarDadosCampus(id);
+  };
+
   const handleCheck = (ministerioId) => {
-    setSelecionados((prev) =>
-      prev.includes(ministerioId)
-        ? prev.filter((id) => id !== ministerioId)
-        : [...prev, ministerioId]
+    setSelecionados((prev) => (prev.includes(ministerioId)
+      ? prev.filter((id) => id !== ministerioId)
+      : [...prev, ministerioId])
     );
   };
 
@@ -68,6 +282,7 @@ const CampusMinisteriosPage = () => {
     try {
       await salvarVinculos(campusId, selecionados);
       setNotification('Vínculos salvos com sucesso!');
+      await carregarDadosCampus(campusId);
     } catch (err) {
       setNotification(err.message || 'Erro ao salvar vínculos');
     } finally {
@@ -95,13 +310,22 @@ const CampusMinisteriosPage = () => {
     }
   };
 
+  const handleAbrirConfig = (ministerio) => {
+    setDialogMinisterio(ministerio);
+  };
+
+  const handleSalvoConfig = async () => {
+    setNotification('Configuração salva com sucesso!');
+    await carregarDadosCampus(campusId);
+  };
+
   return (
     <div>
       <Helmet><title>Vínculos Campus × Ministério</title></Helmet>
       <PapperBlock
         title="Vínculos Campus × Ministério"
         icon="ion-ios-git-network-outline"
-        desc="Defina quais ministérios estão disponíveis em cada campus"
+        desc="Defina quais ministérios estão disponíveis em cada campus e configure dias padrão de culto"
       >
         <FormControl fullWidth sx={{ mb: 3 }}>
           <InputLabel>Selecione um campus</InputLabel>
@@ -143,21 +367,59 @@ const CampusMinisteriosPage = () => {
                 <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                   Ministérios disponíveis neste campus
                 </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
+                  Marque os ministérios ativos e use o ícone de configuração para definir dias padrão e responsável
+                </Typography>
                 <FormGroup>
-                  <Grid container>
-                    {dadosCampus.ministerios.map((m) => (
-                      <Grid item xs={12} sm={6} md={4} key={m.id}>
-                        <FormControlLabel
-                          control={
-                            <Checkbox
-                              checked={selecionados.includes(m.id)}
-                              onChange={() => handleCheck(m.id)}
+                  <Grid container spacing={1}>
+                    {dadosCampus.ministerios.map((m) => {
+                      const vinculado = selecionados.includes(m.id);
+                      const temConfig = vinculado && (m.diasPadrao?.length > 0 || m.responsavelMemberId);
+                      return (
+                        <Grid item xs={12} sm={6} md={4} key={m.id}>
+                          <Box
+                            display="flex"
+                            alignItems="center"
+                            sx={{
+                              border: 1,
+                              borderColor: temConfig ? 'primary.light' : 'divider',
+                              borderRadius: 1,
+                              px: 1,
+                              py: 0.5,
+                              bgcolor: temConfig ? 'primary.50' : 'transparent',
+                            }}
+                          >
+                            <FormControlLabel
+                              sx={{ flex: 1, mr: 0 }}
+                              control={
+                                <Checkbox
+                                  checked={vinculado}
+                                  onChange={() => handleCheck(m.id)}
+                                  size="small"
+                                />
+                              }
+                              label={
+                                <Box>
+                                  <Typography variant="body2">{m.nome}</Typography>
+                                  {vinculado && m.diasPadrao?.length > 0 && (
+                                    <Typography variant="caption" color="text.secondary">
+                                      {m.diasPadrao.map((d) => ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][d]).join(', ')}
+                                    </Typography>
+                                  )}
+                                </Box>
+                              }
                             />
-                          }
-                          label={m.nome}
-                        />
-                      </Grid>
-                    ))}
+                            {vinculado && (
+                              <Tooltip title="Configurar dias padrão e responsável">
+                                <IconButton size="small" onClick={() => handleAbrirConfig(m)}>
+                                  <SettingsIcon fontSize="small" color={temConfig ? 'primary' : 'action'} />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Box>
+                        </Grid>
+                      );
+                    })}
                   </Grid>
                 </FormGroup>
               </Grid>
@@ -172,6 +434,16 @@ const CampusMinisteriosPage = () => {
         )}
 
         {notification && <Notification message={notification} onClose={() => setNotification('')} />}
+
+        {dialogMinisterio && (
+          <DialogConfigurarVinculo
+            aberto={!!dialogMinisterio}
+            ministerio={dialogMinisterio}
+            campusId={campusId}
+            onFechar={() => setDialogMinisterio(null)}
+            onSalvo={handleSalvoConfig}
+          />
+        )}
       </PapperBlock>
     </div>
   );

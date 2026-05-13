@@ -95,6 +95,27 @@ async function deleteExpense(req, res) {
   }
 }
 
+async function exportEntries(req, res) {
+  try {
+    const statusParam = normalizeQueryValue(req.query.paymentStatus);
+    const paymentStatuses = statusParam
+      ? statusParam.split(',').map((s) => s.trim()).filter(Boolean)
+      : null;
+    const filters = {
+      eventId: normalizeQueryValue(req.query.eventId),
+      dateFrom: normalizeQueryValue(req.query.dateFrom),
+      dateTo: normalizeQueryValue(req.query.dateTo),
+      paymentStatuses,
+      paymentMethod: normalizeQueryValue(req.query.paymentMethod)
+    };
+    const entries = await financialService.getEntriesForExport(filters);
+    res.status(200).json(entries);
+  } catch (error) {
+    console.error('Erro ao exportar entradas:', error);
+    res.status(500).json({ message: error.message || 'Erro ao exportar entradas' });
+  }
+}
+
 async function exportExpenses(req, res) {
   try {
     const filters = {
@@ -142,6 +163,7 @@ async function deleteManualEntry(req, res) {
 
 module.exports = {
   listRecords,
+  exportEntries,
   exportExpenses,
   getFeeConfig,
   updateFeeConfig,

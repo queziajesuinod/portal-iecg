@@ -1,4 +1,3 @@
-'use strict';
 const { Model, DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
@@ -9,6 +8,9 @@ module.exports = (sequelize) => {
       }
       if (models.Ministerio) {
         CampusMinisterio.belongsTo(models.Ministerio, { foreignKey: 'ministerioId', as: 'ministerio' });
+      }
+      if (models.Member) {
+        CampusMinisterio.belongsTo(models.Member, { foreignKey: 'responsavelMemberId', as: 'responsavel' });
       }
     }
   }
@@ -24,6 +26,20 @@ module.exports = (sequelize) => {
         type: DataTypes.UUID,
         allowNull: false,
         primaryKey: true,
+      },
+      diasPadrao: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: [],
+      },
+      responsavelMemberId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      validacaoAtiva: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
       },
     },
     {

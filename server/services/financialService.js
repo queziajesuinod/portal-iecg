@@ -2,6 +2,7 @@ const { Op } = require('sequelize');
 const {
   RegistrationPayment,
   Registration,
+  RegistrationAttendee,
   Event,
   FinancialExpense,
   FinancialManualEntry,
@@ -898,6 +899,93 @@ async function getExpensesForExport(filters = {}) {
   }));
 }
 
+async function getEntriesForExport(filters = {}) {
+  const where = {};
+
+  const normalizedEventId = normalizeOptionalValue(filters.eventId);
+  if (normalizedEventId) {
+    where.eventId = normalizedEventId;
+  } else {
+    const unfinishedEvents = await Event.findAll({
+      where: buildUnfinishedEventWhere(),
+      attributes: ['id'],
+      raw: true
+    });
+    const unfinishedEventIds = unfinishedEvents.map((e) => e.id);
+    if (unfinishedEventIds.length) {
+      where.eventId = { [Op.in]: unfinishedEventIds };
+    }
+  }
+
+  const paymentDateFilter = buildDateRange('createdAt', filters.dateFrom, filters.dateTo, { dateOnly: false });
+  Object.assign(where, paymentDateFilter);
+
+  const statusList = Array.isArray(filters.paymentStatuses) && filters.paymentStatuses.length
+    ? filters.paymentStatuses
+    : ['confirmed', 'partial'];
+  where.paymentStatus = { [Op.in]: statusList };
+
+  const normalizedMethod = normalizeOptionalValue(filters.paymentMethod);
+  if (normalizedMethod && ALLOWED_PAYMENT_METHODS.includes(normalizedMethod)) {
+    where.paymentMethod = normalizedMethod;
+  }
+
+  const registrations = await Registration.findAll({
+    where,
+    include: [
+      { model: Event, as: 'event', attributes: ['id', 'title'] },
+      { model: RegistrationAttendee, as: 'attendees', attributes: ['id', 'attendeeNumber', 'attendeeData'] }
+    ],
+    order: [['createdAt', 'DESC']]
+  });
+
+  if (!registrations.length) return [];
+
+  const ids = registrations.map((r) => r.id);
+  const payments = await RegistrationPayment.findAll({
+    where: { registrationId: { [Op.in]: ids } },
+    attributes: ['id', 'registrationId', 'method', 'amount', 'taxa', 'status', 'installments', 'cardBrand', 'channel', 'confirmedAt', 'createdAt', 'notes'],
+    order: [['createdAt', 'DESC']]
+  });
+  const paymentsByRegId = payments.reduce((acc, p) => {
+    if (!acc[p.registrationId]) acc[p.registrationId] = [];
+    acc[p.registrationId].push(p);
+    return acc;
+  }, {});
+
+  return registrations.map((reg) => ({
+    id: reg.id,
+    orderCode: reg.orderCode,
+    eventTitle: reg.event?.title || '-',
+    quantity: reg.quantity,
+    originalPrice: toMoney(reg.originalPrice),
+    discountAmount: toMoney(reg.discountAmount),
+    finalPrice: toMoney(reg.finalPrice),
+    paymentStatus: reg.paymentStatus,
+    paymentMethod: reg.paymentMethod,
+    createdAt: reg.createdAt,
+    buyerData: reg.buyerData || {},
+    attendees: (reg.attendees || []).map((a) => ({
+      id: a.id,
+      attendeeNumber: a.attendeeNumber,
+      attendeeData: a.attendeeData || {}
+    })),
+    payments: (paymentsByRegId[reg.id] || []).map((p) => ({
+      id: p.id,
+      method: p.method,
+      amount: toMoney(p.amount),
+      taxa: toMoney(p.taxa || 0),
+      status: p.status,
+      installments: p.installments,
+      cardBrand: p.cardBrand || '',
+      channel: p.channel || '',
+      confirmedAt: p.confirmedAt || null,
+      createdAt: p.createdAt,
+      notes: p.notes || ''
+    }))
+  }));
+}
+
 async function normalizeManualEntryPayload(payload = {}) {
   const description = String(payload.description || '').trim();
   if (!description) {
@@ -982,6 +1070,7 @@ async function deleteManualEntry(id) {
 module.exports = {
   listFinancialRecords,
   getExpensesForExport,
+  getEntriesForExport,
   getFeeConfig,
   updateFeeConfig,
   createExpense,

@@ -1109,7 +1109,9 @@ async function listarInscricoesPorEvento(eventId, options = {}) {
     where.orderCode = { [Op.iLike]: `%${filters.orderCode}%` };
   }
   if (filters.paymentStatus) {
-    where.paymentStatus = filters.paymentStatus;
+    where.paymentStatus = Array.isArray(filters.paymentStatus)
+      ? { [Op.in]: filters.paymentStatus }
+      : filters.paymentStatus;
   }
   const dateConditions = [];
   const fromDate = buildDayRange(filters.dateFrom);
