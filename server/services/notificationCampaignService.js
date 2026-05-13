@@ -95,7 +95,7 @@ const NotificationCampaignService = {
     const {
       name, channel, templateId, customMessage, audienceType, audienceConfig,
       scheduledAt, sendDelayMs, recurrenceType, recurrenceDays, recurrenceTime,
-      recurrencePeriodStart, recurrencePeriodEnd
+      recurrencePeriodStart, recurrencePeriodEnd, evolutionInstance
     } = dados;
     if (!name?.trim()) throw new Error('Nome é obrigatório');
     if (!audienceType) throw new Error('Tipo de audiência é obrigatório');
@@ -116,6 +116,7 @@ const NotificationCampaignService = {
       recurrenceTime: recurrenceTime || null,
       recurrencePeriodStart: recurrencePeriodStart || null,
       recurrencePeriodEnd: recurrencePeriodEnd || null,
+      evolutionInstance: evolutionInstance || null,
       nextRunAt: null,
       createdBy: userId
     });
@@ -128,7 +129,7 @@ const NotificationCampaignService = {
     }
     const allowed = ['name', 'channel', 'templateId', 'customMessage', 'audienceType', 'audienceConfig',
       'scheduledAt', 'sendDelayMs', 'recurrenceType', 'recurrenceDays', 'recurrenceTime',
-      'recurrencePeriodStart', 'recurrencePeriodEnd'];
+      'recurrencePeriodStart', 'recurrencePeriodEnd', 'evolutionInstance'];
     const updates = {};
     allowed.forEach((key) => { if (dados[key] !== undefined) updates[key] = dados[key]; });
     if (updates.scheduledAt !== undefined) {
