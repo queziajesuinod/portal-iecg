@@ -39,7 +39,8 @@ import {
   sendWebhookEvent,
   updateWebhook,
   listarInscricoesParaReenvio,
-  reenviarWebhookInscricoes
+  reenviarWebhookInscricoes,
+  fetchEvolutionWebhookLogs
 } from '../../../utils/webhookClient';
 import { listarEventos } from '../../../api/eventsApi';
 
@@ -149,6 +150,8 @@ const WEBHOOK_BASE = 'https://portal.iecg.com.br/webhook/';
 
 const WebhooksPage = () => {
   const [activeTab, setActiveTab] = useState(0);
+  const [evoLogs, setEvoLogs] = useState([]);
+  const [evoLogsLoading, setEvoLogsLoading] = useState(false);
   const [webhooks, setWebhooks] = useState([]);
   const [eventDefinitions, setEventDefinitions] = useState(DEFAULT_EVENT_DEFINITIONS);
   const [loading, setLoading] = useState(false);
@@ -222,6 +225,16 @@ const WebhooksPage = () => {
     }
   };
 
+  const loadEvoLogs = async () => {
+    setEvoLogsLoading(true);
+    try {
+      const data = await fetchEvolutionWebhookLogs(100, 0);
+      setEvoLogs(data.logs || []);
+    } catch { /* silencioso */ } finally {
+      setEvoLogsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadData();
     loadEventDefinitions();
@@ -229,6 +242,10 @@ const WebhooksPage = () => {
       setEventos(Array.isArray(data) ? data : (data?.rows || data?.eventos || []));
     }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 2) loadEvoLogs();
+  }, [activeTab]);
 
   const handleBuscarInscricoes = async () => {
     if (!reenvioEventoId) return;
@@ -441,6 +458,7 @@ const WebhooksPage = () => {
         <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2 }}>
           <Tab label="Webhooks configurados" />
           <Tab label="Reenviar inscrições" />
+          <Tab label="Monitor WhatsApp" />
         </Tabs>
 
         {activeTab === 1 && (
@@ -869,6 +887,73 @@ const WebhooksPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {activeTab === 2 && (
+        <Box>
+          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+            <Typography variant="body2" color="textSecondary">
+                Últimos webhooks recebidos da Evolution API (WhatsApp).
+            </Typography>
+            <Button size="small" variant="outlined" onClick={loadEvoLogs} disabled={evoLogsLoading}>
+              {evoLogsLoading ? 'Atualizando…' : 'Atualizar'}
+            </Button>
+          </Box>
+          {evoLogsLoading && <Typography variant="body2" color="textSecondary">Carregando…</Typography>}
+          {!evoLogsLoading && evoLogs.length === 0 && (
+            <Typography variant="body2" color="textSecondary">Nenhum webhook recebido ainda.</Typography>
+          )}
+          {evoLogs.length > 0 && (
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Data/Hora</TableCell>
+                    <TableCell>Evento</TableCell>
+                    <TableCell>Instância</TableCell>
+                    <TableCell>Message ID</TableCell>
+                    <TableCell>Status mapeado</TableCell>
+                    <TableCell>Registros atualizados</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {evoLogs.map((log) => (
+                    <TableRow key={log.id} hover>
+                      <TableCell>
+                        <Typography variant="caption">
+                          {new Date(log.createdAt).toLocaleString('pt-BR')}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Chip size="small" label={log.event || '—'} variant="outlined" />
+                      </TableCell>
+                      <TableCell>{log.instance || '—'}</TableCell>
+                      <TableCell>
+                        <Typography variant="caption" fontFamily="monospace">
+                          {log.messageId ? `${log.messageId.slice(0, 20)}…` : '—'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        {log.mappedStatus ? (
+                          <Chip
+                            size="small"
+                            label={log.mappedStatus}
+                            color={log.mappedStatus === 'read' ? 'success' : log.mappedStatus === 'delivered' ? 'info' : 'default'}
+                          />
+                        ) : '—'}
+                      </TableCell>
+                      <TableCell>
+                        {Array.isArray(log.updatedRecords) && log.updatedRecords.length > 0
+                          ? log.updatedRecords.join(', ')
+                          : <Typography variant="caption" color="textSecondary">nenhum</Typography>}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </Box>
+      )}
 
       <Notification
         open={!!notification}

@@ -15,7 +15,7 @@ class EvolutionApiService {
       baseURL: this.baseUrl,
       headers: {
         'Content-Type': 'application/json',
-        'apikey': this.apiKey
+        apikey: this.apiKey
       },
       timeout: 30000
     });
@@ -55,7 +55,11 @@ class EvolutionApiService {
     return `${normalized}`;
   }
 
-  async validarNumeroWhatsapp(phone) {
+  resolveInstance(instanceName) {
+    return instanceName || this.instanceName;
+  }
+
+  async validarNumeroWhatsapp(phone, instanceName) {
     const normalized = this.normalizeDigits(phone);
     if (!normalized) {
       throw new Error('Telefone inválido ao validar WhatsApp');
@@ -63,7 +67,8 @@ class EvolutionApiService {
 
     try {
       const client = this.getClient();
-      const response = await client.post(`/chat/whatsappNumbers/${this.instanceName}`, {
+      const instance = this.resolveInstance(instanceName);
+      const response = await client.post(`/chat/whatsappNumbers/${instance}`, {
         numbers: [normalized]
       });
 
@@ -85,12 +90,13 @@ class EvolutionApiService {
    * @param {string} message - Mensagem a ser enviada
    * @returns {Promise<Object>} - Resposta da API
    */
-  async enviarMensagemTexto(phone, message) {
+  async enviarMensagemTexto(phone, message, instanceName) {
     try {
       const client = this.getClient();
       const formattedPhone = this.formatPhoneNumber(phone);
+      const instance = this.resolveInstance(instanceName);
 
-      const response = await client.post(`/message/sendText/${this.instanceName}`, {
+      const response = await client.post(`/message/sendText/${instance}`, {
         number: formattedPhone,
         text: message
       });
@@ -117,36 +123,37 @@ class EvolutionApiService {
    * @param {string} mediaType - Tipo de mídia (image, document, video, audio)
    * @returns {Promise<Object>} - Resposta da API
    */
-  async enviarMensagemComMidia(phone, message, mediaUrl, mediaType = 'image') {
+  async enviarMensagemComMidia(phone, message, mediaUrl, mediaType = 'image', instanceName = null) {
     try {
       const client = this.getClient();
       const formattedPhone = this.formatPhoneNumber(phone);
+      const instance = this.resolveInstance(instanceName);
 
       let endpoint = '';
-      let payload = {
+      const payload = {
         number: formattedPhone,
         caption: message
       };
 
       switch (mediaType) {
         case 'image':
-          endpoint = '/message/sendMedia/${this.instanceName}';
+          endpoint = `/message/sendMedia/${instance}`;
           payload.mediatype = 'image';
           payload.media = mediaUrl;
           break;
         case 'document':
-          endpoint = '/message/sendMedia/${this.instanceName}';
+          endpoint = `/message/sendMedia/${instance}`;
           payload.mediatype = 'document';
           payload.media = mediaUrl;
           payload.fileName = 'documento.pdf';
           break;
         case 'video':
-          endpoint = '/message/sendMedia/${this.instanceName}';
+          endpoint = `/message/sendMedia/${instance}`;
           payload.mediatype = 'video';
           payload.media = mediaUrl;
           break;
         case 'audio':
-          endpoint = '/message/sendMedia/${this.instanceName}';
+          endpoint = `/message/sendMedia/${instance}`;
           payload.mediatype = 'audio';
           payload.media = mediaUrl;
           break;
@@ -178,7 +185,7 @@ class EvolutionApiService {
     try {
       const client = this.getClient();
       const response = await client.get(`/instance/connectionState/${this.instanceName}`);
-      
+
       return {
         conectado: response.data?.state === 'open',
         estado: response.data?.state,
@@ -201,7 +208,7 @@ class EvolutionApiService {
     try {
       const client = this.getClient();
       const response = await client.get(`/instance/connect/${this.instanceName}`);
-      
+
       return {
         sucesso: true,
         qrcode: response.data?.qrcode?.base64 || null,
@@ -216,46 +223,48 @@ class EvolutionApiService {
     }
   }
 
-  /**
-   * Webhook handler - processar atualizações de status de mensagens
-   * @param {Object} webhookData - Dados recebidos do webhook
-   * @returns {Object} - Informações extraídas
-   */
+  mapearAck(ackStatus) {
+    switch (String(ackStatus).toUpperCase()) {
+      case 'DELIVERY_ACK': case '3': return 'delivered';
+      case 'READ': case '4': return 'read';
+      case 'PLAYED': case '5': return 'read';
+      case 'SERVER_ACK': case '2': return 'sent';
+      case 'ERROR': case '0': return 'failed';
+      default: return null;
+    }
+  }
+
+  // Retorna array de { messageId, status, timestamp }
   processarWebhook(webhookData) {
     try {
       const { event, data } = webhookData;
 
-      // Extrair informações relevantes
-      const messageId = data?.key?.id || null;
-      const status = this.mapearStatus(event);
-      const timestamp = data?.messageTimestamp || Date.now();
+      if (event === 'messages.update') {
+        const items = Array.isArray(data) ? data : [data];
+        return items
+          .map((item) => {
+            const messageId = item?.key?.id || null;
+            const status = item?.update?.status
+              ? this.mapearAck(item.update.status)
+              : 'delivered';
+            if (!messageId || !status) return null;
+            return { messageId, status, timestamp: Date.now() };
+          })
+          .filter(Boolean);
+      }
 
-      return {
-        messageId,
-        status,
-        timestamp,
-        dadosCompletos: data
-      };
+      if (event === 'messages.upsert') {
+        const item = Array.isArray(data) ? data[0] : data;
+        const messageId = item?.key?.id || null;
+        if (!messageId) return [];
+        return [{ messageId, status: 'sent', timestamp: item?.messageTimestamp || Date.now() }];
+      }
+
+      return [];
     } catch (error) {
       console.error('Erro ao processar webhook:', error);
-      return null;
+      return [];
     }
-  }
-
-  /**
-   * Mapear eventos do webhook para status internos
-   * @param {string} event - Evento recebido
-   * @returns {string} - Status mapeado
-   */
-  mapearStatus(event) {
-    const mapeamento = {
-      'messages.upsert': 'sent',
-      'messages.update': 'delivered',
-      'message.ack': 'delivered',
-      'message.read': 'read'
-    };
-
-    return mapeamento[event] || 'pending';
   }
 }
 

@@ -191,7 +191,7 @@ const NotificationCampaignService = {
         try {
           if (campaign.channel === 'whatsapp') {
             const response = await evolutionApi.enviarMensagemTexto(
-              recipient.contact, recipient.resolvedMessage
+              recipient.contact, recipient.resolvedMessage, campaign.evolutionInstance
             );
             await recipient.update({
               status: 'sent',

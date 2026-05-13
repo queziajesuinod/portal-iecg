@@ -324,6 +324,7 @@ export default function NotificacoesCampanhasPage() {
   // campos do formulário
   const [nome, setNome] = useState('');
   const [channel, setChannel] = useState('whatsapp');
+  const [evolutionInstance, setEvolutionInstance] = useState('');
   const [templateId, setTemplateId] = useState('');
   const [customMessage, setCustomMessage] = useState('');
   const [audienceType, setAudienceType] = useState('filter');
@@ -382,7 +383,7 @@ export default function NotificacoesCampanhasPage() {
   useEffect(() => { fetchAll(); }, []);
 
   const resetForm = () => {
-    setNome(''); setChannel('whatsapp'); setTemplateId(''); setCustomMessage('');
+    setNome(''); setChannel('whatsapp'); setEvolutionInstance(''); setTemplateId(''); setCustomMessage('');
     setAudienceType('filter'); setGroupId(''); setIndividualContact(''); setIndividualName('');
     setFilterSources([emptySource()]); setFilterDeduplicateBy('phone'); setFilterPreviewTotal(null);
     setScheduledAt(''); setSendDelaySeconds('0.5'); setRecurrenceType('once');
@@ -399,7 +400,7 @@ export default function NotificacoesCampanhasPage() {
 
   const abrirEditar = (c) => {
     setEditando(c);
-    setNome(c.name); setChannel(c.channel); setTemplateId(c.templateId || '');
+    setNome(c.name); setChannel(c.channel); setEvolutionInstance(c.evolutionInstance || ''); setTemplateId(c.templateId || '');
     setCustomMessage(c.customMessage || ''); setAudienceType(c.audienceType);
     setGroupId(c.audienceType === 'group' ? (c.audienceConfig?.groupId || '') : '');
     setIndividualContact(c.audienceType === 'individual' ? (c.audienceConfig?.contact || '') : '');
@@ -506,7 +507,8 @@ export default function NotificacoesCampanhasPage() {
       recurrenceDays: recurrenceType === 'weekly' ? recurrenceDays : null,
       recurrenceTime: recurrenceType !== 'once' ? recurrenceTime : null,
       recurrencePeriodStart: recurrenceType !== 'once' ? (recurrencePeriodStart || null) : null,
-      recurrencePeriodEnd: recurrenceType !== 'once' ? (recurrencePeriodEnd || null) : null
+      recurrencePeriodEnd: recurrenceType !== 'once' ? (recurrencePeriodEnd || null) : null,
+      evolutionInstance: evolutionInstance.trim() || null
     };
     try {
       const url = editando
@@ -656,6 +658,21 @@ export default function NotificacoesCampanhasPage() {
               <MenuItem value="whatsapp">WhatsApp</MenuItem>
               <MenuItem value="email">E-mail</MenuItem>
             </TextField>
+
+            {channel === 'whatsapp' && (
+              <TextField
+                select
+                label="Instância Evolution"
+                value={evolutionInstance}
+                onChange={(e) => setEvolutionInstance(e.target.value)}
+                fullWidth
+                helperText="Instância do Evolution API usada para envio. Se vazio, usa a padrão do servidor."
+              >
+                <MenuItem value="">Padrão do servidor</MenuItem>
+                <MenuItem value="IECG">IECG</MenuItem>
+                <MenuItem value="START_IECG">START_IECG</MenuItem>
+              </TextField>
+            )}
 
             <Divider><Typography variant="caption">Mensagem</Typography></Divider>
             <TextField select label="Template" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>

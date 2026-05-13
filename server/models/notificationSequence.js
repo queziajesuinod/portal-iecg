@@ -15,6 +15,7 @@ module.exports = (sequelize) => {
     channel: { type: DataTypes.STRING(30), allowNull: false, defaultValue: 'whatsapp' },
     audienceType: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'filter' },
     audienceConfig: { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
+    evolutionInstance: { type: DataTypes.STRING(100), allowNull: true },
     sendDelayMs: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 500 },
     status: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'draft' },
     createdBy: { type: DataTypes.UUID, allowNull: true }
