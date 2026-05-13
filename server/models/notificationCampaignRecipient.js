@@ -16,6 +16,7 @@ module.exports = (sequelize) => {
     contact: { type: DataTypes.STRING(200), allowNull: false },
     resolvedMessage: { type: DataTypes.TEXT, allowNull: true },
     status: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'pending' },
+    externalId: { type: DataTypes.STRING(255), allowNull: true },
     sentAt: { type: DataTypes.DATE, allowNull: true },
     deliveredAt: { type: DataTypes.DATE, allowNull: true },
     readAt: { type: DataTypes.DATE, allowNull: true },

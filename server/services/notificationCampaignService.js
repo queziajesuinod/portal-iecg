@@ -193,7 +193,12 @@ const NotificationCampaignService = {
             const response = await evolutionApi.enviarMensagemTexto(
               recipient.contact, recipient.resolvedMessage
             );
-            await recipient.update({ status: 'sent', sentAt: new Date(), providerResponse: response });
+            await recipient.update({
+              status: 'sent',
+              sentAt: new Date(),
+              externalId: response.externalId || null,
+              providerResponse: response
+            });
           } else {
             await recipient.update({ status: 'sent', sentAt: new Date() });
           }
