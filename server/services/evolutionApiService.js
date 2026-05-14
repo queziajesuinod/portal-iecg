@@ -243,10 +243,10 @@ class EvolutionApiService {
         const items = Array.isArray(data) ? data : [data];
         return items
           .map((item) => {
-            const messageId = item?.key?.id || null;
-            const status = item?.update?.status
-              ? this.mapearAck(item.update.status)
-              : 'delivered';
+            // Suporta formato novo (keyId + status) e antigo (key.id + update.status)
+            const messageId = item?.keyId || item?.key?.id || null;
+            const rawStatus = item?.status || item?.update?.status;
+            const status = rawStatus ? this.mapearAck(rawStatus) : null;
             if (!messageId || !status) return null;
             return { messageId, status, timestamp: Date.now() };
           })
@@ -255,8 +255,8 @@ class EvolutionApiService {
 
       if (event === 'messages.upsert') {
         const item = Array.isArray(data) ? data[0] : data;
-        const messageId = item?.key?.id || null;
-        if (!messageId) return [];
+        const messageId = item?.key?.id || item?.keyId || null;
+        if (!messageId || !item?.key?.fromMe) return [];
         return [{ messageId, status: 'sent', timestamp: item?.messageTimestamp || Date.now() }];
       }
 

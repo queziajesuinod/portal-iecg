@@ -175,6 +175,8 @@ class NotificationController {
   async processarWebhook(req, res) {
     try {
       const { body } = req;
+      console.log('[EvolutionWebhook] Recebido:', JSON.stringify({ event: body.event, instance: body.instance, url: req.originalUrl }));
+
       const resultado = await notificationService.processarWebhook(body);
 
       const infos = evolutionApiService.processarWebhook(body);
@@ -186,11 +188,13 @@ class NotificationController {
         updatedRecords: resultado?.updated || [],
         rawPayload: body
       };
-      EvolutionWebhookLog.create(logEntry).catch(() => {});
+      EvolutionWebhookLog.create(logEntry).catch((err) => {
+        console.error('[EvolutionWebhook] Erro ao salvar log:', err.message);
+      });
 
       return res.status(200).json(resultado);
     } catch (error) {
-      console.error('Erro ao processar webhook:', error);
+      console.error('[EvolutionWebhook] Erro ao processar:', error);
       return res.status(400).json({ erro: error.message });
     }
   }
