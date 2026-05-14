@@ -9,9 +9,39 @@ const {
   ApeloDirecionadoCelula
 } = require('../models');
 const celulaPresencaService = require('../services/celulaPresencaService');
-const { now, todayDateOnly } = require('../utils/dateTime');
+const {
+  now, todayDateOnly, parseDateOnly, toStartOfDay, toEndOfDay
+} = require('../utils/dateTime');
 
 class CelulaPresencaController {
+  // ── Célula do líder autenticado ─────────────────────────────────────────────
+
+  async minhacelula(req, res) {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) return res.status(401).json({ erro: 'Usuário não autenticado.' });
+
+      const celula = await Celula.findOne({
+        where: { liderId: userId, ativo: true },
+        attributes: ['id', 'celula', 'dia', 'horario', 'lider']
+      });
+
+      if (!celula) {
+        return res.status(404).json({ erro: 'Nenhuma célula vinculada ao seu usuário.' });
+      }
+
+      return res.json({
+        id: celula.id,
+        nome: celula.celula,
+        diaSemana: celula.dia,
+        horario: celula.horario,
+        lider: { id: userId, nome: celula.lider }
+      });
+    } catch (err) {
+      return res.status(500).json({ erro: err.message });
+    }
+  }
+
   // ── Membros vinculados ──────────────────────────────────────────────────────
 
   async listarMembros(req, res) {
@@ -167,16 +197,35 @@ class CelulaPresencaController {
       const celula = await Celula.findByPk(celulaId);
       if (!celula) return res.status(404).json({ erro: 'Célula não encontrada' });
 
+      const dataParseada = parseDateOnly(data);
+      if (!dataParseada || !dataParseada.isValid()) {
+        return res.status(400).json({ erro: 'Data inválida. Use o formato YYYY-MM-DD.' });
+      }
+
+      const dataTs = dataParseada.toDate();
+      const inicioDia = toStartOfDay(data);
+      const fimDia = toEndOfDay(data);
+
+      const existente = await CelulaReuniao.findOne({
+        where: { celulaId, data: { [Op.between]: [inicioDia, fimDia] } }
+      });
+      if (existente) {
+        return res.status(409).json({ erro: 'Já existe uma reunião cadastrada para esta data.' });
+      }
+
       const reuniao = await CelulaReuniao.create({
         celulaId,
-        data: new Date(data),
-        status: new Date(data) <= now() ? 'aberta' : 'agendada',
+        data: dataTs,
+        status: dataTs <= now() ? 'aberta' : 'agendada',
         origem: 'manual',
         observacoes: observacoes || null
       });
 
       return res.status(201).json(reuniao);
     } catch (err) {
+      if (err.name === 'SequelizeUniqueConstraintError') {
+        return res.status(409).json({ erro: 'Já existe uma reunião cadastrada para esta data.' });
+      }
       return res.status(500).json({ erro: err.message });
     }
   }

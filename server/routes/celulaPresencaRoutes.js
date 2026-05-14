@@ -3,6 +3,9 @@ const express = require('express');
 const router = express.Router();
 const ctrl = require('../controllers/celulaPresencaController');
 
+// Célula do líder autenticado (deve vir antes de /:celulaId para não conflitar)
+router.get('/minha-celula', ctrl.minhacelula.bind(ctrl));
+
 // Membros vinculados à célula
 router.get('/:celulaId/membros', ctrl.listarMembros.bind(ctrl));
 router.post('/:celulaId/membros', ctrl.vincularMembro.bind(ctrl));
