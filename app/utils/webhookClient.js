@@ -162,8 +162,14 @@ export const updateWebhook = async (id, payload) => {
   return res.json();
 };
 
-export const fetchEvolutionWebhookLogs = async (limit = 50, offset = 0) => {
-  const res = await fetch(`${API_URL}/api/admin/evolution-webhook-logs?limit=${limit}&offset=${offset}`, {
+export const fetchEvolutionWebhookLogs = async (limit = 50, offset = 0, filters = {}) => {
+  const params = new URLSearchParams({ limit, offset });
+  if (filters.event) params.set('event', filters.event);
+  if (filters.instance) params.set('instance', filters.instance);
+  if (filters.mappedStatus !== undefined && filters.mappedStatus !== '') {
+    params.set('mappedStatus', filters.mappedStatus);
+  }
+  const res = await fetch(`${API_URL}/api/admin/evolution-webhook-logs?${params}`, {
     headers: { 'Content-Type': 'application/json', ...authHeaders() }
   });
   if (!res.ok) throw new Error('Falha ao carregar logs');

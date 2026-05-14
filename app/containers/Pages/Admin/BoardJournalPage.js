@@ -26,7 +26,6 @@ import {
   FormControl,
   FormControlLabel,
   Grid,
-  IconButton,
   InputLabel,
   LinearProgress,
   MenuItem,
@@ -41,6 +40,7 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import brand from 'dan-api/dummy/brand';
+import { CardsSkeleton } from '../../../components/Skeleton';
 import {
   createBoardSubmission,
   getBoardJournal,
@@ -1090,11 +1090,7 @@ function BoardJournalPage() {
             </Box>
 
             {loading && (
-              <Card sx={{ borderRadius: 3, backgroundColor: COLORS.paper }}>
-                <CardContent>
-                  <Typography>Carregando modulo...</Typography>
-                </CardContent>
-              </Card>
+              <CardsSkeleton count={4} height={160} showToolbar={false} />
             )}
 
             {!loading && tab === 0 && (

@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useConfirm } from '../../../utils/useConfirm';
 import { Helmet } from 'react-helmet';
 import {
   ContentState,
@@ -54,6 +53,8 @@ import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { Editor } from 'react-draft-wysiwyg';
 import brand from 'dan-api/dummy/brand';
+import { useConfirm } from '../../../utils/useConfirm';
+import { TableSkeleton } from '../../../components/Skeleton';
 import 'react-draft-wysiwyg/dist/react-draft-wysiwyg.css';
 import {
   addBoardJournalMemberManually,
@@ -1294,7 +1295,9 @@ function BoardJournalAdminPage() {
                                 color="error"
                                 disabled={isCreator}
                                 onClick={async () => {
-                                  if (!await confirm({ title: 'Remover usuário', message: `Remover ${item.user?.name || 'usuario'} deste diario?`, confirmText: 'Remover', confirmColor: 'error', severity: 'error' })) return;
+                                  if (!await confirm({
+                                    title: 'Remover usuário', message: `Remover ${item.user?.name || 'usuario'} deste diario?`, confirmText: 'Remover', confirmColor: 'error', severity: 'error'
+                                  })) return;
                                   try {
                                     await deleteBoardJournalMember(selectedJournalId, item.id);
                                     setNotification('Usuario removido do diario');
@@ -1336,7 +1339,7 @@ function BoardJournalAdminPage() {
           </Card>
         )}
 
-        {loading && <Typography>Carregando modulo...</Typography>}
+        {loading && <Box py={2}><TableSkeleton cols={4} rows={4} showToolbar={false} /></Box>}
 
         {!loading && tab === 'categories' && (
           <Card>
@@ -1369,7 +1372,11 @@ function BoardJournalAdminPage() {
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Excluir">
-                          <IconButton size="small" color="error" onClick={async () => { if (!await confirm({ title: 'Remover categoria', message: `Remover categoria "${item.name}"?`, confirmText: 'Remover', confirmColor: 'error', severity: 'error' })) return; try { await deleteBoardCategory(item.id); setNotification('Categoria removida'); loadData(); } catch (error) { setNotification(error.message); } }}>
+                          <IconButton size="small" color="error" onClick={async () => {
+                            if (!await confirm({
+                              title: 'Remover categoria', message: `Remover categoria "${item.name}"?`, confirmText: 'Remover', confirmColor: 'error', severity: 'error'
+                            })) return; try { await deleteBoardCategory(item.id); setNotification('Categoria removida'); loadData(); } catch (error) { setNotification(error.message); }
+                          }}>
                             <DeleteIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
@@ -1443,7 +1450,11 @@ function BoardJournalAdminPage() {
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Excluir">
-                          <IconButton size="small" color="error" onClick={async () => { if (!await confirm({ title: 'Remover desafio', message: `Remover desafio "${item.title}"?`, confirmText: 'Remover', confirmColor: 'error', severity: 'error' })) return; try { await deleteBoardChallenge(item.id); setNotification('Desafio removido'); loadData(); } catch (error) { setNotification(error.message); } }}>
+                          <IconButton size="small" color="error" onClick={async () => {
+                            if (!await confirm({
+                              title: 'Remover desafio', message: `Remover desafio "${item.title}"?`, confirmText: 'Remover', confirmColor: 'error', severity: 'error'
+                            })) return; try { await deleteBoardChallenge(item.id); setNotification('Desafio removido'); loadData(); } catch (error) { setNotification(error.message); }
+                          }}>
                             <DeleteIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
@@ -1709,7 +1720,11 @@ function BoardJournalAdminPage() {
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Excluir">
-                          <IconButton size="small" color="error" onClick={async () => { if (!await confirm({ title: 'Remover badge', message: `Remover badge "${item.name}"?`, confirmText: 'Remover', confirmColor: 'error', severity: 'error' })) return; try { await deleteBoardBadge(item.id); setNotification('Badge removido'); loadData(); } catch (error) { setNotification(error.message); } }}>
+                          <IconButton size="small" color="error" onClick={async () => {
+                            if (!await confirm({
+                              title: 'Remover badge', message: `Remover badge "${item.name}"?`, confirmText: 'Remover', confirmColor: 'error', severity: 'error'
+                            })) return; try { await deleteBoardBadge(item.id); setNotification('Badge removido'); loadData(); } catch (error) { setNotification(error.message); }
+                          }}>
                             <DeleteIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>

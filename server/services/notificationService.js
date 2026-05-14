@@ -637,11 +637,19 @@ class NotificationService {
     for (const info of infos) {
       const now = moment.tz(TIMEZONE).toDate();
 
+      const STATUS_RANK = { sent: 1, delivered: 2, read: 3 };
       const buildUpdates = (current = {}) => {
-        const u = { status: info.status };
+        const u = {};
+        const currentRank = STATUS_RANK[current.status] ?? 0;
+        const newRank = STATUS_RANK[info.status] ?? 0;
+
+        // Nunca rebaixa o status (ex: read → delivered não pode ocorrer)
+        if (newRank > currentRank) u.status = info.status;
+
         if (info.status === 'delivered' && !current.deliveredAt) {
           u.deliveredAt = now;
-        } else if (info.status === 'read') {
+        }
+        if (info.status === 'read') {
           if (!current.readAt) u.readAt = now;
           if (!current.deliveredAt) u.deliveredAt = now;
         }

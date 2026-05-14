@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { PapperBlock } from 'dan-components';
 import {
+  Box,
   Grid,
   Card,
   CardContent,
@@ -34,6 +35,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useHistory, useParams } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
+import { DetailSkeleton } from '../../../components/Skeleton';
 import { useConfirm } from '../../../utils/useConfirm';
 import {
   buscarInscricao,
@@ -352,30 +354,7 @@ function RegistrationDetails() {
   };
 
   if (loading) {
-    return (
-      <div
-        style={{
-          position: 'fixed',
-          inset: 0,
-          backgroundColor: 'rgba(255,255,255,0.95)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 16,
-          zIndex: 1400
-        }}
-      >
-        <img
-          src="/spinner.gif"
-          alt="Carregando inscrição"
-          style={{ width: 96, height: 96 }}
-        />
-        <Typography variant="h6" color="textSecondary">
-          Carregando inscrição...
-        </Typography>
-      </div>
-    );
+    return <Box p={3}><DetailSkeleton fields={8} /></Box>;
   }
 
   if (!inscricao) {

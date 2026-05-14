@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useConfirm } from '../../../utils/useConfirm';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
-import { formatDateInAppTimezone } from '../../../utils/dateTime';
 import {
   Button,
   Table,
@@ -31,6 +29,9 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import brand from 'dan-api/dummy/brand';
+import { formatDateInAppTimezone } from '../../../utils/dateTime';
+import { useConfirm } from '../../../utils/useConfirm';
+import { TableSkeleton } from '../../../components/Skeleton';
 import {
   listarCupons,
   criarCupom,
@@ -150,7 +151,9 @@ function CouponsPage() {
   };
 
   const handleDeletar = async (id, code) => {
-    const ok = await confirm({ title: 'Deletar cupom', message: `Tem certeza que deseja deletar o cupom "${code}"?`, confirmText: 'Deletar', confirmColor: 'error', severity: 'error' });
+    const ok = await confirm({
+      title: 'Deletar cupom', message: `Tem certeza que deseja deletar o cupom "${code}"?`, confirmText: 'Deletar', confirmColor: 'error', severity: 'error'
+    });
     if (!ok) return;
     try {
       await deletarCupom(id);
@@ -164,7 +167,9 @@ function CouponsPage() {
 
   const handleAlternarStatus = async (cupom) => {
     const acao = cupom.isActive ? 'inativar' : 'reativar';
-    const ok = await confirm({ title: `${acao.charAt(0).toUpperCase() + acao.slice(1)} cupom`, message: `Tem certeza que deseja ${acao} o cupom "${cupom.code}"?`, confirmText: acao.charAt(0).toUpperCase() + acao.slice(1), confirmColor: 'warning', severity: 'warning' });
+    const ok = await confirm({
+      title: `${acao.charAt(0).toUpperCase() + acao.slice(1)} cupom`, message: `Tem certeza que deseja ${acao} o cupom "${cupom.code}"?`, confirmText: acao.charAt(0).toUpperCase() + acao.slice(1), confirmColor: 'warning', severity: 'warning'
+    });
     if (!ok) return;
 
     try {
@@ -218,7 +223,7 @@ function CouponsPage() {
         </div>
 
         {loading ? (
-          <Typography>Carregando...</Typography>
+          <TableSkeleton cols={5} showToolbar={false} />
         ) : cupons.length === 0 ? (
           <Typography>Nenhum cupom cadastrado</Typography>
         ) : (
