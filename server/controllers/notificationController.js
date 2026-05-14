@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 const notificationService = require('../services/notificationService');
 const { EvolutionWebhookLog } = require('../models');
 const evolutionApiService = require('../services/evolutionApiService');
@@ -179,18 +180,21 @@ class NotificationController {
 
       const resultado = await notificationService.processarWebhook(body);
 
-      const infos = evolutionApiService.processarWebhook(body);
-      const logEntry = {
-        event: body.event || null,
-        instance: body.instance || null,
-        messageId: infos[0]?.messageId || null,
-        mappedStatus: infos[0]?.status || null,
-        updatedRecords: resultado?.updated || [],
-        rawPayload: body
-      };
-      EvolutionWebhookLog.create(logEntry).catch((err) => {
-        console.error('[EvolutionWebhook] Erro ao salvar log:', err.message);
-      });
+      const updated = resultado?.updated || [];
+      if (updated.length > 0) {
+        const infos = evolutionApiService.processarWebhook(body);
+        const logEntry = {
+          event: body.event || null,
+          instance: body.instance || null,
+          messageId: infos[0]?.messageId || null,
+          mappedStatus: infos[0]?.status || null,
+          updatedRecords: updated,
+          rawPayload: body
+        };
+        EvolutionWebhookLog.create(logEntry).catch((err) => {
+          console.error('[EvolutionWebhook] Erro ao salvar log:', err.message);
+        });
+      }
 
       return res.status(200).json(resultado);
     } catch (error) {
@@ -203,7 +207,18 @@ class NotificationController {
     try {
       const limit = Math.min(Number(req.query.limit) || 50, 200);
       const offset = Number(req.query.offset) || 0;
+
+      const where = {};
+      if (req.query.event) where.event = req.query.event;
+      if (req.query.instance) where.instance = req.query.instance;
+      if (req.query.mappedStatus === 'none') {
+        where.mappedStatus = { [Op.is]: null };
+      } else if (req.query.mappedStatus) {
+        where.mappedStatus = req.query.mappedStatus;
+      }
+
       const { count, rows } = await EvolutionWebhookLog.findAndCountAll({
+        where,
         order: [['createdAt', 'DESC']],
         limit,
         offset

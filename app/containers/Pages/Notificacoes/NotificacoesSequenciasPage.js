@@ -18,6 +18,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { Helmet } from 'react-helmet';
 import Notification from 'dan-components/Notification/Notification';
+import { TableSkeleton } from '../../../components/Skeleton';
 import { useConfirm } from '../../../utils/useConfirm';
 
 const resolveApiUrl = () => {
@@ -185,6 +186,7 @@ const emptyStep = (order) => ({
 // ── Página principal ────────────────────────────────────────────────────────────
 export default function NotificacoesSequenciasPage() {
   const { confirm, ConfirmDialog } = useConfirm();
+  const [loading, setLoading] = useState(true);
   const [sequencias, setSequencias] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [grupos, setGrupos] = useState([]);
@@ -216,14 +218,19 @@ export default function NotificacoesSequenciasPage() {
   const token = () => localStorage.getItem('token');
 
   const fetchAll = async () => {
-    const [s, t, g] = await Promise.all([
-      fetch(`${API_URL}/api/admin/notificacoes/sequencias`, { headers: { Authorization: `Bearer ${token()}` } }).then((r) => r.json()),
-      fetch(`${API_URL}/api/admin/notificacoes/templates`, { headers: { Authorization: `Bearer ${token()}` } }).then((r) => r.json()),
-      fetch(`${API_URL}/api/admin/notificacoes/grupos`, { headers: { Authorization: `Bearer ${token()}` } }).then((r) => r.json())
-    ]);
-    setSequencias(Array.isArray(s) ? s : []);
-    setTemplates(Array.isArray(t) ? t : []);
-    setGrupos(Array.isArray(g) ? g : []);
+    setLoading(true);
+    try {
+      const [s, t, g] = await Promise.all([
+        fetch(`${API_URL}/api/admin/notificacoes/sequencias`, { headers: { Authorization: `Bearer ${token()}` } }).then((r) => r.json()),
+        fetch(`${API_URL}/api/admin/notificacoes/templates`, { headers: { Authorization: `Bearer ${token()}` } }).then((r) => r.json()),
+        fetch(`${API_URL}/api/admin/notificacoes/grupos`, { headers: { Authorization: `Bearer ${token()}` } }).then((r) => r.json())
+      ]);
+      setSequencias(Array.isArray(s) ? s : []);
+      setTemplates(Array.isArray(t) ? t : []);
+      setGrupos(Array.isArray(g) ? g : []);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fetchListas = async () => {
@@ -400,6 +407,8 @@ export default function NotificacoesSequenciasPage() {
     });
     if (res.ok) { setNotification('Sequência excluída.'); fetchAll(); } else setNotification('Erro ao excluir.');
   };
+
+  if (loading) return <Box p={2}><TableSkeleton cols={5} rows={4} /></Box>;
 
   return (
     <div>

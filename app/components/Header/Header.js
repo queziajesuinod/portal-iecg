@@ -11,7 +11,7 @@ import Tooltip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
 import MenuIcon from '@mui/icons-material/Menu';
 import UserMenu from './UserMenu';
-import SearchUi from '../Search/SearchUi';
+import GlobalSearch from '../Search/GlobalSearch';
 import useStyles from './header-jss';
 
 const elem = document.documentElement;
@@ -90,8 +90,7 @@ function Header(props) {
     position,
     gradient,
     mode,
-    title,
-    history
+    title
   } = props;
 
   const setMargin = (sidebarPosition) => {
@@ -161,7 +160,7 @@ function Header(props) {
             <div className={classes.search}>
               <SearchIcon />
             </div>
-            <SearchUi history={history} />
+            <GlobalSearch />
           </div>
         </div>
         {!smDown && (
@@ -182,7 +181,6 @@ Header.propTypes = {
   mode: PropTypes.string.isRequired,
   title: PropTypes.string.isRequired,
   changeMode: PropTypes.func.isRequired,
-  history: PropTypes.object.isRequired,
 };
 
 export default Header;

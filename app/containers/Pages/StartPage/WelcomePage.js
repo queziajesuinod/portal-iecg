@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet';
 import {
-  Box, Grid, Paper, Typography
+  Box, Grid, Paper, Skeleton, Typography
 } from '@mui/material';
 import { PapperBlock } from 'dan-components';
 
@@ -172,7 +172,9 @@ const WelcomePage = () => {
                   >
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography variant="h4" sx={{ fontWeight: 700, lineHeight: 1.1 }}>
-                        {loading ? '-' : card.value}
+                        {loading
+                          ? <Skeleton variant="text" width="55%" sx={{ bgcolor: 'rgba(255,255,255,0.35)', borderRadius: 1 }} />
+                          : card.value}
                       </Typography>
                       <Typography
                         variant="body1"

@@ -18,6 +18,7 @@ import PeopleIcon from '@mui/icons-material/People';
 import { useHistory } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import Notification from 'dan-components/Notification/Notification';
+import { TableSkeleton } from '../../../components/Skeleton';
 import { useConfirm } from '../../../utils/useConfirm';
 
 const resolveApiUrl = () => {
@@ -312,6 +313,7 @@ SourceFilters.propTypes = {
 export default function NotificacoesCampanhasPage() {
   const { confirm, ConfirmDialog } = useConfirm();
   const history = useHistory();
+  const [loading, setLoading] = useState(true);
   const [campanhas, setCampanhas] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [grupos, setGrupos] = useState([]);
@@ -353,14 +355,19 @@ export default function NotificacoesCampanhasPage() {
   const token = () => localStorage.getItem('token');
 
   const fetchAll = async () => {
-    const [c, t, g] = await Promise.all([
-      fetch(`${API_URL}/api/admin/notificacoes/campanhas`, { headers: { Authorization: `Bearer ${token()}` } }).then((r) => r.json()),
-      fetch(`${API_URL}/api/admin/notificacoes/templates`, { headers: { Authorization: `Bearer ${token()}` } }).then((r) => r.json()),
-      fetch(`${API_URL}/api/admin/notificacoes/grupos`, { headers: { Authorization: `Bearer ${token()}` } }).then((r) => r.json())
-    ]);
-    setCampanhas(Array.isArray(c) ? c : []);
-    setTemplates(Array.isArray(t) ? t : []);
-    setGrupos(Array.isArray(g) ? g : []);
+    setLoading(true);
+    try {
+      const [c, t, g] = await Promise.all([
+        fetch(`${API_URL}/api/admin/notificacoes/campanhas`, { headers: { Authorization: `Bearer ${token()}` } }).then((r) => r.json()),
+        fetch(`${API_URL}/api/admin/notificacoes/templates`, { headers: { Authorization: `Bearer ${token()}` } }).then((r) => r.json()),
+        fetch(`${API_URL}/api/admin/notificacoes/grupos`, { headers: { Authorization: `Bearer ${token()}` } }).then((r) => r.json())
+      ]);
+      setCampanhas(Array.isArray(c) ? c : []);
+      setTemplates(Array.isArray(t) ? t : []);
+      setGrupos(Array.isArray(g) ? g : []);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fetchListas = async () => {
@@ -567,6 +574,8 @@ export default function NotificacoesCampanhasPage() {
     });
     if (res.ok) { setNotification('Campanha excluída.'); fetchAll(); } else setNotification('Erro ao excluir.');
   };
+
+  if (loading) return <Box p={2}><TableSkeleton cols={6} /></Box>;
 
   return (
     <div>

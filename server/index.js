@@ -136,6 +136,17 @@ app.use('/api/webhooks', require('./routers/webhookRoutes'));
 app.use('/api/webhooks/notifications', require('./routers/evolutionWebhookRoutes'));
 // Logs de webhooks Evolution (protegido)
 app.get('/api/admin/evolution-webhook-logs', authMiddleware, (req, res) => require('./controllers/notificationController').listarWebhookLogs(req, res));
+// Busca global
+app.get('/api/admin/search', authMiddleware, async (req, res) => {
+  try {
+    const { search } = require('./services/globalSearchService');
+    const results = await search(req.query.q || '');
+    return res.json(results);
+  } catch (err) {
+    console.error('[GlobalSearch]', err.message);
+    return res.status(500).json({ erro: err.message });
+  }
+});
 
 // Assets utilitários
 app.use('/api/icons', (req, res) => {

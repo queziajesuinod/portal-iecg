@@ -42,6 +42,7 @@ import LinkIcon from '@mui/icons-material/Link';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import brand from 'dan-api/dummy/brand';
 import * as XLSX from 'xlsx';
+import { TableSkeleton } from '../../../components/Skeleton';
 import { listarEventos } from '../../../api/eventsApi';
 import {
   atualizarSaidaFinanceira,
@@ -971,6 +972,8 @@ function FinancialPage() {
       setSettlingExpenseId(null);
     }
   };
+
+  if (loading) return <Box p={2}><TableSkeleton cols={5} rows={8} /></Box>;
 
   return (
     <div>

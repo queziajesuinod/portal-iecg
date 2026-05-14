@@ -21,6 +21,7 @@ import {
   TableCell,
   TableContainer,
   TableHead,
+  TablePagination,
   TableRow,
   Tab,
   Tabs,
@@ -152,6 +153,12 @@ const WebhooksPage = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [evoLogs, setEvoLogs] = useState([]);
   const [evoLogsLoading, setEvoLogsLoading] = useState(false);
+  const [evoTotal, setEvoTotal] = useState(0);
+  const [evoPage, setEvoPage] = useState(0);
+  const [evoPerPage, setEvoPerPage] = useState(25);
+  const [evoFilterEvent, setEvoFilterEvent] = useState('');
+  const [evoFilterInstance, setEvoFilterInstance] = useState('');
+  const [evoFilterStatus, setEvoFilterStatus] = useState('');
   const [webhooks, setWebhooks] = useState([]);
   const [eventDefinitions, setEventDefinitions] = useState(DEFAULT_EVENT_DEFINITIONS);
   const [loading, setLoading] = useState(false);
@@ -225,11 +232,12 @@ const WebhooksPage = () => {
     }
   };
 
-  const loadEvoLogs = async () => {
+  const loadEvoLogs = async (page = evoPage, filters = { event: evoFilterEvent, instance: evoFilterInstance, mappedStatus: evoFilterStatus }, perPage = evoPerPage) => {
     setEvoLogsLoading(true);
     try {
-      const data = await fetchEvolutionWebhookLogs(100, 0);
+      const data = await fetchEvolutionWebhookLogs(perPage, page * perPage, filters);
       setEvoLogs(data.logs || []);
+      setEvoTotal(data.total || 0);
     } catch { /* silencioso */ } finally {
       setEvoLogsLoading(false);
     }
@@ -890,67 +898,167 @@ const WebhooksPage = () => {
 
       {activeTab === 2 && (
         <Box>
-          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-            <Typography variant="body2" color="textSecondary">
-                Últimos webhooks recebidos da Evolution API (WhatsApp).
-            </Typography>
-            <Button size="small" variant="outlined" onClick={loadEvoLogs} disabled={evoLogsLoading}>
+          {/* Filtros */}
+          <Box display="flex" gap={1} flexWrap="wrap" alignItems="center" mb={2}>
+            <FormControl size="small" sx={{ minWidth: 180 }}>
+              <InputLabel>Evento</InputLabel>
+              <Select
+                value={evoFilterEvent}
+                label="Evento"
+                onChange={(e) => setEvoFilterEvent(e.target.value)}
+              >
+                <MenuItem value="">Todos</MenuItem>
+                <MenuItem value="messages.update">messages.update</MenuItem>
+                <MenuItem value="messages.upsert">messages.upsert</MenuItem>
+                <MenuItem value="messages.set">messages.set</MenuItem>
+                <MenuItem value="send.message">send.message</MenuItem>
+                <MenuItem value="connection.update">connection.update</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 150 }}>
+              <InputLabel>Instância</InputLabel>
+              <Select
+                value={evoFilterInstance}
+                label="Instância"
+                onChange={(e) => setEvoFilterInstance(e.target.value)}
+              >
+                <MenuItem value="">Todas</MenuItem>
+                <MenuItem value="IECG">IECG</MenuItem>
+                <MenuItem value="START_IECG">START_IECG</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 150 }}>
+              <InputLabel>Status</InputLabel>
+              <Select
+                value={evoFilterStatus}
+                label="Status"
+                onChange={(e) => setEvoFilterStatus(e.target.value)}
+              >
+                <MenuItem value="">Todos</MenuItem>
+                <MenuItem value="sent">sent</MenuItem>
+                <MenuItem value="delivered">delivered</MenuItem>
+                <MenuItem value="read">read</MenuItem>
+                <MenuItem value="failed">failed</MenuItem>
+                <MenuItem value="none">sem status</MenuItem>
+              </Select>
+            </FormControl>
+            <Button
+              size="small"
+              variant="contained"
+              disabled={evoLogsLoading}
+              onClick={() => {
+                setEvoPage(0);
+                loadEvoLogs(0, { event: evoFilterEvent, instance: evoFilterInstance, mappedStatus: evoFilterStatus });
+              }}
+            >
+              Filtrar
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={evoLogsLoading}
+              onClick={() => {
+                setEvoFilterEvent('');
+                setEvoFilterInstance('');
+                setEvoFilterStatus('');
+                setEvoPage(0);
+                loadEvoLogs(0, { event: '', instance: '', mappedStatus: '' });
+              }}
+            >
+              Limpar
+            </Button>
+            <Box flex={1} />
+            <Button size="small" variant="outlined" onClick={() => loadEvoLogs()} disabled={evoLogsLoading}>
               {evoLogsLoading ? 'Atualizando…' : 'Atualizar'}
             </Button>
           </Box>
-          {evoLogsLoading && <Typography variant="body2" color="textSecondary">Carregando…</Typography>}
+
+          {evoLogsLoading && (
+            <Box display="flex" alignItems="center" gap={1} my={1}>
+              <CircularProgress size={16} />
+              <Typography variant="body2" color="textSecondary">Carregando…</Typography>
+            </Box>
+          )}
+          {!evoLogsLoading && evoTotal > 0 && (
+            <Typography variant="caption" color="textSecondary" display="block" mb={1}>
+              {evoTotal} registro{evoTotal !== 1 ? 's' : ''} encontrado{evoTotal !== 1 ? 's' : ''}
+            </Typography>
+          )}
           {!evoLogsLoading && evoLogs.length === 0 && (
-            <Typography variant="body2" color="textSecondary">Nenhum webhook recebido ainda.</Typography>
+            <Typography variant="body2" color="textSecondary">Nenhum webhook encontrado.</Typography>
           )}
           {evoLogs.length > 0 && (
-            <TableContainer component={Paper} variant="outlined">
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Data/Hora</TableCell>
-                    <TableCell>Evento</TableCell>
-                    <TableCell>Instância</TableCell>
-                    <TableCell>Message ID</TableCell>
-                    <TableCell>Status mapeado</TableCell>
-                    <TableCell>Registros atualizados</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {evoLogs.map((log) => (
-                    <TableRow key={log.id} hover>
-                      <TableCell>
-                        <Typography variant="caption">
-                          {new Date(log.createdAt).toLocaleString('pt-BR')}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip size="small" label={log.event || '—'} variant="outlined" />
-                      </TableCell>
-                      <TableCell>{log.instance || '—'}</TableCell>
-                      <TableCell>
-                        <Typography variant="caption" fontFamily="monospace">
-                          {log.messageId ? `${log.messageId.slice(0, 20)}…` : '—'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        {log.mappedStatus ? (
-                          <Chip
-                            size="small"
-                            label={log.mappedStatus}
-                            color={log.mappedStatus === 'read' ? 'success' : log.mappedStatus === 'delivered' ? 'info' : 'default'}
-                          />
-                        ) : '—'}
-                      </TableCell>
-                      <TableCell>
-                        {Array.isArray(log.updatedRecords) && log.updatedRecords.length > 0
-                          ? log.updatedRecords.join(', ')
-                          : <Typography variant="caption" color="textSecondary">nenhum</Typography>}
-                      </TableCell>
+            <Paper variant="outlined">
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Data/Hora</TableCell>
+                      <TableCell>Evento</TableCell>
+                      <TableCell>Instância</TableCell>
+                      <TableCell>Message ID</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Registros atualizados</TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                  </TableHead>
+                  <TableBody>
+                    {evoLogs.map((log) => (
+                      <TableRow key={log.id} hover>
+                        <TableCell>
+                          <Typography variant="caption">
+                            {new Date(log.createdAt).toLocaleString('pt-BR')}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Chip size="small" label={log.event || '—'} variant="outlined" />
+                        </TableCell>
+                        <TableCell>{log.instance || '—'}</TableCell>
+                        <TableCell>
+                          <Typography variant="caption" fontFamily="monospace">
+                            {log.messageId ? `${log.messageId.slice(0, 20)}…` : '—'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          {log.mappedStatus ? (
+                            <Chip
+                              size="small"
+                              label={log.mappedStatus}
+                              color={log.mappedStatus === 'read' ? 'success' : log.mappedStatus === 'delivered' ? 'info' : 'default'}
+                            />
+                          ) : '—'}
+                        </TableCell>
+                        <TableCell>
+                          {Array.isArray(log.updatedRecords) && log.updatedRecords.length > 0
+                            ? log.updatedRecords.join(', ')
+                            : <Typography variant="caption" color="textSecondary">nenhum</Typography>}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <TablePagination
+                component="div"
+                count={evoTotal}
+                page={evoPage}
+                rowsPerPage={evoPerPage}
+                rowsPerPageOptions={[10, 25, 50, 100]}
+                onPageChange={(_, newPage) => {
+                  setEvoPage(newPage);
+                  loadEvoLogs(newPage, { event: evoFilterEvent, instance: evoFilterInstance, mappedStatus: evoFilterStatus });
+                }}
+                onRowsPerPageChange={(e) => {
+                  const newPerPage = Number(e.target.value);
+                  setEvoPerPage(newPerPage);
+                  setEvoPage(0);
+                  loadEvoLogs(0, { event: evoFilterEvent, instance: evoFilterInstance, mappedStatus: evoFilterStatus }, newPerPage);
+                }}
+                labelRowsPerPage="Linhas por página:"
+                labelDisplayedRows={({ from, to, count: c }) => `${from}–${to} de ${c === -1 ? `mais de ${to}` : c}`}
+                showFirstButton
+                showLastButton
+              />
+            </Paper>
           )}
         </Box>
       )}

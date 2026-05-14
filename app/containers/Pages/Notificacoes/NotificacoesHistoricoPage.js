@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import { Helmet } from 'react-helmet';
 import Notification from 'dan-components/Notification/Notification';
+import { TableSkeleton } from '../../../components/Skeleton';
 
 const resolveApiUrl = () => {
   if (process.env.REACT_APP_API_URL) return process.env.REACT_APP_API_URL.replace(/\/$/, '');
@@ -41,7 +42,7 @@ export default function NotificacoesHistoricoPage() {
   const [page, setPage] = useState(1);
   const [filterStatus, setFilterStatus] = useState('');
   const [notification, setNotification] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const token = () => localStorage.getItem('token');
 
@@ -108,50 +109,52 @@ export default function NotificacoesHistoricoPage() {
         ))}
       </Box>
 
-      <TableContainer component={Paper}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Nome</TableCell>
-              <TableCell>Contato</TableCell>
-              <TableCell>Origem</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell>Enviado em</TableCell>
-              <TableCell>Erro</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {loading && (
-              <TableRow><TableCell colSpan={6} align="center">Carregando...</TableCell></TableRow>
-            )}
-            {!loading && destinatarios.length === 0 && (
-              <TableRow><TableCell colSpan={6} align="center">Nenhum destinatário encontrado.</TableCell></TableRow>
-            )}
-            {!loading && destinatarios.map((d) => {
-              const cfg = STATUS_CHIP[d.status] || { label: d.status, color: 'default' };
-              return (
-                <TableRow key={d.id}>
-                  <TableCell>{d.name || '-'}</TableCell>
-                  <TableCell>{d.contact}</TableCell>
-                  <TableCell>{SOURCE_LABELS[d.sourceType] || d.sourceType}</TableCell>
-                  <TableCell><Chip size="small" label={cfg.label} color={cfg.color} /></TableCell>
-                  <TableCell>{d.sentAt ? new Date(d.sentAt).toLocaleString('pt-BR') : '-'}</TableCell>
-                  <TableCell>{d.errorMessage || '-'}</TableCell>
+      {loading ? (
+        <TableSkeleton cols={6} rows={5} showToolbar={false} />
+      ) : (
+        <>
+          <TableContainer component={Paper}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Nome</TableCell>
+                  <TableCell>Contato</TableCell>
+                  <TableCell>Origem</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Enviado em</TableCell>
+                  <TableCell>Erro</TableCell>
                 </TableRow>
-              );
-            })}
-          </TableBody>
-          <TableFooter>
-            <TableRow>
-              <TableCell colSpan={6} align="right">Total: {total}</TableCell>
-            </TableRow>
-          </TableFooter>
-        </Table>
-      </TableContainer>
-
-      <Box mt={2} display="flex" justifyContent="center">
-        <Pagination count={totalPages} page={page} onChange={(_, v) => setPage(v)} color="primary" />
-      </Box>
+              </TableHead>
+              <TableBody>
+                {destinatarios.length === 0 && (
+                  <TableRow><TableCell colSpan={6} align="center">Nenhum destinatário encontrado.</TableCell></TableRow>
+                )}
+                {destinatarios.map((d) => {
+                  const cfg = STATUS_CHIP[d.status] || { label: d.status, color: 'default' };
+                  return (
+                    <TableRow key={d.id}>
+                      <TableCell>{d.name || '-'}</TableCell>
+                      <TableCell>{d.contact}</TableCell>
+                      <TableCell>{SOURCE_LABELS[d.sourceType] || d.sourceType}</TableCell>
+                      <TableCell><Chip size="small" label={cfg.label} color={cfg.color} /></TableCell>
+                      <TableCell>{d.sentAt ? new Date(d.sentAt).toLocaleString('pt-BR') : '-'}</TableCell>
+                      <TableCell>{d.errorMessage || '-'}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={6} align="right">Total: {total}</TableCell>
+                </TableRow>
+              </TableFooter>
+            </Table>
+          </TableContainer>
+          <Box mt={2} display="flex" justifyContent="center">
+            <Pagination count={totalPages} page={page} onChange={(_, v) => setPage(v)} color="primary" />
+          </Box>
+        </>
+      )}
 
       <Notification message={notification} close={() => setNotification('')} />
     </div>

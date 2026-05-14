@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useConfirm } from '../../../utils/useConfirm';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
-import { formatDateInAppTimezone } from '../../../utils/dateTime';
 import {
   Grid,
   Card,
@@ -41,6 +39,9 @@ import CreditCardIcon from '@mui/icons-material/CreditCard';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import { useHistory } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
+import { formatDateInAppTimezone } from '../../../utils/dateTime';
+import { useConfirm } from '../../../utils/useConfirm';
+import { TableSkeleton } from '../../../components/Skeleton';
 import {
   listarEventos,
   listarEstatisticas,
@@ -138,7 +139,9 @@ function EventList() {
   };
 
   const handleDeletar = async (id, titulo) => {
-    const ok = await confirm({ title: 'Deletar evento', message: `Tem certeza que deseja deletar o evento "${titulo}"?`, confirmText: 'Deletar', confirmColor: 'error', severity: 'error' });
+    const ok = await confirm({
+      title: 'Deletar evento', message: `Tem certeza que deseja deletar o evento "${titulo}"?`, confirmText: 'Deletar', confirmColor: 'error', severity: 'error'
+    });
     if (!ok) return;
     try {
       await deletarEvento(id);
@@ -151,7 +154,9 @@ function EventList() {
   };
 
   const handleDuplicar = async (evento) => {
-    const ok = await confirm({ title: 'Duplicar evento', message: `Deseja duplicar o evento "${evento.title}"?`, confirmText: 'Duplicar', confirmColor: 'primary', severity: 'info' });
+    const ok = await confirm({
+      title: 'Duplicar evento', message: `Deseja duplicar o evento "${evento.title}"?`, confirmText: 'Duplicar', confirmColor: 'primary', severity: 'info'
+    });
     if (!ok) return;
     try {
       await duplicarEvento(evento.id);
@@ -421,7 +426,7 @@ function EventList() {
 
         {/* Tabela */}
         {loading ? (
-          <Typography>Carregando...</Typography>
+          <TableSkeleton cols={5} showToolbar={false} />
         ) : eventosFiltrados.length === 0 ? (
           <Typography>
             {eventos.length === 0 ? 'Nenhum evento cadastrado' : 'Nenhum evento encontrado com os filtros aplicados'}
