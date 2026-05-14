@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useConfirm } from '../../../utils/useConfirm';
 import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableFooter,
   Paper, Toolbar, Typography, Pagination, IconButton, Tooltip, TextField, Box, MenuItem,
@@ -13,12 +12,14 @@ import PowerSettingsNewIcon from '@mui/icons-material/PowerSettingsNew';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import MergeIcon from '@mui/icons-material/MergeType';
+import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import { useHistory } from 'react-router-dom';
 import useStyles from 'dan-components/Tables/tableStyle-jss';
 import Notification from 'dan-components/Notification/Notification';
 import {
   GoogleMap, Marker, InfoWindow, useLoadScript, Circle
 } from '@react-google-maps/api';
+import { useConfirm } from '../../../utils/useConfirm';
 import { fetchGeocode } from '../../../utils/googleGeocode';
 
 const REDE_OPTIONS = [
@@ -905,7 +906,9 @@ const ListagemCelulasPage = () => {
   };
 
   const handleDelete = async (id) => {
-    const confirmDelete = await confirm({ title: 'Excluir célula', message: 'Tem certeza que deseja excluir esta célula?', confirmText: 'Excluir', confirmColor: 'error', severity: 'error' });
+    const confirmDelete = await confirm({
+      title: 'Excluir célula', message: 'Tem certeza que deseja excluir esta célula?', confirmText: 'Excluir', confirmColor: 'error', severity: 'error'
+    });
     if (!confirmDelete) return;
 
     const token = localStorage.getItem('token');
@@ -961,7 +964,9 @@ const ListagemCelulasPage = () => {
   };
 
   const handleAddReference = async () => {
-    const { endereco, numero, bairro, cep, cidade, estado } = referenceAddress;
+    const {
+      endereco, numero, bairro, cep, cidade, estado
+    } = referenceAddress;
     const queryParts = [endereco, numero, bairro, cidade, estado, cep].filter(Boolean);
     if (!queryParts.length) {
       setNotification('Informe ao menos bairro, CEP ou endereço para gerar o marcador.');
@@ -989,7 +994,9 @@ const ListagemCelulasPage = () => {
   };
 
   const migrateCelulaLeaders = async () => {
-    const confirma = await confirm({ title: 'Sincronizar líderes', message: 'Deseja sincronizar líderes e células agora?', confirmText: 'Sincronizar', confirmColor: 'primary', severity: 'info' });
+    const confirma = await confirm({
+      title: 'Sincronizar líderes', message: 'Deseja sincronizar líderes e células agora?', confirmText: 'Sincronizar', confirmColor: 'primary', severity: 'info'
+    });
     if (!confirma) return;
     setNotification('');
     setMigratingLeaders(true);
@@ -1481,7 +1488,7 @@ const ListagemCelulasPage = () => {
                 <TableRow key={c.id}>
                   <TableCell>{c.celula}</TableCell>
                   <TableCell>{c.rede}</TableCell>
-                  <TableCell>{c.lider}</TableCell>
+                  <TableCell>{c.liderMemberRef?.fullName || c.lider || '-'}</TableCell>
                   <TableCell>{c.pastor_geracao || '-'}</TableCell>
                   <TableCell>{c.bairro}</TableCell>
                   <TableCell>{c.campusRef?.nome || c.campus}</TableCell>
@@ -1495,6 +1502,11 @@ const ListagemCelulasPage = () => {
                           </Badge>
                         </IconButton>
                       </Tooltip>
+                      <Tooltip title="Presença">
+                        <IconButton color="primary" onClick={() => history.push(`/app/celulas/${c.id}/presenca`)}>
+                          <PeopleAltIcon />
+                        </IconButton>
+                      </Tooltip>
                       <Tooltip title="Editar">
                         <IconButton color="primary" onClick={() => handleEdit(c)}>
                           <EditIcon />
@@ -1505,7 +1517,9 @@ const ListagemCelulasPage = () => {
                           color={c.ativo === false ? 'success' : 'warning'}
                           onClick={() => {
                             if (c.ativo === false) { alternarStatusCelula(c, true); return; }
-                            confirm({ title: 'Inativar célula', message: 'Confirmar inativação desta célula?', confirmText: 'Inativar', confirmColor: 'warning', severity: 'warning' }).then((ok) => { if (ok) alternarStatusCelula(c, false); });
+                            confirm({
+                              title: 'Inativar célula', message: 'Confirmar inativação desta célula?', confirmText: 'Inativar', confirmColor: 'warning', severity: 'warning'
+                            }).then((ok) => { if (ok) alternarStatusCelula(c, false); });
                           }}
                         >
                           <PowerSettingsNewIcon />

@@ -130,6 +130,7 @@ app.use('/api/admin/financial', authMiddleware, require('./routers/financialRout
 app.use('/api/admin/diario-bordo', authMiddleware, require('./routers/boardJournalRoutes'));
 app.use('/api/admin/cultos', authMiddleware, require('./routers/cultosRoutes'));
 app.use('/api/admin/voluntariado', authMiddleware, require('./routers/voluntariadoRoutes'));
+app.use('/api/admin/celulas-presenca', authMiddleware, require('./routes/celulaPresencaRoutes'));
 // Webhook Cielo (pública - sem autenticação)
 app.use('/api/webhooks', require('./routers/webhookRoutes'));
 // Webhook Evolution API (pública - sem autenticação)

@@ -45,6 +45,8 @@ import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
 import MergeIcon from '@mui/icons-material/MergeType';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import Webcam from 'react-webcam';
 import imageCompression from 'browser-image-compression';
 import { PapperBlock, Notification } from 'dan-components';
@@ -290,6 +292,8 @@ const MembrosPage = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [isLiderFilter, setIsLiderFilter] = useState(false);
+  const [notificandoMembro, setNotificandoMembro] = useState({});
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [message, setMessage] = useState('');
@@ -381,12 +385,15 @@ const MembrosPage = () => {
       if (statusFilter && member.status !== statusFilter) {
         return false;
       }
+      if (isLiderFilter && !member.isLider) {
+        return false;
+      }
       if (!query) return true;
       const name = (member.fullName || '').toLowerCase();
       const email = (member.email || '').toLowerCase();
       return name.includes(query) || email.includes(query);
     });
-  }, [sortedMembers, search, statusFilter]);
+  }, [sortedMembers, search, statusFilter, isLiderFilter]);
 
   const spouseOptions = useMemo(() => (
     sortedMembers.filter((member) => member.id !== memberEdicao?.id)
@@ -511,7 +518,7 @@ const MembrosPage = () => {
   };
 
   const handleDeleteMember = async (member) => {
-    const ok = await confirm({ title: 'Excluir membro', message: `Tem certeza que deseja excluir o membro "${member.fullName}"?`, confirmText: 'Excluir', confirmColor: 'error', severity: 'error' });
+    const ok = window.confirm(`Tem certeza que deseja excluir o membro "${member.fullName}"?`);
     if (!ok) return;
     try {
       await deletarMembro(member.id);
@@ -628,6 +635,43 @@ const MembrosPage = () => {
     }
   };
 
+  const COMPLETUDE_FIELDS = [
+    (m) => m.email,
+    (m) => m.phone || m.whatsapp,
+    (m) => m.birthDate,
+    (m) => m.cpf,
+    (m) => m.maritalStatus,
+    (m) => m.gender,
+    (m) => m.street || m.neighborhood,
+    (m) => m.zipCode,
+    (m) => m.photoUrl,
+    (m) => m.campusId
+  ];
+
+  const calcCompletude = (member) => {
+    const filled = COMPLETUDE_FIELDS.filter((fn) => Boolean(fn(member))).length;
+    return Math.round((filled / COMPLETUDE_FIELDS.length) * 100);
+  };
+
+  const notificarDadosIncompletos = async (member) => {
+    setNotificandoMembro((prev) => ({ ...prev, [member.id]: true }));
+    const BASE = (process.env.REACT_APP_API_URL || '').replace(/\/$/, '');
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${BASE}/api/admin/members/${member.id}/notificar-dados`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.erro || 'Falha ao enviar notificação');
+      notify('Notificação enviada com sucesso.');
+    } catch (err) {
+      notify(err.message || 'Erro ao enviar notificação.', 'error');
+    } finally {
+      setNotificandoMembro((prev) => ({ ...prev, [member.id]: false }));
+    }
+  };
+
   return (
     <PapperBlock title="Membros" desc="Lista de membros">
       <Helmet>
@@ -664,6 +708,14 @@ const MembrosPage = () => {
                 <MenuItem key={option} value={option}>{option}</MenuItem>
               ))}
             </TextField>
+            <Chip
+              label="Lider de celula"
+              clickable
+              color={isLiderFilter ? 'primary' : 'default'}
+              variant={isLiderFilter ? 'filled' : 'outlined'}
+              onClick={() => { setIsLiderFilter((v) => !v); setPage(0); }}
+              sx={{ alignSelf: 'center', whiteSpace: 'nowrap' }}
+            />
           </Stack>
           <Button variant="contained" color="primary" startIcon={<AddIcon />} onClick={handleOpenCreate}>
             Cadastrar membro
@@ -684,7 +736,6 @@ const MembrosPage = () => {
           </Button>
         </Stack>
       )}
-
 
       {activeTab === 1 && (
         <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: 'background.default' }}>
@@ -788,10 +839,22 @@ const MembrosPage = () => {
         <TableBody>
           {pagedMembers.map((member) => {
             const isActive = !['INATIVO', 'MIA', 'TRANSFERIDO', 'FALECIDO'].includes(member.status);
+            const completude = calcCompletude(member);
+            const incompleto = completude < 70;
+            const temContato = Boolean(member.phone || member.whatsapp);
             return (
               <TableRow hover key={member.id}>
                 <TableCell><Avatar src={member.photoUrl || 'https://via.placeholder.com/40'} alt={member.fullName} sx={{ width: 32, height: 32 }} /></TableCell>
-                <TableCell>{member.fullName}</TableCell>
+                <TableCell>
+                  <Stack direction="row" spacing={0.5} alignItems="center">
+                    <span>{member.fullName}</span>
+                    {incompleto && (
+                      <Tooltip title={`Dados incompletos: ${completude}% preenchido`}>
+                        <WarningAmberIcon fontSize="small" color="warning" />
+                      </Tooltip>
+                    )}
+                  </Stack>
+                </TableCell>
                 <TableCell>{member.email || '-'}</TableCell>
                 <TableCell>{member.phone || member.whatsapp || '-'}</TableCell>
                 <TableCell><Chip label={member.status || '-'} color={isActive ? 'primary' : 'default'} size="small" /></TableCell>
@@ -802,6 +865,20 @@ const MembrosPage = () => {
                       control={<Switch size="small" color="primary" checked={isActive} disabled={updatingMemberId === member.id} onChange={(event) => handleToggleMemberStatus(member, event.target.checked)} />}
                       label={updatingMemberId === member.id ? 'Salvando...' : isActive ? 'Ativo' : 'Inativo'}
                     />
+                    {incompleto && (
+                      <Tooltip title={temContato ? `Notificar para atualizar dados (${completude}%)` : 'Sem telefone para notificar'}>
+                        <span>
+                          <IconButton
+                            size="small"
+                            color="warning"
+                            disabled={!temContato || !!notificandoMembro[member.id]}
+                            onClick={() => notificarDadosIncompletos(member)}
+                          >
+                            <NotificationsActiveIcon fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    )}
                     <Tooltip title="Detalhes do membro"><IconButton size="small" onClick={() => handleOpenDetails(member)}><VisibilityIcon fontSize="small" /></IconButton></Tooltip>
                     <Tooltip title="Editar membro"><IconButton size="small" onClick={() => handleOpenEdit(member)}><EditIcon fontSize="small" /></IconButton></Tooltip>
                     <Tooltip title="Excluir membro"><IconButton size="small" color="error" onClick={() => handleDeleteMember(member)}><DeleteIcon fontSize="small" /></IconButton></Tooltip>

@@ -16,6 +16,7 @@ const {
 } = require('../models');
 
 const { parseLegacyNotes } = require('../utils/memberUserSync');
+const celulaPresencaService = require('./celulaPresencaService');
 
 const { GOOGLE_GEOCODE_KEY } = process.env;
 const GEO_TIMEOUT_MS = 5000;
@@ -545,6 +546,16 @@ class ApeloDirecionadoCelulaService {
       'Consolidado via apelo direcionado',
       transaction
     );
+
+    // Vincula o membro à célula como discípulo
+    if (member?.id && apelo?.celula_id) {
+      celulaPresencaService.vincularMembroPorApelo({
+        membroId: member.id,
+        celulaId: apelo.celula_id,
+        apeloId: apelo.id
+      }).catch(err => console.error('[CelulaPresenca] Erro ao vincular membro por apelo:', err));
+    }
+
     return member;
   }
 

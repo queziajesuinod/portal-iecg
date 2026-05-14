@@ -83,12 +83,22 @@ function buildDayRange(value) {
   };
 }
 
+function startOfToday() {
+  return moment.tz(APP_TIMEZONE).startOf('day').toDate();
+}
+
+function endOfToday() {
+  return moment.tz(APP_TIMEZONE).endOf('day').toDate();
+}
+
 module.exports = {
   APP_TIMEZONE,
   buildDayRange,
+  endOfToday,
   isDateOnlyString,
   now,
   parseDateOnly,
+  startOfToday,
   toDate,
   toDateOnlyString,
   toEndOfDay,

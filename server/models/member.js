@@ -1,4 +1,3 @@
-'use strict';
 const { Model, DataTypes } = require('sequelize');
 const { normalizeCpf } = require('../utils/cpf');
 const { syncUserFromMemberRecord } = require('../utils/memberUserSync');
@@ -8,84 +7,91 @@ module.exports = (sequelize) => {
     static associate(models) {
       // Relacionamento 1:1 com User (opcional)
       if (models.User) {
-        Member.belongsTo(models.User, { 
-          foreignKey: 'userId', 
-          as: 'user' 
+        Member.belongsTo(models.User, {
+          foreignKey: 'userId',
+          as: 'user'
         });
       }
-      
+
       // Relacionamento com Campus
       if (models.Campus) {
-        Member.belongsTo(models.Campus, { 
-          foreignKey: 'campusId', 
-          as: 'campus' 
+        Member.belongsTo(models.Campus, {
+          foreignKey: 'campusId',
+          as: 'campus'
         });
       }
-      
+
       // Relacionamento com Célula
       if (models.Celula) {
-        Member.belongsTo(models.Celula, { 
-          foreignKey: 'celulaId', 
-          as: 'celula' 
+        Member.belongsTo(models.Celula, {
+          foreignKey: 'celulaId',
+          as: 'celula'
         });
         Member.hasMany(models.Celula, {
           foreignKey: 'liderMemberId',
           as: 'liderancaCelulas'
         });
       }
-      
+
+      if (models.CelulaMembroVinculo) {
+        Member.hasMany(models.CelulaMembroVinculo, {
+          foreignKey: 'membroId',
+          as: 'celulaVinculos'
+        });
+      }
+
       // Auto-relacionamento para cônjuge
-      Member.belongsTo(Member, { 
-        foreignKey: 'spouseMemberId', 
-        as: 'spouse' 
+      Member.belongsTo(Member, {
+        foreignKey: 'spouseMemberId',
+        as: 'spouse'
       });
-      
+
       // Relacionamento 1:1 com MemberJourney
       if (models.MemberJourney) {
-        Member.hasOne(models.MemberJourney, { 
-          foreignKey: 'memberId', 
-          as: 'journey' 
+        Member.hasOne(models.MemberJourney, {
+          foreignKey: 'memberId',
+          as: 'journey'
         });
       }
-      
+
       // Relacionamento 1:N com MemberActivities
       if (models.MemberActivity) {
-        Member.hasMany(models.MemberActivity, { 
-          foreignKey: 'memberId', 
-          as: 'activities' 
+        Member.hasMany(models.MemberActivity, {
+          foreignKey: 'memberId',
+          as: 'activities'
         });
       }
-      
+
       // Relacionamento 1:N com MemberMilestones
       if (models.MemberMilestone) {
-        Member.hasMany(models.MemberMilestone, { 
-          foreignKey: 'memberId', 
-          as: 'milestones' 
+        Member.hasMany(models.MemberMilestone, {
+          foreignKey: 'memberId',
+          as: 'milestones'
         });
       }
-      
+
       // Relacionamento 1:1 com MIA (opcional)
       if (models.MIA) {
-        Member.hasOne(models.MIA, { 
-          foreignKey: 'memberId', 
-          as: 'miaRecord' 
+        Member.hasOne(models.MIA, {
+          foreignKey: 'memberId',
+          as: 'miaRecord'
         });
       }
-      
+
       // Criado por
       if (models.User) {
-        Member.belongsTo(models.User, { 
-          foreignKey: 'createdBy', 
-          as: 'creator' 
+        Member.belongsTo(models.User, {
+          foreignKey: 'createdBy',
+          as: 'creator'
         });
       }
     }
-    
+
     // Métodos de instância
     getFullName() {
       return this.preferredName || this.fullName;
     }
-    
+
     getAge() {
       if (!this.birthDate) return null;
       const today = new Date();
@@ -93,15 +99,15 @@ module.exports = (sequelize) => {
       let age = today.getFullYear() - birthDate.getFullYear();
       const monthDiff = today.getMonth() - birthDate.getMonth();
       if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-        age--;
+        age -= 1;
       }
       return age;
     }
-    
+
     isActive() {
       return ['VISITANTE', 'CONGREGADO', 'MEMBRO'].includes(this.status);
     }
-    
+
     isMIA() {
       return this.status === 'MIA';
     }
@@ -118,7 +124,7 @@ module.exports = (sequelize) => {
       unique: true,
       allowNull: true
     },
-    
+
     // Dados Pessoais
     fullName: {
       type: DataTypes.STRING(255),
@@ -155,7 +161,7 @@ module.exports = (sequelize) => {
       type: DataTypes.ENUM('SOLTEIRO', 'CASADO', 'DIVORCIADO', 'VIUVO', 'UNIAO_ESTAVEL'),
       allowNull: true
     },
-    
+
     // Contato
     phone: {
       type: DataTypes.STRING(20),
@@ -172,7 +178,7 @@ module.exports = (sequelize) => {
         isEmail: true
       }
     },
-    
+
     // Endereço
     zipCode: {
       type: DataTypes.STRING(10),
@@ -206,7 +212,7 @@ module.exports = (sequelize) => {
       type: DataTypes.STRING(100),
       defaultValue: 'Brasil'
     },
-    
+
     // Dados Eclesiásticos
     membershipDate: {
       type: DataTypes.DATEONLY,
@@ -224,7 +230,7 @@ module.exports = (sequelize) => {
       type: DataTypes.DATEONLY,
       allowNull: true
     },
-    
+
     // Status do Membro
     status: {
       type: DataTypes.ENUM('VISITANTE', 'CONGREGADO', 'MEMBRO', 'INATIVO', 'MIA', 'TRANSFERIDO', 'FALECIDO'),
@@ -238,7 +244,7 @@ module.exports = (sequelize) => {
       type: DataTypes.TEXT,
       allowNull: true
     },
-    
+
     // Relacionamentos
     campusId: {
       type: DataTypes.UUID,
@@ -252,19 +258,19 @@ module.exports = (sequelize) => {
       type: DataTypes.UUID,
       allowNull: true
     },
-    
+
     // Foto
     photoUrl: {
       type: DataTypes.TEXT,
       allowNull: true
     },
-    
+
     // Observações
     notes: {
       type: DataTypes.TEXT,
       allowNull: true
     },
-    
+
     // Controle
     createdBy: {
       type: DataTypes.UUID,
@@ -297,4 +303,3 @@ module.exports = (sequelize) => {
 
   return Member;
 };
-

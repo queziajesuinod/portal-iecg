@@ -1,11 +1,14 @@
+const moment = require('moment-timezone');
 const ValidacaoMinisterioService = require('../services/validacaoMinisterioService');
+const { APP_TIMEZONE } = require('../utils/dateTime');
 
 class ValidacaoMinisterioController {
   async verificar(req, res) {
     try {
       const { campusId, ministerioId } = req.query;
-      const mes = parseInt(req.query.mes, 10) || new Date().getMonth() + 1;
-      const ano = parseInt(req.query.ano, 10) || new Date().getFullYear();
+      const agora = moment.tz(APP_TIMEZONE);
+      const mes = parseInt(req.query.mes, 10) || agora.month() + 1;
+      const ano = parseInt(req.query.ano, 10) || agora.year();
 
       if (!campusId) {
         return res.status(400).json({ erro: 'campusId é obrigatório' });
@@ -30,8 +33,9 @@ class ValidacaoMinisterioController {
   async notificar(req, res) {
     try {
       const { campusId, ministerioId } = req.body;
-      const mes = parseInt(req.body.mes, 10) || new Date().getMonth() + 1;
-      const ano = parseInt(req.body.ano, 10) || new Date().getFullYear();
+      const agoraNotificar = moment.tz(APP_TIMEZONE);
+      const mes = parseInt(req.body.mes, 10) || agoraNotificar.month() + 1;
+      const ano = parseInt(req.body.ano, 10) || agoraNotificar.year();
 
       if (!campusId || !ministerioId) {
         return res.status(400).json({ erro: 'campusId e ministerioId são obrigatórios' });
@@ -48,8 +52,9 @@ class ValidacaoMinisterioController {
 
   async notificarTodos(req, res) {
     try {
-      const mes = parseInt(req.body.mes, 10) || new Date().getMonth() + 1;
-      const ano = parseInt(req.body.ano, 10) || new Date().getFullYear();
+      const agoraTodos = moment.tz(APP_TIMEZONE);
+      const mes = parseInt(req.body.mes, 10) || agoraTodos.month() + 1;
+      const ano = parseInt(req.body.ano, 10) || agoraTodos.year();
 
       const resultados = await ValidacaoMinisterioService.enviarNotificacoesAutomaticas(mes, ano);
       return res.status(200).json(resultados);

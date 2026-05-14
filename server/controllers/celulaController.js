@@ -70,44 +70,57 @@ class CelulaController {
         return serializeCelula(payload);
       });
 
-      const spouse = leader.spouse ? {
-        id: leader.spouse.id,
-        name: leader.spouse.fullName,
-        email: leader.spouse.email,
-        telefone: leader.spouse.phone || leader.spouse.whatsapp,
-        image: leader.spouse.photoUrl,
-        endereco: leader.spouse.street,
-        bairro: leader.spouse.neighborhood,
-        numero: leader.spouse.number,
-        cep: leader.spouse.zipCode
+      const u = leader.user || {};
+      const spouseMember = leader.spouse;
+      const spouseUser = spouseMember?.user || {};
+
+      const spouse = spouseMember ? {
+        id: spouseMember.id,
+        name: spouseMember.fullName,
+        email: spouseMember.email,
+        telefone: spouseMember.phone || spouseMember.whatsapp,
+        image: spouseMember.photoUrl,
+        endereco: spouseMember.street,
+        bairro: spouseMember.neighborhood,
+        numero: spouseMember.number,
+        cep: spouseMember.zipCode,
+        cidade: spouseMember.city,
+        estado: spouseMember.state,
+        cpf: spouseMember.cpf,
+        estado_civil: MARITAL_STATUS_TO_ESTADO_CIVIL[spouseMember.maritalStatus] || spouseUser.estado_civil || null,
+        profissao: spouseUser.profissao || null
       } : null;
 
       return res.status(200).json({
         leader: {
           id: leader.id,
           name: leader.fullName,
+          preferredName: leader.preferredName || null,
           email: leader.email,
           telefone: leader.phone || leader.whatsapp,
-          username: null,
+          username: u.username || null,
           isLeader: celulas.length > 0,
           data_nascimento: leader.birthDate,
           cpf: leader.cpf,
-          estado_civil: MARITAL_STATUS_TO_ESTADO_CIVIL[leader.maritalStatus] || null,
-          profissao: null,
-          batizado: null,
-          encontro: null,
-          escolas: null,
+          estado_civil: MARITAL_STATUS_TO_ESTADO_CIVIL[leader.maritalStatus] || u.estado_civil || null,
+          profissao: u.profissao || null,
+          batizado: u.batizado != null ? u.batizado : (leader.baptismDate != null),
+          encontro: u.encontro || null,
+          escolas: u.escolas || null,
           image: leader.photoUrl,
           conjuge_id: leader.spouseMemberId || null,
-          perfilId: null,
+          perfilId: u.perfilId || null,
           active: !['INATIVO', 'MIA', 'TRANSFERIDO', 'FALECIDO'].includes(leader.status),
           endereco: leader.street,
           bairro: leader.neighborhood,
           numero: leader.number,
           cep: leader.zipCode,
-          escolaridade: null,
-          nome_esposo: spouse?.name || null,
+          cidade: leader.city,
+          estado: leader.state,
+          escolaridade: u.escolaridade || null,
+          nome_esposo: u.nome_esposo || spouse?.name || null,
           userId: leader.userId,
+          campusId: leader.campusId || null,
           spouse
         },
         celulas

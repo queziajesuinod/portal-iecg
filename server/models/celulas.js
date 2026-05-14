@@ -1,4 +1,3 @@
-'use strict';
 const { Model, DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
@@ -12,6 +11,12 @@ module.exports = (sequelize) => {
       }
       if (models.Member) {
         Celula.belongsTo(models.Member, { foreignKey: 'liderMemberId', as: 'liderMemberRef' });
+      }
+      if (models.CelulaMembroVinculo) {
+        Celula.hasMany(models.CelulaMembroVinculo, { foreignKey: 'celulaId', as: 'membrosVinculo' });
+      }
+      if (models.CelulaReuniao) {
+        Celula.hasMany(models.CelulaReuniao, { foreignKey: 'celulaId', as: 'reunioes' });
       }
     }
   }
