@@ -7,7 +7,7 @@ class CelulaLeaderController {
       const result = await CelulaLeaderService.upsertLeaderForCelula(payload);
       return res.status(200).json(result);
     } catch (error) {
-      console.error('Erro ao salvar l�der de c�lula:', error);
+      console.error('Erro ao salvar l�der de c�lula:', error);
       return res.status(400).json({ erro: error.message });
     }
   }
@@ -18,22 +18,23 @@ class CelulaLeaderController {
       const result = await CelulaLeaderService.linkSpouseByContact(payload);
       return res.status(200).json(result);
     } catch (error) {
-      console.error('Erro ao vincular c�njuge:', error);
+      console.error('Erro ao vincular c�njuge:', error);
       return res.status(400).json({ erro: error.message });
     }
   }
 
-
   async migrateLeaders(req, res) {
     try {
-      const migrated = await CelulaLeaderService.migrateCelulaLeaders();
+      const { migrated, errors } = await CelulaLeaderService.migrateCelulaLeaders();
       return res.status(200).json({
         migrated,
+        errors,
         total: migrated.length,
-        mensagem: `Sincroniza??o conclu?da. ${migrated.length} l?deres vinculados.`
+        totalErros: errors.length,
+        mensagem: `Sincronização concluída. ${migrated.length} líderes vinculados, ${errors.length} ignorados por erro.`
       });
     } catch (error) {
-      console.error('Erro ao migrar l?deres de c?lula:', error);
+      console.error('Erro ao migrar líderes de célula:', error);
       return res.status(500).json({ erro: error.message });
     }
   }

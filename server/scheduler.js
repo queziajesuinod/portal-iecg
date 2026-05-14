@@ -1,13 +1,18 @@
+const moment = require('moment-timezone');
 const { Op } = require('sequelize');
 const { NotificationCampaign, NotificationSequenceStep, NotificationSequence } = require('./models');
 const NotificationCampaignService = require('./services/notificationCampaignService');
 const NotificationSequenceService = require('./services/notificationSequenceService');
 const ValidacaoMinisterioService = require('./services/validacaoMinisterioService');
+const celulaPresencaService = require('./services/celulaPresencaService');
+const { APP_TIMEZONE, todayDateOnly } = require('./utils/dateTime');
 
 const dispatching = new Set();
 
 // Controle para não disparar o job de validação mais de uma vez por dia
 let ultimaValidacaoData = null;
+// Controle para abertura de reuniões (roda 1x por dia)
+let ultimaAberturaReunioes = null;
 
 async function tickCampaigns() {
   const now = new Date();
@@ -72,13 +77,13 @@ async function tickSequences() {
 }
 
 async function tickValidacaoCultos() {
-  const agora = new Date();
-  const hoje = agora.toISOString().slice(0, 10);
+  const agora = moment.tz(APP_TIMEZONE);
+  const hoje = agora.format('YYYY-MM-DD');
 
-  // Só executa uma vez por dia, toda segunda-feira às 8h
+  // Só executa uma vez por dia, toda segunda-feira às 8h (horário Campo Grande)
   if (ultimaValidacaoData === hoje) return;
-  if (agora.getDay() !== 1) return; // 1 = segunda-feira
-  if (agora.getHours() < 8) return;
+  if (agora.day() !== 1) return; // 1 = segunda-feira
+  if (agora.hour() < 8) return;
 
   ultimaValidacaoData = hoje;
 
@@ -86,9 +91,9 @@ async function tickValidacaoCultos() {
 
   try {
     // Verifica o mês anterior se estamos nos primeiros 7 dias do mês, senão verifica o mês atual
-    let mes = agora.getMonth() + 1;
-    let ano = agora.getFullYear();
-    if (agora.getDate() <= 7) {
+    let mes = agora.month() + 1;
+    let ano = agora.year();
+    if (agora.date() <= 7) {
       mes = mes === 1 ? 12 : mes - 1;
       if (mes === 12) ano -= 1;
     }
@@ -102,9 +107,23 @@ async function tickValidacaoCultos() {
   }
 }
 
+async function tickCelulas() {
+  const hoje = todayDateOnly();
+
+  if (ultimaAberturaReunioes !== hoje) {
+    try {
+      const abertas = await celulaPresencaService.abrirReunioesDodia();
+      if (abertas > 0) console.log(`[Scheduler] Abertas ${abertas} reuniões de célula do dia`);
+      ultimaAberturaReunioes = hoje;
+    } catch (err) {
+      console.error('[Scheduler] Erro ao abrir reuniões de célula:', err.message);
+    }
+  }
+}
+
 async function tick() {
   try {
-    await Promise.all([tickCampaigns(), tickSequences(), tickValidacaoCultos()]);
+    await Promise.all([tickCampaigns(), tickSequences(), tickValidacaoCultos(), tickCelulas()]);
   } catch (err) {
     console.error('[Scheduler] Erro no tick:', err.message);
   }

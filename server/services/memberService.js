@@ -13,7 +13,8 @@ const {
   MIA,
   User,
   Campus,
-  Celula
+  Celula,
+  CelulaMembroVinculo
 } = require('../models');
 const cache = require('../utils/cache');
 const { syncUserFromMemberRecord } = require('../utils/memberUserSync');
@@ -365,6 +366,19 @@ class MemberService {
           { model: User, as: 'responsiblePastor', attributes: ['id', 'name', 'email'] },
           { model: User, as: 'responsibleLeader', attributes: ['id', 'name', 'email'] }
         ]
+      },
+      {
+        model: CelulaMembroVinculo,
+        as: 'celulaVinculos',
+        where: { ativo: true },
+        required: false,
+        attributes: ['id', 'papel', 'dataEntrada', 'origem'],
+        include: [{
+          model: Celula,
+          as: 'celula',
+          attributes: ['id', 'celula', 'bairro', 'dia', 'horario', 'ativo', 'campusId'],
+          include: [{ model: Campus, as: 'campusRef', attributes: ['id', 'nome'] }]
+        }]
       }
     ];
   }
@@ -980,8 +994,17 @@ class MemberService {
         ];
       }
 
+      const schema = process.env.DB_SCHEMA || 'dev_iecg';
       const { count, rows } = await Member.findAndCountAll({
         where,
+        attributes: {
+          include: [
+            [
+              sequelize.literal(`EXISTS (SELECT 1 FROM "${schema}"."celulas" WHERE "liderMemberId" = "Member"."id" AND "ativo" = true)`),
+              'isLider'
+            ]
+          ]
+        },
         include: [
           { model: Campus, as: 'campus', attributes: ['id', 'nome'] },
           { model: Celula, as: 'celula', attributes: ['id', 'celula'] },

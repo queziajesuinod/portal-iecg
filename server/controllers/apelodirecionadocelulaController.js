@@ -1,6 +1,8 @@
 const ApeloDirecionadoCelulaService = require('../services/ApeloDirecionadoCelulaService');
 const WebhookService = require('../services/WebhookService');
 const ApeloFilaService = require('../services/ApeloFilaService');
+const evolutionApiService = require('../services/evolutionApiService');
+const { ApeloDirecionadoCelula, Celula } = require('../models');
 
 class ApeloDirecionadoCelulaController {
   async criar(req, res) {
@@ -16,8 +18,12 @@ class ApeloDirecionadoCelulaController {
 
   async listarTodos(req, res) {
     try {
-      const { month, status, page, limit, nome, decisao, year } = req.query;
-      const lista = await ApeloDirecionadoCelulaService.listarTodos({ month, status, page, limit, nome, decisao, year });
+      const {
+        month, status, page, limit, nome, decisao, year
+      } = req.query;
+      const lista = await ApeloDirecionadoCelulaService.listarTodos({
+        month, status, page, limit, nome, decisao, year
+      });
       return res.status(200).json(lista);
     } catch (error) {
       return res.status(500).json({ erro: 'Erro ao buscar registros' });
@@ -104,7 +110,7 @@ class ApeloDirecionadoCelulaController {
   }
 
   // ==================== NOVOS ENDPOINTS DE MONITORAMENTO ====================
-  
+
   /**
    * GET /apelos-direcionados/fila/health
    * Retorna o status de saúde do sistema de geocoding
@@ -112,28 +118,28 @@ class ApeloDirecionadoCelulaController {
   async healthCheck(req, res) {
     try {
       const status = ApeloFilaService.getHealthStatus();
-      
+
       // Determinar HTTP status code baseado no estado
       let httpStatus = 200;
-      
+
       // Se circuit breaker está aberto, retornar 503 (Service Unavailable)
       if (status.circuitBreaker.state === 'OPEN') {
         httpStatus = 503;
       }
-      
+
       // Se quota diária foi excedida, retornar 429 (Too Many Requests)
       if (status.rateLimiter.quotaExceeded > 0 && status.rateLimiter.remainingToday === 0) {
         httpStatus = 429;
       }
-      
+
       return res.status(httpStatus).json({
         status: httpStatus === 200 ? 'healthy' : 'degraded',
         ...status
       });
     } catch (error) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         status: 'error',
-        erro: error.message 
+        erro: error.message
       });
     }
   }
@@ -149,7 +155,7 @@ class ApeloDirecionadoCelulaController {
       // if (!req.user || req.user.role !== 'admin') {
       //   return res.status(403).json({ erro: 'Acesso negado' });
       // }
-      
+
       const resultado = ApeloFilaService.resetMonitoring();
       return res.status(200).json(resultado);
     } catch (error) {
@@ -186,6 +192,35 @@ class ApeloDirecionadoCelulaController {
       return res.status(200).json(item);
     } catch (error) {
       return res.status(400).json({ erro: error.message });
+    }
+  }
+
+  async notificarLider(req, res) {
+    try {
+      const { id } = req.params;
+      const apelo = await ApeloDirecionadoCelula.findByPk(id, {
+        include: [{ model: Celula, as: 'celulaAtual', attributes: ['id', 'celula', 'lider', 'cel_lider'] }]
+      });
+      if (!apelo) return res.status(404).json({ erro: 'Apelo não encontrado' });
+
+      const telefoneLider = apelo.celulaAtual?.cel_lider;
+      if (!telefoneLider) return res.status(400).json({ erro: 'Telefone do líder não cadastrado na célula' });
+
+      const whatsappApelo = String(apelo.whatsapp || '').replace(/\D/g, '');
+      const nomeApelo = apelo.nome || 'Desconhecido';
+      const link = whatsappApelo
+        ? `https://start.iecg.com.br/direcionamentos/pendentes?whatsapp=${whatsappApelo}`
+        : 'https://start.iecg.com.br/direcionamentos/pendentes';
+
+      const mensagem = `Atualize o feedback do(a) ${nomeApelo} e o link é ${link}`;
+
+      const resultado = await evolutionApiService.enviarMensagemTexto(telefoneLider, mensagem, 'START_IECG');
+      if (!resultado.sucesso) {
+        return res.status(500).json({ erro: resultado.erro || 'Falha ao enviar mensagem' });
+      }
+      return res.status(200).json({ mensagem: 'Mensagem enviada com sucesso' });
+    } catch (error) {
+      return res.status(500).json({ erro: error.message });
     }
   }
 }

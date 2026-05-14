@@ -1,6 +1,8 @@
 /* eslint-disable camelcase */
 const { Op } = require('sequelize');
-const { Celula, User, Member } = require('../models');
+const {
+  Celula, User, Member, MemberJourney
+} = require('../models');
 
 const ESTADO_CIVIL_NORMALIZED = {
   solteiro: 'Solteiro',
@@ -64,6 +66,40 @@ class CelulaLeaderService {
     return member?.id || null;
   }
 
+  static async ensureMemberForLeader(user) {
+    if (!user?.id) return null;
+
+    let member = await Member.findOne({ where: { userId: user.id } });
+    if (member) return member.id;
+
+    const fullName = (user.name || user.username || '').trim();
+    if (!fullName) return null;
+
+    const sanitized = String(user.telefone || '').replace(/\D/g, '') || null;
+    const rawEmail = user.email ? user.email.trim() : null;
+    const validEmail = rawEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail) ? rawEmail : null;
+
+    member = await Member.create({
+      fullName,
+      email: validEmail,
+      telefone: sanitized,
+      userId: user.id,
+      status: 'MEMBRO'
+    });
+
+    await MemberJourney.findOrCreate({
+      where: { memberId: member.id },
+      defaults: {
+        memberId: member.id,
+        currentStage: 'LIDER_ATIVO',
+        healthStatus: 'SAUDAVEL',
+        engagementScore: 0
+      }
+    });
+
+    return member.id;
+  }
+
   static async findCandidateLeader({ email, telefone, excludeId } = {}) {
     const clauses = [];
     if (email) clauses.push({ email: { [Op.iLike]: email } });
@@ -89,11 +125,12 @@ class CelulaLeaderService {
   static async assignLeaderToCelula(celulaId, leaderId) {
     const celula = await Celula.findByPk(celulaId);
     if (!celula) throw new Error('Célula não encontrada');
+    let liderMemberId = null;
     if (leaderId) {
       const leader = await User.findByPk(leaderId);
       if (!leader) throw new Error('Líder não encontrado');
+      liderMemberId = await CelulaLeaderService.ensureMemberForLeader(leader);
     }
-    const liderMemberId = await CelulaLeaderService.resolveMemberIdByUserId(leaderId);
     await celula.update({ liderId: leaderId || null, liderMemberId });
     return celula;
   }
@@ -134,49 +171,55 @@ class CelulaLeaderService {
   static async migrateCelulaLeaders({ memberProfileId = MEMBER_PROFILE_ID } = {}) {
     const celulas = await Celula.findAll({ where: { ativo: true } });
     const migrated = [];
+    const errors = [];
 
     for (const celula of celulas) {
-      const hasName = Boolean(celula.lider?.trim());
-      const hasEmail = Boolean(celula.email_lider?.trim());
-      const hasPhone = Boolean(celula.cel_lider?.trim());
-      if (!hasName && !hasEmail && !hasPhone) continue;
+      try {
+        const hasName = Boolean(celula.lider?.trim());
+        const hasEmail = Boolean(celula.email_lider?.trim());
+        const hasPhone = Boolean(celula.cel_lider?.trim());
+        if (!hasName && !hasEmail && !hasPhone) continue;
 
-      const leaderAttrs = CelulaLeaderService.buildLeaderPayload(celula);
-      const candidate = await CelulaLeaderService.findCandidateLeader({
-        email: leaderAttrs.email,
-        telefone: leaderAttrs.telefone
-      });
+        const leaderAttrs = CelulaLeaderService.buildLeaderPayload(celula);
+        const candidate = await CelulaLeaderService.findCandidateLeader({
+          email: leaderAttrs.email,
+          telefone: leaderAttrs.telefone
+        });
 
-      let leader = candidate;
-      if (!leader) {
-        leader = await User.create({
-          ...leaderAttrs,
-          active: true,
-          perfilId: memberProfileId,
-          is_lider_celula: true,
-          frequenta_celula: true
+        let leader = candidate;
+        if (!leader) {
+          leader = await User.create({
+            ...leaderAttrs,
+            active: true,
+            perfilId: memberProfileId,
+            is_lider_celula: true,
+            frequenta_celula: true
+          });
+        } else {
+          await CelulaLeaderService.markAsLeader(leader, {
+            name: leaderAttrs.name,
+            email: leaderAttrs.email || leader.email,
+            telefone: leaderAttrs.telefone || leader.telefone,
+            perfilId: leader.perfilId || memberProfileId
+          });
+        }
+
+        const liderMemberId = await CelulaLeaderService.ensureMemberForLeader(leader);
+        await celula.update({
+          liderId: leader.id,
+          liderMemberId,
+          lider: leaderAttrs.name,
+          email_lider: leaderAttrs.email,
+          cel_lider: leaderAttrs.telefone
         });
-      } else {
-        await CelulaLeaderService.markAsLeader(leader, {
-          name: leaderAttrs.name,
-          email: leaderAttrs.email || leader.email,
-          telefone: leaderAttrs.telefone || leader.telefone,
-          perfilId: leader.perfilId || memberProfileId
-        });
+
+        migrated.push({ celulaId: celula.id, leaderId: leader.id, liderMemberId });
+      } catch (err) {
+        errors.push({ celulaId: celula.id, celula: celula.celula, erro: err.message });
       }
-
-      await celula.update({
-        liderId: leader.id,
-        liderMemberId: await CelulaLeaderService.resolveMemberIdByUserId(leader.id),
-        lider: leaderAttrs.name,
-        email_lider: leaderAttrs.email,
-        cel_lider: leaderAttrs.telefone
-      });
-
-      migrated.push({ celulaId: celula.id, leaderId: leader.id });
     }
 
-    return migrated;
+    return { migrated, errors };
   }
 
   static async upsertLeaderForCelula({
@@ -253,9 +296,10 @@ class CelulaLeaderService {
     }
 
     if (celula) {
+      const liderMemberId = await CelulaLeaderService.ensureMemberForLeader(leader);
       await celula.update({
         liderId: leader.id,
-        liderMemberId: await CelulaLeaderService.resolveMemberIdByUserId(leader.id),
+        liderMemberId,
         lider: leaderAttrs.name,
         email_lider: leaderAttrs.email,
         cel_lider: leaderAttrs.telefone

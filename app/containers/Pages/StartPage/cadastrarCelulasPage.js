@@ -26,6 +26,7 @@ import { fetchGeocode } from '../../../utils/googleGeocode';
 const formInicial = {
   id: '',
   celula: '',
+  rede: '',
   liderMemberId: '',
   lider: '',
   email_lider: '',
@@ -152,13 +153,15 @@ const CadastrarCelula = () => {
 
   useEffect(() => {
     if (isEdit && celulaEditando) {
-      setFormData((prev) => ({
-        ...prev,
+      const safeEdit = Object.fromEntries(
+        Object.entries(celulaEditando).map(([k, v]) => [k, v == null ? '' : v])
+      );
+      setFormData({
         ...formInicial,
-        ...celulaEditando,
-        cel_lider: formatPhoneNumber(celulaEditando.cel_lider || ''),
-        horario: formatHorarioInput(celulaEditando.horario || '')
-      }));
+        ...safeEdit,
+        cel_lider: formatPhoneNumber(safeEdit.cel_lider || ''),
+        horario: formatHorarioInput(safeEdit.horario || '')
+      });
       const dias = (celulaEditando.dia || '')
         .split(',')
         .map((d) => d.trim())

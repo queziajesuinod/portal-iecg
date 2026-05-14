@@ -22,6 +22,7 @@ router.get('/direcionamentos/por-celula/:celulaId', ApeloDirecionadoCelulaContro
 router.get('/direcionamentos/resumo-por-celula', ApeloDirecionadoCelulaController.resumoPorCelula);
 router.get('/direcionamentos/:id/historico', ApeloDirecionadoCelulaController.historico);
 router.post('/direcionamentos/:id/mover', ApeloDirecionadoCelulaController.mover);
+router.post('/direcionamentos/:id/notificar-lider', (req, res) => ApeloDirecionadoCelulaController.notificarLider(req, res));
 router.get('/direcionamentos/:id', ApeloDirecionadoCelulaController.buscarPorId);
 router.put('/direcionamentos/:id', ApeloDirecionadoCelulaController.atualizar);
 router.delete('/direcionamentos/:id', ApeloDirecionadoCelulaController.deletar);
@@ -40,6 +41,5 @@ router.get('/direcionamentos/stats', ApeloDirecionadoCelulaController.getStats);
  * Reset do monitoramento (apenas admin)
  */
 router.post('/direcionamentos/reset-monitoring', ApeloDirecionadoCelulaController.resetMonitoring);
-
 
 module.exports = router;

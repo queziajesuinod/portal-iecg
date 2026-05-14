@@ -4,7 +4,6 @@ import React, {
   useRef,
   useState
 } from 'react';
-import { formatDateInAppTimezone, formatDateTimeInAppTimezone } from '../../../utils/dateTime';
 import {
   Box,
   Button,
@@ -34,10 +33,12 @@ import { Helmet } from 'react-helmet';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import HistoryIcon from '@mui/icons-material/History';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import { PapperBlock, Notification } from 'dan-components';
 import { useHistory } from 'react-router-dom';
+import { formatDateInAppTimezone, formatDateTimeInAppTimezone } from '../../../utils/dateTime';
 import { sendWebhookEvent } from '../../../utils/webhookClient';
 import { fetchGeocode } from '../../../utils/googleGeocode';
 
@@ -87,6 +88,7 @@ const ApelosDirecionadosPage = () => {
   const [sugestoes, setSugestoes] = useState([]);
   const [loadingSugestoes, setLoadingSugestoes] = useState(false);
   const [limiteSugestoes, setLimiteSugestoes] = useState(5);
+  const [notificandoLider, setNotificandoLider] = useState({});
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [detailApelo, setDetailApelo] = useState(null);
   const [detailForm, setDetailForm] = useState({
@@ -320,6 +322,24 @@ const ApelosDirecionadosPage = () => {
       setHistoricoList([]);
     } finally {
       setLoadingHistorico(false);
+    }
+  };
+
+  const notificarLider = async (apelo) => {
+    setNotificandoLider((prev) => ({ ...prev, [apelo.id]: true }));
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${API_URL}/start/direcionamentos/${apelo.id}/notificar-lider`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.erro || 'Falha ao enviar mensagem');
+      setNotification('Mensagem enviada ao líder com sucesso.');
+    } catch (err) {
+      setNotification(err.message || 'Erro ao enviar mensagem ao líder.');
+    } finally {
+      setNotificandoLider((prev) => ({ ...prev, [apelo.id]: false }));
     }
   };
 
@@ -885,6 +905,20 @@ const ApelosDirecionadosPage = () => {
                             <SwapHorizIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
+                        {apelo.celulaAtual?.id && (
+                          <Tooltip title="Notificar líder via WhatsApp para atualizar feedback">
+                            <span>
+                              <IconButton
+                                size="small"
+                                disabled={actionsDisabled || !!notificandoLider[apelo.id]}
+                                onClick={() => !actionsDisabled && notificarLider(apelo)}
+                                sx={{ color: 'success.main' }}
+                              >
+                                <WhatsAppIcon fontSize="small" />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        )}
                       </Box>
                     </TableCell>
                   </TableRow>

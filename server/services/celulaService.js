@@ -1,5 +1,7 @@
-const { Celula, Campus, Member, ApeloDirecionadoCelula } = require('../models');
 const { Op } = require('sequelize');
+const {
+  Celula, Campus, Member, User, ApeloDirecionadoCelula
+} = require('../models');
 const webhookEmitter = require('./webhookEmitter');
 
 const sanitizeCelular = (valor) => {
@@ -305,8 +307,7 @@ const CelulaService = {
       rede: celula.rede
     });
     return { mensagem: 'Célula removida com sucesso' };
-  }
-,
+  },
 
   async buscarDuplicados() {
     const celulas = await Celula.findAll({
@@ -334,7 +335,7 @@ const CelulaService = {
   },
 
   async mesclarCelulas(celulaMantenerId, celulaRemoverId) {
-    const sequelize = Celula.sequelize;
+    const { sequelize } = Celula;
     const t = await sequelize.transaction();
     try {
       const [mantener, remover] = await Promise.all([
@@ -404,6 +405,7 @@ const CelulaService = {
         'phone',
         'whatsapp',
         'birthDate',
+        'baptismDate',
         'cpf',
         'maritalStatus',
         'status',
@@ -411,8 +413,12 @@ const CelulaService = {
         'neighborhood',
         'number',
         'zipCode',
+        'city',
+        'state',
         'photoUrl',
-        'notes'
+        'notes',
+        'spouseMemberId',
+        'campusId'
       ],
       include: [
         {
@@ -433,7 +439,32 @@ const CelulaService = {
             'street',
             'neighborhood',
             'number',
-            'zipCode'
+            'zipCode',
+            'city',
+            'state',
+            'userId'
+          ],
+          include: [
+            {
+              model: User,
+              as: 'user',
+              attributes: ['id', 'profissao', 'estado_civil']
+            }
+          ]
+        },
+        {
+          model: User,
+          as: 'user',
+          attributes: [
+            'id',
+            'profissao',
+            'batizado',
+            'encontro',
+            'escolas',
+            'escolaridade',
+            'estado_civil',
+            'nome_esposo',
+            'perfilId'
           ]
         }
       ]

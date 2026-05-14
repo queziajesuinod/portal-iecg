@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useHistory } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
-import { formatDateInAppTimezone, formatDateTimeInAppTimezone } from '../../../utils/dateTime';
 import {
   Autocomplete,
   Avatar,
@@ -13,6 +13,7 @@ import {
   Paper,
   Stack,
   TextField,
+  Tooltip,
   Typography
 } from '@mui/material';
 import {
@@ -22,11 +23,13 @@ import {
 } from '@mui/icons-material';
 import { PapperBlock } from 'dan-components';
 import dummyContents from 'dan-api/dummy/dummyContents';
+import { formatDateInAppTimezone, formatDateTimeInAppTimezone } from '../../../utils/dateTime';
 import {
   atualizarMeuPerfilMembro,
   buscarMeuMembro,
   listarPossiveisConjugesMeuMembro
 } from '../../../api/membersApi';
+import { estatisticasMembro } from '../../../api/celulaPresencaApi';
 import { fetchGeocode } from '../../../utils/googleGeocode';
 
 const GENDER_OPTIONS = ['MASCULINO', 'FEMININO'];
@@ -158,9 +161,11 @@ const buildPayloadFromForm = (form) => ({
 });
 
 const MinhaJornadaPage = () => {
+  const history = useHistory();
   const [member, setMember] = useState(null);
   const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(true);
+  const [celulaStats, setCelulaStats] = useState(null);
   const [saving, setSaving] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
   const [spouseLoading, setSpouseLoading] = useState(false);
@@ -216,6 +221,11 @@ const MinhaJornadaPage = () => {
       setMember(payload);
       setForm(buildFormFromMember(payload));
       await loadSpouseCandidates();
+      if (payload?.id && payload?.celulaId) {
+        estatisticasMembro(payload.celulaId, payload.id)
+          .then(setCelulaStats)
+          .catch(() => null);
+      }
     } catch (err) {
       setError(err.message || 'Nao foi possivel carregar sua jornada.');
     } finally {
@@ -579,6 +589,60 @@ const MinhaJornadaPage = () => {
                   </Paper>
                 )}
 
+                {celulaStats && member?.celulaId && (
+                  <Paper
+                    sx={{
+                      p: 3,
+                      borderRadius: 4,
+                      border: '1px solid rgba(12, 71, 88, 0.12)',
+                      background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(241,247,244,0.94))'
+                    }}
+                  >
+                    <Stack direction="row" spacing={1.5} alignItems="center" mb={2}>
+                      <TimelineOutlined color="success" />
+                      <Typography variant="h6">Minha Célula</Typography>
+                      <Chip size="small" label="Discípulo" color="success" />
+                    </Stack>
+
+                    <Grid container spacing={2} mb={2}>
+                      {[
+                        { label: 'Presença', value: `${celulaStats.percentualPresenca}%` },
+                        { label: 'Reuniões', value: celulaStats.totalReunioes },
+                        { label: 'Sequência atual', value: `${celulaStats.sequenciaAtual} sem.` },
+                        { label: 'Pontos', value: celulaStats.totalPontos }
+                      ].map(item => (
+                        <Grid item xs={6} key={item.label}>
+                          <Box sx={{
+                            p: 1.5, borderRadius: 2, bgcolor: 'rgba(0,0,0,0.03)', textAlign: 'center'
+                          }}>
+                            <Typography variant="h5" fontWeight={800} color="success.main">{item.value}</Typography>
+                            <Typography variant="caption" color="textSecondary">{item.label}</Typography>
+                          </Box>
+                        </Grid>
+                      ))}
+                    </Grid>
+
+                    <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
+                      Últimas reuniões
+                    </Typography>
+                    <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                      {(celulaStats.ultimas || []).map((r, i) => (
+                        <Chip
+                          key={i}
+                          size="small"
+                          label={formatDateInAppTimezone(r.data, '—').slice(0, 5)}
+                          color={r.presente === true ? 'success' : r.presente === false ? 'error' : 'default'}
+                          variant={r.presente === null ? 'outlined' : 'filled'}
+                        />
+                      ))}
+                    </Stack>
+
+                    <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 1.5 }}>
+                      Discípulo desde {formatDateInAppTimezone(celulaStats.dataEntrada, '-')}
+                    </Typography>
+                  </Paper>
+                )}
+
                 {!!leaderCells.length && (
                   <Paper
                     sx={{
@@ -633,6 +697,21 @@ const MinhaJornadaPage = () => {
                               </Typography>
                             </Grid>
                           </Grid>
+                          <Box mt={1.5}>
+                            <Tooltip title={!cell.ativo ? 'Célula inativa' : ''}>
+                              <span>
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  color="primary"
+                                  disabled={!cell.ativo}
+                                  onClick={() => history.push(`/app/celulas/${cell.id}/presenca`)}
+                                >
+                                  Registrar Presença
+                                </Button>
+                              </span>
+                            </Tooltip>
+                          </Box>
                         </Paper>
                       ))}
                     </Stack>

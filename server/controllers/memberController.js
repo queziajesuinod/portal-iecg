@@ -1,4 +1,6 @@
 const memberService = require('../services/memberService');
+const evolutionApiService = require('../services/evolutionApiService');
+const { Member } = require('../models');
 
 function sanitizeMemberPayload(payload = {}) {
   const allowedFields = [
@@ -383,6 +385,32 @@ async function dismissDuplicate(req, res) {
   }
 }
 
+async function notificarDadosIncompletos(req, res) {
+  try {
+    const { id } = req.params;
+    const member = await Member.findByPk(id, {
+      attributes: ['id', 'fullName', 'email', 'phone', 'whatsapp']
+    });
+    if (!member) return res.status(404).json({ erro: 'Membro não encontrado' });
+
+    const telefone = member.phone || member.whatsapp;
+    if (!telefone) return res.status(400).json({ erro: 'Membro não possui telefone cadastrado para envio' });
+
+    const emailDigits = member.email ? member.email.trim() : null;
+    const phoneDigits = String(telefone).replace(/\D/g, '');
+    const param = emailDigits ? `email=${encodeURIComponent(emailDigits)}` : `telefone=${phoneDigits}`;
+    const link = `https://start.iecg.com.br/celulas/lider?${param}`;
+    const mensagem = `Olá ${member.fullName}, seus dados de membresia estão incompletos. Atualize pelo link: ${link}`;
+
+    const resultado = await evolutionApiService.enviarMensagemTexto(telefone, mensagem, 'START_IECG');
+    if (!resultado.sucesso) return res.status(500).json({ erro: resultado.erro || 'Falha ao enviar mensagem' });
+
+    return res.status(200).json({ mensagem: 'Notificação enviada com sucesso' });
+  } catch (error) {
+    return res.status(500).json({ erro: error.message });
+  }
+}
+
 module.exports = {
   list,
   getById,
@@ -403,5 +431,6 @@ module.exports = {
   listActivityTypes,
   createActivityType,
   updateActivityType,
-  setActivityTypeActive
+  setActivityTypeActive,
+  notificarDadosIncompletos
 };
