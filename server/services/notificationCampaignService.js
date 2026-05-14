@@ -194,16 +194,26 @@ const NotificationCampaignService = {
             const response = await evolutionApi.enviarMensagemTexto(
               recipient.contact, recipient.resolvedMessage, campaign.evolutionInstance
             );
-            await recipient.update({
-              status: 'sent',
-              sentAt: new Date(),
-              externalId: response.externalId || null,
-              providerResponse: response
-            });
+            if (response.sucesso) {
+              await recipient.update({
+                status: 'sent',
+                sentAt: new Date(),
+                externalId: response.externalId || null,
+                providerResponse: response
+              });
+              totalSent += 1;
+            } else {
+              await recipient.update({
+                status: 'failed',
+                errorMessage: response.erro || 'Erro no envio',
+                providerResponse: response
+              });
+              totalFailed += 1;
+            }
           } else {
             await recipient.update({ status: 'sent', sentAt: new Date() });
+            totalSent += 1;
           }
-          totalSent += 1;
         } catch (err) {
           await recipient.update({ status: 'failed', errorMessage: err.message || 'Erro no envio' });
           totalFailed += 1;
