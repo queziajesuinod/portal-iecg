@@ -1,5 +1,3 @@
-'use strict';
-
 const swaggerJsdoc = require('swagger-jsdoc');
 
 const definition = {
@@ -124,7 +122,7 @@ const definition = {
         properties: {
           id: { $ref: '#/components/schemas/UUID' },
           eventId: { $ref: '#/components/schemas/UUID' },
-          fieldType: { type: 'string', enum: ['text','email','phone','cpf','number','date','textarea','select','radio','checkbox','file'] },
+          fieldType: { type: 'string', enum: ['text', 'email', 'phone', 'cpf', 'number', 'date', 'textarea', 'select', 'radio', 'checkbox', 'file'] },
           fieldLabel: { type: 'string', example: 'Data de Nascimento' },
           fieldName: { type: 'string', example: 'dataNascimento' },
           isRequired: { type: 'boolean' },
@@ -140,7 +138,7 @@ const definition = {
           id: { $ref: '#/components/schemas/UUID' },
           eventId: { $ref: '#/components/schemas/UUID' },
           fieldKey: { type: 'string', example: 'dataNascimento' },
-          operator: { type: 'string', enum: ['eq','neq','gt','gte','lt','lte','in','not_in','contains','age_gte','age_lte','age_gt','age_lt'] },
+          operator: { type: 'string', enum: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'in', 'not_in', 'contains', 'age_gte', 'age_lte', 'age_gt', 'age_lt'] },
           value: { oneOf: [{ type: 'string' }, { type: 'number' }, { type: 'array', items: { type: 'string' } }] },
           errorMessage: { type: 'string' },
           appliesTo: { type: 'string', enum: ['buyer', 'attendee'] },
@@ -155,7 +153,7 @@ const definition = {
           eventId: { $ref: '#/components/schemas/UUID' },
           formFieldId: { $ref: '#/components/schemas/UUID' },
           fieldKey: { type: 'string', example: 'dataNascimento' },
-          operator: { type: 'string', enum: ['eq','neq','gt','gte','lt','lte','in','not_in','contains','age_gte','age_lte','age_gt','age_lt'], example: 'age_gte' },
+          operator: { type: 'string', enum: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'in', 'not_in', 'contains', 'age_gte', 'age_lte', 'age_gt', 'age_lt'], example: 'age_gte' },
           value: { oneOf: [{ type: 'string' }, { type: 'number' }, { type: 'array', items: { type: 'string' } }], example: 15 },
           errorMessage: { type: 'string', example: 'Este evento é para maiores de 15 anos' },
           appliesTo: { type: 'string', enum: ['buyer', 'attendee'], default: 'attendee' },
@@ -172,7 +170,7 @@ const definition = {
           eventId: { $ref: '#/components/schemas/UUID' },
           quantity: { type: 'integer' },
           finalPrice: { type: 'number' },
-          paymentStatus: { type: 'string', enum: ['pending','authorized','partial','confirmed','denied','expired','cancelled','refunded'] },
+          paymentStatus: { type: 'string', enum: ['pending', 'authorized', 'partial', 'confirmed', 'denied', 'expired', 'cancelled', 'refunded'] },
           buyerData: { type: 'object' },
         },
       },
@@ -210,6 +208,99 @@ const definition = {
           dataNascimento: { type: 'string', format: 'date' },
           estadoCivil: { type: 'string' },
           isActive: { type: 'boolean' },
+        },
+      },
+
+      // ── Importação de Inscritos ─────────────────────────────────────────────
+      ImportSetup: {
+        type: 'object',
+        properties: {
+          event: { $ref: '#/components/schemas/Event' },
+          attendeeFields: { type: 'array', items: { $ref: '#/components/schemas/FormField' } },
+          buyerFields: { type: 'array', items: { $ref: '#/components/schemas/FormField' } },
+          memberFields: {
+            type: 'array',
+            items: { type: 'object', properties: { key: { type: 'string' }, label: { type: 'string' } } },
+            description: 'Campos disponíveis no cadastro de membro',
+          },
+          suggestedMapping: { type: 'object', description: 'Mapeamento sugerido automático (fieldName → memberField) dos inscritos' },
+          suggestedBuyerMapping: { type: 'object', description: 'Mapeamento sugerido automático dos campos do comprador' },
+          attendeeCount: { type: 'integer', description: 'Total de inscritos confirmados (paymentStatus confirmed/authorized)' },
+          importedCount: { type: 'integer', description: 'Quantidade já importada como membros neste evento' },
+        },
+      },
+      ImportMappingBody: {
+        type: 'object',
+        properties: {
+          fieldMapping: {
+            type: 'object',
+            description: 'De-para: fieldName do inscrito → chave do membro (ex: { "nomeCompleto": "fullName" })',
+            example: { nomeCompleto: 'fullName', emailCampo: 'email' },
+          },
+          buyerFieldMapping: {
+            type: 'object',
+            description: 'De-para para campos do comprador (fallback quando inscrito não preenche)',
+            example: { nomeFull: 'fullName' },
+          },
+        },
+      },
+      ImportExecuteBody: {
+        type: 'object',
+        allOf: [{ $ref: '#/components/schemas/ImportMappingBody' }],
+        properties: {
+          memberStatus: {
+            type: 'string',
+            enum: ['MEMBRO', 'CONGREGADO', 'VISITANTE'],
+            default: 'MEMBRO',
+            description: 'Status atribuído ao novo membro criado',
+          },
+        },
+      },
+      ImportPreviewResult: {
+        type: 'object',
+        properties: {
+          attendees: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                attendeeId: { $ref: '#/components/schemas/UUID' },
+                attendeeNumber: { type: 'integer' },
+                orderCode: { type: 'string' },
+                mappedData: { type: 'object', description: 'Dados mapeados do inscrito para campos de membro' },
+                existingMember: {
+                  nullable: true,
+                  type: 'object',
+                  properties: { id: { $ref: '#/components/schemas/UUID' }, fullName: { type: 'string' }, status: { type: 'string' } },
+                },
+                hasActivity: { type: 'boolean' },
+                action: { type: 'string', enum: ['create', 'add_activity', 'skip'], description: 'create=novo membro, add_activity=membro existente sem atividade, skip=já importado' },
+              },
+            },
+          },
+          summary: {
+            type: 'object',
+            properties: {
+              create: { type: 'integer' },
+              add_activity: { type: 'integer' },
+              skip: { type: 'integer' },
+            },
+          },
+        },
+      },
+      ImportExecuteResult: {
+        type: 'object',
+        properties: {
+          created: { type: 'integer', description: 'Novos membros criados' },
+          addedActivity: { type: 'integer', description: 'Atividades EVENTO_INSCRICAO adicionadas a membros existentes' },
+          skipped: { type: 'integer', description: 'Inscritos ignorados (já tinham atividade neste evento)' },
+          errors: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { attendeeId: { $ref: '#/components/schemas/UUID' }, orderCode: { type: 'string' }, erro: { type: 'string' } },
+            },
+          },
         },
       },
 
@@ -304,8 +395,10 @@ const definition = {
     { name: 'Times', description: 'Configuração e alocação de times' },
     { name: 'Membros', description: 'Gestão de membros da igreja' },
     { name: 'Usuários', description: 'Gestão de usuários do sistema' },
+    { name: 'Importação de Inscritos', description: 'Wizard de-para: campos de inscrição de evento → cadastro de membro' },
     { name: 'Voluntariado', description: 'Áreas e vínculos de voluntariado' },
     { name: 'Financeiro', description: 'Registros financeiros e despesas' },
+    { name: 'Células (Público)', description: 'Endpoints públicos de atualização de líderes de célula' },
   ],
 
   // ── Paths ──────────────────────────────────────────────────────────────────
@@ -331,22 +424,74 @@ const definition = {
     // EVENTOS — PÚBLICO
     // ═══════════════════════════════════════════════════════════════
     '/api/public/events': {
-      get: { tags: ['Eventos (Público)'], summary: 'Listar eventos ativos', security: [], responses: { 200: { description: 'Lista de eventos' } } },
+      get: {
+        tags: ['Eventos (Público)'], summary: 'Listar eventos ativos', security: [], responses: { 200: { description: 'Lista de eventos' } }
+      },
     },
     '/api/public/events/{id}': {
-      get: { tags: ['Eventos (Público)'], summary: 'Buscar evento por ID', security: [], parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Evento encontrado' }, 404: { description: 'Não encontrado' } } },
+      get: {
+        tags: ['Eventos (Público)'],
+        summary: 'Buscar evento por ID',
+        security: [],
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Evento encontrado' }, 404: { description: 'Não encontrado' } }
+      },
     },
     '/api/public/events/{eventId}/batches': {
-      get: { tags: ['Eventos (Público)'], summary: 'Listar lotes de um evento', security: [], parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Lista de lotes' } } },
+      get: {
+        tags: ['Eventos (Público)'],
+        summary: 'Listar lotes de um evento',
+        security: [],
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Lista de lotes' } }
+      },
     },
     '/api/public/events/{eventId}/form-fields': {
-      get: { tags: ['Eventos (Público)'], summary: 'Listar campos do formulário', security: [], parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Campos' } } },
+      get: {
+        tags: ['Eventos (Público)'],
+        summary: 'Listar campos do formulário',
+        security: [],
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Campos' } }
+      },
     },
     '/api/public/events/{eventId}/payment-options': {
-      get: { tags: ['Eventos (Público)'], summary: 'Listar formas de pagamento', security: [], parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Formas de pagamento' } } },
+      get: {
+        tags: ['Eventos (Público)'],
+        summary: 'Listar formas de pagamento',
+        security: [],
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Formas de pagamento' } }
+      },
     },
     '/api/public/events/coupons/validate': {
-      post: { tags: ['Eventos (Público)'], summary: 'Validar cupom de desconto', security: [], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { code: { type: 'string' }, eventId: { $ref: '#/components/schemas/UUID' }, quantity: { type: 'integer' }, totalPrice: { type: 'number' } } } } } }, responses: { 200: { description: 'Resultado da validação' } } },
+      post: {
+        tags: ['Eventos (Público)'],
+        summary: 'Validar cupom de desconto',
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' }, eventId: { $ref: '#/components/schemas/UUID' }, quantity: { type: 'integer' }, totalPrice: { type: 'number' }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: 'Resultado da validação' } }
+      },
     },
     '/api/public/events/register': {
       post: {
@@ -361,47 +506,141 @@ const definition = {
       },
     },
     '/api/public/events/registrations/{orderCode}': {
-      get: { tags: ['Eventos (Público)'], summary: 'Consultar inscrição por código', security: [], parameters: [{ name: 'orderCode', in: 'path', required: true, schema: { type: 'string', example: 'REG-20260121-A3B5C7' } }], responses: { 200: { description: 'Inscrição encontrada' }, 404: { description: 'Não encontrada' } } },
+      get: {
+        tags: ['Eventos (Público)'],
+        summary: 'Consultar inscrição por código',
+        security: [],
+        parameters: [{
+          name: 'orderCode', in: 'path', required: true, schema: { type: 'string', example: 'REG-20260121-A3B5C7' }
+        }],
+        responses: { 200: { description: 'Inscrição encontrada' }, 404: { description: 'Não encontrada' } }
+      },
     },
     '/api/public/events/registrations/{orderCode}/status': {
-      get: { tags: ['Eventos (Público)'], summary: 'Verificar status de pagamento', security: [], parameters: [{ name: 'orderCode', in: 'path', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Status atual' } } },
+      get: {
+        tags: ['Eventos (Público)'],
+        summary: 'Verificar status de pagamento',
+        security: [],
+        parameters: [{
+          name: 'orderCode', in: 'path', required: true, schema: { type: 'string' }
+        }],
+        responses: { 200: { description: 'Status atual' } }
+      },
     },
 
     // ═══════════════════════════════════════════════════════════════
     // EVENTOS — ADMIN
     // ═══════════════════════════════════════════════════════════════
     '/api/admin/events': {
-      get: { tags: ['Eventos (Admin)'], summary: 'Listar todos os eventos', responses: { 200: { description: 'Lista de eventos', content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/Event' } } } } } } },
-      post: { tags: ['Eventos (Admin)'], summary: 'Criar novo evento', requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/EventInput' } } } }, responses: { 201: { description: 'Evento criado' }, 400: { description: 'Dados inválidos' } } },
+      get: {
+        tags: ['Eventos (Admin)'],
+        summary: 'Listar todos os eventos',
+        parameters: [
+          {
+            name: 'includeFinished', in: 'query', schema: { type: 'boolean' }, description: 'Se true, inclui eventos com endDate no passado (padrão: false — só futuros/em andamento)'
+          },
+        ],
+        responses: { 200: { description: 'Lista de eventos', content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/Event' } } } } } },
+      },
+      post: {
+        tags: ['Eventos (Admin)'], summary: 'Criar novo evento', requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/EventInput' } } } }, responses: { 201: { description: 'Evento criado' }, 400: { description: 'Dados inválidos' } }
+      },
     },
     '/api/admin/events/stats': {
       get: { tags: ['Eventos (Admin)'], summary: 'Estatísticas gerais', responses: { 200: { description: 'Estatísticas' } } },
     },
     '/api/admin/events/{id}': {
-      get: { tags: ['Eventos (Admin)'], summary: 'Buscar evento por ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Evento' }, 404: { description: 'Não encontrado' } } },
-      put: { tags: ['Eventos (Admin)'], summary: 'Atualizar evento', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/EventInput' } } } }, responses: { 200: { description: 'Evento atualizado' } } },
-      delete: { tags: ['Eventos (Admin)'], summary: 'Remover evento', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 204: { description: 'Removido' } } },
+      get: {
+        tags: ['Eventos (Admin)'],
+        summary: 'Buscar evento por ID',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Evento' }, 404: { description: 'Não encontrado' } }
+      },
+      put: {
+        tags: ['Eventos (Admin)'],
+        summary: 'Atualizar evento',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/EventInput' } } } },
+        responses: { 200: { description: 'Evento atualizado' } }
+      },
+      delete: {
+        tags: ['Eventos (Admin)'],
+        summary: 'Remover evento',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 204: { description: 'Removido' } }
+      },
     },
     '/api/admin/events/{id}/duplicate': {
-      post: { tags: ['Eventos (Admin)'], summary: 'Duplicar evento', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 201: { description: 'Evento duplicado' } } },
+      post: {
+        tags: ['Eventos (Admin)'],
+        summary: 'Duplicar evento',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 201: { description: 'Evento duplicado' } }
+      },
     },
     '/api/admin/events/{eventId}/tickets-summary': {
-      get: { tags: ['Eventos (Admin)'], summary: 'Resumo de ingressos do evento', parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Resumo' } } },
+      get: {
+        tags: ['Eventos (Admin)'],
+        summary: 'Resumo de ingressos do evento',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Resumo' } }
+      },
     },
 
     // ═══════════════════════════════════════════════════════════════
     // LOTES
     // ═══════════════════════════════════════════════════════════════
     '/api/admin/events/{eventId}/batches': {
-      get: { tags: ['Lotes'], summary: 'Listar lotes do evento', parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Lista de lotes', content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/Batch' } } } } } } },
+      get: {
+        tags: ['Lotes'],
+        summary: 'Listar lotes do evento',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Lista de lotes', content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/Batch' } } } } } }
+      },
     },
     '/api/admin/events/batches': {
-      post: { tags: ['Lotes'], summary: 'Criar lote', requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/Batch' } } } }, responses: { 201: { description: 'Lote criado' } } },
+      post: {
+        tags: ['Lotes'], summary: 'Criar lote', requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/Batch' } } } }, responses: { 201: { description: 'Lote criado' } }
+      },
     },
     '/api/admin/events/batches/{id}': {
-      get: { tags: ['Lotes'], summary: 'Buscar lote por ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Lote' } } },
-      put: { tags: ['Lotes'], summary: 'Atualizar lote', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/Batch' } } } }, responses: { 200: { description: 'Lote atualizado' } } },
-      delete: { tags: ['Lotes'], summary: 'Remover lote', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 204: { description: 'Removido' } } },
+      get: {
+        tags: ['Lotes'],
+        summary: 'Buscar lote por ID',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Lote' } }
+      },
+      put: {
+        tags: ['Lotes'],
+        summary: 'Atualizar lote',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/Batch' } } } },
+        responses: { 200: { description: 'Lote atualizado' } }
+      },
+      delete: {
+        tags: ['Lotes'],
+        summary: 'Remover lote',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 204: { description: 'Removido' } }
+      },
     },
 
     // ═══════════════════════════════════════════════════════════════
@@ -409,37 +648,101 @@ const definition = {
     // ═══════════════════════════════════════════════════════════════
     '/api/admin/events/coupons': {
       get: { tags: ['Cupons'], summary: 'Listar cupons', responses: { 200: { description: 'Lista de cupons', content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/Coupon' } } } } } } },
-      post: { tags: ['Cupons'], summary: 'Criar cupom', requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/Coupon' } } } }, responses: { 201: { description: 'Cupom criado' } } },
+      post: {
+        tags: ['Cupons'], summary: 'Criar cupom', requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/Coupon' } } } }, responses: { 201: { description: 'Cupom criado' } }
+      },
     },
     '/api/admin/events/coupons/{id}': {
-      get: { tags: ['Cupons'], summary: 'Buscar cupom por ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Cupom' } } },
-      put: { tags: ['Cupons'], summary: 'Atualizar cupom', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/Coupon' } } } }, responses: { 200: { description: 'Cupom atualizado' } } },
-      delete: { tags: ['Cupons'], summary: 'Remover cupom', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 204: { description: 'Removido' } } },
+      get: {
+        tags: ['Cupons'],
+        summary: 'Buscar cupom por ID',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Cupom' } }
+      },
+      put: {
+        tags: ['Cupons'],
+        summary: 'Atualizar cupom',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/Coupon' } } } },
+        responses: { 200: { description: 'Cupom atualizado' } }
+      },
+      delete: {
+        tags: ['Cupons'],
+        summary: 'Remover cupom',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 204: { description: 'Removido' } }
+      },
     },
 
     // ═══════════════════════════════════════════════════════════════
     // CAMPOS DE FORMULÁRIO
     // ═══════════════════════════════════════════════════════════════
     '/api/admin/events/{eventId}/form-fields': {
-      get: { tags: ['Campos do Formulário'], summary: 'Listar campos do evento', parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Campos', content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/FormField' } } } } } } },
+      get: {
+        tags: ['Campos do Formulário'],
+        summary: 'Listar campos do evento',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Campos', content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/FormField' } } } } } }
+      },
     },
     '/api/admin/events/form-fields': {
-      post: { tags: ['Campos do Formulário'], summary: 'Criar campo', requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/FormField' } } } }, responses: { 201: { description: 'Campo criado' } } },
+      post: {
+        tags: ['Campos do Formulário'], summary: 'Criar campo', requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/FormField' } } } }, responses: { 201: { description: 'Campo criado' } }
+      },
     },
     '/api/admin/events/form-fields/batch': {
-      post: { tags: ['Campos do Formulário'], summary: 'Criar múltiplos campos em lote', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { eventId: { $ref: '#/components/schemas/UUID' }, campos: { type: 'array', items: { $ref: '#/components/schemas/FormField' } } } } } } }, responses: { 201: { description: 'Campos criados' } } },
+      post: {
+        tags: ['Campos do Formulário'], summary: 'Criar múltiplos campos em lote', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { eventId: { $ref: '#/components/schemas/UUID' }, campos: { type: 'array', items: { $ref: '#/components/schemas/FormField' } } } } } } }, responses: { 201: { description: 'Campos criados' } }
+      },
     },
     '/api/admin/events/form-fields/{id}': {
-      get: { tags: ['Campos do Formulário'], summary: 'Buscar campo por ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Campo' } } },
-      put: { tags: ['Campos do Formulário'], summary: 'Atualizar campo', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/FormField' } } } }, responses: { 200: { description: 'Campo atualizado' } } },
-      delete: { tags: ['Campos do Formulário'], summary: 'Remover campo', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 204: { description: 'Removido' } } },
+      get: {
+        tags: ['Campos do Formulário'],
+        summary: 'Buscar campo por ID',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Campo' } }
+      },
+      put: {
+        tags: ['Campos do Formulário'],
+        summary: 'Atualizar campo',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/FormField' } } } },
+        responses: { 200: { description: 'Campo atualizado' } }
+      },
+      delete: {
+        tags: ['Campos do Formulário'],
+        summary: 'Remover campo',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 204: { description: 'Removido' } }
+      },
     },
 
     // ═══════════════════════════════════════════════════════════════
     // REGRAS DE BLOQUEIO
     // ═══════════════════════════════════════════════════════════════
     '/api/admin/events/{eventId}/registration-rules': {
-      get: { tags: ['Regras de Bloqueio'], summary: 'Listar regras de bloqueio do evento', parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Regras', content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/RegistrationRule' } } } } } } },
+      get: {
+        tags: ['Regras de Bloqueio'],
+        summary: 'Listar regras de bloqueio do evento',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Regras', content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/RegistrationRule' } } } } } }
+      },
     },
     '/api/admin/events/registration-rules': {
       post: {
@@ -451,8 +754,23 @@ const definition = {
       },
     },
     '/api/admin/events/registration-rules/{id}': {
-      put: { tags: ['Regras de Bloqueio'], summary: 'Atualizar regra', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RegistrationRuleInput' } } } }, responses: { 200: { description: 'Regra atualizada' } } },
-      delete: { tags: ['Regras de Bloqueio'], summary: 'Remover regra', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 204: { description: 'Removida' } } },
+      put: {
+        tags: ['Regras de Bloqueio'],
+        summary: 'Atualizar regra',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RegistrationRuleInput' } } } },
+        responses: { 200: { description: 'Regra atualizada' } }
+      },
+      delete: {
+        tags: ['Regras de Bloqueio'],
+        summary: 'Remover regra',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 204: { description: 'Removida' } }
+      },
     },
 
     // ═══════════════════════════════════════════════════════════════
@@ -462,97 +780,286 @@ const definition = {
       get: { tags: ['Inscrições (Admin)'], summary: 'Listar todas as inscrições', responses: { 200: { description: 'Lista de inscrições' } } },
     },
     '/api/admin/events/{eventId}/registrations': {
-      get: { tags: ['Inscrições (Admin)'], summary: 'Listar inscrições de um evento', parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }, { name: 'page', in: 'query', schema: { type: 'integer' } }, { name: 'limit', in: 'query', schema: { type: 'integer' } }, { name: 'status', in: 'query', schema: { type: 'string' } }], responses: { 200: { description: 'Inscrições com paginação' } } },
+      get: {
+        tags: ['Inscrições (Admin)'],
+        summary: 'Listar inscrições de um evento',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }, { name: 'page', in: 'query', schema: { type: 'integer' } }, { name: 'limit', in: 'query', schema: { type: 'integer' } }, { name: 'status', in: 'query', schema: { type: 'string' } }],
+        responses: { 200: { description: 'Inscrições com paginação' } }
+      },
     },
     '/api/admin/events/{eventId}/registration-attendees/confirmed': {
-      get: { tags: ['Inscrições (Admin)'], summary: 'Listar inscritos confirmados', parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Inscritos confirmados' } } },
+      get: {
+        tags: ['Inscrições (Admin)'],
+        summary: 'Listar inscritos confirmados',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Inscritos confirmados' } }
+      },
     },
     '/api/admin/events/registrations/{id}': {
-      get: { tags: ['Inscrições (Admin)'], summary: 'Buscar inscrição por ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Inscrição' } } },
+      get: {
+        tags: ['Inscrições (Admin)'],
+        summary: 'Buscar inscrição por ID',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Inscrição' } }
+      },
     },
     '/api/admin/events/registrations/{id}/cancel': {
-      post: { tags: ['Inscrições (Admin)'], summary: 'Cancelar inscrição', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Inscrição cancelada' } } },
+      post: {
+        tags: ['Inscrições (Admin)'],
+        summary: 'Cancelar inscrição',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Inscrição cancelada' } }
+      },
     },
     '/api/admin/events/registrations/{id}/cancel-info': {
-      get: { tags: ['Inscrições (Admin)'], summary: 'Obter informações de cancelamento', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Informações de cancelamento' } } },
+      get: {
+        tags: ['Inscrições (Admin)'],
+        summary: 'Obter informações de cancelamento',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Informações de cancelamento' } }
+      },
     },
     '/api/admin/events/registrations/{id}/recalculate-status': {
-      post: { tags: ['Inscrições (Admin)'], summary: 'Recalcular status de pagamento', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Status recalculado' } } },
+      post: {
+        tags: ['Inscrições (Admin)'],
+        summary: 'Recalcular status de pagamento',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Status recalculado' } }
+      },
     },
     '/api/admin/events/registrations/{id}/payments': {
-      post: { tags: ['Inscrições (Admin)'], summary: 'Registrar pagamento online', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 201: { description: 'Pagamento registrado' } } },
+      post: {
+        tags: ['Inscrições (Admin)'],
+        summary: 'Registrar pagamento online',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } },
+        responses: { 201: { description: 'Pagamento registrado' } }
+      },
     },
     '/api/admin/events/registrations/{id}/payments/offline': {
-      post: { tags: ['Inscrições (Admin)'], summary: 'Registrar pagamento offline', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { amount: { type: 'number' }, method: { type: 'string', enum: ['cash','pix','transfer','boleto','pos','manual'] }, notes: { type: 'string' } } } } } }, responses: { 201: { description: 'Pagamento offline registrado' } } },
+      post: {
+        tags: ['Inscrições (Admin)'],
+        summary: 'Registrar pagamento offline',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { amount: { type: 'number' }, method: { type: 'string', enum: ['cash', 'pix', 'transfer', 'boleto', 'pos', 'manual'] }, notes: { type: 'string' } } } } } },
+        responses: { 201: { description: 'Pagamento offline registrado' } }
+      },
     },
     '/api/admin/events/registrations/{id}/payments/{paymentId}/offline': {
-      put: { tags: ['Inscrições (Admin)'], summary: 'Atualizar pagamento offline', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }, { name: 'paymentId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Pagamento atualizado' } } },
+      put: {
+        tags: ['Inscrições (Admin)'],
+        summary: 'Atualizar pagamento offline',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }, {
+          name: 'paymentId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } },
+        responses: { 200: { description: 'Pagamento atualizado' } }
+      },
     },
     '/api/admin/events/registrations/{id}/payments/{paymentId}': {
-      delete: { tags: ['Inscrições (Admin)'], summary: 'Remover pagamento', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }, { name: 'paymentId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 204: { description: 'Removido' } } },
+      delete: {
+        tags: ['Inscrições (Admin)'],
+        summary: 'Remover pagamento',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }, {
+          name: 'paymentId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 204: { description: 'Removido' } }
+      },
     },
 
     // ═══════════════════════════════════════════════════════════════
     // CHECK-IN
     // ═══════════════════════════════════════════════════════════════
     '/api/admin/checkin/schedules': {
-      post: { tags: ['Check-in'], summary: 'Criar agendamento de check-in', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 201: { description: 'Agendamento criado' } } },
+      post: {
+        tags: ['Check-in'], summary: 'Criar agendamento de check-in', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 201: { description: 'Agendamento criado' } }
+      },
     },
     '/api/admin/checkin/events/{eventId}/schedules': {
-      get: { tags: ['Check-in'], summary: 'Listar agendamentos do evento', parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Agendamentos' } } },
+      get: {
+        tags: ['Check-in'],
+        summary: 'Listar agendamentos do evento',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Agendamentos' } }
+      },
     },
     '/api/admin/checkin/stations': {
-      post: { tags: ['Check-in'], summary: 'Criar estação de check-in', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 201: { description: 'Estação criada' } } },
+      post: {
+        tags: ['Check-in'], summary: 'Criar estação de check-in', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 201: { description: 'Estação criada' } }
+      },
     },
     '/api/admin/checkin/events/{eventId}/stations': {
-      get: { tags: ['Check-in'], summary: 'Listar estações do evento', parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Estações' } } },
+      get: {
+        tags: ['Check-in'],
+        summary: 'Listar estações do evento',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Estações' } }
+      },
     },
     '/api/admin/checkin/manual': {
-      post: { tags: ['Check-in'], summary: 'Realizar check-in manual', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { orderCode: { type: 'string' }, eventId: { $ref: '#/components/schemas/UUID' }, stationId: { $ref: '#/components/schemas/UUID' } } } } } }, responses: { 200: { description: 'Check-in realizado' } } },
+      post: {
+        tags: ['Check-in'], summary: 'Realizar check-in manual', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { orderCode: { type: 'string' }, eventId: { $ref: '#/components/schemas/UUID' }, stationId: { $ref: '#/components/schemas/UUID' } } } } } }, responses: { 200: { description: 'Check-in realizado' } }
+      },
     },
     '/api/admin/checkin/events/{eventId}/list': {
-      get: { tags: ['Check-in'], summary: 'Listar check-ins do evento', parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Check-ins' } } },
+      get: {
+        tags: ['Check-in'],
+        summary: 'Listar check-ins do evento',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Check-ins' } }
+      },
     },
     '/api/admin/checkin/events/{eventId}/stats': {
-      get: { tags: ['Check-in'], summary: 'Estatísticas de check-in', parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Estatísticas' } } },
+      get: {
+        tags: ['Check-in'],
+        summary: 'Estatísticas de check-in',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Estatísticas' } }
+      },
     },
 
     // ═══════════════════════════════════════════════════════════════
     // HOSPEDAGEM
     // ═══════════════════════════════════════════════════════════════
     '/api/admin/events/{eventId}/housing/config': {
-      get: { tags: ['Hospedagem'], summary: 'Obter configuração de hospedagem', parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Configuração' } } },
-      post: { tags: ['Hospedagem'], summary: 'Salvar configuração de hospedagem', parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Configuração salva' } } },
+      get: {
+        tags: ['Hospedagem'],
+        summary: 'Obter configuração de hospedagem',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Configuração' } }
+      },
+      post: {
+        tags: ['Hospedagem'],
+        summary: 'Salvar configuração de hospedagem',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } },
+        responses: { 200: { description: 'Configuração salva' } }
+      },
     },
     '/api/admin/events/{eventId}/housing/generate': {
-      post: { tags: ['Hospedagem'], summary: 'Gerar alocação de hospedagem (IA)', parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Alocação gerada' } } },
+      post: {
+        tags: ['Hospedagem'],
+        summary: 'Gerar alocação de hospedagem (IA)',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Alocação gerada' } }
+      },
     },
     '/api/admin/events/{eventId}/housing/allocation': {
-      get: { tags: ['Hospedagem'], summary: 'Obter alocação de hospedagem', parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Alocação' } } },
-      put: { tags: ['Hospedagem'], summary: 'Salvar alocação de hospedagem', parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Alocação salva' } } },
+      get: {
+        tags: ['Hospedagem'],
+        summary: 'Obter alocação de hospedagem',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Alocação' } }
+      },
+      put: {
+        tags: ['Hospedagem'],
+        summary: 'Salvar alocação de hospedagem',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } },
+        responses: { 200: { description: 'Alocação salva' } }
+      },
     },
 
     // ═══════════════════════════════════════════════════════════════
     // TIMES
     // ═══════════════════════════════════════════════════════════════
     '/api/admin/events/{eventId}/teams/config': {
-      get: { tags: ['Times'], summary: 'Obter configuração de times', parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Configuração' } } },
-      post: { tags: ['Times'], summary: 'Salvar configuração de times', parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Configuração salva' } } },
+      get: {
+        tags: ['Times'],
+        summary: 'Obter configuração de times',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Configuração' } }
+      },
+      post: {
+        tags: ['Times'],
+        summary: 'Salvar configuração de times',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } },
+        responses: { 200: { description: 'Configuração salva' } }
+      },
     },
     '/api/admin/events/{eventId}/teams/generate': {
-      post: { tags: ['Times'], summary: 'Gerar times (IA)', parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Times gerados' } } },
+      post: {
+        tags: ['Times'],
+        summary: 'Gerar times (IA)',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Times gerados' } }
+      },
     },
     '/api/admin/events/{eventId}/teams/allocation': {
-      get: { tags: ['Times'], summary: 'Obter alocação de times', parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Alocação' } } },
-      put: { tags: ['Times'], summary: 'Salvar alocação de times', parameters: [{ name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Alocação salva' } } },
+      get: {
+        tags: ['Times'],
+        summary: 'Obter alocação de times',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Alocação' } }
+      },
+      put: {
+        tags: ['Times'],
+        summary: 'Salvar alocação de times',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } },
+        responses: { 200: { description: 'Alocação salva' } }
+      },
     },
 
     // ═══════════════════════════════════════════════════════════════
     // MEMBROS
     // ═══════════════════════════════════════════════════════════════
     '/api/admin/members': {
-      get: { tags: ['Membros'], summary: 'Listar membros', parameters: [{ name: 'page', in: 'query', schema: { type: 'integer' } }, { name: 'search', in: 'query', schema: { type: 'string' } }], responses: { 200: { description: 'Lista de membros' } } },
-      post: { tags: ['Membros'], summary: 'Cadastrar membro', requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/Member' } } } }, responses: { 201: { description: 'Membro criado' } } },
+      get: {
+        tags: ['Membros'], summary: 'Listar membros', parameters: [{ name: 'page', in: 'query', schema: { type: 'integer' } }, { name: 'search', in: 'query', schema: { type: 'string' } }], responses: { 200: { description: 'Lista de membros' } }
+      },
+      post: {
+        tags: ['Membros'], summary: 'Cadastrar membro', requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/Member' } } } }, responses: { 201: { description: 'Membro criado' } }
+      },
     },
     '/api/admin/members/stats': {
       get: { tags: ['Membros'], summary: 'Estatísticas de membros', responses: { 200: { description: 'Estatísticas' } } },
@@ -561,9 +1068,59 @@ const definition = {
       get: { tags: ['Membros'], summary: 'Perfil do membro autenticado', responses: { 200: { description: 'Perfil' } } },
     },
     '/api/admin/members/{id}': {
-      get: { tags: ['Membros'], summary: 'Buscar membro por ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Membro' } } },
-      put: { tags: ['Membros'], summary: 'Atualizar membro', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/Member' } } } }, responses: { 200: { description: 'Membro atualizado' } } },
-      delete: { tags: ['Membros'], summary: 'Remover membro', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 204: { description: 'Removido' } } },
+      get: {
+        tags: ['Membros'],
+        summary: 'Buscar membro por ID',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Membro' } }
+      },
+      put: {
+        tags: ['Membros'],
+        summary: 'Atualizar membro',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/Member' } } } },
+        responses: { 200: { description: 'Membro atualizado' } }
+      },
+      delete: {
+        tags: ['Membros'],
+        summary: 'Remover membro',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 204: { description: 'Removido' } }
+      },
+    },
+    '/api/admin/members/{id}/sync-from-user': {
+      post: {
+        tags: ['Membros'],
+        summary: 'Sincronizar dados do usuário vinculado para o membro',
+        description: 'Copia nome, e-mail, telefone, WhatsApp e outros campos do User vinculado (`userId`) para o registro de Member. Não sobrescreve CPF. Retorna o membro atualizado.',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: {
+          200: {
+            description: 'Dados sincronizados',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    mensagem: { type: 'string', example: 'Dados sincronizados com sucesso' },
+                    member: { $ref: '#/components/schemas/Member' },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Membro não possui usuário vinculado' },
+          404: { description: 'Membro não encontrado' },
+        },
+      },
     },
 
     // ═══════════════════════════════════════════════════════════════
@@ -571,11 +1128,28 @@ const definition = {
     // ═══════════════════════════════════════════════════════════════
     '/users': {
       get: { tags: ['Usuários'], summary: 'Listar usuários', responses: { 200: { description: 'Lista de usuários' } } },
-      post: { tags: ['Usuários'], summary: 'Criar usuário', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 201: { description: 'Usuário criado' } } },
+      post: {
+        tags: ['Usuários'], summary: 'Criar usuário', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 201: { description: 'Usuário criado' } }
+      },
     },
     '/users/{id}': {
-      get: { tags: ['Usuários'], summary: 'Buscar usuário por ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Usuário' } } },
-      put: { tags: ['Usuários'], summary: 'Atualizar usuário', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Usuário atualizado' } } },
+      get: {
+        tags: ['Usuários'],
+        summary: 'Buscar usuário por ID',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Usuário' } }
+      },
+      put: {
+        tags: ['Usuários'],
+        summary: 'Atualizar usuário',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } },
+        responses: { 200: { description: 'Usuário atualizado' } }
+      },
     },
 
     // ═══════════════════════════════════════════════════════════════
@@ -609,7 +1183,9 @@ const definition = {
         tags: ['Voluntariado'],
         summary: 'Listar ministérios de um campus (público)',
         security: [],
-        parameters: [{ name: 'campusId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }],
+        parameters: [{
+          name: 'campusId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
         responses: {
           200: {
             description: 'Ministérios vinculados ao campus',
@@ -654,7 +1230,9 @@ const definition = {
                     },
                   },
                   areaVoluntariadoId: { allOf: [{ $ref: '#/components/schemas/UUID' }], nullable: true, description: 'Retrocompatível — use `vinculos` para múltiplas áreas' },
-                  areaVoluntariadoIds: { type: 'array', items: { $ref: '#/components/schemas/UUID' }, nullable: true, description: 'Retrocompatível — use `vinculos` para múltiplas áreas' },
+                  areaVoluntariadoIds: {
+                    type: 'array', items: { $ref: '#/components/schemas/UUID' }, nullable: true, description: 'Retrocompatível — use `vinculos` para múltiplas áreas'
+                  },
                   campusId: { allOf: [{ $ref: '#/components/schemas/UUID' }], nullable: true, description: 'Aplicado a todas as áreas quando não usar `vinculos`' },
                   ministerioId: { allOf: [{ $ref: '#/components/schemas/UUID' }], nullable: true, description: 'Aplicado a todas as áreas quando não usar `vinculos`' },
                 },
@@ -690,17 +1268,36 @@ const definition = {
     // ═══════════════════════════════════════════════════════════════
     '/api/admin/voluntariado/areas': {
       get: { tags: ['Voluntariado'], summary: 'Listar áreas de voluntariado', responses: { 200: { description: 'Áreas', content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/AreaVoluntariado' } } } } } } },
-      post: { tags: ['Voluntariado'], summary: 'Criar área de voluntariado', requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AreaVoluntariado' } } } }, responses: { 201: { description: 'Área criada' } } },
+      post: {
+        tags: ['Voluntariado'], summary: 'Criar área de voluntariado', requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AreaVoluntariado' } } } }, responses: { 201: { description: 'Área criada' } }
+      },
     },
     '/api/admin/voluntariado/areas/{id}': {
-      get: { tags: ['Voluntariado'], summary: 'Buscar área por ID', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 200: { description: 'Área', content: { 'application/json': { schema: { $ref: '#/components/schemas/AreaVoluntariado' } } } }, 404: { description: 'Não encontrada' } } },
-      put: { tags: ['Voluntariado'], summary: 'Atualizar área', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AreaVoluntariado' } } } }, responses: { 200: { description: 'Área atualizada', content: { 'application/json': { schema: { $ref: '#/components/schemas/AreaVoluntariado' } } } } } },
+      get: {
+        tags: ['Voluntariado'],
+        summary: 'Buscar área por ID',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 200: { description: 'Área', content: { 'application/json': { schema: { $ref: '#/components/schemas/AreaVoluntariado' } } } }, 404: { description: 'Não encontrada' } }
+      },
+      put: {
+        tags: ['Voluntariado'],
+        summary: 'Atualizar área',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AreaVoluntariado' } } } },
+        responses: { 200: { description: 'Área atualizada', content: { 'application/json': { schema: { $ref: '#/components/schemas/AreaVoluntariado' } } } } }
+      },
     },
     '/api/admin/voluntariado/areas/{id}/ativo': {
       patch: {
         tags: ['Voluntariado'],
         summary: 'Alternar status ativo/inativo da área',
-        parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }],
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
         responses: {
           200: { description: 'Status alternado', content: { 'application/json': { schema: { $ref: '#/components/schemas/AreaVoluntariado' } } } },
           404: { description: 'Área não encontrada' },
@@ -712,11 +1309,21 @@ const definition = {
         tags: ['Voluntariado'],
         summary: 'Listar vínculos de voluntariado',
         parameters: [
-          { name: 'memberId', in: 'query', schema: { $ref: '#/components/schemas/UUID' }, description: 'Filtrar por membro' },
-          { name: 'areaVoluntariadoId', in: 'query', schema: { $ref: '#/components/schemas/UUID' }, description: 'Filtrar por área' },
-          { name: 'campusId', in: 'query', schema: { $ref: '#/components/schemas/UUID' }, description: 'Filtrar por campus' },
-          { name: 'ministerioId', in: 'query', schema: { $ref: '#/components/schemas/UUID' }, description: 'Filtrar por ministério' },
-          { name: 'status', in: 'query', schema: { type: 'string', enum: ['PENDENTE', 'APROVADO', 'ENCERRADO'] }, description: 'Filtrar por status' },
+          {
+            name: 'memberId', in: 'query', schema: { $ref: '#/components/schemas/UUID' }, description: 'Filtrar por membro'
+          },
+          {
+            name: 'areaVoluntariadoId', in: 'query', schema: { $ref: '#/components/schemas/UUID' }, description: 'Filtrar por área'
+          },
+          {
+            name: 'campusId', in: 'query', schema: { $ref: '#/components/schemas/UUID' }, description: 'Filtrar por campus'
+          },
+          {
+            name: 'ministerioId', in: 'query', schema: { $ref: '#/components/schemas/UUID' }, description: 'Filtrar por ministério'
+          },
+          {
+            name: 'status', in: 'query', schema: { type: 'string', enum: ['PENDENTE', 'APROVADO', 'ENCERRADO'] }, description: 'Filtrar por status'
+          },
         ],
         responses: {
           200: { description: 'Lista de vínculos', content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/Voluntariado' } } } } },
@@ -737,7 +1344,9 @@ const definition = {
       get: {
         tags: ['Voluntariado'],
         summary: 'Buscar vínculo por ID',
-        parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }],
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
         responses: {
           200: { description: 'Vínculo encontrado', content: { 'application/json': { schema: { $ref: '#/components/schemas/Voluntariado' } } } },
           404: { description: 'Vínculo não encontrado' },
@@ -747,7 +1356,9 @@ const definition = {
         tags: ['Voluntariado'],
         summary: 'Atualizar vínculo de voluntariado',
         description: 'Atualiza campos editáveis. O campo status não pode ser alterado por este endpoint.',
-        parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }],
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
         requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/VoluntariadoInput' } } } },
         responses: {
           200: { description: 'Vínculo atualizado', content: { 'application/json': { schema: { $ref: '#/components/schemas/Voluntariado' } } } },
@@ -757,7 +1368,9 @@ const definition = {
       delete: {
         tags: ['Voluntariado'],
         summary: 'Remover vínculo de voluntariado',
-        parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }],
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
         responses: {
           204: { description: 'Removido com sucesso' },
           400: { description: 'Erro ao remover' },
@@ -769,7 +1382,9 @@ const definition = {
         tags: ['Voluntariado'],
         summary: 'Aprovar vínculo de voluntariado',
         description: 'Muda o status de PENDENTE para APROVADO e registra um marco (MemberMilestone) do tipo VOLUNTARIADO.',
-        parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }],
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
         responses: {
           200: { description: 'Vínculo aprovado', content: { 'application/json': { schema: { $ref: '#/components/schemas/Voluntariado' } } } },
           400: { description: 'Vínculo não está PENDENTE ou não encontrado' },
@@ -781,7 +1396,9 @@ const definition = {
         tags: ['Voluntariado'],
         summary: 'Encerrar vínculo de voluntariado',
         description: 'Muda o status para ENCERRADO, registra dataFim e cria uma MemberActivity do tipo FIM_VOLUNTARIADO.',
-        parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }],
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
         requestBody: {
           required: false,
           content: {
@@ -803,6 +1420,121 @@ const definition = {
     },
 
     // ═══════════════════════════════════════════════════════════════
+    // IMPORTAÇÃO DE INSCRITOS
+    // ═══════════════════════════════════════════════════════════════
+    '/api/admin/event-import/{eventId}/setup': {
+      get: {
+        tags: ['Importação de Inscritos'],
+        summary: 'Obter configuração para importação de um evento',
+        description: 'Retorna os campos do formulário do evento (inscritos e comprador), os campos disponíveis do membro, sugestões de mapeamento automático e a contagem de inscritos já importados.',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: {
+          200: {
+            description: 'Setup de importação',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ImportSetup' } } },
+          },
+          404: { description: 'Evento não encontrado' },
+        },
+      },
+    },
+    '/api/admin/event-import/{eventId}/preview': {
+      post: {
+        tags: ['Importação de Inscritos'],
+        summary: 'Pré-visualizar resultado da importação',
+        description: 'Aplica o mapeamento de campos sobre todos os inscritos confirmados e retorna, por inscrito: dados mapeados, membro existente encontrado e ação que seria executada (create / add_activity / skip). Nada é gravado.',
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ImportMappingBody' } } } },
+        responses: {
+          200: {
+            description: 'Preview gerado',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ImportPreviewResult' } } },
+          },
+          404: { description: 'Evento não encontrado' },
+        },
+      },
+    },
+    '/api/admin/event-import/{eventId}/execute': {
+      post: {
+        tags: ['Importação de Inscritos'],
+        summary: 'Executar importação de inscritos como membros',
+        description: [
+          'Para cada inscrito confirmado (paymentStatus `confirmed` ou `authorized`):',
+          '1. Extrai os dados usando o mapeamento de campos fornecido.',
+          '2. Fallback automático para dados do comprador quando o inscrito não preencheu o campo.',
+          '3. Busca membro existente por e-mail, CPF ou telefone.',
+          '4. Se não existir: cria Member + MemberJourney com o status informado.',
+          '5. Registra MemberActivity do tipo `EVENTO_INSCRICAO` com pontuação 5.',
+          '6. **Idempotente**: inscritos que já possuem a atividade `EVENTO_INSCRICAO` para este evento são ignorados.',
+        ].join('\n'),
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ImportExecuteBody' } } } },
+        responses: {
+          200: {
+            description: 'Importação concluída',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ImportExecuteResult' } } },
+          },
+          400: { description: 'fullName não mapeado ou evento não encontrado' },
+        },
+      },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // CÉLULAS — PÚBLICO (líderes)
+    // ═══════════════════════════════════════════════════════════════
+    '/api/public/celulas/leader/contact': {
+      post: {
+        tags: ['Células (Público)'],
+        summary: 'Atualizar dados de contato do líder via link externo',
+        description: [
+          'Identifica o líder pelo `telefone` passado como query string.',
+          'Atualiza o User vinculado com os campos permitidos (nome, e-mail, endereço, estado civil, etc.).',
+          'O CPF é salvo **diretamente no Member** (não no User) após normalização e validação de 11 dígitos.',
+          'O hook `afterSave` do User propaga automaticamente as demais alterações para o Member vinculado.',
+        ].join('\n'),
+        security: [],
+        parameters: [
+          {
+            name: 'telefone', in: 'query', required: true, schema: { type: 'string', example: '11999999999' }, description: 'Telefone do líder para identificação'
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string', example: 'João da Silva' },
+                  email: { type: 'string', format: 'email', example: 'joao@exemplo.com' },
+                  cpf: { type: 'string', example: '123.456.789-00', description: 'Salvo apenas no Member, não no User' },
+                  telefone: { type: 'string', example: '11999999999' },
+                  whatsapp: { type: 'string', example: '11999999999' },
+                  estado_civil: { type: 'string', example: 'Casado(a)' },
+                  endereco: { type: 'string', example: 'Rua das Flores' },
+                  numero: { type: 'string', example: '123' },
+                  bairro: { type: 'string', example: 'Centro' },
+                  cidade: { type: 'string', example: 'São Paulo' },
+                  estado: { type: 'string', example: 'SP' },
+                  cep: { type: 'string', example: '01310-100' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Dados atualizados com sucesso', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' } } } } } },
+          404: { description: 'Líder não encontrado pelo telefone informado' },
+        },
+      },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
     // FINANCEIRO
     // ═══════════════════════════════════════════════════════════════
     '/api/admin/financial/records': {
@@ -810,14 +1542,48 @@ const definition = {
     },
     '/api/admin/financial/fee-config': {
       get: { tags: ['Financeiro'], summary: 'Obter configuração de taxas', responses: { 200: { description: 'Configuração de taxas' } } },
-      put: { tags: ['Financeiro'], summary: 'Atualizar configuração de taxas', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Configuração atualizada' } } },
+      put: {
+        tags: ['Financeiro'], summary: 'Atualizar configuração de taxas', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Configuração atualizada' } }
+      },
     },
     '/api/admin/financial/expenses': {
-      post: { tags: ['Financeiro'], summary: 'Registrar despesa', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { description: { type: 'string' }, amount: { type: 'number' }, date: { type: 'string', format: 'date' }, eventId: { $ref: '#/components/schemas/UUID' } } } } } }, responses: { 201: { description: 'Despesa criada' } } },
+      post: {
+        tags: ['Financeiro'],
+        summary: 'Registrar despesa',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  description: { type: 'string' }, amount: { type: 'number' }, date: { type: 'string', format: 'date' }, eventId: { $ref: '#/components/schemas/UUID' }
+                }
+              }
+            }
+          }
+        },
+        responses: { 201: { description: 'Despesa criada' } }
+      },
     },
     '/api/admin/financial/expenses/{id}': {
-      put: { tags: ['Financeiro'], summary: 'Atualizar despesa', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Despesa atualizada' } } },
-      delete: { tags: ['Financeiro'], summary: 'Remover despesa', parameters: [{ name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' } }], responses: { 204: { description: 'Removida' } } },
+      put: {
+        tags: ['Financeiro'],
+        summary: 'Atualizar despesa',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } },
+        responses: { 200: { description: 'Despesa atualizada' } }
+      },
+      delete: {
+        tags: ['Financeiro'],
+        summary: 'Remover despesa',
+        parameters: [{
+          name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        responses: { 204: { description: 'Removida' } }
+      },
     },
   },
 };

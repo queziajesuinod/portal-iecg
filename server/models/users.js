@@ -1,5 +1,6 @@
 const { Model, DataTypes } = require('sequelize');
 const { normalizeCpf } = require('../utils/cpf');
+const { syncMemberFromUserRecord } = require('../utils/memberUserSync');
 
 module.exports = (sequelize) => {
   class User extends Model {
@@ -152,6 +153,11 @@ module.exports = (sequelize) => {
   User.addHook('beforeValidate', (user) => {
     if (!user) return;
     user.setDataValue('cpf', normalizeCpf(user.cpf));
+  });
+
+  User.addHook('afterSave', async (user, options = {}) => {
+    if (options.skipLinkedMemberSync) return;
+    await syncMemberFromUserRecord(user, { models: sequelize.models });
   });
 
   return User;

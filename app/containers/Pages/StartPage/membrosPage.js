@@ -47,6 +47,7 @@ import MergeIcon from '@mui/icons-material/MergeType';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
+import SyncIcon from '@mui/icons-material/Sync';
 import Webcam from 'react-webcam';
 import imageCompression from 'browser-image-compression';
 import { PapperBlock, Notification } from 'dan-components';
@@ -60,7 +61,8 @@ import {
   deletarMembro,
   fundirMembrosDuplicados,
   desconsiderarMembrosDuplicados,
-  buscarMembro
+  buscarMembro,
+  sincronizarDadosDoUser
 } from '../../../api/membersApi';
 
 const ESCOLARIDADE_OPTIONS = [
@@ -294,6 +296,7 @@ const MembrosPage = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [isLiderFilter, setIsLiderFilter] = useState(false);
   const [notificandoMembro, setNotificandoMembro] = useState({});
+  const [sincronizandoMembro, setSincronizandoMembro] = useState({});
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [message, setMessage] = useState('');
@@ -653,6 +656,24 @@ const MembrosPage = () => {
     return Math.round((filled / COMPLETUDE_FIELDS.length) * 100);
   };
 
+  const sincronizarMembro = async (member) => {
+    if (!member.userId) {
+      notify('Membro não possui usuário vinculado.', 'error');
+      return;
+    }
+    setSincronizandoMembro((prev) => ({ ...prev, [member.id]: true }));
+    try {
+      await sincronizarDadosDoUser(member.id);
+      notify('Dados sincronizados com sucesso.');
+      const updated = await buscarMembro(member.id);
+      setMembers((prev) => prev.map((m) => (m.id === member.id ? { ...m, ...updated } : m)));
+    } catch (err) {
+      notify(err.message || 'Erro ao sincronizar dados.', 'error');
+    } finally {
+      setSincronizandoMembro((prev) => ({ ...prev, [member.id]: false }));
+    }
+  };
+
   const notificarDadosIncompletos = async (member) => {
     setNotificandoMembro((prev) => ({ ...prev, [member.id]: true }));
     const BASE = (process.env.REACT_APP_API_URL || '').replace(/\/$/, '');
@@ -875,6 +896,20 @@ const MembrosPage = () => {
                             onClick={() => notificarDadosIncompletos(member)}
                           >
                             <NotificationsActiveIcon fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    )}
+                    {member.userId && (
+                      <Tooltip title="Sincronizar dados do usuário vinculado">
+                        <span>
+                          <IconButton
+                            size="small"
+                            color="info"
+                            disabled={!!sincronizandoMembro[member.id]}
+                            onClick={() => sincronizarMembro(member)}
+                          >
+                            {sincronizandoMembro[member.id] ? <CircularProgress size={16} /> : <SyncIcon fontSize="small" />}
                           </IconButton>
                         </span>
                       </Tooltip>

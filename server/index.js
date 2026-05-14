@@ -117,6 +117,7 @@ app.use('/api/public/voluntariado', require('./routers/publicVoluntariadoRoutes'
 app.use('/api/public/diario-bordo', require('./routers/publicBoardJournalRoutes'));
 // Rotas administrativas de eventos (protegidas)
 app.use('/api/admin/events', authMiddleware, require('./routers/eventRoutes'));
+app.use('/api/admin/event-import', authMiddleware, require('./routers/eventImportRoutes'));
 // Rotas administrativas de membros (protegidas)
 app.use('/api/admin/members', authMiddleware, require('./routers/memberRoutes'));
 // Rotas administrativas de check-in (protegidas)

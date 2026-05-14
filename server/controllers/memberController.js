@@ -1,6 +1,7 @@
 const memberService = require('../services/memberService');
 const evolutionApiService = require('../services/evolutionApiService');
-const { Member } = require('../models');
+const { Member, User } = require('../models');
+const { syncMemberFromUserRecord } = require('../utils/memberUserSync');
 
 function sanitizeMemberPayload(payload = {}) {
   const allowedFields = [
@@ -411,6 +412,26 @@ async function notificarDadosIncompletos(req, res) {
   }
 }
 
+async function syncFromUser(req, res) {
+  try {
+    const { id } = req.params;
+    const member = await Member.findByPk(id, { attributes: ['id', 'fullName', 'userId'] });
+    if (!member) return res.status(404).json({ erro: 'Membro não encontrado' });
+    if (!member.userId) return res.status(400).json({ erro: 'Membro não possui usuário vinculado' });
+
+    const user = await User.findByPk(member.userId);
+    if (!user) return res.status(404).json({ erro: 'Usuário vinculado não encontrado' });
+
+    const { sequelize } = Member;
+    await syncMemberFromUserRecord(user, { models: sequelize.models });
+
+    const updated = await Member.findByPk(id);
+    return res.status(200).json({ mensagem: 'Dados sincronizados com sucesso', member: updated });
+  } catch (error) {
+    return res.status(500).json({ erro: error.message });
+  }
+}
+
 module.exports = {
   list,
   getById,
@@ -432,5 +453,6 @@ module.exports = {
   createActivityType,
   updateActivityType,
   setActivityTypeActive,
-  notificarDadosIncompletos
+  notificarDadosIncompletos,
+  syncFromUser
 };

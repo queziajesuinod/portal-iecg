@@ -295,14 +295,31 @@ class CelulaLeaderService {
       });
     }
 
+    const liderMemberId = await CelulaLeaderService.ensureMemberForLeader(leader);
+
     if (celula) {
-      const liderMemberId = await CelulaLeaderService.ensureMemberForLeader(leader);
       await celula.update({
         liderId: leader.id,
         liderMemberId,
         lider: leaderAttrs.name,
         email_lider: leaderAttrs.email,
         cel_lider: leaderAttrs.telefone
+      });
+    }
+
+    if (liderMemberId) {
+      await CelulaLeaderService.syncMemberFromLeaderPayload(liderMemberId, {
+        lider: leaderAttrs.name,
+        email_lider: leaderAttrs.email,
+        telefone: leaderAttrs.telefone,
+        data_nascimento,
+        cpf,
+        estado_civil,
+        endereco,
+        bairro,
+        numero,
+        cep,
+        image
       });
     }
 
@@ -332,6 +349,52 @@ class CelulaLeaderService {
       celula: celula ? await celula.reload() : null,
       leader: await leader.reload()
     };
+  }
+
+  static async syncMemberFromLeaderPayload(memberId, {
+    lider, email_lider, telefone, data_nascimento, cpf,
+    estado_civil, endereco, bairro, numero, cep, image
+  }) {
+    const member = await Member.findByPk(memberId);
+    if (!member) return;
+
+    const MARITAL_MAP = {
+      solteiro: 'SOLTEIRO',
+      casado: 'CASADO',
+      viuvo: 'VIUVO',
+      divorciado: 'DIVORCIADO',
+      uniao_estavel: 'UNIAO_ESTAVEL',
+      uniao: 'UNIAO_ESTAVEL'
+    };
+
+    const maritalKey = estado_civil
+      ? String(estado_civil).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      : null;
+    const maritalStatus = maritalKey ? (MARITAL_MAP[maritalKey] || null) : null;
+
+    const rawEmail = email_lider ? String(email_lider).trim() : null;
+    const validEmail = rawEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail) ? rawEmail : null;
+
+    const normalizedCpf = cpf ? String(cpf).replace(/\D/g, '') : null;
+    const validCpf = normalizedCpf && normalizedCpf.length === 11 ? normalizedCpf : null;
+
+    const updates = {
+      ...(lider ? { fullName: lider } : {}),
+      ...(email_lider !== undefined ? { email: validEmail } : {}),
+      ...(telefone != null ? { whatsapp: telefone } : {}),
+      ...(data_nascimento ? { birthDate: data_nascimento } : {}),
+      ...(validCpf ? { cpf: validCpf } : {}),
+      ...(maritalStatus ? { maritalStatus } : {}),
+      ...(endereco != null ? { street: endereco } : {}),
+      ...(bairro != null ? { neighborhood: bairro } : {}),
+      ...(numero != null ? { number: numero } : {}),
+      ...(cep != null ? { zipCode: cep } : {}),
+      ...(image ? { photoUrl: image } : {})
+    };
+
+    if (Object.keys(updates).length) {
+      await member.update(updates, { skipLinkedUserSync: true });
+    }
   }
 
   static async linkSpouseByContact({ leaderId, email, telefone }) {

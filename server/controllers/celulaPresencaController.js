@@ -43,6 +43,20 @@ class CelulaPresencaController {
       const existente = await CelulaMembroVinculo.findOne({ where: { celulaId, membroId, ativo: true } });
       if (existente) return res.status(409).json({ erro: 'Membro já vinculado a esta célula' });
 
+      // Verifica se já está ativo em OUTRA célula → gera aviso, não bloqueia
+      let aviso = null;
+      const vinculoAnterior = await CelulaMembroVinculo.findOne({
+        where: { membroId, ativo: true, celulaId: { [Op.ne]: celulaId } },
+        include: [{ model: Celula, as: 'celula', attributes: ['id', 'celula', 'lider'] }]
+      });
+      if (vinculoAnterior) {
+        aviso = {
+          celulaAnteriorId: vinculoAnterior.celulaId,
+          celulaAnteriorNome: vinculoAnterior.celula?.celula || 'outra célula',
+          liderAnterior: vinculoAnterior.celula?.lider || null
+        };
+      }
+
       const vinculo = await CelulaMembroVinculo.create({
         celulaId,
         membroId,
@@ -55,7 +69,7 @@ class CelulaPresencaController {
       // Atualiza celulaId no membro
       await Member.update({ celulaId }, { where: { id: membroId } });
 
-      return res.status(201).json(vinculo);
+      return res.status(201).json({ ...vinculo.toJSON(), aviso });
     } catch (err) {
       return res.status(500).json({ erro: err.message });
     }
@@ -404,12 +418,27 @@ class CelulaPresencaController {
 
       const membros = await Member.findAll({
         where,
-        attributes: ['id', 'fullName', 'preferredName', 'phone', 'photoUrl'],
+        attributes: ['id', 'fullName', 'preferredName', 'phone', 'photoUrl', 'celulaId'],
+        include: [{
+          model: Celula,
+          as: 'celula',
+          attributes: ['id', 'celula', 'lider'],
+          required: false
+        }],
         limit: 20,
         order: [['fullName', 'ASC']]
       });
 
-      return res.json(membros);
+      return res.json(membros.map(m => ({
+        id: m.id,
+        fullName: m.fullName,
+        preferredName: m.preferredName,
+        phone: m.phone,
+        photoUrl: m.photoUrl,
+        celulaAtual: m.celulaId
+          ? { id: m.celulaId, celula: m.celula?.celula || null, lider: m.celula?.lider || null }
+          : null
+      })));
     } catch (err) {
       return res.status(500).json({ erro: err.message });
     }

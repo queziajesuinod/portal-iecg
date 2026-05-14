@@ -133,11 +133,75 @@ async function syncUserFromMemberRecord(member, options = {}) {
   }, {});
 
   if (Object.keys(updates).length) {
-    await user.update(updates, { transaction });
+    await user.update(updates, { transaction, skipLinkedMemberSync: true });
+  }
+}
+
+const MEMBER_MARITAL_MAP = {
+  solteiro: 'SOLTEIRO',
+  casado: 'CASADO',
+  viuvo: 'VIUVO',
+  divorciado: 'DIVORCIADO'
+};
+
+function mapUserEstadoCivilToMember(estadoCivil) {
+  if (!estadoCivil) return null;
+  const key = String(estadoCivil)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '');
+  return MEMBER_MARITAL_MAP[key] || null;
+}
+
+async function syncMemberFromUserRecord(user, options = {}) {
+  if (!user?.id) return;
+
+  const models = options.models || {};
+  const MemberModel = models.Member;
+  if (!MemberModel) return;
+
+  const member = await MemberModel.findOne({
+    where: { userId: user.id },
+    attributes: [
+      'id', 'fullName', 'email', 'whatsapp', 'birthDate',
+      'maritalStatus', 'street', 'neighborhood', 'number', 'zipCode', 'photoUrl'
+    ]
+  });
+  if (!member) return;
+
+  const rawEmail = user.email ? String(user.email).trim() : null;
+  const validEmail = rawEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail) ? rawEmail : null;
+  const whatsapp = user.telefone ? String(user.telefone).replace(/\D/g, '') || null : null;
+  const maritalStatus = mapUserEstadoCivilToMember(user.estado_civil);
+
+  const desired = {
+    ...(user.name ? { fullName: user.name } : {}),
+    ...(validEmail !== null ? { email: validEmail } : {}),
+    ...(whatsapp ? { whatsapp } : {}),
+    ...(user.data_nascimento ? { birthDate: user.data_nascimento } : {}),
+    ...(maritalStatus ? { maritalStatus } : {}),
+    ...(user.endereco != null ? { street: user.endereco } : {}),
+    ...(user.bairro != null ? { neighborhood: user.bairro } : {}),
+    ...(user.numero != null ? { number: user.numero } : {}),
+    ...(user.cep != null ? { zipCode: user.cep } : {}),
+    ...(user.image ? { photoUrl: user.image } : {})
+  };
+
+  const updates = Object.entries(desired).reduce((acc, [field, nextValue]) => {
+    const currentValue = member[field] ?? null;
+    if (currentValue !== (nextValue ?? null)) {
+      acc[field] = nextValue ?? null;
+    }
+    return acc;
+  }, {});
+
+  if (Object.keys(updates).length) {
+    await member.update(updates, { skipLinkedUserSync: true });
   }
 }
 
 module.exports = {
   parseLegacyNotes,
-  syncUserFromMemberRecord
+  syncUserFromMemberRecord,
+  syncMemberFromUserRecord
 };
