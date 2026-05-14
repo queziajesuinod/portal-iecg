@@ -20,6 +20,7 @@ router.post('/:id/activities', memberController.addActivity);
 router.delete('/:id/activities/:activityId', memberController.deleteActivity);
 router.post('/:id/milestones', memberController.addMilestone);
 router.post('/:id/notificar-dados', memberController.notificarDadosIncompletos);
+router.post('/:id/sync-from-user', memberController.syncFromUser);
 router.patch('/:id/journey', memberController.updateJourney);
 router.post('/', memberController.create);
 router.put('/:id', memberController.update);

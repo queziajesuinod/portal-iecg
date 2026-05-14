@@ -1,4 +1,5 @@
 const { getUserWithSpouse, updateUser, findUserWithSpouseByContact } = require('../services/users');
+const { Member } = require('../models');
 
 const buildLeaderResponse = ({ user, spouse }) => ({
   leader: {
@@ -26,15 +27,15 @@ const buildLeaderResponse = ({ user, spouse }) => ({
   },
   spouse: spouse
     ? {
-        id: spouse.id,
-        name: spouse.name,
-        email: spouse.email,
-        telefone: spouse.telefone,
-        image: spouse.image,
-        cpf: spouse.cpf,
-        estado_civil: spouse.estado_civil,
-        profissao: spouse.profissao
-      }
+      id: spouse.id,
+      name: spouse.name,
+      email: spouse.email,
+      telefone: spouse.telefone,
+      image: spouse.image,
+      cpf: spouse.cpf,
+      estado_civil: spouse.estado_civil,
+      profissao: spouse.profissao
+    }
     : null
 });
 
@@ -71,7 +72,7 @@ class PublicUserController {
   }
 
   async updateLeaderById(req, res) {
-    const allowedFields = ['endereco', 'bairro', 'numero', 'cep', 'telefone', 'escolaridade', 'nome_esposo'];
+    const allowedFields = ['endereco', 'bairro', 'numero', 'cep', 'telefone', 'escolaridade', 'nome_esposo', 'cpf'];
     const payload = {};
     allowedFields.forEach((field) => {
       if (Object.prototype.hasOwnProperty.call(req.body, field)) {
@@ -84,7 +85,21 @@ class PublicUserController {
     }
 
     try {
-      const user = await updateUser(req.params.id, payload);
+      // Remove CPF do payload do User antes de atualizar (CPF só existe no Member)
+      const { cpf: cpfRaw, ...userPayload } = payload;
+      const user = await updateUser(req.params.id, userPayload);
+
+      // Salva CPF diretamente no Member vinculado
+      if (cpfRaw) {
+        const normalizedCpf = String(cpfRaw).replace(/\D/g, '');
+        if (normalizedCpf.length === 11) {
+          const member = await Member.findOne({ where: { userId: user.id } });
+          if (member) {
+            await member.update({ cpf: normalizedCpf }, { skipLinkedUserSync: true });
+          }
+        }
+      }
+
       return res.status(200).json({
         id: user.id,
         name: user.name,

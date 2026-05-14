@@ -94,3 +94,7 @@ export const atualizarStatusTipoAtividadeMembro = (typeId, isActive) => fetchWit
   method: 'PATCH',
   body: JSON.stringify({ isActive }),
 });
+
+export const notificarDadosIncompletos = (id) => fetchWithAuth(`${API_URL}/api/admin/members/${id}/notificar-dados`, { method: 'POST' });
+
+export const sincronizarDadosDoUser = (id) => fetchWithAuth(`${API_URL}/api/admin/members/${id}/sync-from-user`, { method: 'POST' });

@@ -33,6 +33,7 @@ import PeopleIcon from '@mui/icons-material/People';
 import MoneyIcon from '@mui/icons-material/AttachMoney';
 import TrendingIcon from '@mui/icons-material/TrendingUp';
 import DuplicateIcon from '@mui/icons-material/FileCopy';
+import UploadIcon from '@mui/icons-material/Upload';
 import ExpandMoreIcon from '@mui/icons-material/KeyboardArrowDown';
 import ExpandLessIcon from '@mui/icons-material/KeyboardArrowUp';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
@@ -67,16 +68,18 @@ function EventList() {
   });
   const [filtros, setFiltros] = useState({
     busca: '',
-    status: 'todos'
+    status: 'todos',
+    finalizados: false
   });
   const [expandedEvents, setExpandedEvents] = useState({});
   const [ticketsSummaryByEvent, setTicketsSummaryByEvent] = useState({});
   const [ticketsSummaryLoading, setTicketsSummaryLoading] = useState({});
 
-  async function carregarEventos() {
+  async function carregarEventos(includeFinished = false) {
     try {
       setLoading(true);
-      const [response, statsResponse] = await Promise.all([listarEventos(), listarEstatisticas()]);
+      const params = includeFinished ? { includeFinished: 'true' } : {};
+      const [response, statsResponse] = await Promise.all([listarEventos(params), listarEstatisticas()]);
       const eventosArray = Array.isArray(response) ? response : [];
 
       setEventos(eventosArray);
@@ -117,18 +120,23 @@ function EventList() {
       });
     }
 
-    // Filtro de status
+    // Filtro de status ativo/inativo
     if (filtros.status !== 'todos') {
-      resultado = resultado.filter(evento => (filtros.status === 'ativos' ? evento.isActive : !evento.isActive)
-      );
+      resultado = resultado.filter(evento => (filtros.status === 'ativos' ? evento.isActive : !evento.isActive));
+    }
+
+    // Filtro finalizados: quando NÃO está no modo finalizados, oculta eventos com endDate no passado
+    if (!filtros.finalizados) {
+      const now = new Date();
+      resultado = resultado.filter(evento => !evento.endDate || new Date(evento.endDate) >= now);
     }
 
     setEventosFiltrados(resultado);
   }
 
   useEffect(() => {
-    carregarEventos();
-  }, []);
+    carregarEventos(filtros.finalizados);
+  }, [filtros.finalizados]);
 
   useEffect(() => {
     aplicarFiltros();
@@ -412,7 +420,17 @@ function EventList() {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} sm={12} md={5}>
+          <Grid item xs="auto">
+            <Button
+              variant={filtros.finalizados ? 'contained' : 'outlined'}
+              color="secondary"
+              size="small"
+              onClick={() => handleChangeFiltro('finalizados', !filtros.finalizados)}
+            >
+              {filtros.finalizados ? 'Ocultando futuros' : 'Ver finalizados'}
+            </Button>
+          </Grid>
+          <Grid item xs={12} sm={12} md="auto">
             <Button
               variant="contained"
               color="primary"
@@ -514,6 +532,15 @@ function EventList() {
                             onClick={() => handleDuplicar(evento)}
                           >
                             <DuplicateIcon />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Importar inscritos como membros">
+                          <IconButton
+                            size="small"
+                            color="info"
+                            onClick={() => history.push(`/app/events/importar?eventId=${evento.id}`)}
+                          >
+                            <UploadIcon />
                           </IconButton>
                         </Tooltip>
                       </TableCell>

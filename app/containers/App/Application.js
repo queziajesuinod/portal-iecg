@@ -37,6 +37,7 @@ import NotificationsManagement from '../Pages/Events/NotificationsManagement';
 import CouponsPage from '../Pages/Events/CouponsPage';
 import FormBuilder from '../Pages/Events/FormBuilder';
 import RegistrationDetails from '../Pages/Events/RegistrationDetails';
+import EventImportPage from '../Pages/Events/EventImportPage';
 import EventHousing from '../Pages/Events/EventHousing';
 import EventTeams from '../Pages/Events/EventTeams';
 import RegistrationRules from '../Pages/Events/RegistrationRules';
@@ -113,6 +114,7 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/admin/webhooks" component={WebhooksPage} isAuthenticated={isAuthenticated} requiredPermission="WEBHOOKS_VIEW" />
             <ProtectedRoute exact path="/app/events" component={EventList} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/novo" component={EventForm} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/events/importar" component={EventImportPage} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/:id" component={EventDetails} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/:id/editar" component={EventForm} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/:id/checkin" component={CheckInManagement} isAuthenticated={isAuthenticated} requiredPermission="EVENTS_ACESS" />

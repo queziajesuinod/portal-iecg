@@ -5,7 +5,7 @@ import { useParams, useHistory } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
 import {
-  Avatar, Box, Button, Checkbox, Chip, CircularProgress, Dialog,
+  Alert, Avatar, Box, Button, Checkbox, Chip, CircularProgress, Dialog,
   DialogActions, DialogContent, DialogTitle, Divider, FormControl,
   Grid, IconButton, InputLabel, MenuItem, Paper, Select, Stack, Tab,
   Tabs, TextField, Tooltip, Typography
@@ -17,6 +17,7 @@ import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import EventNoteIcon from '@mui/icons-material/EventNote';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { TableSkeleton } from '../../../components/Skeleton';
 import { useConfirm } from '../../../utils/useConfirm';
 import { formatDateInAppTimezone } from '../../../utils/dateTime';
@@ -389,10 +390,16 @@ export default function CelulaPresencaPage() {
     if (!membroSelecionado) { setNotification('Selecione um membro'); return; }
     setVinculando(true);
     try {
-      await vincularMembro(celulaId, { membroId: membroSelecionado.id, papel: papelNovo });
-      setNotification('Membro vinculado com sucesso!');
+      const resultado = await vincularMembro(celulaId, { membroId: membroSelecionado.id, papel: papelNovo });
       setDialogMembro(false);
       carregarMembros();
+      if (resultado?.aviso) {
+        const { celulaAnteriorNome, liderAnterior } = resultado.aviso;
+        const liderInfo = liderAnterior ? ` (líder: ${liderAnterior})` : '';
+        setNotification(`⚠️ Membro vinculado com sucesso! Ponto de atenção: este membro já estava na célula "${celulaAnteriorNome}"${liderInfo}. Verifique a transferência com o líder anterior.`);
+      } else {
+        setNotification('Membro vinculado com sucesso!');
+      }
     } catch (err) {
       setNotification(err.message);
     } finally {
@@ -896,25 +903,36 @@ export default function CelulaPresencaPage() {
                         borderRadius: 1,
                         cursor: 'pointer',
                         border: '1px solid',
-                        borderColor: membroSelecionado?.id === c.id ? 'primary.main' : 'divider',
+                        borderColor: membroSelecionado?.id === c.id ? 'primary.main' : c.celulaAtual ? 'warning.light' : 'divider',
                         bgcolor: membroSelecionado?.id === c.id ? 'primary.50' : 'transparent',
                         '&:hover': { bgcolor: 'action.hover' }
                       }}
                     >
-                      <Stack direction="row" spacing={1.5} alignItems="center">
-                        <Avatar sx={{
-                          width: 32, height: 32, bgcolor: 'secondary.main', fontSize: 13
-                        }}>
-                          {inicialNome(c.preferredName || c.fullName)}
-                        </Avatar>
-                        <Box>
-                          <Typography variant="body2" fontWeight={600}>
-                            {c.preferredName || c.fullName}
-                          </Typography>
-                          {c.phone && (
-                            <Typography variant="caption" color="textSecondary">{c.phone}</Typography>
-                          )}
-                        </Box>
+                      <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="space-between">
+                        <Stack direction="row" spacing={1.5} alignItems="center">
+                          <Avatar sx={{
+                            width: 32, height: 32, bgcolor: 'secondary.main', fontSize: 13
+                          }}>
+                            {inicialNome(c.preferredName || c.fullName)}
+                          </Avatar>
+                          <Box>
+                            <Typography variant="body2" fontWeight={600}>
+                              {c.preferredName || c.fullName}
+                            </Typography>
+                            {c.phone && (
+                              <Typography variant="caption" color="textSecondary">{c.phone}</Typography>
+                            )}
+                          </Box>
+                        </Stack>
+                        {c.celulaAtual && (
+                          <Chip
+                            size="small"
+                            icon={<WarningAmberIcon />}
+                            label={`Já em: ${c.celulaAtual.celula || 'outra célula'}`}
+                            color="warning"
+                            variant="outlined"
+                          />
+                        )}
                       </Stack>
                     </Box>
                   ))}
@@ -922,14 +940,26 @@ export default function CelulaPresencaPage() {
               </Box>
 
               {membroSelecionado && (
-                <FormControl fullWidth size="small">
-                  <InputLabel>Papel na célula</InputLabel>
-                  <Select value={papelNovo} label="Papel na célula" onChange={e => setPapelNovo(e.target.value)}>
-                    {PAPEL_OPTIONS.map(p => (
-                      <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                <Stack spacing={1.5}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Papel na célula</InputLabel>
+                    <Select value={papelNovo} label="Papel na célula" onChange={e => setPapelNovo(e.target.value)}>
+                      {PAPEL_OPTIONS.map(p => (
+                        <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  {membroSelecionado.celulaAtual && (
+                    <Alert severity="warning" icon={<WarningAmberIcon />}>
+                      <strong>Ponto de atenção:</strong> {membroSelecionado.preferredName || membroSelecionado.fullName} já está
+                      na célula <strong>{membroSelecionado.celulaAtual.celula || 'outra célula'}</strong>
+                      {membroSelecionado.celulaAtual.lider && (
+                        <> com o líder <strong>{membroSelecionado.celulaAtual.lider}</strong></>
+                      )}
+                      . Ao vincular, verifique a transferência com o líder anterior.
+                    </Alert>
+                  )}
+                </Stack>
               )}
 
               {candidatos.length > 0 && (

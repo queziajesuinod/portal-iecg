@@ -598,20 +598,31 @@ const MinhaJornadaPage = () => {
                       background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(241,247,244,0.94))'
                     }}
                   >
-                    <Stack direction="row" spacing={1.5} alignItems="center" mb={2}>
+                    <Stack direction="row" spacing={1.5} alignItems="center" mb={0.5}>
                       <TimelineOutlined color="success" />
                       <Typography variant="h6">Minha Célula</Typography>
-                      <Chip size="small" label="Discípulo" color="success" />
                     </Stack>
+
+                    {member.celula?.celula && (
+                      <Box mb={1.5}>
+                        <Typography variant="body1" fontWeight={700}>
+                          {member.celula.celula}
+                        </Typography>
+                        {member.celula.lider && (
+                          <Typography variant="body2" color="textSecondary">
+                            Líder: {member.celula.lider}
+                          </Typography>
+                        )}
+                      </Box>
+                    )}
 
                     <Grid container spacing={2} mb={2}>
                       {[
                         { label: 'Presença', value: `${celulaStats.percentualPresenca}%` },
                         { label: 'Reuniões', value: celulaStats.totalReunioes },
                         { label: 'Sequência atual', value: `${celulaStats.sequenciaAtual} sem.` },
-                        { label: 'Pontos', value: celulaStats.totalPontos }
                       ].map(item => (
-                        <Grid item xs={6} key={item.label}>
+                        <Grid item xs={4} key={item.label}>
                           <Box sx={{
                             p: 1.5, borderRadius: 2, bgcolor: 'rgba(0,0,0,0.03)', textAlign: 'center'
                           }}>
