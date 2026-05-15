@@ -74,28 +74,28 @@ async function main() {
   for (const { user, celulas: nomeCelulas } of usuariosMap.values()) {
     const celulaLabel = nomeCelulas.join(', ');
     try {
-      const jaTemPerfil = user.perfilId === perfil.id;
       const jaTemVinculo = !!(await UserPerfil.findOne({
         where: { userId: user.id, perfilId: perfil.id }
       }));
 
-      if (jaTemPerfil && jaTemVinculo) {
+      if (jaTemVinculo) {
         console.log(`  ─ ${user.name} (${user.email}) — já possui o perfil. Célula(s): ${celulaLabel}`);
         jaCorretos += 1;
         continue;
       }
 
-      console.log(`  → ${user.name} (${user.email}) — atribuindo LIDER_CELULA. Célula(s): ${celulaLabel}`);
+      // Usa perfilId primário somente se o usuário não tiver nenhum ainda (null).
+      // Se já tiver outro perfil (ex: ADMIN), preserva e adiciona LIDER_CELULA via UserPerfis.
+      const semPerfilPrimario = !user.perfilId;
+      console.log(`  → ${user.name} (${user.email}) — adicionando LIDER_CELULA${semPerfilPrimario ? ' (primário)' : ' (extra, preserva perfil atual)'}. Célula(s): ${celulaLabel}`);
 
       if (!isDryRun) {
-        if (!jaTemPerfil) {
+        if (semPerfilPrimario) {
           await user.update({ perfilId: perfil.id });
         }
-        if (!jaTemVinculo) {
-          await UserPerfil.findOrCreate({
-            where: { userId: user.id, perfilId: perfil.id }
-          });
-        }
+        await UserPerfil.findOrCreate({
+          where: { userId: user.id, perfilId: perfil.id }
+        });
       }
 
       atualizados += 1;

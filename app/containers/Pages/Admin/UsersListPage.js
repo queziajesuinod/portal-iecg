@@ -97,7 +97,10 @@ const UsersListPage = () => {
       name: user.name || '',
       email: user.email || '',
       username: user.username || '',
-      perfilIds: user.perfis?.map((p) => p.id) || (user.perfilId ? [user.perfilId] : []),
+      perfilIds: Array.from(new Set([
+        ...(user.perfis?.map((p) => p.id) || []),
+        ...(user.perfilId ? [user.perfilId] : [])
+      ])),
       active: user.active !== false,
       changePassword: false,
       passwordMode: 'auto',

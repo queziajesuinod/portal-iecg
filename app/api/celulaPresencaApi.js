@@ -32,6 +32,7 @@ export const confirmarReunioes = (celulaId, datas) => request('POST', `/api/admi
 export const excluirReunioesAgendadas = (celulaId) => request('DELETE', `/api/admin/celulas-presenca/${celulaId}/reunioes/agendadas`);
 
 export const excluirReuniao = (reuniaoId) => request('DELETE', `/api/admin/celulas-presenca/reunioes/${reuniaoId}`);
+export const reabrirReuniao = (reuniaoId) => request('PATCH', `/api/admin/celulas-presenca/reunioes/${reuniaoId}/reabrir`);
 
 // Reuniões — CRUD
 export const listarReunioes = (celulaId, params = {}) => {
@@ -40,6 +41,7 @@ export const listarReunioes = (celulaId, params = {}) => {
 };
 export const criarReuniaoManual = (celulaId, body) => request('POST', `/api/admin/celulas-presenca/${celulaId}/reunioes`, body);
 export const cancelarReuniao = (reuniaoId, body) => request('PATCH', `/api/admin/celulas-presenca/reunioes/${reuniaoId}/cancelar`, body);
+export const editarReuniao = (reuniaoId, body) => request('PATCH', `/api/admin/celulas-presenca/reunioes/${reuniaoId}`, body);
 
 // Presença
 export const obterPresencaReuniao = (reuniaoId) => request('GET', `/api/admin/celulas-presenca/reunioes/${reuniaoId}/presenca`);
@@ -48,6 +50,10 @@ export const adicionarPresencaAvulsa = (reuniaoId, body) => request('POST', `/ap
 
 // Transferência entre células
 export const transferirMembro = (celulaId, membroId, body) => request('POST', `/api/admin/celulas-presenca/${celulaId}/membros/${membroId}/transferir`, body);
+
+// Pré-cadastros (visitantes / frequentadores)
+export const atualizarTipoPreCadastro = (celulaId, preCadastroId, tipo) => request('PATCH', `/api/admin/celulas-presenca/${celulaId}/pre-cadastros/${preCadastroId}`, { tipo });
+export const promoverPreCadastro = (celulaId, preCadastroId) => request('POST', `/api/admin/celulas-presenca/${celulaId}/pre-cadastros/${preCadastroId}/promover`);
 
 // Stats
 export const estatisticasMembro = (celulaId, membroId) => request('GET', `/api/admin/celulas-presenca/${celulaId}/membros/${membroId}/stats`);

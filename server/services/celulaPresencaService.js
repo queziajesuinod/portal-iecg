@@ -1,6 +1,7 @@
 const moment = require('moment-timezone');
 const { Op } = require('sequelize');
 const {
+  sequelize,
   Celula,
   CelulaMembroVinculo,
   CelulaReuniao,
@@ -144,19 +145,30 @@ async function excluirReunioesAgendadas(celulaId) {
   return CelulaReuniao.destroy({ where: { celulaId, status: 'agendada' } });
 }
 
-// Exclui uma reunião individual se não tiver presença marcada (presente != null)
+// Exclui uma reunião individual desfazendo todas as presenças e pontos
 async function excluirReuniao(reuniaoId) {
   const reuniao = await CelulaReuniao.findByPk(reuniaoId);
   if (!reuniao) throw new Error('Reunião não encontrada');
-  if (reuniao.status === 'encerrada') throw new Error('Reunião já encerrada, não pode ser excluída');
 
-  const presencaMarcada = await CelulaPresenca.count({
-    where: { reuniaoId, presente: { [Op.ne]: null } }
+  const foiEncerrada = reuniao.status === 'encerrada';
+
+  return sequelize.transaction(async (t) => {
+    const pontosRemovidos = await CelulaPresencaPonto.destroy({ where: { reuniaoId }, transaction: t });
+    const presencasRemovidas = await CelulaPresenca.destroy({ where: { reuniaoId }, transaction: t });
+    await reuniao.destroy({ transaction: t });
+
+    return { presencasRemovidas, pontosRemovidos, foiEncerrada };
   });
-  if (presencaMarcada > 0) throw new Error('Reunião possui presenças marcadas e não pode ser excluída');
+}
 
-  await CelulaPresenca.destroy({ where: { reuniaoId } });
-  await reuniao.destroy();
+// Reabre uma reunião encerrada para edição (mantém presenças, pontos serão recalculados ao salvar)
+async function reabrirReuniao(reuniaoId) {
+  const reuniao = await CelulaReuniao.findByPk(reuniaoId);
+  if (!reuniao) throw new Error('Reunião não encontrada');
+  if (reuniao.status !== 'encerrada') throw new Error('Apenas reuniões encerradas podem ser reabertas');
+
+  await reuniao.update({ status: 'aberta', encerradaPorId: null });
+  return reuniao;
 }
 
 // Gera reuniões automáticas para uma célula (sem duplicar) — mantido para uso legado
@@ -271,9 +283,11 @@ async function vincularMembroPorApelo({ membroId, celulaId, apeloId }) {
   }
 }
 
-// Registra presença de uma reunião (checklist completo)
+// Registra presença de uma reunião (checklist completo) — retorna relatório
 async function registrarPresenca(reuniaoId, presencas, encerradaPorId) {
-  const reuniao = await CelulaReuniao.findByPk(reuniaoId);
+  const reuniao = await CelulaReuniao.findByPk(reuniaoId, {
+    include: [{ model: Celula, as: 'celula', attributes: ['celula', 'lider', 'liderId'] }]
+  });
   if (!reuniao) throw new Error('Reunião não encontrada');
   if (reuniao.status === 'cancelada') throw new Error('Reunião cancelada');
   if (reuniao.status === 'encerrada') throw new Error('Reunião já encerrada');
@@ -290,7 +304,6 @@ async function registrarPresenca(reuniaoId, presencas, encerradaPorId) {
           reuniaoId, membroId: item.membroId, preCadastroId: null, presente: item.presente, registradoEm: agora
         });
       }
-
       if (item.presente) {
         await _calcularEGravarPontos(item.membroId, reuniaoId);
       }
@@ -307,6 +320,65 @@ async function registrarPresenca(reuniaoId, presencas, encerradaPorId) {
   }
 
   await reuniao.update({ status: 'encerrada', encerradaPorId });
+
+  // Calcula relatório para compartilhamento
+  const todasPresencas = await CelulaPresenca.findAll({ where: { reuniaoId } });
+  const discipulos = todasPresencas.filter(p => p.membroId && p.presente === true).length;
+  const visitantes = todasPresencas.filter(p => p.preCadastroId && p.presente === true).length;
+
+  // Verifica quais pré-cadastros atingiram 3+ presenças e podem ser promovidos
+  const paraPromover = [];
+  const preCadastrosPresentes = todasPresencas.filter(p => p.preCadastroId && p.presente === true);
+  for (const p of preCadastrosPresentes) {
+    const total = await CelulaPresenca.count({
+      where: { preCadastroId: p.preCadastroId, presente: true }
+    });
+    if (total >= 3) {
+      const pc = await PreCadastroPresenca.findByPk(p.preCadastroId, { attributes: ['id', 'nome', 'tipo'] });
+      if (pc) {
+        paraPromover.push({
+          id: pc.id, nome: pc.nome, tipo: pc.tipo, totalPresencas: total
+        });
+      }
+    }
+  }
+
+  return {
+    celulaNome: reuniao.celula?.celula || '',
+    lider: reuniao.celula?.lider || '',
+    discipulos,
+    visitantes,
+    total: discipulos + visitantes,
+    paraPromover
+  };
+}
+
+// Promove um pré-cadastro a membro vinculado da célula
+async function promoverPreCadastro(preCadastroId, celulaId) {
+  const pc = await PreCadastroPresenca.findOne({
+    where: { id: preCadastroId, celulaId, promovidoEmMembroId: null }
+  });
+  if (!pc) throw new Error('Pré-cadastro não encontrado ou já promovido');
+
+  const membro = await Member.create({
+    fullName: pc.nome,
+    phone: pc.telefone || null,
+    whatsapp: pc.whatsapp || null,
+    status: 'MEMBRO',
+    celulaId
+  });
+
+  await CelulaMembroVinculo.create({
+    celulaId,
+    membroId: membro.id,
+    papel: 'membro',
+    dataEntrada: todayDateOnly(),
+    origem: 'pre_cadastro'
+  });
+
+  await pc.update({ promovidoEmMembroId: membro.id, promovidoEm: now() });
+
+  return { membro: { id: membro.id, fullName: membro.fullName }, mensagem: 'Promovido a membro com sucesso!' };
 }
 
 // Calcula pontos com bônus por sequência e grava
@@ -539,11 +611,36 @@ async function transferirMembro(membroId, origemCelulaId, destinoCelulaId, motiv
   });
 }
 
+async function atualizarTipoPreCadastro(preCadastroId, tipo) {
+  const TIPOS_VALIDOS = ['visitante', 'frequentador', 'novo_integrante'];
+  if (!TIPOS_VALIDOS.includes(tipo)) {
+    const err = new Error(`Tipo inválido: ${tipo}`);
+    err.status = 400;
+    throw err;
+  }
+
+  const registro = await PreCadastroPresenca.findByPk(preCadastroId);
+  if (!registro) {
+    const err = new Error('Registro não encontrado.');
+    err.status = 404;
+    throw err;
+  }
+  if (registro.promovidoEmMembroId) {
+    const err = new Error('Pessoa já promovida a membro.');
+    err.status = 409;
+    throw err;
+  }
+
+  await registro.update({ tipo });
+  return registro;
+}
+
 module.exports = {
   sugerirReunioes,
   criarReunioesDatas,
   excluirReunioesAgendadas,
   excluirReuniao,
+  reabrirReuniao,
   gerarReunioesParaCelula,
   gerarReunioesTodasCelulas,
   abrirReunioesDodia,
@@ -552,5 +649,7 @@ module.exports = {
   registrarPresenca,
   adicionarPresencaAvulsa,
   estatisticasMembro,
-  transferirMembro
+  transferirMembro,
+  promoverPreCadastro,
+  atualizarTipoPreCadastro
 };

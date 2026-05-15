@@ -28,7 +28,7 @@ module.exports = (sequelize) => {
       dataSaida: { type: DataTypes.DATEONLY, allowNull: true },
       ativo: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
       origem: {
-        type: DataTypes.ENUM('apelo', 'manual', 'transferencia', 'lideranca'),
+        type: DataTypes.ENUM('apelo', 'manual', 'transferencia', 'lideranca', 'pre_cadastro'),
         allowNull: false,
         defaultValue: 'manual'
       },
