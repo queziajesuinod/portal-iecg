@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Redirect } from 'react-router-dom';
-import CircularProgress from '@material-ui/core/CircularProgress';
-import Typography from '@material-ui/core/Typography';
-import Box from '@material-ui/core/Box';
+import { CircularProgress, Typography, Box } from '@mui/material';
 import { minhacelula } from '../../../api/celulaPresencaApi';
 
 export default function MinhaCelulaPage() {
