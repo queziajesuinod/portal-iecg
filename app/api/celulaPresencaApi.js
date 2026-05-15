@@ -16,6 +16,9 @@ async function request(method, path, body) {
   return data;
 }
 
+// Célula do líder autenticado
+export const minhacelula = () => request('GET', '/api/admin/celulas-presenca/minha-celula');
+
 // Membros vinculados
 export const listarMembrosVinculados = (celulaId) => request('GET', `/api/admin/celulas-presenca/${celulaId}/membros`);
 export const vincularMembro = (celulaId, body) => request('POST', `/api/admin/celulas-presenca/${celulaId}/membros`, body);

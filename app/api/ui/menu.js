@@ -40,6 +40,13 @@ module.exports = [
         permission: 'CELULA_LISTAR'
       },
       {
+        key: 'minhaCelula',
+        name: 'Minha Célula',
+        link: '/app/minha-celula',
+        icon: 'ion-ios-home-outline',
+        permission: 'LIDER_CELULA_PRESENCA'
+      },
+      {
         key: 'minhaJornada',
         name: 'Minha Jornada',
         link: '/app/minha-jornada',
