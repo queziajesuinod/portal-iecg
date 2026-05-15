@@ -18,6 +18,7 @@ import EventNoteIcon from '@mui/icons-material/EventNote';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import EditIcon from '@mui/icons-material/Edit';
 import { TableSkeleton } from '../../../components/Skeleton';
 import { useConfirm } from '../../../utils/useConfirm';
 import { formatDateInAppTimezone } from '../../../utils/dateTime';
@@ -28,15 +29,19 @@ import {
   registrarPresenca,
   adicionarPresencaAvulsa,
   cancelarReuniao,
+  editarReuniao,
   sugerirReunioes,
   confirmarReunioes,
   excluirReunioesAgendadas,
   excluirReuniao,
+  reabrirReuniao,
   listarMembrosVinculados,
   vincularMembro,
   desvincularMembro,
   buscarMembrosCandidatos,
-  cadastrarEVincularMembro
+  cadastrarEVincularMembro,
+  atualizarTipoPreCadastro,
+  promoverPreCadastro
 } from '../../../api/celulaPresencaApi';
 
 const STATUS_COLOR = {
@@ -56,6 +61,17 @@ const PAPEL_OPTIONS = [
 
 function inicialNome(nome) {
   return (nome || '?').charAt(0).toUpperCase();
+}
+
+function gerarTextoRelatorio(r) {
+  return [
+    'Relatório de Célula',
+    r.celulaNome ? `Célula: ${r.celulaNome}` : null,
+    r.lider ? `Líder: ${r.lider}` : null,
+    `Discípulos presentes: ${r.discipulos}`,
+    `Visitantes presentes: ${r.visitantes}`,
+    `Total: ${r.total}`
+  ].filter(Boolean).join('\n');
 }
 
 function formatDataSugestao(data) {
@@ -102,6 +118,19 @@ export default function CelulaPresencaPage() {
   const [formAvulso, setFormAvulso] = useState({
     nome: '', telefone: '', whatsapp: '', tipo: 'visitante'
   });
+
+  // Dialog: editar data da reunião
+  const [dialogEditarReuniao, setDialogEditarReuniao] = useState(false);
+  const [reuniaoEditando, setReuniaoEditando] = useState(null);
+  const [dataEdicao, setDataEdicao] = useState('');
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
+
+  // Dialog: relatório de presença (WhatsApp)
+  const [dialogRelatorio, setDialogRelatorio] = useState(false);
+  const [relatorio, setRelatorio] = useState(null);
+
+  // Promover pré-cadastro a membro
+  const [promovendo, setPromovendo] = useState(null);
 
   // Dialog: cancelar reunião
   const [dialogCancelar, setDialogCancelar] = useState(false);
@@ -187,14 +216,29 @@ export default function CelulaPresencaPage() {
         presencas.push({ membroId: m.membroId, presente: marcacoes[`m_${m.membroId}`] ?? false });
       });
       (presencaData?.avulsos || []).forEach(a => {
-        presencas.push({ preCadastroId: a.preCadastroId, presente: marcacoes[`a_${a.preCadastroId}`] ?? true });
+        const marcado = marcacoes[`a_${a.preCadastroId}`];
+        if (a.carryForward) {
+          if (marcado !== null && marcado !== undefined) {
+            presencas.push({ preCadastroId: a.preCadastroId, presente: marcado });
+          }
+        } else {
+          presencas.push({ preCadastroId: a.preCadastroId, presente: marcado ?? true });
+        }
       });
 
-      await registrarPresenca(reuniaoAtiva.id, presencas);
-      setNotification('Presença registrada com sucesso!');
+      const resultado = await registrarPresenca(reuniaoAtiva.id, presencas);
       setTab(0);
       setReuniaoAtiva(null);
       carregarReunioes();
+      carregarMembros();
+
+      if (resultado?.relatorio) {
+        setRelatorio(resultado.relatorio);
+        setDialogRelatorio(true);
+        navigator.clipboard.writeText(gerarTextoRelatorio(resultado.relatorio)).catch(() => {});
+      } else {
+        setNotification('Presença registrada com sucesso!');
+      }
     } catch (err) {
       setNotification(err.message);
     } finally {
@@ -239,9 +283,12 @@ export default function CelulaPresencaPage() {
   // ── Excluir reunião individual ─────────────────────────────────────────────
 
   const handleExcluirReuniao = async (r) => {
+    const encerrada = r.status === 'encerrada';
     const ok = await confirm({
       title: 'Excluir reunião',
-      message: `Deseja excluir a reunião de ${formatDateInAppTimezone(r.data, '-')}? Esta ação não pode ser desfeita.`,
+      message: encerrada
+        ? `A reunião de ${formatDateInAppTimezone(r.data, '-')} já foi encerrada. Excluir irá apagar todas as presenças e pontos registrados. Esta ação não pode ser desfeita.`
+        : `Deseja excluir a reunião de ${formatDateInAppTimezone(r.data, '-')}? Esta ação não pode ser desfeita.`,
       confirmText: 'Excluir',
       confirmColor: 'error'
     });
@@ -249,6 +296,45 @@ export default function CelulaPresencaPage() {
     try {
       await excluirReuniao(r.id);
       setNotification('Reunião excluída');
+      carregarReunioes();
+    } catch (err) {
+      setNotification(err.message);
+    }
+  };
+
+  const handleAbrirEdicaoReuniao = (r) => {
+    setReuniaoEditando(r);
+    setDataEdicao(new Date(r.data).toLocaleDateString('en-CA'));
+    setDialogEditarReuniao(true);
+  };
+
+  const handleSalvarEdicaoReuniao = async () => {
+    if (!dataEdicao || !reuniaoEditando) return;
+    setSalvandoEdicao(true);
+    try {
+      await editarReuniao(reuniaoEditando.id, { data: dataEdicao });
+      setNotification('Data da reunião atualizada');
+      setDialogEditarReuniao(false);
+      setReuniaoEditando(null);
+      carregarReunioes();
+    } catch (err) {
+      setNotification(err.message);
+    } finally {
+      setSalvandoEdicao(false);
+    }
+  };
+
+  const handleReabrirReuniao = async (r) => {
+    const ok = await confirm({
+      title: 'Reabrir reunião',
+      message: `Deseja reabrir a reunião de ${formatDateInAppTimezone(r.data, '-')} para edição? As presenças já registradas serão mantidas e poderão ser ajustadas.`,
+      confirmText: 'Reabrir',
+      confirmColor: 'primary'
+    });
+    if (!ok) return;
+    try {
+      await reabrirReuniao(r.id);
+      setNotification('Reunião reaberta para edição');
       carregarReunioes();
     } catch (err) {
       setNotification(err.message);
@@ -425,12 +511,57 @@ export default function CelulaPresencaPage() {
     }
   };
 
+  const handleAlterarTipo = async (avulso, novoTipo) => {
+    if (novoTipo === 'membro') {
+      handlePromoverParaMembro(avulso);
+      return;
+    }
+    try {
+      await atualizarTipoPreCadastro(celulaId, avulso.preCadastroId, novoTipo);
+      setPresencaData(prev => ({
+        ...prev,
+        avulsos: (prev?.avulsos || []).map(a => (a.preCadastroId === avulso.preCadastroId ? { ...a, tipoPessoa: novoTipo } : a)
+        )
+      }));
+    } catch (err) {
+      setNotification(err.message);
+    }
+  };
+
+  const handlePromoverParaMembro = async (avulso) => {
+    const ok = await confirm({
+      title: 'Promover a membro',
+      message: `Deseja promover ${avulso.nome} a membro da célula? Um cadastro de membro será criado e vinculado automaticamente.`,
+      confirmText: 'Promover',
+      confirmColor: 'primary'
+    });
+    if (!ok) return;
+
+    setPromovendo(avulso.preCadastroId);
+    try {
+      await promoverPreCadastro(celulaId, avulso.preCadastroId);
+      setNotification(`${avulso.nome} promovido(a) a membro com sucesso!`);
+      const data = await obterPresencaReuniao(reuniaoAtiva.id);
+      setPresencaData(data);
+      const init = {};
+      (data.membros || []).forEach(m => { init[`m_${m.membroId}`] = m.presente; });
+      (data.avulsos || []).forEach(a => { init[`a_${a.preCadastroId}`] = a.presente; });
+      setMarcacoes(init);
+      carregarMembros();
+    } catch (err) {
+      setNotification(err.message);
+    } finally {
+      setPromovendo(null);
+    }
+  };
+
   const totalPresentes = presencaData
-    ? (presencaData.membros || []).filter(m => marcacoes[`m_${m.membroId}`]).length
-      + (presencaData.avulsos || []).filter(a => marcacoes[`a_${a.preCadastroId}`] !== false).length
+    ? (presencaData.membros || []).filter(m => marcacoes[`m_${m.membroId}`] === true).length
+      + (presencaData.avulsos || []).filter(a => marcacoes[`a_${a.preCadastroId}`] === true).length
     : 0;
   const totalReuniao = presencaData
-    ? (presencaData.membros || []).length + (presencaData.avulsos || []).length
+    ? (presencaData.membros || []).length
+      + (presencaData.avulsos || []).filter(a => !a.carryForward || marcacoes[`a_${a.preCadastroId}`] != null).length
     : 0;
 
   const novasSelecionadas = sugestoes.filter((s, i) => selecionadas[i] && !s.existente).length;
@@ -504,6 +635,15 @@ export default function CelulaPresencaPage() {
                             {r.status === 'aberta' ? 'Registrar presença' : 'Ver presença'}
                           </Button>
                         )}
+                        {r.status === 'encerrada' && (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => handleReabrirReuniao(r)}
+                          >
+                            Reabrir
+                          </Button>
+                        )}
                         {r.status === 'aberta' && (
                           <Button
                             size="small"
@@ -514,13 +654,16 @@ export default function CelulaPresencaPage() {
                             Cancelar
                           </Button>
                         )}
-                        {r.status !== 'encerrada' && (
-                          <Tooltip title="Excluir reunião">
-                            <IconButton size="small" color="error" onClick={() => handleExcluirReuniao(r)}>
-                              <DeleteOutlineIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        )}
+                        <Tooltip title="Editar data">
+                          <IconButton size="small" onClick={() => handleAbrirEdicaoReuniao(r)}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Excluir reunião">
+                          <IconButton size="small" color="error" onClick={() => handleExcluirReuniao(r)}>
+                            <DeleteOutlineIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
                       </Stack>
                     </Stack>
                   </Paper>
@@ -619,24 +762,114 @@ export default function CelulaPresencaPage() {
                     {(presencaData?.avulsos || []).length > 0 && (
                       <>
                         <Divider sx={{ my: 1 }}><Typography variant="caption">Visitantes / Novos</Typography></Divider>
-                        {(presencaData?.avulsos || []).map(a => (
-                          <Paper key={a.preCadastroId} variant="outlined" sx={{ p: 1.5, borderColor: 'warning.main' }}>
-                            <Stack direction="row" alignItems="center" justifyContent="space-between">
-                              <Stack direction="row" spacing={1.5} alignItems="center">
-                                <Avatar sx={{
-                                  width: 36, height: 36, bgcolor: 'warning.main', fontSize: 14
-                                }}>
-                                  {inicialNome(a.nome)}
-                                </Avatar>
-                                <Box>
-                                  <Typography variant="subtitle2">{a.nome}</Typography>
-                                  <Chip size="small" label={a.tipoPessoa === 'novo_integrante' ? 'Novo integrante' : 'Visitante'} color="warning" sx={{ fontSize: 10, height: 18 }} />
-                                </Box>
+                        {(presencaData?.avulsos || []).map(a => {
+                          const presente = marcacoes[`a_${a.preCadastroId}`];
+                          const podeEditar = reuniaoAtiva.status !== 'encerrada';
+                          const estaPromovendo = promovendo === a.preCadastroId;
+                          return (
+                            <Paper
+                              key={a.preCadastroId}
+                              variant="outlined"
+                              sx={{
+                                p: 1.5,
+                                borderColor: presente === true ? 'success.main' : presente === false ? 'error.light' : 'warning.main',
+                                bgcolor: presente === true ? 'success.50' : 'transparent'
+                              }}
+                            >
+                              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                                <Stack direction="row" spacing={1.5} alignItems="center">
+                                  <Avatar sx={{
+                                    width: 36, height: 36, bgcolor: 'warning.main', fontSize: 14
+                                  }}>
+                                    {inicialNome(a.nome)}
+                                  </Avatar>
+                                  <Box>
+                                    <Typography variant="subtitle2">{a.nome}</Typography>
+                                    <Stack direction="row" spacing={0.5} mt={0.25} flexWrap="wrap" alignItems="center">
+                                      {podeEditar ? (
+                                        <Select
+                                          size="small"
+                                          value={a.tipoPessoa}
+                                          onChange={e => handleAlterarTipo(a, e.target.value)}
+                                          sx={{
+                                            fontSize: 11,
+                                            height: 22,
+                                            '& .MuiSelect-select': { py: 0, px: 1 }
+                                          }}
+                                        >
+                                          <MenuItem value="visitante" sx={{ fontSize: 12 }}>Visitante</MenuItem>
+                                          <MenuItem value="novo_integrante" sx={{ fontSize: 12 }}>Frequentador</MenuItem>
+                                          <MenuItem value="membro" sx={{ fontSize: 12, color: 'success.main', fontWeight: 700 }}>Promover a membro…</MenuItem>
+                                        </Select>
+                                      ) : (
+                                        <Chip
+                                          size="small"
+                                          label={a.tipoPessoa === 'novo_integrante' ? 'Frequentador' : 'Visitante'}
+                                          color="warning"
+                                          sx={{ fontSize: 10, height: 18 }}
+                                        />
+                                      )}
+                                      {a.totalPresencas > 0 && (
+                                        <Chip
+                                          size="small"
+                                          label={`${a.totalPresencas}ª visita`}
+                                          variant="outlined"
+                                          color={a.promotable ? 'success' : 'default'}
+                                          sx={{ fontSize: 10, height: 18 }}
+                                        />
+                                      )}
+                                    </Stack>
+                                  </Box>
+                                </Stack>
+                                <Stack direction="row" spacing={0.5} alignItems="center">
+                                  {podeEditar && (
+                                    <Tooltip title={a.promotable ? '3+ presenças — elegível para membro' : 'Promover a membro'}>
+                                      <Button
+                                        size="small"
+                                        variant={a.promotable ? 'contained' : 'outlined'}
+                                        color="success"
+                                        startIcon={<PersonAddIcon />}
+                                        onClick={() => handlePromoverParaMembro(a)}
+                                        disabled={estaPromovendo}
+                                        sx={{ fontSize: 11, whiteSpace: 'nowrap' }}
+                                      >
+                                        {estaPromovendo ? '...' : 'Promover'}
+                                      </Button>
+                                    </Tooltip>
+                                  )}
+                                  {podeEditar ? (
+                                    <Stack direction="row" spacing={0.5}>
+                                      <Tooltip title="Presente">
+                                        <IconButton
+                                          size="small"
+                                          color={presente === true ? 'success' : 'default'}
+                                          onClick={() => setMarcacoes(prev => ({ ...prev, [`a_${a.preCadastroId}`]: true }))}
+                                        >
+                                          <CheckCircleIcon />
+                                        </IconButton>
+                                      </Tooltip>
+                                      <Tooltip title="Faltou">
+                                        <IconButton
+                                          size="small"
+                                          color={presente === false ? 'error' : 'default'}
+                                          onClick={() => setMarcacoes(prev => ({ ...prev, [`a_${a.preCadastroId}`]: false }))}
+                                        >
+                                          <CancelIcon />
+                                        </IconButton>
+                                      </Tooltip>
+                                    </Stack>
+                                  ) : (
+                                    <Chip
+                                      size="small"
+                                      label={presente === true ? 'Presente' : presente === false ? 'Faltou' : '—'}
+                                      color={presente === true ? 'success' : presente === false ? 'error' : 'default'}
+                                    />
+                                  )}
+                                </Stack>
                               </Stack>
-                              <Chip size="small" label="Presente" color="success" />
-                            </Stack>
-                          </Paper>
-                        ))}
+                            </Paper>
+                          );
+                        })}
                       </>
                     )}
                   </Stack>
@@ -1073,6 +1306,77 @@ export default function CelulaPresencaPage() {
               </Button>
             </>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Dialog: editar data da reunião ──────────────────────────────────── */}
+      <Dialog open={dialogEditarReuniao} onClose={() => setDialogEditarReuniao(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Editar reunião</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} mt={1}>
+            <TextField
+              type="date"
+              fullWidth
+              label="Data da reunião"
+              value={dataEdicao}
+              onChange={e => setDataEdicao(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialogEditarReuniao(false)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            onClick={handleSalvarEdicaoReuniao}
+            disabled={!dataEdicao || salvandoEdicao}
+          >
+            {salvandoEdicao ? 'Salvando...' : 'Salvar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Dialog: relatório de célula (WhatsApp) ───────────────────────────── */}
+      <Dialog open={dialogRelatorio} onClose={() => setDialogRelatorio(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Relatório de Célula</DialogTitle>
+        <DialogContent>
+          {relatorio && (
+            <Stack spacing={2} mt={0.5}>
+              <Alert severity="success" icon={false}>
+                Presença registrada e reunião encerrada com sucesso!
+              </Alert>
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 2,
+                  fontFamily: 'monospace',
+                  fontSize: 13,
+                  whiteSpace: 'pre-line',
+                  bgcolor: 'grey.50',
+                  lineHeight: 1.8
+                }}
+              >
+                {gerarTextoRelatorio(relatorio)}
+              </Paper>
+              <Typography variant="caption" color="textSecondary">
+                Texto copiado automaticamente para a área de transferência.
+              </Typography>
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              if (relatorio) {
+                navigator.clipboard.writeText(gerarTextoRelatorio(relatorio))
+                  .then(() => setNotification('Texto copiado!'))
+                  .catch(() => setNotification('Erro ao copiar'));
+              }
+            }}
+          >
+            Copiar novamente
+          </Button>
+          <Button variant="contained" onClick={() => setDialogRelatorio(false)}>Fechar</Button>
         </DialogActions>
       </Dialog>
 

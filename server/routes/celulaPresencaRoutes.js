@@ -9,6 +9,7 @@ router.get('/minha-celula', ctrl.minhacelula.bind(ctrl));
 // Membros vinculados à célula
 router.get('/:celulaId/membros', ctrl.listarMembros.bind(ctrl));
 router.post('/:celulaId/membros', ctrl.vincularMembro.bind(ctrl));
+router.patch('/:celulaId/membros/:membroId', ctrl.editarMembro.bind(ctrl));
 router.delete('/:celulaId/membros/:membroId', ctrl.desvincularMembro.bind(ctrl));
 
 // Busca de membros candidatos a vincular
@@ -27,6 +28,8 @@ router.get('/:celulaId/reunioes', ctrl.listarReunioes.bind(ctrl));
 router.post('/:celulaId/reunioes', ctrl.criarReuniaoManual.bind(ctrl));
 router.delete('/reunioes/:reuniaoId', ctrl.excluirReuniao.bind(ctrl));
 router.patch('/reunioes/:reuniaoId/cancelar', ctrl.cancelarReuniao.bind(ctrl));
+router.patch('/reunioes/:reuniaoId/reabrir', ctrl.reabrirReuniao.bind(ctrl));
+router.patch('/reunioes/:reuniaoId', ctrl.editarReuniao.bind(ctrl));
 
 // Presença
 router.get('/reunioes/:reuniaoId/presenca', ctrl.obterPresencaReuniao.bind(ctrl));
@@ -38,5 +41,9 @@ router.post('/:celulaId/membros/:membroId/transferir', ctrl.transferirMembro.bin
 
 // Estatísticas do membro na célula
 router.get('/:celulaId/membros/:membroId/stats', ctrl.estatisticasMembro.bind(ctrl));
+
+// Pré-cadastros (visitantes / frequentadores)
+router.patch('/:celulaId/pre-cadastros/:preCadastroId', ctrl.atualizarTipoPreCadastro.bind(ctrl));
+router.post('/:celulaId/pre-cadastros/:preCadastroId/promover', ctrl.promoverPreCadastro.bind(ctrl));
 
 module.exports = router;

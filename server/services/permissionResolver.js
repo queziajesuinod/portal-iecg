@@ -1,21 +1,21 @@
 const { User, Perfil, Permissao } = require('../models');
 
 function buildPermissionInclude() {
+  const permissoesInclude = { model: Permissao, as: 'permissoes', through: { attributes: [] } };
   return [
+    // Perfil primário (via perfilId FK)
+    { model: Perfil, required: false, include: [permissoesInclude] },
+    // Perfis adicionais (via UserPerfis many-to-many)
     {
       model: Perfil,
-      required: false,
-      include: [{
-        model: Permissao,
-        as: 'permissoes',
-        through: { attributes: [] }
-      }]
-    },
-    {
-      model: Permissao,
-      as: 'permissoesDiretas',
+      as: 'perfis',
       through: { attributes: [] },
-      required: false
+      required: false,
+      include: [permissoesInclude]
+    },
+    // Permissões diretas ao usuário
+    {
+      model: Permissao, as: 'permissoesDiretas', through: { attributes: [] }, required: false
     }
   ];
 }
@@ -23,9 +23,10 @@ function buildPermissionInclude() {
 function extractPermissionNames(user) {
   if (!user) return [];
   const perfilPerms = user.Perfil?.permissoes || [];
+  const perfisPerms = (user.perfis || []).flatMap(p => p.permissoes || []);
   const directPerms = user.permissoesDiretas || [];
   return Array.from(new Set(
-    [...perfilPerms, ...directPerms]
+    [...perfilPerms, ...perfisPerms, ...directPerms]
       .map((perm) => perm?.nome)
       .filter(Boolean)
   ));

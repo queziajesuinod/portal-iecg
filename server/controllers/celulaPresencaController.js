@@ -1,5 +1,6 @@
 const { Op } = require('sequelize');
 const {
+  sequelize,
   Celula,
   CelulaMembroVinculo,
   CelulaReuniao,
@@ -165,6 +166,48 @@ class CelulaPresencaController {
     }
   }
 
+  async editarMembro(req, res) {
+    try {
+      const { celulaId, membroId } = req.params;
+      const {
+        fullName, preferredName, phone, whatsapp, papel
+      } = req.body;
+
+      if (!fullName || !fullName.trim()) {
+        return res.status(400).json({ erro: 'Nome completo é obrigatório.' });
+      }
+
+      const membro = await Member.findByPk(membroId);
+      if (!membro) return res.status(404).json({ erro: 'Membro não encontrado.' });
+
+      await membro.update({
+        fullName: fullName.trim(),
+        preferredName: preferredName?.trim() || null,
+        phone: phone?.trim() || null,
+        whatsapp: whatsapp?.trim() || null,
+      });
+
+      if (papel) {
+        const vinculo = await CelulaMembroVinculo.findOne({ where: { celulaId, membroId, ativo: true } });
+        if (vinculo) await vinculo.update({ papel });
+      }
+
+      return res.json({
+        mensagem: 'Dados atualizados com sucesso.',
+        membro: {
+          id: membro.id,
+          fullName: membro.fullName,
+          preferredName: membro.preferredName,
+          phone: membro.phone,
+          whatsapp: membro.whatsapp,
+        },
+        papel: papel || null,
+      });
+    } catch (err) {
+      return res.status(500).json({ erro: err.message });
+    }
+  }
+
   // ── Reuniões ────────────────────────────────────────────────────────────────
 
   async listarReunioes(req, res) {
@@ -261,14 +304,14 @@ class CelulaPresencaController {
         include: [{ model: Member, as: 'membro', attributes: ['id', 'fullName', 'preferredName', 'photoUrl', 'status'] }]
       });
 
-      const presencasExistentes = await CelulaPresenca.findAll({
-        where: { reuniaoId },
-        include: [{ model: PreCadastroPresenca, as: 'preCadastro', attributes: ['id', 'nome', 'tipo'] }]
-      });
+      // Presenças já registradas nesta reunião
+      const presencasExistentes = await CelulaPresenca.findAll({ where: { reuniaoId } });
 
       const presencaMap = {};
+      const presencaAvulsoMap = {};
       for (const p of presencasExistentes) {
         if (p.membroId) presencaMap[`m_${p.membroId}`] = p;
+        if (p.preCadastroId) presencaAvulsoMap[p.preCadastroId] = p;
       }
 
       const membros = vinculos.map(v => ({
@@ -282,16 +325,66 @@ class CelulaPresencaController {
         presencaId: presencaMap[`m_${v.membroId}`]?.id ?? null
       }));
 
-      const avulsos = presencasExistentes
-        .filter(p => p.preCadastroId && !p.membroId)
-        .map(p => ({
-          tipo: 'avulso',
-          preCadastroId: p.preCadastroId,
-          nome: p.preCadastro?.nome,
-          tipoPessoa: p.preCadastro?.tipo,
-          presente: p.presente,
-          presencaId: p.id
-        }));
+      // Todos os pré-cadastros não promovidos desta célula (visitantes e frequentadores)
+      const todosPreCadastros = await PreCadastroPresenca.findAll({
+        where: { celulaId: reuniao.celulaId, promovidoEmMembroId: null },
+        attributes: ['id', 'nome', 'tipo', 'telefone', 'whatsapp'],
+        order: [['nome', 'ASC']]
+      });
+
+      // Contar total de presenças e calcular sequência de cada pré-cadastro
+      let countsMap = {};
+      const sequenciaMap = {};
+      const preIds = todosPreCadastros.map(pc => pc.id);
+      if (preIds.length) {
+        const counts = await CelulaPresenca.findAll({
+          attributes: ['preCadastroId', [sequelize.fn('COUNT', sequelize.col('CelulaPresenca.id')), 'total']],
+          where: { preCadastroId: { [Op.in]: preIds }, presente: true },
+          group: ['preCadastroId'],
+          raw: true
+        });
+        countsMap = Object.fromEntries(counts.map(c => [c.preCadastroId, parseInt(c.total, 10)]));
+
+        // Histórico ordenado por data desc para calcular sequência consecutiva
+        const historico = await CelulaPresenca.findAll({
+          where: { preCadastroId: { [Op.in]: preIds } },
+          include: [{
+            model: CelulaReuniao,
+            as: 'reuniao',
+            attributes: ['id', 'data'],
+            required: true
+          }],
+          order: [[{ model: CelulaReuniao, as: 'reuniao' }, 'data', 'DESC']]
+        });
+
+        const gruposPorPc = {};
+        for (const p of historico) {
+          if (!gruposPorPc[p.preCadastroId]) gruposPorPc[p.preCadastroId] = [];
+          gruposPorPc[p.preCadastroId].push(p);
+        }
+        for (const [pcId, presencas] of Object.entries(gruposPorPc)) {
+          let seq = 0;
+          for (const p of presencas) {
+            if (p.presente === true) seq += 1;
+            else break;
+          }
+          sequenciaMap[pcId] = seq;
+        }
+      }
+
+      const avulsos = todosPreCadastros.map(pc => ({
+        tipo: 'avulso',
+        preCadastroId: pc.id,
+        nome: pc.nome,
+        tipoPessoa: pc.tipo,
+        telefone: pc.telefone,
+        presente: presencaAvulsoMap[pc.id]?.presente ?? null,
+        presencaId: presencaAvulsoMap[pc.id]?.id ?? null,
+        carryForward: !presencaAvulsoMap[pc.id],
+        totalPresencas: countsMap[pc.id] || 0,
+        sequenciaAtual: sequenciaMap[pc.id] || 0,
+        promotable: (countsMap[pc.id] || 0) >= 3
+      }));
 
       return res.json({ reuniao, membros, avulsos });
     } catch (err) {
@@ -304,11 +397,20 @@ class CelulaPresencaController {
       const { reuniaoId } = req.params;
       const { presencas } = req.body;
 
-      // Busca membroId do usuário logado para gravar quem encerrou
       const encerradaPorId = req.user?.memberId || null;
+      const relatorio = await celulaPresencaService.registrarPresenca(reuniaoId, presencas, encerradaPorId);
 
-      await celulaPresencaService.registrarPresenca(reuniaoId, presencas, encerradaPorId);
-      return res.json({ mensagem: 'Presença registrada com sucesso' });
+      return res.json({ mensagem: 'Presença registrada com sucesso', relatorio });
+    } catch (err) {
+      return res.status(400).json({ erro: err.message });
+    }
+  }
+
+  async promoverPreCadastro(req, res) {
+    try {
+      const { celulaId, preCadastroId } = req.params;
+      const resultado = await celulaPresencaService.promoverPreCadastro(preCadastroId, celulaId);
+      return res.status(201).json(resultado);
     } catch (err) {
       return res.status(400).json({ erro: err.message });
     }
@@ -347,10 +449,67 @@ class CelulaPresencaController {
   async excluirReuniao(req, res) {
     try {
       const { reuniaoId } = req.params;
-      await celulaPresencaService.excluirReuniao(reuniaoId);
-      return res.json({ mensagem: 'Reunião excluída com sucesso' });
+      const resultado = await celulaPresencaService.excluirReuniao(reuniaoId);
+      const { presencasRemovidas, pontosRemovidos, foiEncerrada } = resultado;
+
+      let mensagem = 'Reunião excluída com sucesso.';
+      if (foiEncerrada && presencasRemovidas > 0) {
+        mensagem = `Reunião excluída. ${presencasRemovidas} registro(s) de presença desfeito(s).`;
+      }
+
+      return res.json({
+        mensagem, presencasRemovidas, pontosRemovidos, foiEncerrada
+      });
     } catch (err) {
       return res.status(400).json({ erro: err.message });
+    }
+  }
+
+  async reabrirReuniao(req, res) {
+    try {
+      const { reuniaoId } = req.params;
+      const reuniao = await celulaPresencaService.reabrirReuniao(reuniaoId);
+      return res.json(reuniao);
+    } catch (err) {
+      return res.status(400).json({ erro: err.message });
+    }
+  }
+
+  async editarReuniao(req, res) {
+    try {
+      const { reuniaoId } = req.params;
+      const { data } = req.body;
+
+      const reuniao = await CelulaReuniao.findByPk(reuniaoId);
+      if (!reuniao) return res.status(404).json({ erro: 'Reunião não encontrada.' });
+
+      if (data) {
+        const dataParseada = parseDateOnly(data);
+        if (!dataParseada || !dataParseada.isValid()) {
+          return res.status(400).json({ erro: 'Data inválida. Use o formato YYYY-MM-DD.' });
+        }
+
+        const inicioDia = toStartOfDay(data);
+        const fimDia = toEndOfDay(data);
+
+        const existente = await CelulaReuniao.findOne({
+          where: {
+            celulaId: reuniao.celulaId,
+            id: { [Op.ne]: reuniaoId },
+            data: { [Op.between]: [inicioDia, fimDia] }
+          }
+        });
+        if (existente) {
+          return res.status(409).json({ erro: 'Já existe uma reunião cadastrada para esta data.' });
+        }
+
+        const dataTs = dataParseada.toDate();
+        await reuniao.update({ data: dataTs });
+      }
+
+      return res.json(reuniao);
+    } catch (err) {
+      return res.status(500).json({ erro: err.message });
     }
   }
 
@@ -490,6 +649,18 @@ class CelulaPresencaController {
       })));
     } catch (err) {
       return res.status(500).json({ erro: err.message });
+    }
+  }
+
+  async atualizarTipoPreCadastro(req, res) {
+    try {
+      const { preCadastroId } = req.params;
+      const { tipo } = req.body;
+      if (!tipo) return res.status(400).json({ erro: 'Campo "tipo" é obrigatório.' });
+      const registro = await celulaPresencaService.atualizarTipoPreCadastro(preCadastroId, tipo);
+      return res.json({ mensagem: 'Tipo atualizado.', tipo: registro.tipo });
+    } catch (err) {
+      return res.status(err.status ?? 500).json({ erro: err.message });
     }
   }
 }

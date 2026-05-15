@@ -25,7 +25,7 @@ module.exports = (sequelize) => {
       telefone: { type: DataTypes.STRING(20), allowNull: true },
       whatsapp: { type: DataTypes.STRING(20), allowNull: true },
       tipo: {
-        type: DataTypes.ENUM('visitante', 'novo_integrante'),
+        type: DataTypes.ENUM('visitante', 'frequentador', 'novo_integrante'),
         allowNull: false,
         defaultValue: 'visitante'
       },

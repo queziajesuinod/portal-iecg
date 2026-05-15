@@ -25,9 +25,6 @@ async function syncUserPerfis(user, perfilIds = []) {
     }
   });
   await user.setPerfis(perfis);
-  if (perfis.length) {
-    await user.update({ perfilId: perfis[0].id });
-  }
 }
 
 async function syncUserPermissoes(user, permissaoIds = []) {
