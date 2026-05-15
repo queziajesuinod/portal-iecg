@@ -3,8 +3,7 @@
  * Adiciona permissões necessárias ao perfil LIDER_CELULA.
  *
  * Permissões adicionadas:
- *   - EVENTS_ACESS   — acesso às rotas de eventos (backend)
- *   - EVENTOS_LISTAR — exibição do módulo de eventos no menu
+ *   - LIDER_CELULA_PRESENCA — exibição do item "Minha Célula" no menu
  *
  * Uso:
  *   node scripts/addPermissoesLiderCelula.js            # executa
@@ -19,8 +18,7 @@ const {
 const isDryRun = process.argv.includes('--dry-run');
 
 const PERMISSOES_NECESSARIAS = [
-  { nome: 'EVENTS_ACESS', descricao: 'Acessar o módulo de eventos (API)' },
-  { nome: 'EVENTOS_LISTAR', descricao: 'Acessar o módulo de eventos (listagem)' },
+  { nome: 'LIDER_CELULA_PRESENCA', descricao: 'Acessar a página Minha Célula (presença)' },
 ];
 
 async function main() {

@@ -59,6 +59,7 @@ import ValidacaoMinisterioPage from '../Pages/Cultos/ValidacaoMinisterioPage';
 import AreaVoluntariadoPage from '../Pages/Voluntariado/AreaVoluntariadoPage';
 import VoluntariadoPage from '../Pages/Voluntariado/VoluntariadoPage';
 import CelulaPresencaPage from '../Pages/Celulas/CelulaPresencaPage';
+import MinhaCelulaPage from '../Pages/Celulas/MinhaCelulaPage';
 import { isStoredTokenValid } from '../../utils/authSession';
 
 function Application({ history }) {
@@ -146,6 +147,7 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/voluntariado/areas" component={AreaVoluntariadoPage} isAuthenticated={isAuthenticated} requiredPermission="VOLUNTARIADO" />
             <ProtectedRoute exact path="/app/voluntariado" component={VoluntariadoPage} isAuthenticated={isAuthenticated} requiredPermission="VOLUNTARIADO" />
             {/* ===== Módulo: Presença em Células ===== */}
+            <ProtectedRoute exact path="/app/minha-celula" component={MinhaCelulaPage} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/celulas/:celulaId/presenca" component={CelulaPresencaPage} isAuthenticated={isAuthenticated} />
           </Switch>
         </Dashboard>
