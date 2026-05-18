@@ -1465,6 +1465,25 @@ async function criarPagamentoOnline(registrationId, payload = {}) {
   const merchantOrderId = `${registration.orderCode}-P${pagamentosExistentes.length + 1}`;
   let resultadoPagamento;
   if (paymentOption.paymentType === 'pix') {
+    const pixPendente = pagamentosExistentes
+      .filter(p => p.method === 'pix' && ['pending', 'authorized'].includes(p.status) && p.channel === 'ONLINE')
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+
+    if (pixPendente) {
+      return {
+        pagamento: {
+          sucesso: true,
+          paymentId: pixPendente.providerPaymentId,
+          status: 12,
+          qrCodeString: pixPendente.pixQrCode,
+          qrCodeBase64: pixPendente.pixQrCodeBase64,
+          pixTransactionId: pixPendente.pixTransactionId
+        },
+        payment: pixPendente,
+        pixPendente: true
+      };
+    }
+
     resultadoPagamento = await paymentService.criarTransacaoPix({
       merchantOrderId,
       customerName: registration.buyerData?.nome || registration.buyerData?.name || 'Cliente',
