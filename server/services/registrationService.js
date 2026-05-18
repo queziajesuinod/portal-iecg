@@ -208,8 +208,11 @@ async function montarPayloadWebhookInscricao(registrationId) {
   return registration;
 }
 
-async function emitirWebhookRegistroAtualizado(registrationId, extra = {}) {
-  const registration = await Registration.findByPk(registrationId, { attributes: ['id', 'paymentStatus', 'webhookEventLog'] });
+async function emitirWebhookRegistroAtualizado(registrationId, extra = {}, options = {}) {
+  const registration = await Registration.findByPk(registrationId, {
+    attributes: ['id', 'paymentStatus', 'webhookEventLog'],
+    transaction: options.transaction || null
+  });
   if (!registration) return;
 
   const previousStatus = extra.previousStatus || null;
@@ -228,7 +231,7 @@ async function emitirWebhookRegistroAtualizado(registrationId, extra = {}) {
       ...eventLog,
       [logKey]: { previousStatus, currentStatus, sentAt: new Date().toISOString() }
     }
-  });
+  }, { transaction: options.transaction || null });
 
   const registrationPayload = await montarPayloadWebhookInscricao(registrationId);
   webhookEmitter.emit('registration.updated', {
@@ -594,7 +597,7 @@ async function atualizarStatusPagamentoPorPagamentos(registration, options = {})
     await emitirWebhookRegistroAtualizado(registration.id, {
       previousStatus: statusAnterior,
       currentStatus: registration.paymentStatus
-    });
+    }, options);
     /* eslint-enable no-param-reassign */
   }
   return resumo;
