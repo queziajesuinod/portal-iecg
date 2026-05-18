@@ -92,13 +92,13 @@ function classificarErroCielo(error) {
 function montarCustomer(dadosPagamento) {
   const customerData = dadosPagamento.customer || {};
   const documentValue = (
-    dadosPagamento.customerDocument ||
-    customerData.document ||
-    customerData.cpf ||
-    customerData.cnpj ||
-    customerData.documento ||
-    customerData.cnpjcpf ||
-    ''
+    dadosPagamento.customerDocument
+    || customerData.document
+    || customerData.cpf
+    || customerData.cnpj
+    || customerData.documento
+    || customerData.cnpjcpf
+    || ''
   ).toString();
 
   const sanitizedDocument = documentValue.replace(/\D/g, '') || '00000000000';
@@ -426,6 +426,7 @@ async function cancelarPagamento(paymentId, amount) {
 
     return {
       sucesso: false,
+      httpStatus: error.response?.status || null,
       erro: error.response?.data?.ReturnMessage || error.message,
       dadosCompletos: error.response?.data
     };
@@ -467,6 +468,7 @@ async function estornarPagamento(paymentId, amount) {
 
     return {
       sucesso: false,
+      httpStatus: error.response?.status || null,
       erro: error.response?.data?.ReturnMessage || error.message,
       dadosCompletos: error.response?.data
     };

@@ -1801,7 +1801,9 @@ async function cancelarInscricao(id) {
   if (registration.paymentStatus === 'cancelled' || registration.paymentStatus === 'refunded') {
     throw new Error('Inscrição já foi cancelada');
   }
-  if (registration.paymentStatus === 'pending') {
+  const pagamentosAtivos = (registration.getDataValue('payments') || [])
+    .filter(p => ['pending', 'authorized'].includes(p.status));
+  if (pagamentosAtivos.length > 0) {
     throw new Error('Não é possível cancelar uma inscrição com pagamento pendente');
   }
 
@@ -1865,6 +1867,16 @@ async function cancelarInscricao(id) {
     return aplicarCancelamentoLocal('cancelled', 'Ambiente sandbox: pagamento ignorado');
   }
 
+  const todosPagamentos = registration.getDataValue('payments') || [];
+  const temPagamentoCieloAtivo = todosPagamentos.some(
+    p => p.provider === 'cielo' && p.providerPaymentId
+      && !['cancelled', 'refunded', 'expired', 'denied'].includes(p.status)
+  );
+
+  if (!temPagamentoCieloAtivo) {
+    return aplicarCancelamentoLocal('cancelled', 'Sem pagamentos Cielo ativos: cancelamento local aplicado');
+  }
+
   const creditCardPayments = await RegistrationPayment.findAll({
     where: {
       registrationId: registration.id,
@@ -1918,6 +1930,18 @@ async function cancelarInscricao(id) {
     const amountCentavos = paymentService.converterParaCentavos(valorCobrado);
     const cancelamento = await cancelarNoCielo(payment.providerPaymentId, amountCentavos, payment.status);
     if (!cancelamento.sucesso) {
+      if (cancelamento.httpStatus === 400) {
+        console.warn(`[cancelarInscricao] Cielo retornou 400 para ${payment.providerPaymentId} — pagamento já em estado terminal, prosseguindo com cancelamento local`);
+        if (payment.id) {
+          const pagamentoDb = await RegistrationPayment.findByPk(payment.id);
+          if (pagamentoDb && !['cancelled', 'refunded', 'expired', 'denied'].includes(pagamentoDb.status)) {
+            pagamentoDb.status = 'cancelled';
+            await pagamentoDb.save();
+          }
+        }
+        cancelamentosConcluidos.push({ sucesso: true, type: 'cancellation', local: true });
+        continue;
+      }
       throw new Error(`Erro ao cancelar pagamento ${payment.providerPaymentId || payment.id}: ${cancelamento.erro}`);
     }
 
