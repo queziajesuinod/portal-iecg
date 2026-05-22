@@ -168,6 +168,9 @@ async function list(req, res) {
         filters[key] = value;
       }
     });
+    if (req.query.isLider === 'true' || req.query.isLider === '1') {
+      filters.isLider = true;
+    }
 
     const result = await memberService.listMembers(filters, { page, limit });
     res.status(200).json(result);
@@ -347,7 +350,8 @@ async function setActivityTypeActive(req, res) {
 
 async function listPossibleDuplicates(req, res) {
   try {
-    const result = await memberService.listPossibleDuplicates();
+    const { page, limit } = req.query || {};
+    const result = await memberService.listPossibleDuplicates({ page, limit });
     res.status(200).json(result);
   } catch (error) {
     res.status(500).json({ message: error.message || 'Erro ao listar membros duplicados' });

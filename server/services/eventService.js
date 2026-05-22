@@ -121,6 +121,11 @@ function buildUnfinishedEventWhere() {
 
 async function listarEventos(options = {}) {
   const includeFinished = Boolean(options.includeFinished);
+  const cacheKey = includeFinished ? 'events:list:all' : cache.CACHE_KEYS.eventsList();
+  return cache.getOrSet(cacheKey, () => _listarEventosUncached(includeFinished), 60);
+}
+
+async function _listarEventosUncached(includeFinished) {
   const eventWhere = includeFinished ? {} : buildUnfinishedEventWhere();
   const [eventos, registrationsTotal] = await Promise.all([
     Event.findAll({
@@ -330,7 +335,7 @@ async function buscarEventoPorId(id) {
 }
 
 async function listarEventosPublicos() {
-  return Event.findAll({
+  return cache.getOrSet(cache.CACHE_KEYS.eventsPublicList(), async () => Event.findAll({
     where: {
       isActive: true,
       ...buildUnfinishedEventWhere()
@@ -345,7 +350,16 @@ async function listarEventosPublicos() {
       },
     ],
     order: [['startDate', 'DESC']],
-  });
+  }), 60);
+}
+
+// Invalida todas as variantes de listagem (admin + publica).
+async function invalidateEventListsCache() {
+  await Promise.all([
+    cache.del(cache.CACHE_KEYS.eventsList()),
+    cache.del(cache.CACHE_KEYS.eventsPublicList()),
+    cache.del('events:list:all'),
+  ]);
 }
 
 async function buscarEventoPublicoPorId(id, options = {}) {
@@ -703,6 +717,7 @@ async function criarEvento(body, userId) {
   });
 
   await garantirCamposPadraoFormulario(event.id);
+  await invalidateEventListsCache();
   webhookEmitter.emit('event.created', {
     id: event.id,
     data: body,
@@ -765,6 +780,11 @@ async function atualizarEvento(id, body) {
     if (body[key] === undefined) return;
     changes[key] = event[key];
   });
+  await Promise.all([
+    invalidateEventListsCache(),
+    cache.del(cache.CACHE_KEYS.event(event.id)),
+    cache.del(cache.CACHE_KEYS.eventPublic(event.id)),
+  ]);
   webhookEmitter.emit('event.updated', {
     id: event.id,
     data: body,
@@ -790,6 +810,11 @@ async function deletarEvento(id) {
   }
 
   await event.destroy();
+  await Promise.all([
+    invalidateEventListsCache(),
+    cache.del(cache.CACHE_KEYS.event(event.id)),
+    cache.del(cache.CACHE_KEYS.eventPublic(event.id)),
+  ]);
   webhookEmitter.emit('event.deleted', {
     id: event.id,
   });
@@ -902,6 +927,8 @@ async function duplicarEvento(eventId, userId) {
 
     await Promise.all([...batchPromises, ...fieldPromises, ...paymentPromises]);
     await garantirCamposPadraoFormulario(newEvent.id, { transaction });
+
+    await invalidateEventListsCache();
 
     webhookEmitter.emit('event.duplicated', {
       originalEventId: eventId,

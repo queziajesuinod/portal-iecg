@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import PropTypes from 'prop-types';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
@@ -53,6 +54,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import { useHistory, useParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import brand from 'dan-api/dummy/brand';
+import { queryKeys } from '../../../utils/queryKeys';
 import { useConfirm } from '../../../utils/useConfirm';
 import {
   buscarEvento,
@@ -94,12 +96,9 @@ TabPanel.propTypes = {
 function EventDetails() {
   const { confirm, ConfirmDialog } = useConfirm();
   const history = useHistory();
+  const queryClient = useQueryClient();
   const { id } = useParams();
   const [tabAtiva, setTabAtiva] = useState(0);
-  const [evento, setEvento] = useState(null);
-  const [lotes, setLotes] = useState([]);
-  const [inscricoes, setInscricoes] = useState([]);
-  const [inscritosConfirmados, setInscritosConfirmados] = useState([]);
   const [filters, setFilters] = useState({
     orderCode: '',
     buyerName: '',
@@ -108,17 +107,10 @@ function EventDetails() {
     dateFrom: '',
     dateTo: ''
   });
-  const [formasPagamento, setFormasPagamento] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [lotesLoading, setLotesLoading] = useState(false);
-  const [formasLoading, setFormasLoading] = useState(false);
-  const [registrationsLoading, setRegistrationsLoading] = useState(false);
-  const [confirmedAttendeesLoading, setConfirmedAttendeesLoading] = useState(false);
   const [exportingSales, setExportingSales] = useState(false);
   const [exportingConfirmed, setExportingConfirmed] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [totalInscricoes, setTotalInscricoes] = useState(0);
   const [confirmedFilters, setConfirmedFilters] = useState({
     lote: '',
     orderCode: '',
@@ -126,15 +118,108 @@ function EventDetails() {
   });
   const [confirmedPage, setConfirmedPage] = useState(0);
   const [confirmedRowsPerPage, setConfirmedRowsPerPage] = useState(10);
-  const [totalInscritosConfirmados, setTotalInscritosConfirmados] = useState(0);
   const [notification, setNotification] = useState('');
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [cancelDialogLoading, setCancelDialogLoading] = useState(false);
   const [cancelDialogInfo, setCancelDialogInfo] = useState(null);
   const [cancelTarget, setCancelTarget] = useState(null);
-  const eventoCacheRef = useRef(new Map());
-  const lotesCacheRef = useRef(new Map());
-  const formasCacheRef = useRef(new Map());
+
+  // ===== Queries (cache compartilhado, refetch coordenado pela aba ativa) =====
+
+  const eventoQuery = useQuery({
+    queryKey: queryKeys.events.detail(id),
+    queryFn: () => buscarEvento(id),
+    enabled: Boolean(id),
+  });
+  const evento = eventoQuery.data || null;
+  const loading = eventoQuery.isLoading;
+
+  const lotesQuery = useQuery({
+    queryKey: queryKeys.events.batches(id),
+    queryFn: () => listarLotesPorEvento(id),
+    enabled: Boolean(id) && (tabAtiva === 0),
+  });
+  const lotes = lotesQuery.data || [];
+  const lotesLoading = lotesQuery.isLoading;
+
+  const formasQuery = useQuery({
+    queryKey: queryKeys.events.paymentOptions(id),
+    queryFn: () => listarFormasPagamento(id),
+    enabled: Boolean(id) && (tabAtiva === 3),
+  });
+  const formasPagamento = formasQuery.data || [];
+  const formasLoading = formasQuery.isLoading;
+
+  const inscricoesParams = (() => {
+    const statusParam = Array.isArray(filters.paymentStatus)
+      ? filters.paymentStatus.join(',') || undefined
+      : filters.paymentStatus || undefined;
+    return {
+      page: currentPage + 1,
+      perPage: rowsPerPage,
+      orderCode: filters.orderCode || undefined,
+      buyerName: filters.buyerName || undefined,
+      buyerDocument: filters.buyerDocument || undefined,
+      paymentStatus: statusParam,
+      dateFrom: filters.dateFrom || undefined,
+      dateTo: filters.dateTo || undefined
+    };
+  })();
+
+  const inscricoesQuery = useQuery({
+    queryKey: queryKeys.events.registrations(id, inscricoesParams),
+    queryFn: () => listarInscricoesPorEvento(id, inscricoesParams),
+    enabled: Boolean(id) && tabAtiva === 1,
+    placeholderData: (prev) => prev,
+  });
+  const inscricoes = inscricoesQuery.data?.records || [];
+  const totalInscricoes = inscricoesQuery.data?.total || 0;
+  const registrationsLoading = inscricoesQuery.isFetching;
+
+  const confirmedParams = {
+    page: confirmedPage + 1,
+    perPage: confirmedRowsPerPage,
+    lote: confirmedFilters.lote || undefined,
+    orderCode: confirmedFilters.orderCode || undefined,
+    nomeCompleto: confirmedFilters.nomeCompleto || undefined
+  };
+  const confirmedQuery = useQuery({
+    queryKey: ['events', 'confirmed-attendees', id, confirmedParams],
+    queryFn: () => listarInscritosConfirmadosPorEvento(id, confirmedParams),
+    enabled: Boolean(id) && tabAtiva === 2,
+    placeholderData: (prev) => prev,
+  });
+  const inscritosConfirmados = confirmedQuery.data?.records || [];
+  const totalInscritosConfirmados = confirmedQuery.data?.total || 0;
+  const confirmedAttendeesLoading = confirmedQuery.isFetching;
+
+  // Helpers de invalidacao usados pelas mutations (mantem nomes das funcoes antigas).
+  const carregarDados = () => queryClient.invalidateQueries({ queryKey: queryKeys.events.detail(id) });
+  const carregarLotes = () => queryClient.invalidateQueries({ queryKey: queryKeys.events.batches(id) });
+  const carregarFormas = () => queryClient.invalidateQueries({ queryKey: queryKeys.events.paymentOptions(id) });
+  const carregarInscricoes = () => queryClient.invalidateQueries({ queryKey: ['events', 'registrations', id] });
+  const carregarInscritosConfirmados = () => queryClient.invalidateQueries({ queryKey: ['events', 'confirmed-attendees', id] });
+
+  // Reportar erros das queries no Notification.
+  if (eventoQuery.error && eventoQuery.error._reported !== true) {
+    eventoQuery.error._reported = true;
+    setTimeout(() => setNotification('Erro ao carregar dados do evento'), 0);
+  }
+  if (lotesQuery.error && lotesQuery.error._reported !== true) {
+    lotesQuery.error._reported = true;
+    setTimeout(() => setNotification('Erro ao carregar lotes do evento'), 0);
+  }
+  if (formasQuery.error && formasQuery.error._reported !== true) {
+    formasQuery.error._reported = true;
+    setTimeout(() => setNotification('Erro ao carregar formas de pagamento'), 0);
+  }
+  if (inscricoesQuery.error && inscricoesQuery.error._reported !== true) {
+    inscricoesQuery.error._reported = true;
+    setTimeout(() => setNotification('Erro ao carregar inscrições do evento'), 0);
+  }
+  if (confirmedQuery.error && confirmedQuery.error._reported !== true) {
+    confirmedQuery.error._reported = true;
+    setTimeout(() => setNotification('Erro ao carregar inscritos confirmados do evento'), 0);
+  }
 
   const statusOptions = [
     '',
@@ -169,126 +254,6 @@ function EventDetails() {
     installmentInterestRates: {}
   });
 
-  async function carregarDados() {
-    if (!id) return;
-    try {
-      setLoading(true);
-      let eventoRes = eventoCacheRef.current.get(id);
-      if (!eventoRes) {
-        eventoRes = await buscarEvento(id);
-        eventoCacheRef.current.set(id, eventoRes);
-      }
-      setEvento(eventoRes);
-    } catch (error) {
-      console.error('Erro ao carregar dados:', error);
-      setNotification('Erro ao carregar dados do evento');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function carregarLotes() {
-    if (!id) return;
-    if (lotesCacheRef.current.has(id)) {
-      setLotes(lotesCacheRef.current.get(id));
-      return;
-    }
-    setLotesLoading(true);
-    try {
-      const lotesRes = await listarLotesPorEvento(id);
-      lotesCacheRef.current.set(id, lotesRes);
-      setLotes(lotesRes);
-    } catch (error) {
-      console.error('Erro ao carregar lotes:', error);
-      setNotification('Erro ao carregar lotes do evento');
-    } finally {
-      setLotesLoading(false);
-    }
-  }
-
-  async function carregarFormas() {
-    if (!id) return;
-    if (formasCacheRef.current.has(id)) {
-      setFormasPagamento(formasCacheRef.current.get(id));
-      return;
-    }
-    setFormasLoading(true);
-    try {
-      const formasPagamentoRes = await listarFormasPagamento(id);
-      formasCacheRef.current.set(id, formasPagamentoRes);
-      setFormasPagamento(formasPagamentoRes);
-    } catch (error) {
-      console.error('Erro ao carregar formas de pagamento:', error);
-      setNotification('Erro ao carregar formas de pagamento');
-    } finally {
-      setFormasLoading(false);
-    }
-  }
-
-  async function carregarInscricoes(page = currentPage, perPage = rowsPerPage, currentFilters = filters) {
-    if (!id) return;
-    setRegistrationsLoading(true);
-    try {
-      const statusParam = Array.isArray(currentFilters.paymentStatus)
-        ? currentFilters.paymentStatus.join(',') || undefined
-        : currentFilters.paymentStatus || undefined;
-      const params = {
-        page: page + 1,
-        perPage,
-        orderCode: currentFilters.orderCode || undefined,
-        buyerName: currentFilters.buyerName || undefined,
-        buyerDocument: currentFilters.buyerDocument || undefined,
-        paymentStatus: statusParam,
-        dateFrom: currentFilters.dateFrom || undefined,
-        dateTo: currentFilters.dateTo || undefined
-      };
-      const response = await listarInscricoesPorEvento(id, params);
-      setInscricoes(response.records || []);
-      setTotalInscricoes(response.total || 0);
-    } catch (error) {
-      console.error('Erro ao carregar inscrições:', error);
-      setNotification('Erro ao carregar inscrições do evento');
-    } finally {
-      setRegistrationsLoading(false);
-    }
-  }
-
-  async function carregarInscritosConfirmados(
-    page = confirmedPage,
-    perPage = confirmedRowsPerPage,
-    currentFilters = confirmedFilters
-  ) {
-    if (!id) return;
-    setConfirmedAttendeesLoading(true);
-    try {
-      const params = {
-        page: page + 1,
-        perPage,
-        lote: currentFilters.lote || undefined,
-        orderCode: currentFilters.orderCode || undefined,
-        nomeCompleto: currentFilters.nomeCompleto || undefined
-      };
-      const response = await listarInscritosConfirmadosPorEvento(id, params);
-      setInscritosConfirmados(response.records || []);
-      setTotalInscritosConfirmados(response.total || 0);
-    } catch (error) {
-      console.error('Erro ao carregar inscritos confirmados:', error);
-      setNotification('Erro ao carregar inscritos confirmados do evento');
-    } finally {
-      setConfirmedAttendeesLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    setLotes(lotesCacheRef.current.get(id) || []);
-    setFormasPagamento(formasCacheRef.current.get(id) || []);
-    setInscritosConfirmados([]);
-    setTotalInscritosConfirmados(0);
-    carregarDados();
-    carregarLotes();
-    carregarFormas();
-  }, [id]);
-
   useEffect(() => {
     if (!evento?.title) return;
     const currentPageTitle = history.location?.state?.pageTitle;
@@ -321,20 +286,7 @@ function EventDetails() {
     setConfirmedPage(0);
   }, [confirmedFilters]);
 
-  useEffect(() => {
-    if (tabAtiva === 0) {
-      carregarLotes();
-    }
-    if (tabAtiva === 1) {
-      carregarInscricoes(currentPage, rowsPerPage, filters);
-    }
-    if (tabAtiva === 2) {
-      carregarInscritosConfirmados(confirmedPage, confirmedRowsPerPage, confirmedFilters);
-    }
-    if (tabAtiva === 3) {
-      carregarFormas();
-    }
-  }, [tabAtiva, id, currentPage, rowsPerPage, filters, confirmedPage, confirmedRowsPerPage, confirmedFilters]);
+  // Carregamento das abas e' coordenado pelas opcoes `enabled` em cada useQuery acima.
 
   const handleAbrirDialogLote = (lote = null) => {
     if (lote) {
@@ -368,32 +320,41 @@ function EventDetails() {
     setLoteEdicao(null);
   };
 
-  const handleSalvarLote = async () => {
-    try {
-      const dados = {
-        ...formLote,
-        eventId: id,
-        price: evento?.requiresPayment === false ? 0 : parseFloat(formLote.price),
-        maxQuantity: formLote.maxQuantity ? parseInt(formLote.maxQuantity, 10) : null,
-        order: formLote.order ? parseInt(formLote.order, 10) : 0
-      };
-
-      if (loteEdicao) {
-        await atualizarLote(loteEdicao.id, dados);
-        setNotification('Lote atualizado com sucesso!');
-      } else {
-        await criarLote(dados);
-        setNotification('Lote criado com sucesso!');
-      }
-
+  const salvarLoteMutation = useMutation({
+    mutationFn: async ({ loteId, dados }) => (
+      loteId ? atualizarLote(loteId, dados) : criarLote(dados)
+    ),
+    onSuccess: (_data, { loteId }) => {
+      setNotification(loteId ? 'Lote atualizado com sucesso!' : 'Lote criado com sucesso!');
       handleFecharDialogLote();
       carregarDados();
+      carregarLotes();
       carregarInscricoes();
-    } catch (error) {
-      console.error('Erro ao salvar lote:', error);
-      setNotification(error.message || 'Erro ao salvar lote');
-    }
+    },
+    onError: (error) => setNotification(error.message || 'Erro ao salvar lote'),
+  });
+
+  const handleSalvarLote = () => {
+    const dados = {
+      ...formLote,
+      eventId: id,
+      price: evento?.requiresPayment === false ? 0 : parseFloat(formLote.price),
+      maxQuantity: formLote.maxQuantity ? parseInt(formLote.maxQuantity, 10) : null,
+      order: formLote.order ? parseInt(formLote.order, 10) : 0
+    };
+    salvarLoteMutation.mutate({ loteId: loteEdicao?.id || null, dados });
   };
+
+  const alternarStatusLoteMutation = useMutation({
+    mutationFn: ({ loteId, nextActive }) => atualizarLote(loteId, { isActive: nextActive }),
+    onSuccess: (_data, { acao }) => {
+      setNotification(`Lote ${acao}do com sucesso!`);
+      carregarDados();
+      carregarLotes();
+      carregarInscricoes();
+    },
+    onError: (error) => setNotification(error.message || 'Erro ao atualizar o lote'),
+  });
 
   const handleAlternarStatusLote = async (lote) => {
     const acao = lote.isActive ? 'inativar' : 'reativar';
@@ -401,16 +362,7 @@ function EventDetails() {
       title: `${acao.charAt(0).toUpperCase() + acao.slice(1)} lote`, message: `Deseja ${acao} o lote "${lote.name}"?`, confirmText: acao.charAt(0).toUpperCase() + acao.slice(1), confirmColor: 'warning', severity: 'warning'
     });
     if (!ok) return;
-
-    try {
-      await atualizarLote(lote.id, { isActive: !lote.isActive });
-      setNotification(`Lote ${acao}do com sucesso!`);
-      carregarDados();
-      carregarInscricoes();
-    } catch (error) {
-      console.error('Erro ao atualizar status do lote:', error);
-      setNotification(error.message || 'Erro ao atualizar o lote');
-    }
+    alternarStatusLoteMutation.mutate({ loteId: lote.id, nextActive: !lote.isActive, acao });
   };
 
   // Funções de Forma de Pagamento
@@ -497,51 +449,53 @@ function EventDetails() {
     setPagamentoEdicao(null);
   };
 
-  const handleSalvarPagamento = async () => {
-    try {
-      const maxInstallments = parseInt(formPagamento.maxInstallments, 10) || 1;
-      const installmentInterestRates = normalizeInstallmentRates(
-        formPagamento.installmentInterestRates,
-        maxInstallments
-      );
-      const dados = {
-        ...formPagamento,
-        maxInstallments,
-        installmentInterestRates
-      };
-
-      if (pagamentoEdicao) {
-        await atualizarFormaPagamento(pagamentoEdicao.id, dados);
-        setNotification('Forma de pagamento atualizada com sucesso!');
-      } else {
-        await criarFormaPagamento(id, dados);
-        setNotification('Forma de pagamento criada com sucesso!');
-      }
-
+  const salvarPagamentoMutation = useMutation({
+    mutationFn: async ({ pagamentoId, dados }) => (
+      pagamentoId ? atualizarFormaPagamento(pagamentoId, dados) : criarFormaPagamento(id, dados)
+    ),
+    onSuccess: (_data, { pagamentoId }) => {
+      setNotification(pagamentoId
+        ? 'Forma de pagamento atualizada com sucesso!'
+        : 'Forma de pagamento criada com sucesso!');
       handleFecharDialogPagamento();
       carregarDados();
+      carregarFormas();
       carregarInscricoes();
-    } catch (error) {
-      console.error('Erro ao salvar forma de pagamento:', error);
-      setNotification(error.message || 'Erro ao salvar forma de pagamento');
-    }
+    },
+    onError: (error) => setNotification(error.message || 'Erro ao salvar forma de pagamento'),
+  });
+
+  const handleSalvarPagamento = () => {
+    const maxInstallments = parseInt(formPagamento.maxInstallments, 10) || 1;
+    const installmentInterestRates = normalizeInstallmentRates(
+      formPagamento.installmentInterestRates,
+      maxInstallments
+    );
+    const dados = {
+      ...formPagamento,
+      maxInstallments,
+      installmentInterestRates
+    };
+    salvarPagamentoMutation.mutate({ pagamentoId: pagamentoEdicao?.id || null, dados });
   };
+
+  const deletarPagamentoMutation = useMutation({
+    mutationFn: (pagamentoId) => deletarFormaPagamento(pagamentoId),
+    onSuccess: () => {
+      setNotification('Forma de pagamento deletada com sucesso!');
+      carregarDados();
+      carregarFormas();
+      carregarInscricoes();
+    },
+    onError: (error) => setNotification(error.message || 'Erro ao deletar forma de pagamento'),
+  });
 
   const handleDeletarPagamento = async (pagamentoId, tipo) => {
     const okDeletar = await confirm({
       title: 'Deletar forma de pagamento', message: `Tem certeza que deseja deletar a forma de pagamento "${tipo}"?`, confirmText: 'Deletar', confirmColor: 'error', severity: 'error'
     });
-    if (okDeletar) {
-      try {
-        await deletarFormaPagamento(pagamentoId);
-        setNotification('Forma de pagamento deletada com sucesso!');
-        carregarDados();
-        carregarInscricoes();
-      } catch (error) {
-        console.error('Erro ao deletar forma de pagamento:', error);
-        setNotification(error.message || 'Erro ao deletar forma de pagamento');
-      }
-    }
+    if (!okDeletar) return;
+    deletarPagamentoMutation.mutate(pagamentoId);
   };
 
   const traduzirTipoPagamento = (tipo) => {
@@ -952,24 +906,22 @@ function EventDetails() {
     setCancelTarget(null);
   };
 
-  const confirmarCancelamento = async () => {
-    if (!cancelTarget?.id) {
-      return;
-    }
-    setCancelDialogLoading(true);
-    try {
-      await cancelarInscricao(cancelTarget.id);
+  const cancelarInscricaoMutation = useMutation({
+    mutationFn: (registrationId) => cancelarInscricao(registrationId),
+    onSuccess: () => {
       setNotification('Inscrição cancelada com sucesso.');
       fecharDialogCancelamento();
       carregarDados();
       carregarInscricoes();
       carregarInscritosConfirmados();
-    } catch (error) {
-      console.error('Erro ao cancelar inscrição:', error);
-      setNotification(error.message || 'Erro ao cancelar a inscrição.');
-    } finally {
-      setCancelDialogLoading(false);
-    }
+    },
+    onError: (error) => setNotification(error.message || 'Erro ao cancelar a inscrição.'),
+  });
+  const cancelDialogLoading = cancelarInscricaoMutation.isPending;
+
+  const confirmarCancelamento = () => {
+    if (!cancelTarget?.id) return;
+    cancelarInscricaoMutation.mutate(cancelTarget.id);
   };
 
   const cancelDialogTargetLabel = cancelDialogInfo?.orderCode
@@ -1880,9 +1832,14 @@ function EventDetails() {
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleFecharDialogLote}>Cancelar</Button>
-          <Button onClick={handleSalvarLote} color="primary" variant="contained">
-            Salvar
+          <Button onClick={handleFecharDialogLote} disabled={salvarLoteMutation.isPending}>Cancelar</Button>
+          <Button
+            onClick={handleSalvarLote}
+            color="primary"
+            variant="contained"
+            disabled={salvarLoteMutation.isPending}
+          >
+            {salvarLoteMutation.isPending ? 'Salvando...' : 'Salvar'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1975,13 +1932,16 @@ function EventDetails() {
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleFecharDialogPagamento}>Cancelar</Button>
+          <Button onClick={handleFecharDialogPagamento} disabled={salvarPagamentoMutation.isPending}>Cancelar</Button>
           <Button
             onClick={handleSalvarPagamento}
             variant="contained"
             color="primary"
+            disabled={salvarPagamentoMutation.isPending}
           >
-            {pagamentoEdicao ? 'Atualizar' : 'Criar'}
+            {salvarPagamentoMutation.isPending
+              ? 'Salvando...'
+              : pagamentoEdicao ? 'Atualizar' : 'Criar'}
           </Button>
         </DialogActions>
       </Dialog>

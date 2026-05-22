@@ -1,5 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet';
+import {
+  useQuery, useQueries, useMutation, useQueryClient
+} from '@tanstack/react-query';
 import { PapperBlock, Notification } from 'dan-components';
 import {
   Grid,
@@ -52,60 +55,118 @@ import {
   atualizarEvento
 } from '../../../api/eventsApi';
 import { EVENT_TYPE_LABELS } from '../../../constants/eventTypes';
+import { queryKeys } from '../../../utils/queryKeys';
 
 function EventList() {
   const { confirm, ConfirmDialog } = useConfirm();
   const history = useHistory();
-  const [eventos, setEventos] = useState([]);
-  const [eventosFiltrados, setEventosFiltrados] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [notification, setNotification] = useState('');
-  const [stats, setStats] = useState({
-    totalEventos: 0,
-    eventosAtivos: 0,
-    totalInscricoes: 0,
-    receitaTotal: 0
-  });
   const [filtros, setFiltros] = useState({
     busca: '',
     status: 'todos',
     finalizados: false
   });
   const [expandedEvents, setExpandedEvents] = useState({});
-  const [ticketsSummaryByEvent, setTicketsSummaryByEvent] = useState({});
-  const [ticketsSummaryLoading, setTicketsSummaryLoading] = useState({});
 
-  async function carregarEventos(includeFinished = false) {
-    try {
-      setLoading(true);
-      const params = includeFinished ? { includeFinished: 'true' } : {};
-      const [response, statsResponse] = await Promise.all([listarEventos(params), listarEstatisticas()]);
-      const eventosArray = Array.isArray(response) ? response : [];
+  // Lista de eventos — cache 60s; refetch automatico quando 'finalizados' muda.
+  const eventosQuery = useQuery({
+    queryKey: queryKeys.events.list({ finalizados: filtros.finalizados }),
+    queryFn: () => listarEventos(filtros.finalizados ? { includeFinished: 'true' } : {}),
+    select: (data) => (Array.isArray(data) ? data : []),
+  });
+  const eventos = eventosQuery.data || [];
+  const loading = eventosQuery.isLoading;
 
-      setEventos(eventosArray);
-      setEventosFiltrados(eventosArray);
+  // Estatisticas em paralelo (consulta independente — pode revalidar sozinha).
+  const statsQuery = useQuery({
+    queryKey: queryKeys.events.stats,
+    queryFn: listarEstatisticas,
+  });
 
-      setStats({
-        totalEventos: Number(statsResponse?.totalEventos ?? eventosArray.length),
-        eventosAtivos: Number(statsResponse?.eventosAtivos ?? eventosArray.filter(e => e.isActive).length),
-        totalInscricoes: Number(statsResponse?.totalInscricoes ?? eventosArray.reduce((sum, e) => sum + (e.currentRegistrations || 0), 0)),
-        receitaTotal: Number(statsResponse?.receitaTotal ?? 0)
-      });
-    } catch (error) {
-      console.error('Erro ao carregar eventos:', error);
-      setNotification('Erro ao carregar eventos');
-    } finally {
-      setLoading(false);
-    }
-  }
+  const stats = useMemo(() => ({
+    totalEventos: Number(statsQuery.data?.totalEventos ?? eventos.length),
+    eventosAtivos: Number(statsQuery.data?.eventosAtivos ?? eventos.filter((e) => e.isActive).length),
+    totalInscricoes: Number(
+      statsQuery.data?.totalInscricoes
+      ?? eventos.reduce((sum, e) => sum + (e.currentRegistrations || 0), 0)
+    ),
+    receitaTotal: Number(statsQuery.data?.receitaTotal ?? 0),
+  }), [statsQuery.data, eventos]);
 
-  function aplicarFiltros() {
-    let resultado = [...eventos];
+  // Lista de eventos atualmente expandidos — usada pra disparar queries de resumo.
+  const expandedIds = useMemo(
+    () => Object.keys(expandedEvents).filter((id) => expandedEvents[id]),
+    [expandedEvents]
+  );
 
-    // Filtro de busca
+  // Uma query por evento expandido. enabled garante que so dispara quando expandido.
+  // staleTime 60s evita refetch ao reabrir o mesmo card.
+  const ticketsSummaryQueries = useQueries({
+    queries: expandedIds.map((eventId) => ({
+      queryKey: queryKeys.events.ticketsSummary(eventId),
+      queryFn: () => listarResumoIngressosEvento(eventId),
+      enabled: Boolean(eventId),
+      staleTime: 60_000,
+    })),
+  });
+
+  const ticketsSummaryByEvent = useMemo(() => {
+    const map = {};
+    expandedIds.forEach((id, idx) => {
+      const q = ticketsSummaryQueries[idx];
+      if (q?.data) map[id] = q.data;
+    });
+    return map;
+  }, [expandedIds, ticketsSummaryQueries]);
+
+  const ticketsSummaryLoading = useMemo(() => {
+    const map = {};
+    expandedIds.forEach((id, idx) => {
+      map[id] = Boolean(ticketsSummaryQueries[idx]?.isLoading);
+    });
+    return map;
+  }, [expandedIds, ticketsSummaryQueries]);
+
+  // Helper: invalida tudo de eventos apos uma mutation que altera a lista.
+  const invalidateAllEvents = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.events.all });
+  };
+
+  const deletarMutation = useMutation({
+    mutationFn: (id) => deletarEvento(id),
+    onSuccess: () => {
+      setNotification('Evento deletado com sucesso!');
+      invalidateAllEvents();
+    },
+    onError: (error) => setNotification(error.message || 'Erro ao deletar evento'),
+  });
+
+  const duplicarMutation = useMutation({
+    mutationFn: (id) => duplicarEvento(id),
+    onSuccess: () => {
+      setNotification('Evento duplicado com sucesso!');
+      invalidateAllEvents();
+    },
+    onError: (error) => setNotification(error.message || 'Erro ao duplicar evento'),
+  });
+
+  const toggleStatusMutation = useMutation({
+    mutationFn: ({ id, isActive }) => atualizarEvento(id, { isActive }),
+    onSuccess: (_data, variables) => {
+      setNotification(`Evento ${variables.isActive ? 'ativado' : 'desativado'} com sucesso!`);
+      invalidateAllEvents();
+    },
+    onError: (error) => setNotification(error.message || 'Erro ao atualizar status'),
+  });
+
+  // Filtragem totalmente derivada dos dados em cache + filtros locais.
+  const eventosFiltrados = useMemo(() => {
+    let resultado = eventos;
+
     if (filtros.busca) {
       const busca = filtros.busca.toLowerCase();
-      resultado = resultado.filter(evento => {
+      resultado = resultado.filter((evento) => {
         const valores = [
           evento.title,
           evento.description,
@@ -115,35 +176,24 @@ function EventList() {
           evento.cep,
           EVENT_TYPE_LABELS[evento.eventType]
         ];
-        return valores.some((valor) => valor && valor.toString().toLowerCase().includes(busca)
-        );
+        return valores.some((valor) => valor && valor.toString().toLowerCase().includes(busca));
       });
     }
 
-    // Filtro de status ativo/inativo
     if (filtros.status !== 'todos') {
-      resultado = resultado.filter(evento => (filtros.status === 'ativos' ? evento.isActive : !evento.isActive));
+      resultado = resultado.filter((evento) => (filtros.status === 'ativos' ? evento.isActive : !evento.isActive));
     }
 
-    // Filtro finalizados: quando NÃO está no modo finalizados, oculta eventos com endDate no passado
     if (!filtros.finalizados) {
       const now = new Date();
-      resultado = resultado.filter(evento => !evento.endDate || new Date(evento.endDate) >= now);
+      resultado = resultado.filter((evento) => !evento.endDate || new Date(evento.endDate) >= now);
     }
 
-    setEventosFiltrados(resultado);
-  }
-
-  useEffect(() => {
-    carregarEventos(filtros.finalizados);
-  }, [filtros.finalizados]);
-
-  useEffect(() => {
-    aplicarFiltros();
-  }, [filtros, eventos]);
+    return resultado;
+  }, [eventos, filtros]);
 
   const handleChangeFiltro = (campo, valor) => {
-    setFiltros(prev => ({ ...prev, [campo]: valor }));
+    setFiltros((prev) => ({ ...prev, [campo]: valor }));
   };
 
   const handleDeletar = async (id, titulo) => {
@@ -151,14 +201,7 @@ function EventList() {
       title: 'Deletar evento', message: `Tem certeza que deseja deletar o evento "${titulo}"?`, confirmText: 'Deletar', confirmColor: 'error', severity: 'error'
     });
     if (!ok) return;
-    try {
-      await deletarEvento(id);
-      setNotification('Evento deletado com sucesso!');
-      carregarEventos();
-    } catch (error) {
-      const mensagem = error.message || 'Erro ao deletar evento';
-      setNotification(mensagem);
-    }
+    deletarMutation.mutate(id);
   };
 
   const handleDuplicar = async (evento) => {
@@ -166,65 +209,26 @@ function EventList() {
       title: 'Duplicar evento', message: `Deseja duplicar o evento "${evento.title}"?`, confirmText: 'Duplicar', confirmColor: 'primary', severity: 'info'
     });
     if (!ok) return;
-    try {
-      await duplicarEvento(evento.id);
-      setNotification('Evento duplicado com sucesso!');
-      carregarEventos();
-    } catch (error) {
-      console.error('Erro ao duplicar evento:', error);
-      setNotification(error.message || 'Erro ao duplicar evento');
-    }
+    duplicarMutation.mutate(evento.id);
+  };
+
+  const handleToggleStatus = (evento) => {
+    toggleStatusMutation.mutate({ id: evento.id, isActive: !evento.isActive });
   };
 
   const formatarData = (data) => formatDateInAppTimezone(data, '-');
-
   const formatarPreco = (preco) => `R$ ${parseFloat(preco || 0).toFixed(2).replace('.', ',')}`;
-
   const formatarVendidosTotal = (vendidos, total) => {
     if (total == null) return `${vendidos} / -`;
     return `${vendidos} / ${total}`;
   };
-
   const calcularPercentualVendidos = (vendidos, total) => {
     if (!total || total <= 0) return 0;
     return Math.max(0, Math.min(100, (Number(vendidos || 0) / Number(total)) * 100));
   };
 
-  const handleToggleStatus = async (evento) => {
-    try {
-      await atualizarEvento(evento.id, { isActive: !evento.isActive });
-      setNotification(`Evento ${evento.isActive ? 'desativado' : 'ativado'} com sucesso!`);
-      carregarEventos();
-    } catch (error) {
-      console.error('Erro ao atualizar status do evento:', error);
-      setNotification(error.message || 'Erro ao atualizar status');
-    }
-  };
-
-  const carregarResumoIngressos = async (eventId) => {
-    if (!eventId) return;
-    if (ticketsSummaryByEvent[eventId]) return;
-    if (ticketsSummaryLoading[eventId]) return;
-    try {
-      setTicketsSummaryLoading((prev) => ({ ...prev, [eventId]: true }));
-      const summary = await listarResumoIngressosEvento(eventId);
-      setTicketsSummaryByEvent((prev) => ({ ...prev, [eventId]: summary }));
-    } catch (error) {
-      console.error('Erro ao carregar resumo de ingressos:', error);
-      setNotification(error.message || 'Erro ao carregar resumo de ingressos');
-    } finally {
-      setTicketsSummaryLoading((prev) => ({ ...prev, [eventId]: false }));
-    }
-  };
-
   const toggleEventSummary = (eventId) => {
-    setExpandedEvents((prev) => {
-      const nextExpanded = !prev[eventId];
-      if (nextExpanded) {
-        carregarResumoIngressos(eventId);
-      }
-      return { ...prev, [eventId]: nextExpanded };
-    });
+    setExpandedEvents((prev) => ({ ...prev, [eventId]: !prev[eventId] }));
   };
 
   const title = brand.name + ' - Eventos';

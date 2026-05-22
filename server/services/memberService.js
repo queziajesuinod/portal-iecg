@@ -945,10 +945,19 @@ class MemberService {
 
   /**
    * Buscar membro por ID (com todos os relacionamentos)
+   *
+   * Cache: TTL curto (300s). Invalidado em updates/links/merges via cache.del(`member:${id}`).
+   * Retorna sempre objeto plano (.toJSON()) — consistente entre cache hit/miss.
    */
   async getMemberById(id) {
     try {
-      return await this.getMemberWithDetails({ id });
+      if (!id) {
+        throw new Error('ID do membro nao informado');
+      }
+      return await cache.getOrSet(`member:${id}`, async () => {
+        const member = await this.getMemberWithDetails({ id });
+        return member.toJSON();
+      }, 300);
     } catch (error) {
       throw new Error(`Erro ao buscar membro: ${error.message}`);
     }
@@ -995,6 +1004,13 @@ class MemberService {
       }
 
       const schema = process.env.DB_SCHEMA || 'dev_iecg';
+
+      if (filters.isLider) {
+        where[Op.and] = [
+          ...(where[Op.and] || []),
+          sequelize.literal(`EXISTS (SELECT 1 FROM "${schema}"."celulas" WHERE "liderMemberId" = "Member"."id" AND "ativo" = true)`)
+        ];
+      }
       const { count, rows } = await Member.findAndCountAll({
         where,
         attributes: {
@@ -1026,77 +1042,140 @@ class MemberService {
     }
   }
 
-  async listPossibleDuplicates() {
+  /**
+   * Lista pares de membros potencialmente duplicados.
+   *
+   * Estrategia: ao inves de comparar O(n^2) pares, agrupa membros por chaves
+   * candidatas (cpf, email, phone, sufixo de phone, primeiro nome normalizado).
+   * Apenas pares dentro do mesmo grupo entram em buildDuplicateReasons — isso
+   * elimina ~99% das comparacoes que nunca poderiam matchar.
+   *
+   * Regras de match (preservadas da versao anterior):
+   *  - Forte: mesmo cpf, mesmo email ou mesmo phone
+   *  - phone_suffix sozinho nao basta (precisa de nome ou outro sinal)
+   *  - Nome sozinho nao basta
+   *  - Caso contrario aceita se houver 2+ sinais
+   *
+   * @param {{ page?: number, limit?: number }} pagination
+   * @returns {{ data: object[], total: number, page: number, limit: number, totalPages: number }}
+   */
+  async listPossibleDuplicates(pagination = {}) {
     try {
-      const dismissals = await MemberDuplicateDismissal.findAll({
-        attributes: ['firstMemberId', 'secondMemberId']
-      });
+      const page = Math.max(1, parseInt(pagination.page, 10) || 1);
+      const limit = Math.min(500, Math.max(1, parseInt(pagination.limit, 10) || 50));
+
+      const [dismissals, members] = await Promise.all([
+        MemberDuplicateDismissal.findAll({
+          attributes: ['firstMemberId', 'secondMemberId']
+        }),
+        Member.findAll({
+          attributes: [
+            'id', 'fullName', 'email', 'phone', 'whatsapp',
+            'cpf', 'status', 'photoUrl', 'userId', 'createdAt'
+          ],
+          order: [['createdAt', 'ASC']]
+        })
+      ]);
+
       const dismissedPairs = new Set(
         dismissals.map((row) => `${row.firstMemberId}:${row.secondMemberId}`)
       );
 
-      const members = await Member.findAll({
-        attributes: [
-          'id',
-          'fullName',
-          'email',
-          'phone',
-          'whatsapp',
-          'cpf',
-          'status',
-          'photoUrl',
-          'userId',
-          'createdAt'
-        ],
-        order: [['createdAt', 'ASC']]
-      });
+      // Indexa membros por chaves que potencialmente geram match.
+      const cpfIndex = new Map();
+      const emailIndex = new Map();
+      const phoneIndex = new Map();
+      const phoneSuffixIndex = new Map();
+      const firstNameIndex = new Map();
+
+      const pushTo = (map, key, member) => {
+        if (!key) return;
+        const bucket = map.get(key);
+        if (bucket) bucket.push(member);
+        else map.set(key, [member]);
+      };
+
+      for (const m of members) {
+        pushTo(cpfIndex, normalizeCpf(m.cpf), m);
+        pushTo(emailIndex, normalizeEmail(m.email), m);
+
+        const phone = sanitizePhone(m.phone || m.whatsapp);
+        pushTo(phoneIndex, phone, m);
+        pushTo(phoneSuffixIndex, phoneLastDigits(m.phone || m.whatsapp), m);
+
+        const normalizedName = normalizeText(m.fullName || '');
+        const firstToken = normalizedName.split(' ').filter((t) => t.length >= 2)[0];
+        pushTo(firstNameIndex, firstToken, m);
+      }
+
+      // Coleta pares candidatos (deduplicados) a partir dos buckets > 1.
+      const candidatePairs = new Set();
+      const collectPairsFromBuckets = (map) => {
+        for (const bucket of map.values()) {
+          if (bucket.length < 2) continue;
+          for (let i = 0; i < bucket.length; i += 1) {
+            for (let j = i + 1; j < bucket.length; j += 1) {
+              const a = bucket[i];
+              const b = bucket[j];
+              if (a.id === b.id) continue;
+              const [first, second] = String(a.id) < String(b.id) ? [a, b] : [b, a];
+              candidatePairs.add(`${first.id}:${second.id}`);
+            }
+          }
+        }
+      };
+
+      collectPairsFromBuckets(cpfIndex);
+      collectPairsFromBuckets(emailIndex);
+      collectPairsFromBuckets(phoneIndex);
+      collectPairsFromBuckets(phoneSuffixIndex);
+      collectPairsFromBuckets(firstNameIndex);
+
+      // Lookup id -> member para resolver pares.
+      const membersById = new Map(members.map((m) => [String(m.id), m]));
 
       const suggestions = [];
-      const seenPairs = new Set();
+      for (const pairKey of candidatePairs) {
+        const [firstId, secondId] = pairKey.split(':');
+        if (dismissedPairs.has(pairKey)) continue;
 
-      for (let index = 0; index < members.length; index += 1) {
-        const current = members[index];
-        for (let compareIndex = index + 1; compareIndex < members.length; compareIndex += 1) {
-          const candidate = members[compareIndex];
-          const [older, newer] = new Date(current.createdAt) <= new Date(candidate.createdAt)
-            ? [current, candidate]
-            : [candidate, current];
+        const a = membersById.get(firstId);
+        const b = membersById.get(secondId);
+        if (!a || !b) continue;
 
-          const pairKey = `${older.id}:${newer.id}`;
-          const normalizedPair = this.normalizeDuplicatePair(older.id, newer.id);
-          const normalizedPairKey = `${normalizedPair.firstMemberId}:${normalizedPair.secondMemberId}`;
+        const [older, newer] = new Date(a.createdAt) <= new Date(b.createdAt) ? [a, b] : [b, a];
 
-          if (seenPairs.has(pairKey) || dismissedPairs.has(normalizedPairKey)) {
-            continue;
-          }
+        const reasons = this.buildDuplicateReasons(older, newer);
+        const hasStrongMatch = reasons.some((r) => ['cpf', 'email', 'phone'].includes(r.type));
+        const hasPhoneSuffix = reasons.some((r) => r.type === 'phone_suffix');
+        const hasName = reasons.some((r) => r.type === 'name');
+        const hasNameOnlyMatch = reasons.length === 1 && reasons[0].type === 'name';
+        const phoneSuffixAloneInsufficient = hasPhoneSuffix && !hasStrongMatch && !hasName;
 
-          const reasons = this.buildDuplicateReasons(older, newer);
-          const hasStrongMatch = reasons.some((reason) => ['cpf', 'email', 'phone'].includes(reason.type));
-          const hasPhoneSuffix = reasons.some((r) => r.type === 'phone_suffix');
-          const hasNameOnlyMatch = reasons.length === 1 && reasons[0].type === 'name';
-
-          // phone_suffix sozinho só mostra se tiver nome parecido junto
-          const phoneSuffixAloneInsufficient = hasPhoneSuffix && !hasStrongMatch
-            && !reasons.some((r) => r.type === 'name');
-
-          if (!reasons.length || hasNameOnlyMatch || phoneSuffixAloneInsufficient
-            || (!hasStrongMatch && !hasPhoneSuffix && reasons.length < 2)) {
-            continue;
-          }
-
-          seenPairs.add(pairKey);
-          suggestions.push(this.serializeDuplicateSuggestion(older, newer, reasons));
+        if (!reasons.length || hasNameOnlyMatch || phoneSuffixAloneInsufficient
+          || (!hasStrongMatch && !hasPhoneSuffix && reasons.length < 2)) {
+          continue;
         }
+
+        suggestions.push(this.serializeDuplicateSuggestion(older, newer, reasons));
       }
 
       suggestions.sort((a, b) => {
-        if (b.score !== a.score) {
-          return b.score - a.score;
-        }
+        if (b.score !== a.score) return b.score - a.score;
         return new Date(a.olderMember.createdAt) - new Date(b.olderMember.createdAt);
       });
 
-      return suggestions;
+      const total = suggestions.length;
+      const offset = (page - 1) * limit;
+      const data = suggestions.slice(offset, offset + limit);
+
+      return {
+        data,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 0,
+      };
     } catch (error) {
       throw new Error(`Erro ao listar membros duplicados: ${error.message}`);
     }
