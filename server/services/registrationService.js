@@ -418,6 +418,16 @@ async function anexarResumoPagamentos(registration, options = {}) {
   return resumo;
 }
 
+async function anexarTransacoesPagamento(registration, options = {}) {
+  if (!registration) return;
+  const transactions = await PaymentTransaction.findAll({
+    where: { registrationId: registration.id },
+    order: [['createdAt', 'ASC']],
+    transaction: options.transaction
+  });
+  registration.setDataValue('transactions', transactions);
+}
+
 function extrairBandeiraPagamento({ brand = null, providerPayload = null } = {}) {
   return paymentService.normalizeCardBrand(brand)
     || paymentService.extrairBandeiraCartao(providerPayload)
@@ -1347,6 +1357,7 @@ async function buscarInscricaoPorCodigo(orderCode) {
 
   await prepararRegistroComCampos(registration);
   await anexarResumoPagamentos(registration);
+  await anexarTransacoesPagamento(registration);
 
   return registration;
 }
@@ -1389,6 +1400,7 @@ async function buscarInscricaoPorId(id) {
 
   await prepararRegistroComCampos(registration);
   await anexarResumoPagamentos(registration);
+  await anexarTransacoesPagamento(registration);
 
   return registration;
 }
@@ -1946,11 +1958,20 @@ async function cancelarInscricao(id) {
     }
 
     if (payment.id) {
-      const novoStatusPagamento = cancelamento.type === 'refund' ? 'refunded' : 'cancelled';
+      const novoStatusPagamento = (cancelamento.type === 'refund' && cancelamento.refundConfirmed)
+        ? 'refunded'
+        : 'cancelled';
       payment.status = novoStatusPagamento;
       payment.providerPayload = cancelamento.dadosCompletos
-        ? { ...cancelamento.dadosCompletos, originalStatus: cancelamento.status }
-        : { originalStatus: cancelamento.status };
+        ? {
+          ...cancelamento.dadosCompletos,
+          originalStatus: cancelamento.status,
+          refundConfirmed: cancelamento.refundConfirmed === true
+        }
+        : {
+          originalStatus: cancelamento.status,
+          refundConfirmed: cancelamento.refundConfirmed === true
+        };
       if (!payment.confirmedAt && novoStatusPagamento === 'refunded') {
         payment.confirmedAt = now();
       }

@@ -391,6 +391,15 @@ async function capturarPagamento(paymentId, amount) {
   }
 }
 
+const VOID_SUCCESS_STATUSES = new Set([10, 11]);
+
+function extrairMensagemCielo(data = {}) {
+  return data.ReturnMessage
+    || data.ProviderReturnMessage
+    || data.ReasonMessage
+    || null;
+}
+
 /**
  * Cancelar pagamento
  */
@@ -409,11 +418,16 @@ async function cancelarPagamento(paymentId, amount) {
       }
     );
 
+    const refundConfirmed = VOID_SUCCESS_STATUSES.has(response.data.Status);
     return {
       sucesso: true,
+      refundConfirmed,
       status: response.data.Status,
       returnCode: response.data.ReturnCode,
       returnMessage: response.data.ReturnMessage,
+      reasonMessage: response.data.ReasonMessage,
+      providerReturnMessage: response.data.ProviderReturnMessage,
+      erro: refundConfirmed ? null : extrairMensagemCielo(response.data),
       dadosCompletos: response.data
     };
   } catch (error) {
@@ -426,6 +440,7 @@ async function cancelarPagamento(paymentId, amount) {
 
     return {
       sucesso: false,
+      refundConfirmed: false,
       httpStatus: error.response?.status || null,
       erro: error.response?.data?.ReturnMessage || error.message,
       dadosCompletos: error.response?.data
@@ -451,11 +466,16 @@ async function estornarPagamento(paymentId, amount) {
       }
     );
 
+    const refundConfirmed = VOID_SUCCESS_STATUSES.has(response.data.Status);
     return {
       sucesso: true,
+      refundConfirmed,
       status: response.data.Status,
       returnCode: response.data.ReturnCode,
       returnMessage: response.data.ReturnMessage,
+      reasonMessage: response.data.ReasonMessage,
+      providerReturnMessage: response.data.ProviderReturnMessage,
+      erro: refundConfirmed ? null : extrairMensagemCielo(response.data),
       dadosCompletos: response.data
     };
   } catch (error) {
@@ -468,6 +488,7 @@ async function estornarPagamento(paymentId, amount) {
 
     return {
       sucesso: false,
+      refundConfirmed: false,
       httpStatus: error.response?.status || null,
       erro: error.response?.data?.ReturnMessage || error.message,
       dadosCompletos: error.response?.data
