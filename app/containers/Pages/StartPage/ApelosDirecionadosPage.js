@@ -38,9 +38,11 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import { PapperBlock, Notification } from 'dan-components';
 import { useHistory } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatDateInAppTimezone, formatDateTimeInAppTimezone } from '../../../utils/dateTime';
 import { sendWebhookEvent } from '../../../utils/webhookClient';
 import { fetchGeocode } from '../../../utils/googleGeocode';
+import { queryKeys } from '../../../utils/queryKeys';
 
 const resolveApiUrl = () => {
   if (process.env.REACT_APP_API_URL) {
@@ -57,31 +59,24 @@ const YEAR_OPTIONS = ['', '2026', '2025'];
 
 const ApelosDirecionadosPage = () => {
   const history = useHistory();
-  const [apelos, setApelos] = useState([]);
-  const [celulas, setCelulas] = useState([]);
+  const queryClient = useQueryClient();
   const [monthFilter, setMonthFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [nomeFilter, setNomeFilter] = useState('');
   const [decisaoFilter, setDecisaoFilter] = useState('');
   const [yearFilter, setYearFilter] = useState(YEAR_OPTIONS[0]);
-  const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalRecords, setTotalRecords] = useState(0);
   const [notification, setNotification] = useState('');
 
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [historicoDialogOpen, setHistoricoDialogOpen] = useState(false);
-  const [historicoList, setHistoricoList] = useState([]);
   const [apeloSelecionado, setApeloSelecionado] = useState(null);
   const [celulaDestinoId, setCelulaDestinoId] = useState('');
   const [filtroCelula, setFiltroCelula] = useState('');
   const [motivo, setMotivo] = useState('');
-  const [loadingHistorico, setLoadingHistorico] = useState(false);
   const [celulaDialogOpen, setCelulaDialogOpen] = useState(false);
   const [celulaDetalhe, setCelulaDetalhe] = useState(null);
   const [celulaPhoneForm, setCelulaPhoneForm] = useState('');
-  const [celulaSaving, setCelulaSaving] = useState(false);
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [novoStatus, setNovoStatus] = useState('');
   const [motivoStatus, setMotivoStatus] = useState('');
@@ -109,6 +104,68 @@ const ApelosDirecionadosPage = () => {
   const detailGeoRequestRef = useRef(0);
 
   const API_URL = resolveApiUrl();
+
+  const apelosFilters = useMemo(
+    () => ({
+      monthFilter, statusFilter, nomeFilter, decisaoFilter, yearFilter, page
+    }),
+    [monthFilter, statusFilter, nomeFilter, decisaoFilter, yearFilter, page]
+  );
+
+  const apelosQuery = useQuery({
+    queryKey: queryKeys.apelos.list(apelosFilters),
+    queryFn: async () => {
+      const token = localStorage.getItem('token');
+      const params = new URLSearchParams();
+      if (apelosFilters.monthFilter) params.append('month', apelosFilters.monthFilter);
+      if (apelosFilters.statusFilter) params.append('status', apelosFilters.statusFilter);
+      if (apelosFilters.nomeFilter) params.append('nome', apelosFilters.nomeFilter);
+      if (apelosFilters.decisaoFilter) params.append('decisao', apelosFilters.decisaoFilter);
+      if (apelosFilters.yearFilter) params.append('year', apelosFilters.yearFilter);
+      params.append('page', apelosFilters.page);
+      params.append('limit', 10);
+      const res = await fetch(`${API_URL}/start/direcionamentos/?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Erro ao carregar apelos direcionados.');
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        return { registros: data, totalPaginas: 1, totalRegistros: data.length };
+      }
+      return {
+        registros: Array.isArray(data.registros) ? data.registros : [],
+        totalPaginas: data.totalPaginas || 1,
+        totalRegistros: data.totalRegistros || 0,
+      };
+    },
+    placeholderData: (prev) => prev, // mantem dados antigos durante refetch (paginacao suave)
+  });
+
+  const apelos = apelosQuery.data?.registros || [];
+  const totalPages = apelosQuery.data?.totalPaginas || 1;
+  const totalRecords = apelosQuery.data?.totalRegistros || 0;
+  const loading = apelosQuery.isFetching;
+
+  if (apelosQuery.error && apelosQuery.error._reported !== true) {
+    apelosQuery.error._reported = true;
+    setTimeout(() => setNotification(apelosQuery.error.message || 'Erro ao buscar apelos direcionados.'), 0);
+  }
+
+  const celulasQuery = useQuery({
+    queryKey: queryKeys.apelos.direcionamentos('celulas'),
+    queryFn: async () => {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/start/celula/listagemgeral`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const lista = Array.isArray(data) ? data : [];
+      return lista.filter((c) => c.ativo !== false);
+    },
+  });
+  const celulas = celulasQuery.data || [];
+
   const redeOptions = useMemo(() => {
     const set = new Set();
     celulas.forEach((celula) => {
@@ -121,63 +178,23 @@ const ApelosDirecionadosPage = () => {
     return Array.from(set);
   }, [celulas, detailApelo?.rede]);
 
-  const fetchApelos = async () => {
-    setLoading(true);
-    const token = localStorage.getItem('token');
-    try {
-      const params = new URLSearchParams();
-      if (monthFilter) params.append('month', monthFilter);
-      if (statusFilter) params.append('status', statusFilter);
-      if (nomeFilter) params.append('nome', nomeFilter);
-      if (decisaoFilter) params.append('decisao', decisaoFilter);
-      if (yearFilter) params.append('year', yearFilter);
-      params.append('page', page);
-      params.append('limit', 10);
-      const res = await fetch(`${API_URL}/start/direcionamentos/?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error('Erro ao carregar apelos direcionados.');
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setApelos(data);
-        setTotalPages(1);
-        setTotalRecords(data.length);
-      } else {
-        setApelos(Array.isArray(data.registros) ? data.registros : []);
-        setTotalPages(data.totalPaginas || 1);
-        setTotalRecords(data.totalRegistros || 0);
-      }
-    } catch (err) {
-      console.error(err);
-      setNotification(err.message || 'Erro ao buscar apelos direcionados.');
-      setApelos([]);
-      setTotalPages(1);
-      setTotalRecords(0);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const invalidateApelos = () => queryClient.invalidateQueries({ queryKey: queryKeys.apelos.all });
 
-  const fetchCelulas = async () => {
-    const token = localStorage.getItem('token');
-    try {
-      const res = await fetch(`${API_URL}/start/celula/listagemgeral`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      const lista = Array.isArray(data) ? data : [];
-      setCelulas(lista.filter((c) => c.ativo !== false));
-    } catch (err) {
-      console.error('Erro ao carregar células:', err);
-      setCelulas([]);
-    }
+  // Atualiza um campo do apelo no cache (ex: telefone do lider, dados pos-edicao).
+  const patchApeloInCache = (predicate, patcher) => {
+    queryClient.setQueriesData({ queryKey: queryKeys.apelos.all }, (prev) => {
+      if (!prev || !Array.isArray(prev.registros)) return prev;
+      return {
+        ...prev,
+        registros: prev.registros.map((apelo) => (predicate(apelo) ? patcher(apelo) : apelo)),
+      };
+    });
   };
-
-  useEffect(() => {
-    fetchApelos();
-    fetchCelulas();
-  }, [monthFilter, statusFilter, nomeFilter, decisaoFilter, yearFilter, page]);
+  const patchCelulaInCache = (celulaId, patcher) => {
+    queryClient.setQueryData(queryKeys.apelos.direcionamentos('celulas'), (prev = []) => (
+      prev.map((celula) => (celula?.id === celulaId ? patcher(celula) : celula))
+    ));
+  };
 
   const normalizeRede = (value) => (value || '').toString().trim().toLowerCase();
   const normalizeSearchValue = (value) => {
@@ -268,7 +285,33 @@ const ApelosDirecionadosPage = () => {
     sugerirCelulasProximas(apelo);
   };
 
-  const moverApelo = async () => {
+  const moverApeloMutation = useMutation({
+    mutationFn: async ({ apeloId, destinoId, motivoTexto }) => {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/start/direcionamentos/${apeloId}/mover`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ celulaDestinoId: destinoId, motivo: motivoTexto })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.erro || 'Falha ao mover apelo.');
+      }
+      return res.json().catch(() => ({}));
+    },
+    onSuccess: (_data, vars) => {
+      setNotification('Apelo movido com sucesso.');
+      sendWebhookEvent('apelo.moved', { apeloId: vars.apeloId, destinoCelulaId: vars.destinoId });
+      setMoveDialogOpen(false);
+      invalidateApelos();
+    },
+    onError: (err) => setNotification(err.message || 'Erro ao mover apelo.'),
+  });
+
+  const moverApelo = () => {
     if (!apeloSelecionado || !celulaDestinoId) {
       setNotification('Selecione a célula de destino.');
       return;
@@ -277,70 +320,56 @@ const ApelosDirecionadosPage = () => {
       setNotification('Não é possível direcionar para a mesma célula.');
       return;
     }
-    const token = localStorage.getItem('token');
-    try {
-      const res = await fetch(`${API_URL}/start/direcionamentos/${apeloSelecionado.id}/mover`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ celulaDestinoId, motivo })
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data?.erro || 'Falha ao mover apelo.');
-      }
-      setNotification('Apelo movido com sucesso.');
-      sendWebhookEvent('apelo.moved', {
-        apeloId: apeloSelecionado.id,
-        destinoCelulaId: celulaDestinoId
-      });
-      setMoveDialogOpen(false);
-      fetchApelos();
-    } catch (err) {
-      console.error(err);
-      setNotification(err.message || 'Erro ao mover apelo.');
-    }
+    moverApeloMutation.mutate({ apeloId: apeloSelecionado.id, destinoId: celulaDestinoId, motivoTexto: motivo });
   };
 
-  const abrirHistorico = async (apelo) => {
-    setApeloSelecionado(apelo);
-    setHistoricoDialogOpen(true);
-    setLoadingHistorico(true);
-    const token = localStorage.getItem('token');
-    try {
-      const res = await fetch(`${API_URL}/start/direcionamentos/${apelo.id}/historico`, {
+  // Historico do apelo selecionado — so busca quando o dialog esta aberto.
+  // Cache por apeloId; reabrir o mesmo apelo nao refetcha (staleTime).
+  const historicoQuery = useQuery({
+    queryKey: queryKeys.apelos.historico(apeloSelecionado?.id),
+    queryFn: async () => {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/start/direcionamentos/${apeloSelecionado.id}/historico`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Erro ao carregar histórico.');
       const data = await res.json();
-      setHistoricoList(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error(err);
-      setNotification(err.message || 'Erro ao carregar histórico.');
-      setHistoricoList([]);
-    } finally {
-      setLoadingHistorico(false);
-    }
+      return Array.isArray(data) ? data : [];
+    },
+    enabled: Boolean(historicoDialogOpen && apeloSelecionado?.id),
+    staleTime: 30_000,
+  });
+  const historicoList = historicoQuery.data || [];
+  const loadingHistorico = historicoQuery.isLoading;
+  if (historicoQuery.error && historicoQuery.error._reported !== true) {
+    historicoQuery.error._reported = true;
+    setTimeout(() => setNotification(historicoQuery.error.message || 'Erro ao carregar histórico.'), 0);
+  }
+
+  const abrirHistorico = (apelo) => {
+    setApeloSelecionado(apelo);
+    setHistoricoDialogOpen(true);
   };
 
-  const notificarLider = async (apelo) => {
-    setNotificandoLider((prev) => ({ ...prev, [apelo.id]: true }));
-    const token = localStorage.getItem('token');
-    try {
-      const res = await fetch(`${API_URL}/start/direcionamentos/${apelo.id}/notificar-lider`, {
+  const notificarLiderMutation = useMutation({
+    mutationFn: async (apeloId) => {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/start/direcionamentos/${apeloId}/notificar-lider`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.erro || 'Falha ao enviar mensagem');
-      setNotification('Mensagem enviada ao líder com sucesso.');
-    } catch (err) {
-      setNotification(err.message || 'Erro ao enviar mensagem ao líder.');
-    } finally {
-      setNotificandoLider((prev) => ({ ...prev, [apelo.id]: false }));
-    }
+      return data;
+    },
+    onSuccess: () => setNotification('Mensagem enviada ao líder com sucesso.'),
+    onError: (err) => setNotification(err.message || 'Erro ao enviar mensagem ao líder.'),
+    onSettled: (_data, _err, apeloId) => setNotificandoLider((prev) => ({ ...prev, [apeloId]: false })),
+  });
+
+  const notificarLider = (apelo) => {
+    setNotificandoLider((prev) => ({ ...prev, [apelo.id]: true }));
+    notificarLiderMutation.mutate(apelo.id);
   };
 
   const celulaAtualTexto = (apelo) => apelo?.celulaAtual?.celula || 'Sem célula';
@@ -357,62 +386,56 @@ const ApelosDirecionadosPage = () => {
     setCelulaPhoneForm('');
   };
 
-  const salvarTelefoneLiderCelula = async () => {
-    if (!celulaDetalhe?.id || celulaSaving) return;
-
-    setCelulaSaving(true);
-    const token = localStorage.getItem('token');
-    try {
-      const res = await fetch(`${API_URL}/start/celula/${celulaDetalhe.id}`, {
+  const salvarTelefoneMutation = useMutation({
+    mutationFn: async ({ celulaId, telefone }) => {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/start/celula/${celulaId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ cel_lider: celulaPhoneForm })
+        body: JSON.stringify({ cel_lider: telefone })
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data?.erro || 'Falha ao atualizar telefone do lider.');
       }
-
-      const celulaAtualizada = await res.json().catch(() => ({}));
-      const novoTelefone = celulaAtualizada?.cel_lider ?? celulaPhoneForm ?? '';
-
+      return res.json().catch(() => ({}));
+    },
+    onSuccess: (celulaAtualizada, { celulaId, telefone }) => {
+      const novoTelefone = celulaAtualizada?.cel_lider ?? telefone ?? '';
       setCelulaDetalhe((prev) => (prev ? {
         ...prev,
         ...celulaAtualizada,
         cel_lider: novoTelefone
       } : prev));
       setCelulaPhoneForm(novoTelefone);
-      setApelos((prev) => prev.map((apelo) => (
-        apelo?.celulaAtual?.id === celulaDetalhe.id
-          ? {
-            ...apelo,
-            celulaAtual: {
-              ...apelo.celulaAtual,
-              cel_lider: novoTelefone,
-              lider: celulaAtualizada?.lider || apelo.celulaAtual?.lider || null
-            }
+      patchApeloInCache(
+        (apelo) => apelo?.celulaAtual?.id === celulaId,
+        (apelo) => ({
+          ...apelo,
+          celulaAtual: {
+            ...apelo.celulaAtual,
+            cel_lider: novoTelefone,
+            lider: celulaAtualizada?.lider || apelo.celulaAtual?.lider || null
           }
-          : apelo
-      )));
-      setCelulas((prev) => prev.map((celula) => (
-        celula?.id === celulaDetalhe.id
-          ? {
-            ...celula,
-            ...celulaAtualizada,
-            cel_lider: novoTelefone
-          }
-          : celula
-      )));
+        })
+      );
+      patchCelulaInCache(celulaId, (celula) => ({
+        ...celula,
+        ...celulaAtualizada,
+        cel_lider: novoTelefone
+      }));
       setNotification('Telefone do lider atualizado com sucesso.');
-    } catch (err) {
-      console.error(err);
-      setNotification(err.message || 'Erro ao atualizar telefone do lider.');
-    } finally {
-      setCelulaSaving(false);
-    }
+    },
+    onError: (err) => setNotification(err.message || 'Erro ao atualizar telefone do lider.'),
+  });
+  const celulaSaving = salvarTelefoneMutation.isPending;
+
+  const salvarTelefoneLiderCelula = () => {
+    if (!celulaDetalhe?.id || celulaSaving) return;
+    salvarTelefoneMutation.mutate({ celulaId: celulaDetalhe.id, telefone: celulaPhoneForm });
   };
 
   const apeloSemDirecionamento = (apelo) => apelo?.status === 'NAO_HAVERAR_DIRECIONAMENTO';
@@ -672,7 +695,7 @@ const ApelosDirecionadosPage = () => {
         throw new Error(data?.erro || 'Falha ao atualizar os detalhes do apelo.');
       }
       setNotification('Detalhes do apelo atualizados com sucesso.');
-      fetchApelos();
+      invalidateApelos();
       fecharDetalheDialog();
     } catch (err) {
       console.error(err);
@@ -805,7 +828,7 @@ const ApelosDirecionadosPage = () => {
             <Button variant="contained" color="secondary" onClick={() => history.push('/app/start/fila-apelos')}>
             Fila de apelos
             </Button>
-            <Button variant="outlined" onClick={fetchApelos} disabled={loading}>
+            <Button variant="outlined" onClick={() => apelosQuery.refetch()} disabled={loading}>
             Atualizar
             </Button>
           </Box>
@@ -1340,7 +1363,7 @@ const ApelosDirecionadosPage = () => {
                 });
                 setStatusDialogOpen(false);
                 setMotivoStatus('');
-                fetchApelos();
+                invalidateApelos();
               } catch (err) {
                 console.error(err);
                 setNotification(err.message || 'Erro ao atualizar status.');

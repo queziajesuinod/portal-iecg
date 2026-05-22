@@ -11,9 +11,11 @@ import { createRoot } from 'react-dom/client';
 import { Provider } from 'react-redux';
 import { PersistGate } from 'redux-persist/integration/react';
 import { ConnectedRouter } from 'connected-react18-router';
+import { QueryClientProvider } from '@tanstack/react-query';
 import FontFaceObserver from 'fontfaceobserver';
 import history from 'utils/history';
 import 'utils/authSession';
+import queryClient from 'utils/queryClient';
 import 'react-18-image-lightbox/style.css';
 import 'sanitize.css/sanitize.css';
 
@@ -52,11 +54,13 @@ const render = messages => {
   root.render(
     <Provider store={store}>
       <PersistGate loading={null} persistor={persistor}>
-        <LanguageProvider messages={messages}>
-          <ConnectedRouter history={history}>
-            <App history={history} />
-          </ConnectedRouter>
-        </LanguageProvider>
+        <QueryClientProvider client={queryClient}>
+          <LanguageProvider messages={messages}>
+            <ConnectedRouter history={history}>
+              <App history={history} />
+            </ConnectedRouter>
+          </LanguageProvider>
+        </QueryClientProvider>
       </PersistGate>
     </Provider>
   );

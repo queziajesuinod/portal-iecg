@@ -1,54 +1,9 @@
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState
-} from 'react';
+import React, { useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet';
+import { Paper, Tabs, Tab } from '@mui/material';
 import {
-  Box,
-  Stack,
-  Grid,
-  Typography,
-  Paper,
-  Button,
-  Table,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableBody,
-  TablePagination,
-  Tabs,
-  Tab,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Chip,
-  CircularProgress,
-  Avatar,
-  MenuItem,
-  Switch,
-  FormControlLabel,
-  IconButton,
-  Tooltip,
-  Autocomplete,
-  Divider,
-  DialogContentText
-} from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
-import CameraAltIcon from '@mui/icons-material/CameraAlt';
-import MergeIcon from '@mui/icons-material/MergeType';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
-import SyncIcon from '@mui/icons-material/Sync';
-import Webcam from 'react-webcam';
+  useQuery, useMutation, useQueryClient, keepPreviousData
+} from '@tanstack/react-query';
 import imageCompression from 'browser-image-compression';
 import { PapperBlock, Notification } from 'dan-components';
 import { useHistory } from 'react-router-dom';
@@ -62,235 +17,59 @@ import {
   fundirMembrosDuplicados,
   desconsiderarMembrosDuplicados,
   buscarMembro,
-  sincronizarDadosDoUser
+  sincronizarDadosDoUser,
+  notificarDadosIncompletos as notificarDadosIncompletosApi
 } from '../../../api/membersApi';
+import { listarCampus } from '../../../api/campusApi';
+import { queryKeys } from '../../../utils/queryKeys';
+import useDebouncedValue from '../../../utils/useDebouncedValue';
 
-const ESCOLARIDADE_OPTIONS = [
-  'ANALFABETO',
-  'ENSINO FUNDAMENTAL INCOMPLETO',
-  'ENSINO FUNDAMENTAL COMPLETO',
-  'ENSINO MEDIO INCOMPLETO',
-  'ENSINO MEDIO COMPLETO',
-  'ENSINO SUPERIOR INCOMPLETO',
-  'ENSINO SUPERIOR COMPLETO'
-];
+import {
+  initialFormState,
+  toFormFromMember,
+  buildPayloadFromForm,
+  isValidCpf,
+  isValidEmail,
+  INACTIVE_STATUSES
+} from './members/membersHelpers';
 
-const ESCOLAS_CONCLUIDAS_OPTIONS = [
-  'Escola de Fundamentos',
-  'Lideranca Avancada 1',
-  'Lideranca Avancada 2',
-  'Lideranca Avancada 3'
-];
+import MembersFiltersBar from './members/MembersFiltersBar';
+import MembersTable from './members/MembersTable';
+import DuplicatesPanel from './members/DuplicatesPanel';
+import MemberFormDialog from './members/MemberFormDialog';
+import MergeConfirmDialog from './members/MergeConfirmDialog';
 
-const ESTADO_CIVIL_OPTIONS = ['Solteiro', 'Casado', 'Viuvo', 'Divorciado', 'Uniao Estavel'];
-const GENDER_OPTIONS = ['MASCULINO', 'FEMININO'];
-const STATUS_OPTIONS = ['VISITANTE', 'CONGREGADO', 'MEMBRO', 'INATIVO', 'MIA', 'TRANSFERIDO', 'FALECIDO'];
-
-const resolveApiUrl = () => {
-  if (process.env.REACT_APP_API_URL) {
-    return process.env.REACT_APP_API_URL.replace(/\/$/, '');
-  }
-  const { protocol, hostname, port } = window.location;
-  if (port === '3005') {
-    return `${protocol}//${hostname}:3005`;
-  }
-  return `${protocol}//${hostname}${port ? `:${port}` : ''}`;
-};
-
-const initialFormState = {
-  name: '',
-  preferredName: '',
-  email: '',
-  telefone: '',
-  whatsapp: '',
-  endereco: '',
-  numero: '',
-  complemento: '',
-  bairro: '',
-  cidade: '',
-  estado: '',
-  country: 'Brasil',
-  cep: '',
-  cpf: '',
-  rg: '',
-  data_nascimento: '',
-  gender: '',
-  estado_civil: '',
-  status: 'MEMBRO',
-  statusReason: '',
-  membershipDate: '',
-  baptismDate: '',
-  baptismPlace: '',
-  conversionDate: '',
-  campusId: '',
-  spouseMemberId: '',
-  photoUrl: '',
-  escolaridade: '',
-  nome_esposo: '',
-  profissao: '',
-  frequenta_celula: false,
-  batizado: false,
-  encontro: false,
-  escolas: []
-};
-
-const maritalStatusToEnum = {
-  Solteiro: 'SOLTEIRO',
-  Casado: 'CASADO',
-  Viuvo: 'VIUVO',
-  Divorciado: 'DIVORCIADO',
-  'Uniao Estavel': 'UNIAO_ESTAVEL'
-};
-
-const maritalEnumToLabel = {
-  SOLTEIRO: 'Solteiro',
-  CASADO: 'Casado',
-  VIUVO: 'Viuvo',
-  DIVORCIADO: 'Divorciado',
-  UNIAO_ESTAVEL: 'Uniao Estavel'
-};
-
-const formatPhone = (value = '') => {
-  const digits = String(value).replace(/\D/g, '').slice(0, 11);
-  if (!digits) return '';
-  if (digits.length <= 10) {
-    return digits.replace(/(\d{0,2})(\d{0,4})(\d{0,4}).*/, (_, d1, d2, d3) => {
-      if (!d2) return d1 ? `(${d1}` : '';
-      if (!d3) return `(${d1}) ${d2}`;
-      return `(${d1}) ${d2}-${d3}`;
-    });
-  }
-  return digits.replace(/(\d{2})(\d{5})(\d{4}).*/, '($1) $2-$3');
-};
-
-const formatCPF = (value = '') => {
-  const digits = String(value).replace(/\D/g, '').slice(0, 11);
-  if (!digits) return '';
-  return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2}).*/, (_, a, b, c, d) => (d ? `${a}.${b}.${c}-${d}` : `${a}.${b}.${c}`));
-};
-
-const parseLegacyNotes = (notes) => {
-  if (!notes) return {};
-  try {
-    const parsed = JSON.parse(notes);
-    if (parsed && parsed.legacy && typeof parsed.legacy === 'object') {
-      return parsed.legacy;
-    }
-    return {};
-  } catch (error) {
-    return {};
-  }
-};
-
-const normalizeEscolas = (value) => {
-  if (Array.isArray(value)) {
-    return value.filter(Boolean);
-  }
-  if (typeof value === 'string' && value.trim()) {
-    return value.split(',').map((item) => item.trim()).filter(Boolean);
-  }
-  return [];
-};
-
-const toFormFromMember = (member) => {
-  const legacy = parseLegacyNotes(member.notes);
+// Fetcher paginado server-side: a UI passa page/limit/filters; o backend devolve a fatia.
+const fetchMembersPage = async ({
+  page, limit, search, status, isLider
+}) => {
+  const params = { page, limit };
+  if (search) params.search = search;
+  if (status) params.status = status;
+  if (isLider) params.isLider = 'true';
+  const response = await listarMembros(params);
   return {
-    ...initialFormState,
-    name: member.fullName || '',
-    preferredName: member.preferredName || '',
-    email: member.email || '',
-    telefone: member.phone || '',
-    whatsapp: member.whatsapp || '',
-    endereco: member.street || '',
-    numero: member.number || '',
-    complemento: member.complement || '',
-    bairro: member.neighborhood || '',
-    cidade: member.city || '',
-    estado: member.state || '',
-    country: member.country || 'Brasil',
-    cep: member.zipCode || '',
-    cpf: formatCPF(member.cpf || ''),
-    rg: member.rg || '',
-    data_nascimento: member.birthDate || '',
-    gender: member.gender || '',
-    estado_civil: maritalEnumToLabel[member.maritalStatus] || '',
-    status: member.status || 'MEMBRO',
-    statusReason: member.statusReason || '',
-    membershipDate: member.membershipDate || '',
-    baptismDate: member.baptismDate || '',
-    baptismPlace: member.baptismPlace || '',
-    conversionDate: member.conversionDate || '',
-    campusId: member.campusId || '',
-    spouseMemberId: member.spouseMemberId || member.spouse?.id || '',
-    photoUrl: member.photoUrl || '',
-    escolaridade: legacy.escolaridade || '',
-    nome_esposo: legacy.nome_esposo || '',
-    profissao: legacy.profissao || '',
-    frequenta_celula: Boolean(legacy.frequenta_celula),
-    batizado: Boolean(legacy.batizado),
-    encontro: Boolean(legacy.encontro),
-    escolas: normalizeEscolas(legacy.escolas)
+    members: Array.isArray(response?.members) ? response.members : [],
+    total: Number(response?.total) || 0,
+    totalPages: Number(response?.totalPages) || 1,
   };
 };
 
-const buildPayloadFromForm = (form) => ({
-  fullName: form.name,
-  preferredName: form.preferredName || null,
-  cpf: form.cpf || null,
-  rg: form.rg || null,
-  birthDate: form.data_nascimento || null,
-  gender: form.gender || null,
-  maritalStatus: maritalStatusToEnum[form.estado_civil] || null,
-  phone: form.telefone || null,
-  whatsapp: form.whatsapp || null,
-  email: form.email || null,
-  zipCode: form.cep || null,
-  street: form.endereco || null,
-  number: form.numero || null,
-  complement: form.complemento || null,
-  neighborhood: form.bairro || null,
-  city: form.cidade || null,
-  state: form.estado || null,
-  country: form.country || 'Brasil',
-  membershipDate: form.membershipDate || null,
-  baptismDate: form.baptismDate || null,
-  baptismPlace: form.baptismPlace || null,
-  conversionDate: form.conversionDate || null,
-  status: form.status || 'MEMBRO',
-  statusReason: form.statusReason || null,
-  campusId: form.campusId || null,
-  spouseMemberId: form.estado_civil === 'Casado' ? (form.spouseMemberId || null) : null,
-  photoUrl: form.photoUrl || null,
-  notes: JSON.stringify({
-    legacy: {
-      escolaridade: form.escolaridade || null,
-      nome_esposo: form.estado_civil === 'Casado' ? (form.nome_esposo || null) : null,
-      profissao: form.profissao || null,
-      frequenta_celula: Boolean(form.frequenta_celula),
-      batizado: Boolean(form.batizado),
-      encontro: Boolean(form.encontro),
-      escolas: form.escolas || []
-    }
-  })
-});
-
-const isValidCpf = (cpf = '') => {
-  if (!cpf) return true;
-  return /^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(cpf);
+// Carrega TODOS os membros em uma unica chamada — usado so como pool do select de conjuge.
+// Limit alto, cache longo, ativado lazy quando o dialog em modo "Casado" precisa.
+const fetchAllMembersForSelect = async () => {
+  const response = await listarMembros({ page: 1, limit: 5000 });
+  return Array.isArray(response?.members) ? response.members : [];
 };
 
-const isValidEmail = (email = '') => {
-  if (!email) return true;
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+const fetchDuplicates = async () => {
+  const payload = await listarMembrosDuplicados();
+  return Array.isArray(payload) ? payload : payload?.data || [];
 };
 
 const MembrosPage = () => {
   const history = useHistory();
-  const [members, setMembers] = useState([]);
-  const [duplicateSuggestions, setDuplicateSuggestions] = useState([]);
-  const [campi, setCampi] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [duplicatesLoading, setDuplicatesLoading] = useState(false);
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState(0);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -301,9 +80,7 @@ const MembrosPage = () => {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('success');
-  const notify = (msg, type = 'success') => { setMessage(msg); setMessageType(type); };
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState(initialFormState);
   const [geoLoading, setGeoLoading] = useState(false);
   const [updatingMemberId, setUpdatingMemberId] = useState('');
@@ -313,99 +90,103 @@ const MembrosPage = () => {
   const [dismissingPairKey, setDismissingPairKey] = useState('');
   const [mergeConfirmOpen, setMergeConfirmOpen] = useState(false);
   const [pendingMergeSuggestion, setPendingMergeSuggestion] = useState(null);
-  const webcamRef = useRef(null);
 
-  const loadMembers = async () => {
-    setLoading(true);
-    try {
-      const limit = 5000;
-      const firstResponse = await listarMembros({ page: 1, limit });
-      const firstMembers = Array.isArray(firstResponse?.members) ? firstResponse.members : [];
-      const totalPages = Math.max(Number(firstResponse?.totalPages) || 1, 1);
-
-      if (totalPages <= 1) {
-        setMembers(firstMembers);
-        return;
-      }
-
-      const remainingResponses = await Promise.all(
-        Array.from({ length: totalPages - 1 }, (_item, index) => listarMembros({ page: index + 2, limit }))
-      );
-
-      const remainingMembers = remainingResponses.flatMap((response) => (
-        Array.isArray(response?.members) ? response.members : []
-      ));
-
-      setMembers([...firstMembers, ...remainingMembers]);
-    } catch (err) {
-      notify(err.message || 'Erro ao carregar membros', 'error');
-    } finally {
-      setLoading(false);
-    }
+  const notify = (msg, type = 'success') => {
+    setMessage(msg);
+    setMessageType(type);
   };
 
-  const loadDuplicateSuggestions = async () => {
-    setDuplicatesLoading(true);
-    try {
-      const payload = await listarMembrosDuplicados();
-      setDuplicateSuggestions(Array.isArray(payload) ? payload : []);
-    } catch (err) {
-      setDuplicateSuggestions([]);
-      notify(err.message || 'Erro ao carregar duplicados', 'error');
-    } finally {
-      setDuplicatesLoading(false);
-    }
+  // Debounce na busca: a query so dispara 300ms apos parar de digitar.
+  const debouncedSearch = useDebouncedValue(search.trim(), 300);
+
+  // Filtros que entram na chave da query — refetch automatico quando mudam.
+  const membersParams = useMemo(() => ({
+    page: page + 1, // backend e' 1-based
+    limit: rowsPerPage,
+    search: debouncedSearch || undefined,
+    status: statusFilter || undefined,
+    isLider: isLiderFilter || undefined,
+  }), [page, rowsPerPage, debouncedSearch, statusFilter, isLiderFilter]);
+
+  // Pagina atual de membros — server-side. placeholderData mantem a anterior visivel durante refetch.
+  const membersQuery = useQuery({
+    queryKey: [...queryKeys.members.list, membersParams],
+    queryFn: () => fetchMembersPage(membersParams),
+    placeholderData: keepPreviousData,
+  });
+
+  // Lista completa apenas para o select de conjuge — fetcheada lazy.
+  const needsSpouseList = dialogOpen && form.estado_civil === 'Casado';
+  const allMembersQuery = useQuery({
+    queryKey: queryKeys.members.allForSelect,
+    queryFn: fetchAllMembersForSelect,
+    enabled: needsSpouseList,
+    staleTime: 5 * 60_000,
+  });
+
+  const duplicatesQuery = useQuery({
+    queryKey: queryKeys.members.duplicates,
+    queryFn: fetchDuplicates,
+  });
+  const campiQuery = useQuery({
+    queryKey: queryKeys.campus.list,
+    queryFn: listarCampus,
+    select: (data) => (Array.isArray(data) ? data : []),
+  });
+
+  const pagedMembers = membersQuery.data?.members || [];
+  const totalMembers = membersQuery.data?.total || 0;
+  const duplicateSuggestions = duplicatesQuery.data || [];
+  const campi = campiQuery.data || [];
+  const loading = membersQuery.isFetching;
+  const duplicatesLoading = duplicatesQuery.isLoading;
+
+  if (membersQuery.error && membersQuery.error._reported !== true) {
+    membersQuery.error._reported = true;
+    setTimeout(() => notify(membersQuery.error.message || 'Erro ao carregar membros', 'error'), 0);
+  }
+
+  const invalidateMembers = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.members.all });
   };
 
-  const loadCampi = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const API_URL = resolveApiUrl();
-      const response = await fetch(`${API_URL}/start/campus`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!response.ok) throw new Error('Erro ao carregar campus');
-      const data = await response.json();
-      setCampi(Array.isArray(data) ? data : []);
-    } catch (error) {
-      setCampi([]);
-    }
-  };
+  const reloadMembersAndDuplicates = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.members.duplicates }),
+  ]);
 
-  useEffect(() => {
-    loadMembers();
-    loadDuplicateSuggestions();
-    loadCampi();
-  }, []);
-
-  const sortedMembers = useMemo(() => (
-    [...members].sort((a, b) => (a?.fullName || '').localeCompare((b?.fullName || '').trim(), 'pt-BR', { sensitivity: 'base' }))
-  ), [members]);
-
-  const filteredMembers = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return sortedMembers.filter((member) => {
-      if (statusFilter && member.status !== statusFilter) {
-        return false;
-      }
-      if (isLiderFilter && !member.isLider) {
-        return false;
-      }
-      if (!query) return true;
-      const name = (member.fullName || '').toLowerCase();
-      const email = (member.email || '').toLowerCase();
-      return name.includes(query) || email.includes(query);
+  // Atualiza um membro em TODAS as paginas cacheadas + lista do select.
+  const patchMemberInCache = (memberId, patcher) => {
+    queryClient.setQueriesData({ queryKey: queryKeys.members.list }, (prev) => {
+      if (!prev || !Array.isArray(prev.members)) return prev;
+      return {
+        ...prev,
+        members: prev.members.map((m) => (m.id === memberId ? patcher(m) : m)),
+      };
     });
-  }, [sortedMembers, search, statusFilter, isLiderFilter]);
+    queryClient.setQueryData(queryKeys.members.allForSelect, (prev) => (
+      Array.isArray(prev) ? prev.map((m) => (m.id === memberId ? patcher(m) : m)) : prev
+    ));
+  };
+
+  // Remove um membro de todas as paginas cacheadas + lista do select.
+  const removeMemberFromCache = (memberId) => {
+    queryClient.setQueriesData({ queryKey: queryKeys.members.list }, (prev) => {
+      if (!prev || !Array.isArray(prev.members)) return prev;
+      return {
+        ...prev,
+        members: prev.members.filter((m) => m.id !== memberId),
+        total: Math.max(0, (prev.total || 0) - 1),
+      };
+    });
+    queryClient.setQueryData(queryKeys.members.allForSelect, (prev) => (
+      Array.isArray(prev) ? prev.filter((m) => m.id !== memberId) : prev
+    ));
+  };
 
   const spouseOptions = useMemo(() => (
-    sortedMembers.filter((member) => member.id !== memberEdicao?.id)
-  ), [sortedMembers, memberEdicao?.id]);
-
-  const pagedMembers = useMemo(() => {
-    const start = page * rowsPerPage;
-    return filteredMembers.slice(start, start + rowsPerPage);
-  }, [filteredMembers, page, rowsPerPage]);
+    (allMembersQuery.data || []).filter((m) => m.id !== memberEdicao?.id)
+  ), [allMembersQuery.data, memberEdicao?.id]);
 
   const resetForm = () => {
     setForm(initialFormState);
@@ -429,10 +210,7 @@ const MembrosPage = () => {
     setForm((prev) => {
       if (field === 'estado_civil' && value !== 'Casado') {
         return {
-          ...prev,
-          estado_civil: value,
-          spouseMemberId: '',
-          nome_esposo: ''
+          ...prev, estado_civil: value, spouseMemberId: '', nome_esposo: ''
         };
       }
       return { ...prev, [field]: value };
@@ -461,11 +239,9 @@ const MembrosPage = () => {
     }
   };
 
-  const capturePhoto = async () => {
-    if (!webcamRef.current) return;
-    const imageSrc = webcamRef.current.getScreenshot();
+  const handleCapturePhoto = async (webcamInstance) => {
+    const imageSrc = webcamInstance?.getScreenshot();
     if (!imageSrc) return;
-
     try {
       const response = await fetch(imageSrc);
       const blob = await response.blob();
@@ -479,58 +255,51 @@ const MembrosPage = () => {
     }
   };
 
-  const handleSaveMember = async () => {
-    if (!form.name.trim()) {
-      notify('Nome e obrigatorio', 'warning');
-      return;
-    }
-    if (!isValidCpf(form.cpf)) {
-      notify('CPF invalido. Use 000.000.000-00', 'warning');
-      return;
-    }
-    if (!isValidEmail(form.email)) {
-      notify('E-mail invalido', 'warning');
-      return;
-    }
-    if (form.estado && form.estado.length !== 2) {
-      notify('UF deve ter 2 caracteres', 'warning');
-      return;
-    }
-
-    setSubmitting(true);
-    setMessage('');
-    try {
-      const payload = buildPayloadFromForm(form);
-      delete payload.statusReason;
+  const saveMutation = useMutation({
+    mutationFn: async (payload) => {
       if (memberEdicao?.id) {
         await atualizarMembro(memberEdicao.id, payload);
-        notify('Membro atualizado com sucesso');
-      } else {
-        await criarMembro(payload);
-        notify('Membro cadastrado com sucesso');
+        return { mode: 'update' };
       }
+      await criarMembro(payload);
+      return { mode: 'create' };
+    },
+    onSuccess: (result) => {
+      notify(result.mode === 'update' ? 'Membro atualizado com sucesso' : 'Membro cadastrado com sucesso');
       setDialogOpen(false);
       resetForm();
-      await loadMembers();
-      await loadDuplicateSuggestions();
-    } catch (error) {
-      notify(error.message || 'Erro ao salvar membro', 'error');
-    } finally {
-      setSubmitting(false);
-    }
+      reloadMembersAndDuplicates();
+    },
+    onError: (error) => notify(error.message || 'Erro ao salvar membro', 'error'),
+  });
+  const submitting = saveMutation.isPending;
+
+  const handleSaveMember = () => {
+    if (!form.name.trim()) return notify('Nome e obrigatorio', 'warning');
+    if (!isValidCpf(form.cpf)) return notify('CPF invalido. Use 000.000.000-00', 'warning');
+    if (!isValidEmail(form.email)) return notify('E-mail invalido', 'warning');
+    if (form.estado && form.estado.length !== 2) return notify('UF deve ter 2 caracteres', 'warning');
+
+    const payload = buildPayloadFromForm(form);
+    delete payload.statusReason;
+    setMessage('');
+    saveMutation.mutate(payload);
+    return undefined;
   };
 
-  const handleDeleteMember = async (member) => {
+  const deleteMutation = useMutation({
+    mutationFn: (id) => deletarMembro(id),
+    onSuccess: () => {
+      notify('Membro excluido com sucesso');
+      reloadMembersAndDuplicates();
+    },
+    onError: (error) => notify(error.message || 'Erro ao excluir membro', 'error'),
+  });
+
+  const handleDeleteMember = (member) => {
     const ok = window.confirm(`Tem certeza que deseja excluir o membro "${member.fullName}"?`);
     if (!ok) return;
-    try {
-      await deletarMembro(member.id);
-      notify('Membro excluido com sucesso');
-      await loadMembers();
-      await loadDuplicateSuggestions();
-    } catch (error) {
-      notify(error.message || 'Erro ao excluir membro', 'error');
-    }
+    deleteMutation.mutate(member.id);
   };
 
   const handleMergeDuplicates = (suggestion) => {
@@ -538,7 +307,27 @@ const MembrosPage = () => {
     setMergeConfirmOpen(true);
   };
 
-  const handleMergeConfirm = async () => {
+  const mergeMutation = useMutation({
+    mutationFn: ({ suggestion }) => fundirMembrosDuplicados(suggestion.keepMemberId, suggestion.removeMemberId),
+    onSuccess: async (_data, { suggestion, pairKey }) => {
+      notify('Membros fundidos com sucesso');
+
+      // Atualizacao otimista no cache antes de invalidar:
+      queryClient.setQueryData(queryKeys.members.duplicates, (prev = []) => (
+        prev.filter((s) => `${s.keepMemberId}:${s.removeMemberId}` !== pairKey)
+      ));
+      const updatedKeep = await buscarMembro(suggestion.keepMemberId).catch(() => null);
+      removeMemberFromCache(suggestion.removeMemberId);
+      if (updatedKeep) {
+        patchMemberInCache(suggestion.keepMemberId, () => updatedKeep);
+      }
+      invalidateMembers();
+    },
+    onError: (error) => notify(error.message || 'Erro ao fundir membros duplicados', 'error'),
+    onSettled: () => setMergingPairKey(''),
+  });
+
+  const handleMergeConfirm = () => {
     const suggestion = pendingMergeSuggestion;
     if (!suggestion) return;
     setMergeConfirmOpen(false);
@@ -547,38 +336,26 @@ const MembrosPage = () => {
     const pairKey = `${suggestion.keepMemberId}:${suggestion.removeMemberId}`;
     setMergingPairKey(pairKey);
     setMessage('');
-    try {
-      await fundirMembrosDuplicados(suggestion.keepMemberId, suggestion.removeMemberId);
-      notify('Membros fundidos com sucesso');
-
-      setDuplicateSuggestions((prev) => prev.filter((s) => `${s.keepMemberId}:${s.removeMemberId}` !== pairKey));
-
-      const updatedKeep = await buscarMembro(suggestion.keepMemberId).catch(() => null);
-      setMembers((prev) => {
-        const sem = prev.filter((m) => m.id !== suggestion.removeMemberId);
-        if (!updatedKeep) return sem;
-        return sem.map((m) => (m.id === suggestion.keepMemberId ? updatedKeep : m));
-      });
-    } catch (error) {
-      notify(error.message || 'Erro ao fundir membros duplicados', 'error');
-    } finally {
-      setMergingPairKey('');
-    }
+    mergeMutation.mutate({ suggestion, pairKey });
   };
 
-  const handleDismissDuplicate = async (suggestion) => {
+  const dismissMutation = useMutation({
+    mutationFn: ({ suggestion }) => desconsiderarMembrosDuplicados(suggestion.keepMemberId, suggestion.removeMemberId),
+    onSuccess: (_data, { pairKey }) => {
+      notify('Sugestao desconsiderada com sucesso');
+      queryClient.setQueryData(queryKeys.members.duplicates, (prev = []) => (
+        prev.filter((item) => `${item.keepMemberId}:${item.removeMemberId}` !== pairKey)
+      ));
+    },
+    onError: (error) => notify(error.message || 'Erro ao desconsiderar sugestao', 'error'),
+    onSettled: () => setDismissingPairKey(''),
+  });
+
+  const handleDismissDuplicate = (suggestion) => {
     const pairKey = `${suggestion.keepMemberId}:${suggestion.removeMemberId}`;
     setDismissingPairKey(pairKey);
     setMessage('');
-    try {
-      await desconsiderarMembrosDuplicados(suggestion.keepMemberId, suggestion.removeMemberId);
-      setDuplicateSuggestions((prev) => prev.filter((item) => `${item.keepMemberId}:${item.removeMemberId}` !== pairKey));
-      notify('Sugestao desconsiderada com sucesso');
-    } catch (error) {
-      notify(error.message || 'Erro ao desconsiderar sugestao', 'error');
-    } finally {
-      setDismissingPairKey('');
-    }
+    dismissMutation.mutate({ suggestion, pairKey });
   };
 
   const handleSpouseChange = (spouseId) => {
@@ -594,20 +371,22 @@ const MembrosPage = () => {
     history.push(`/app/start/membros/detalhes?id=${member.id}`);
   };
 
-  const handleToggleMemberStatus = async (member, forcedActive) => {
-    const activeNow = !['INATIVO', 'MIA', 'TRANSFERIDO', 'FALECIDO'].includes(member.status);
+  const toggleStatusMutation = useMutation({
+    mutationFn: ({ id, nextActive }) => atualizarMembro(id, { status: nextActive ? 'MEMBRO' : 'INATIVO' }),
+    onSuccess: (_data, { id, nextActive }) => {
+      patchMemberInCache(id, (m) => ({ ...m, status: nextActive ? 'MEMBRO' : 'INATIVO' }));
+      notify(nextActive ? 'Membro ativado com sucesso' : 'Membro inativado com sucesso');
+    },
+    onError: (error) => notify(error.message || 'Erro ao atualizar status do membro', 'error'),
+    onSettled: () => setUpdatingMemberId(''),
+  });
+
+  const handleToggleMemberStatus = (member, forcedActive) => {
+    const activeNow = !INACTIVE_STATUSES.includes(member.status);
     const nextActive = typeof forcedActive === 'boolean' ? forcedActive : !activeNow;
     setUpdatingMemberId(member.id);
     setMessage('');
-    try {
-      await atualizarMembro(member.id, { status: nextActive ? 'MEMBRO' : 'INATIVO' });
-      setMembers((prev) => prev.map((item) => (item.id === member.id ? { ...item, status: nextActive ? 'MEMBRO' : 'INATIVO' } : item)));
-      notify(nextActive ? 'Membro ativado com sucesso' : 'Membro inativado com sucesso');
-    } catch (error) {
-      notify(error.message || 'Erro ao atualizar status do membro', 'error');
-    } finally {
-      setUpdatingMemberId('');
-    }
+    toggleStatusMutation.mutate({ id: member.id, nextActive });
   };
 
   const handleCompleteAddressFromCep = async () => {
@@ -638,24 +417,6 @@ const MembrosPage = () => {
     }
   };
 
-  const COMPLETUDE_FIELDS = [
-    (m) => m.email,
-    (m) => m.phone || m.whatsapp,
-    (m) => m.birthDate,
-    (m) => m.cpf,
-    (m) => m.maritalStatus,
-    (m) => m.gender,
-    (m) => m.street || m.neighborhood,
-    (m) => m.zipCode,
-    (m) => m.photoUrl,
-    (m) => m.campusId
-  ];
-
-  const calcCompletude = (member) => {
-    const filled = COMPLETUDE_FIELDS.filter((fn) => Boolean(fn(member))).length;
-    return Math.round((filled / COMPLETUDE_FIELDS.length) * 100);
-  };
-
   const sincronizarMembro = async (member) => {
     if (!member.userId) {
       notify('Membro não possui usuário vinculado.', 'error');
@@ -666,7 +427,7 @@ const MembrosPage = () => {
       await sincronizarDadosDoUser(member.id);
       notify('Dados sincronizados com sucesso.');
       const updated = await buscarMembro(member.id);
-      setMembers((prev) => prev.map((m) => (m.id === member.id ? { ...m, ...updated } : m)));
+      patchMemberInCache(member.id, (m) => ({ ...m, ...updated }));
     } catch (err) {
       notify(err.message || 'Erro ao sincronizar dados.', 'error');
     } finally {
@@ -674,17 +435,10 @@ const MembrosPage = () => {
     }
   };
 
-  const notificarDadosIncompletos = async (member) => {
+  const notificarDadosIncompletosHandler = async (member) => {
     setNotificandoMembro((prev) => ({ ...prev, [member.id]: true }));
-    const BASE = (process.env.REACT_APP_API_URL || '').replace(/\/$/, '');
-    const token = localStorage.getItem('token');
     try {
-      const res = await fetch(`${BASE}/api/admin/members/${member.id}/notificar-dados`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.erro || 'Falha ao enviar notificação');
+      await notificarDadosIncompletosApi(member.id);
       notify('Notificação enviada com sucesso.');
     } catch (err) {
       notify(err.message || 'Erro ao enviar notificação.', 'error');
@@ -705,437 +459,73 @@ const MembrosPage = () => {
           onChange={(_event, nextTab) => setActiveTab(nextTab)}
           variant="fullWidth"
         >
-          <Tab label={`Lista de membros (${filteredMembers.length})`} />
+          <Tab label={`Lista de membros (${totalMembers})`} />
           <Tab label={`Possiveis duplicados (${duplicateSuggestions.length})`} />
         </Tabs>
       </Paper>
 
       {activeTab === 0 && (
-        <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" mb={2} spacing={2}>
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ flex: 1 }}>
-            <TextField fullWidth label="Pesquisar por nome ou e-mail" value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} />
-            <TextField
-              select
-              label="Status"
-              value={statusFilter}
-              onChange={(event) => {
-                setStatusFilter(event.target.value);
-                setPage(0);
-              }}
-              sx={{ minWidth: { xs: '100%', md: 220 } }}
-            >
-              <MenuItem value="">Todos</MenuItem>
-              {STATUS_OPTIONS.map((option) => (
-                <MenuItem key={option} value={option}>{option}</MenuItem>
-              ))}
-            </TextField>
-            <Chip
-              label="Lider de celula"
-              clickable
-              color={isLiderFilter ? 'primary' : 'default'}
-              variant={isLiderFilter ? 'filled' : 'outlined'}
-              onClick={() => { setIsLiderFilter((v) => !v); setPage(0); }}
-              sx={{ alignSelf: 'center', whiteSpace: 'nowrap' }}
-            />
-          </Stack>
-          <Button variant="contained" color="primary" startIcon={<AddIcon />} onClick={handleOpenCreate}>
-            Cadastrar membro
-          </Button>
-        </Stack>
+        <>
+          <MembersFiltersBar
+            search={search}
+            onSearchChange={(value) => { setSearch(value); setPage(0); }}
+            statusFilter={statusFilter}
+            onStatusFilterChange={(value) => { setStatusFilter(value); setPage(0); }}
+            isLiderFilter={isLiderFilter}
+            onToggleLiderFilter={() => { setIsLiderFilter((v) => !v); setPage(0); }}
+            onCreate={handleOpenCreate}
+          />
+          <MembersTable
+            pagedMembers={pagedMembers}
+            totalCount={totalMembers}
+            page={page}
+            rowsPerPage={rowsPerPage}
+            onPageChange={setPage}
+            onRowsPerPageChange={(value) => { setRowsPerPage(value); setPage(0); }}
+            loading={loading}
+            updatingMemberId={updatingMemberId}
+            notificandoMembro={notificandoMembro}
+            sincronizandoMembro={sincronizandoMembro}
+            onToggleStatus={handleToggleMemberStatus}
+            onNotifyIncomplete={notificarDadosIncompletosHandler}
+            onSyncMember={sincronizarMembro}
+            onOpenDetails={handleOpenDetails}
+            onOpenEdit={handleOpenEdit}
+            onDeleteMember={handleDeleteMember}
+          />
+        </>
       )}
 
       {activeTab === 1 && (
-        <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" mb={2} spacing={2}>
-          <Box>
-            <Typography variant="h6">Possiveis dados duplicados</Typography>
-            <Typography variant="body2" color="textSecondary">
-              Comparacao por nome parecido, e-mail, documento e telefone. A fusao mantem o cadastro mais antigo.
-            </Typography>
-          </Box>
-          <Button variant="outlined" onClick={loadDuplicateSuggestions} disabled={duplicatesLoading}>
-            {duplicatesLoading ? 'Analisando duplicados...' : 'Atualizar duplicados'}
-          </Button>
-        </Stack>
+        <DuplicatesPanel
+          suggestions={duplicateSuggestions}
+          loading={duplicatesLoading}
+          onReload={() => duplicatesQuery.refetch()}
+          onMerge={handleMergeDuplicates}
+          onDismiss={handleDismissDuplicate}
+          mergingPairKey={mergingPairKey}
+          dismissingPairKey={dismissingPairKey}
+        />
       )}
 
-      {activeTab === 1 && (
-        <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: 'background.default' }}>
-          <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }} spacing={1.5} mb={duplicateSuggestions.length ? 2 : 0}>
-            <Typography variant="body2" color="textSecondary">
-              Revise cada sugestao antes de fundir. Se desconsiderar, esse par nao volta a aparecer.
-            </Typography>
-            <Chip color={duplicateSuggestions.length ? 'warning' : 'success'} label={duplicateSuggestions.length ? `${duplicateSuggestions.length} sugestoes` : 'Nenhuma sugestao'} />
-          </Stack>
-
-          {duplicatesLoading && (
-            <Box py={2} display="flex" justifyContent="center">
-              <CircularProgress size={22} />
-            </Box>
-          )}
-
-          {!duplicatesLoading && !duplicateSuggestions.length && (
-            <Typography color="textSecondary">Nenhum possivel duplicado encontrado no momento.</Typography>
-          )}
-
-          {!duplicatesLoading && duplicateSuggestions.length > 0 && (
-            <Stack spacing={1.5}>
-              {duplicateSuggestions.map((suggestion) => {
-                const pairKey = `${suggestion.keepMemberId}:${suggestion.removeMemberId}`;
-                return (
-                  <Paper key={pairKey} variant="outlined" sx={{ p: 1.5 }}>
-                    <Grid container spacing={2} alignItems="center">
-                      <Grid item xs={12} md={4}>
-                        <Typography variant="caption" color="textSecondary">Manter cadastro antigo</Typography>
-                        <Stack direction="row" spacing={1.25} alignItems="center" mt={0.5}>
-                          <Avatar src={suggestion.olderMember.photoUrl || ''} alt={suggestion.olderMember.fullName} />
-                          <Box>
-                            <Typography variant="body2" sx={{ fontWeight: 600 }}>{suggestion.olderMember.fullName}</Typography>
-                            <Typography variant="caption" color="textSecondary">
-                              {suggestion.olderMember.email || suggestion.olderMember.phone || suggestion.olderMember.whatsapp || '-'}
-                            </Typography>
-                          </Box>
-                        </Stack>
-                      </Grid>
-                      <Grid item xs={12} md={4}>
-                        <Typography variant="caption" color="textSecondary">Excluir cadastro mais recente</Typography>
-                        <Stack direction="row" spacing={1.25} alignItems="center" mt={0.5}>
-                          <Avatar src={suggestion.newerMember.photoUrl || ''} alt={suggestion.newerMember.fullName} />
-                          <Box>
-                            <Typography variant="body2" sx={{ fontWeight: 600 }}>{suggestion.newerMember.fullName}</Typography>
-                            <Typography variant="caption" color="textSecondary">
-                              {suggestion.newerMember.email || suggestion.newerMember.phone || suggestion.newerMember.whatsapp || '-'}
-                            </Typography>
-                          </Box>
-                        </Stack>
-                      </Grid>
-                      <Grid item xs={12} md={2}>
-                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                          {suggestion.reasons.map((reason) => (
-                            <Chip key={`${pairKey}-${reason.type}`} size="small" variant="outlined" label={reason.label} />
-                          ))}
-                        </Stack>
-                      </Grid>
-                      <Grid item xs={12} md={2}>
-                        <Stack spacing={1}>
-                          <Button
-                            fullWidth
-                            variant="contained"
-                            color="warning"
-                            onClick={() => handleMergeDuplicates(suggestion)}
-                            disabled={mergingPairKey === pairKey || dismissingPairKey === pairKey}
-                          >
-                            {mergingPairKey === pairKey ? 'Fundindo...' : 'Fundir'}
-                          </Button>
-                          <Button
-                            fullWidth
-                            variant="text"
-                            color="inherit"
-                            onClick={() => handleDismissDuplicate(suggestion)}
-                            disabled={dismissingPairKey === pairKey || mergingPairKey === pairKey}
-                          >
-                            {dismissingPairKey === pairKey ? 'Desconsiderando...' : 'Desconsiderar'}
-                          </Button>
-                        </Stack>
-                      </Grid>
-                    </Grid>
-                  </Paper>
-                );
-              })}
-            </Stack>
-          )}
-        </Paper>
-      )}
-
-      {activeTab === 0 && <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell />
-            <TableCell>Nome</TableCell>
-            <TableCell>Email</TableCell>
-            <TableCell>Telefone</TableCell>
-            <TableCell>Status</TableCell>
-            <TableCell>Ações</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {pagedMembers.map((member) => {
-            const isActive = !['INATIVO', 'MIA', 'TRANSFERIDO', 'FALECIDO'].includes(member.status);
-            const completude = calcCompletude(member);
-            const incompleto = completude < 70;
-            const temContato = Boolean(member.phone || member.whatsapp);
-            return (
-              <TableRow hover key={member.id}>
-                <TableCell><Avatar src={member.photoUrl || 'https://via.placeholder.com/40'} alt={member.fullName} sx={{ width: 32, height: 32 }} /></TableCell>
-                <TableCell>
-                  <Stack direction="row" spacing={0.5} alignItems="center">
-                    <span>{member.fullName}</span>
-                    {incompleto && (
-                      <Tooltip title={`Dados incompletos: ${completude}% preenchido`}>
-                        <WarningAmberIcon fontSize="small" color="warning" />
-                      </Tooltip>
-                    )}
-                  </Stack>
-                </TableCell>
-                <TableCell>{member.email || '-'}</TableCell>
-                <TableCell>{member.phone || member.whatsapp || '-'}</TableCell>
-                <TableCell><Chip label={member.status || '-'} color={isActive ? 'primary' : 'default'} size="small" /></TableCell>
-                <TableCell>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <FormControlLabel
-                      sx={{ m: 0 }}
-                      control={<Switch size="small" color="primary" checked={isActive} disabled={updatingMemberId === member.id} onChange={(event) => handleToggleMemberStatus(member, event.target.checked)} />}
-                      label={updatingMemberId === member.id ? 'Salvando...' : isActive ? 'Ativo' : 'Inativo'}
-                    />
-                    {incompleto && (
-                      <Tooltip title={temContato ? `Notificar para atualizar dados (${completude}%)` : 'Sem telefone para notificar'}>
-                        <span>
-                          <IconButton
-                            size="small"
-                            color="warning"
-                            disabled={!temContato || !!notificandoMembro[member.id]}
-                            onClick={() => notificarDadosIncompletos(member)}
-                          >
-                            <NotificationsActiveIcon fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    )}
-                    {member.userId && (
-                      <Tooltip title="Sincronizar dados do usuário vinculado">
-                        <span>
-                          <IconButton
-                            size="small"
-                            color="info"
-                            disabled={!!sincronizandoMembro[member.id]}
-                            onClick={() => sincronizarMembro(member)}
-                          >
-                            {sincronizandoMembro[member.id] ? <CircularProgress size={16} /> : <SyncIcon fontSize="small" />}
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    )}
-                    <Tooltip title="Detalhes do membro"><IconButton size="small" onClick={() => handleOpenDetails(member)}><VisibilityIcon fontSize="small" /></IconButton></Tooltip>
-                    <Tooltip title="Editar membro"><IconButton size="small" onClick={() => handleOpenEdit(member)}><EditIcon fontSize="small" /></IconButton></Tooltip>
-                    <Tooltip title="Excluir membro"><IconButton size="small" color="error" onClick={() => handleDeleteMember(member)}><DeleteIcon fontSize="small" /></IconButton></Tooltip>
-                  </Stack>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-          {!pagedMembers.length && !loading && <TableRow><TableCell colSpan={6}><Typography color="textSecondary">Nenhum membro encontrado.</Typography></TableCell></TableRow>}
-          {loading && <TableRow><TableCell colSpan={6}><Box display="flex" justifyContent="center" py={2}><CircularProgress size={24} /></Box></TableCell></TableRow>}
-        </TableBody>
-      </Table>}
-
-      {activeTab === 0 && <TablePagination
-        component="div"
-        count={filteredMembers.length}
-        page={page}
-        onPageChange={(_, newPage) => setPage(newPage)}
-        rowsPerPage={rowsPerPage}
-        onRowsPerPageChange={(event) => {
-          setRowsPerPage(parseInt(event.target.value, 10));
-          setPage(0);
-        }}
-        rowsPerPageOptions={[5, 10, 20]}
-      />}
-
-      <Dialog fullWidth maxWidth="lg" open={dialogOpen} onClose={() => setDialogOpen(false)}>
-        <DialogTitle>{memberEdicao ? 'Editar membro' : 'Cadastrar membro'}</DialogTitle>
-        <DialogContent>
-          <Paper variant="outlined" sx={{ p: 2, mt: 1, bgcolor: 'background.default' }}>
-            <Stack spacing={2}>
-              <Typography variant="subtitle2" color="textSecondary">Foto</Typography>
-              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center">
-                <Box
-                  sx={{
-                    width: 96,
-                    height: 96,
-                    borderRadius: '50%',
-                    overflow: 'hidden',
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    bgcolor: 'background.paper'
-                  }}
-                >
-                  {showWebcam ? (
-                    <Webcam
-                      audio={false}
-                      ref={webcamRef}
-                      screenshotFormat="image/webp"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      videoConstraints={{ facingMode: 'user' }}
-                    />
-                  ) : (
-                    <Avatar src={form.photoUrl || ''} alt={form.name || 'Membro'} sx={{ width: 96, height: 96 }} />
-                  )}
-                </Box>
-                <Stack direction="row" spacing={1}>
-                  <Button variant="outlined" startIcon={<PhotoCameraIcon />} component="label">
-                    Upload
-                    <input type="file" hidden accept="image/*" onChange={handleFileUpload} />
-                  </Button>
-                  {!showWebcam && (
-                    <Button variant="outlined" startIcon={<CameraAltIcon />} onClick={() => setShowWebcam(true)}>
-                      Webcam
-                    </Button>
-                  )}
-                  {showWebcam && (
-                    <Button variant="contained" onClick={capturePhoto}>
-                      Capturar
-                    </Button>
-                  )}
-                  {showWebcam && (
-                    <Button variant="text" onClick={() => setShowWebcam(false)}>
-                      Fechar camera
-                    </Button>
-                  )}
-                  {!!form.photoUrl && (
-                    <Button variant="text" color="error" onClick={() => handleFormChange('photoUrl', '')}>
-                      Remover
-                    </Button>
-                  )}
-                </Stack>
-              </Stack>
-            </Stack>
-          </Paper>
-
-          <Paper variant="outlined" sx={{ p: 2, mt: 2, bgcolor: 'background.default' }}>
-            <Stack spacing={2}>
-              <Typography variant="subtitle2" color="textSecondary">Dados pessoais</Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} md={4}><TextField label="Nome" value={form.name} required onChange={(event) => handleFormChange('name', event.target.value)} fullWidth /></Grid>
-                <Grid item xs={12} md={4}><TextField label="Nome preferido" value={form.preferredName} onChange={(event) => handleFormChange('preferredName', event.target.value)} fullWidth /></Grid>
-                <Grid item xs={12} md={4}><TextField label="Email" type="email" value={form.email} onChange={(event) => handleFormChange('email', event.target.value)} fullWidth /></Grid>
-                <Grid item xs={12} md={4}><TextField label="Telefone" value={form.telefone} onChange={(event) => handleFormChange('telefone', formatPhone(event.target.value))} fullWidth /></Grid>
-                <Grid item xs={12} md={4}><TextField label="WhatsApp" value={form.whatsapp} onChange={(event) => handleFormChange('whatsapp', formatPhone(event.target.value))} fullWidth /></Grid>
-                <Grid item xs={12} md={4}><TextField label="CPF" value={form.cpf} onChange={(event) => handleFormChange('cpf', formatCPF(event.target.value))} fullWidth /></Grid>
-                <Grid item xs={12} md={4}><TextField label="RG" value={form.rg} onChange={(event) => handleFormChange('rg', event.target.value)} fullWidth /></Grid>
-                <Grid item xs={12} md={4}><TextField label="Data de nascimento" type="date" value={form.data_nascimento} onChange={(event) => handleFormChange('data_nascimento', event.target.value)} InputLabelProps={{ shrink: true }} fullWidth /></Grid>
-
-                <Grid item xs={12} md={4}>
-                  <TextField select label="Genero" value={form.gender} onChange={(event) => handleFormChange('gender', event.target.value)} fullWidth>
-                    <MenuItem value="">Nao informado</MenuItem>
-                    {GENDER_OPTIONS.map((option) => (<MenuItem key={option} value={option}>{option}</MenuItem>))}
-                  </TextField>
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField select label="Estado civil" value={form.estado_civil} onChange={(event) => handleFormChange('estado_civil', event.target.value)} fullWidth>
-                    {ESTADO_CIVIL_OPTIONS.map((option) => (<MenuItem key={option} value={option}>{option}</MenuItem>))}
-                  </TextField>
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField select label="Status" value={form.status} onChange={(event) => handleFormChange('status', event.target.value)} fullWidth>
-                    {STATUS_OPTIONS.map((option) => (<MenuItem key={option} value={option}>{option}</MenuItem>))}
-                  </TextField>
-                </Grid>
-
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    select
-                    label="Campus"
-                    value={form.campusId}
-                    onChange={(event) => handleFormChange('campusId', event.target.value)}
-                    fullWidth
-                  >
-                    <MenuItem value="">Nenhum</MenuItem>
-                    {campi.map((campus) => (
-                      <MenuItem key={campus.id} value={campus.id}>{campus.nome}</MenuItem>
-                    ))}
-                  </TextField>
-                </Grid>
-
-                {form.estado_civil === 'Casado' && (
-                  <Grid item xs={12} md={4}>
-                    <TextField
-                      select
-                      label="Conjuge (membro)"
-                      value={form.spouseMemberId}
-                      onChange={(event) => handleSpouseChange(event.target.value)}
-                      fullWidth
-                    >
-                      <MenuItem value="">Nenhum</MenuItem>
-                      {spouseOptions.map((option) => (
-                        <MenuItem key={option.id} value={option.id}>{option.fullName}</MenuItem>
-                      ))}
-                    </TextField>
-                  </Grid>
-                )}
-                {form.estado_civil === 'Casado' && (
-                  <Grid item xs={12} md={4}>
-                    <TextField
-                      label="Nome do conjuge"
-                      value={form.nome_esposo}
-                      onChange={(event) => handleFormChange('nome_esposo', event.target.value)}
-                      helperText="Preencha manualmente quando o conjuge nao e membro"
-                      fullWidth
-                    />
-                  </Grid>
-                )}
-                <Grid item xs={12} md={4}><TextField label="Profissao" value={form.profissao} onChange={(event) => handleFormChange('profissao', event.target.value)} fullWidth /></Grid>
-
-                <Grid item xs={12} md={4}>
-                  <TextField select label="Escolaridade" value={form.escolaridade} onChange={(event) => handleFormChange('escolaridade', event.target.value)} fullWidth>
-                    <MenuItem value="">Nao informado</MenuItem>
-                    {ESCOLARIDADE_OPTIONS.map((option) => (<MenuItem key={option} value={option}>{option}</MenuItem>))}
-                  </TextField>
-                </Grid>
-                <Grid item xs={12} md={8}>
-                  <Autocomplete
-                    multiple
-                    options={ESCOLAS_CONCLUIDAS_OPTIONS}
-                    value={form.escolas}
-                    onChange={(_, value) => handleFormChange('escolas', value)}
-                    renderTags={(value, getTagProps) => value.map((option, index) => (
-                      <Chip variant="outlined" label={option} {...getTagProps({ index })} key={`${option}-${index}`} />
-                    ))}
-                    renderInput={(params) => <TextField {...params} label="Escolas concluidas" placeholder="Selecionar" />}
-                  />
-                </Grid>
-
-                <Grid item xs={12} md={4}><TextField label="Data de membresia" type="date" value={form.membershipDate} onChange={(event) => handleFormChange('membershipDate', event.target.value)} InputLabelProps={{ shrink: true }} fullWidth /></Grid>
-                <Grid item xs={12} md={4}><TextField label="Data de batismo" type="date" value={form.baptismDate} onChange={(event) => handleFormChange('baptismDate', event.target.value)} InputLabelProps={{ shrink: true }} fullWidth /></Grid>
-                <Grid item xs={12} md={4}><TextField label="Local de batismo" value={form.baptismPlace} onChange={(event) => handleFormChange('baptismPlace', event.target.value)} fullWidth /></Grid>
-                <Grid item xs={12} md={4}><TextField label="Data de conversao" type="date" value={form.conversionDate} onChange={(event) => handleFormChange('conversionDate', event.target.value)} InputLabelProps={{ shrink: true }} fullWidth /></Grid>
-
-                <Grid item xs={12} md={4}><TextField select label="Frequenta celula" value={form.frequenta_celula ? 'true' : 'false'} onChange={(event) => handleFormChange('frequenta_celula', event.target.value === 'true')} fullWidth><MenuItem value="true">Sim</MenuItem><MenuItem value="false">Nao</MenuItem></TextField></Grid>
-                <Grid item xs={12} md={4}><TextField select label="Batizado" value={form.batizado ? 'true' : 'false'} onChange={(event) => handleFormChange('batizado', event.target.value === 'true')} fullWidth><MenuItem value="true">Sim</MenuItem><MenuItem value="false">Nao</MenuItem></TextField></Grid>
-                <Grid item xs={12} md={4}><TextField select label="Encontro" value={form.encontro ? 'true' : 'false'} onChange={(event) => handleFormChange('encontro', event.target.value === 'true')} fullWidth><MenuItem value="true">Sim</MenuItem><MenuItem value="false">Nao</MenuItem></TextField></Grid>
-              </Grid>
-            </Stack>
-          </Paper>
-
-          <Paper variant="outlined" sx={{ p: 2, mt: 2, bgcolor: 'background.default' }}>
-            <Stack spacing={2}>
-              <Typography variant="subtitle2" color="textSecondary">Endereco</Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} md={3}><TextField label="CEP" value={form.cep} onChange={(event) => handleFormChange('cep', event.target.value)} fullWidth /></Grid>
-                <Grid item xs={12} md={3}>
-                  <Button variant="outlined" color="primary" onClick={handleCompleteAddressFromCep} disabled={geoLoading} fullWidth sx={{ height: '100%' }}>
-                    {geoLoading ? 'Buscando CEP...' : 'Completar pelo CEP'}
-                  </Button>
-                </Grid>
-                <Grid item xs={12} md={3}><TextField label="Bairro" value={form.bairro} onChange={(event) => handleFormChange('bairro', event.target.value)} fullWidth /></Grid>
-                <Grid item xs={12} md={3}><TextField label="Numero" value={form.numero} onChange={(event) => handleFormChange('numero', event.target.value)} fullWidth /></Grid>
-                <Grid item xs={12} md={6}><TextField label="Endereco" value={form.endereco} onChange={(event) => handleFormChange('endereco', event.target.value)} fullWidth /></Grid>
-                <Grid item xs={12} md={3}><TextField label="Complemento" value={form.complemento} onChange={(event) => handleFormChange('complemento', event.target.value)} fullWidth /></Grid>
-                <Grid item xs={12} md={3}><TextField label="Cidade" value={form.cidade} onChange={(event) => handleFormChange('cidade', event.target.value)} fullWidth /></Grid>
-                <Grid item xs={12} md={2}><TextField label="UF" value={form.estado} onChange={(event) => handleFormChange('estado', event.target.value.toUpperCase())} inputProps={{ maxLength: 2 }} fullWidth /></Grid>
-                <Grid item xs={12} md={4}><TextField label="Pais" value={form.country} onChange={(event) => handleFormChange('country', event.target.value)} fullWidth /></Grid>
-              </Grid>
-            </Stack>
-          </Paper>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDialogOpen(false)} disabled={submitting}>Cancelar</Button>
-          <Button variant="contained" color="primary" onClick={handleSaveMember} disabled={submitting}>
-            {submitting ? 'Salvando...' : 'Salvar'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <MemberFormDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        isEditing={!!memberEdicao}
+        form={form}
+        onFormChange={handleFormChange}
+        campi={campi}
+        spouseOptions={spouseOptions}
+        onSpouseChange={handleSpouseChange}
+        showWebcam={showWebcam}
+        setShowWebcam={setShowWebcam}
+        onFileUpload={handleFileUpload}
+        onCapturePhoto={handleCapturePhoto}
+        geoLoading={geoLoading}
+        onCompleteAddressFromCep={handleCompleteAddressFromCep}
+        submitting={submitting}
+        onSave={handleSaveMember}
+      />
 
       <Notification
         open={!!message}
@@ -1144,81 +534,12 @@ const MembrosPage = () => {
         close={() => setMessage('')}
       />
 
-      {/* Dialog de confirmação de fusão */}
-      <Dialog
+      <MergeConfirmDialog
         open={mergeConfirmOpen}
+        suggestion={pendingMergeSuggestion}
         onClose={() => { setMergeConfirmOpen(false); setPendingMergeSuggestion(null); }}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <MergeIcon color="warning" />
-          Confirmar fusão de cadastros
-        </DialogTitle>
-        <DialogContent>
-          {pendingMergeSuggestion && (
-            <Stack spacing={2}>
-              <DialogContentText variant="body2">
-                O cadastro mais recente será excluído e seus dados serão incorporados ao mais antigo.
-              </DialogContentText>
-
-              <Stack direction="row" spacing={1.5} alignItems="center">
-                {/* Membro mantido */}
-                <Paper variant="outlined" sx={{ flex: 1, p: 1.5, borderColor: 'success.main' }}>
-                  <Typography variant="caption" color="success.main" fontWeight={600}>MANTER</Typography>
-                  <Stack direction="row" spacing={1} alignItems="center" mt={0.5}>
-                    <Avatar src={pendingMergeSuggestion.olderMember.photoUrl || ''} sx={{ width: 36, height: 36 }} />
-                    <Box>
-                      <Typography variant="body2" fontWeight={600}>{pendingMergeSuggestion.olderMember.fullName}</Typography>
-                      <Typography variant="caption" color="textSecondary">
-                        {pendingMergeSuggestion.olderMember.email || pendingMergeSuggestion.olderMember.phone || '-'}
-                      </Typography>
-                    </Box>
-                  </Stack>
-                </Paper>
-
-                <ArrowForwardIcon color="action" />
-
-                {/* Membro removido */}
-                <Paper variant="outlined" sx={{ flex: 1, p: 1.5, borderColor: 'error.main' }}>
-                  <Typography variant="caption" color="error.main" fontWeight={600}>EXCLUIR</Typography>
-                  <Stack direction="row" spacing={1} alignItems="center" mt={0.5}>
-                    <Avatar src={pendingMergeSuggestion.newerMember.photoUrl || ''} sx={{ width: 36, height: 36 }} />
-                    <Box>
-                      <Typography variant="body2" fontWeight={600}>{pendingMergeSuggestion.newerMember.fullName}</Typography>
-                      <Typography variant="caption" color="textSecondary">
-                        {pendingMergeSuggestion.newerMember.email || pendingMergeSuggestion.newerMember.phone || '-'}
-                      </Typography>
-                    </Box>
-                  </Stack>
-                </Paper>
-              </Stack>
-
-              {pendingMergeSuggestion.reasons?.length > 0 && (
-                <>
-                  <Divider />
-                  <Box>
-                    <Typography variant="caption" color="textSecondary" mb={0.5} display="block">Motivos da sugestão</Typography>
-                    <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
-                      {pendingMergeSuggestion.reasons.map((r) => (
-                        <Chip key={r.type} size="small" label={r.label} variant="outlined" />
-                      ))}
-                    </Stack>
-                  </Box>
-                </>
-              )}
-            </Stack>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => { setMergeConfirmOpen(false); setPendingMergeSuggestion(null); }}>
-            Cancelar
-          </Button>
-          <Button variant="contained" color="warning" startIcon={<MergeIcon />} onClick={handleMergeConfirm}>
-            Confirmar fusão
-          </Button>
-        </DialogActions>
-      </Dialog>
+        onConfirm={handleMergeConfirm}
+      />
     </PapperBlock>
   );
 };
