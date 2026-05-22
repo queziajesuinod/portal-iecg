@@ -353,6 +353,55 @@ function RegistrationDetails() {
     return labels[metodo] || metodo;
   };
 
+  const getTransactionTypeLabel = (tipo) => {
+    const labels = {
+      authorization: 'Autorização',
+      capture: 'Captura',
+      cancellation: 'Cancelamento',
+      refund: 'Reembolso',
+      webhook: 'Webhook'
+    };
+    return labels[tipo] || tipo;
+  };
+
+  // Status numéricos da Cielo: 10 = Voided, 11 = Refunded — só estes confirmam estorno/cancelamento.
+  const CIELO_VOID_OK_STATUSES = new Set(['10', '11', 10, 11]);
+
+  const getResultadoTransacao = (transaction) => {
+    const tipo = transaction.transactionType;
+    const { status } = transaction;
+    const hasError = Boolean(transaction.errorMessage);
+    const cieloStatus = transaction.responseData?.Status;
+
+    if (tipo === 'refund' || tipo === 'cancellation') {
+      const semRespostaCielo = cieloStatus === undefined || cieloStatus === null;
+      const cieloConfirmou = !semRespostaCielo && CIELO_VOID_OK_STATUSES.has(cieloStatus);
+      const cancelamentoLocal = semRespostaCielo && !hasError;
+
+      if (cieloConfirmou || cancelamentoLocal) {
+        return {
+          label: tipo === 'refund' ? 'Reembolso efetivado' : 'Cancelamento efetivado',
+          color: 'success'
+        };
+      }
+      return {
+        label: tipo === 'refund' ? 'Reembolso negado' : 'Cancelamento negado',
+        color: 'error'
+      };
+    }
+
+    if (hasError) {
+      return { label: 'Falha', color: 'error' };
+    }
+    return { label: status || '—', color: 'default' };
+  };
+
+  const getMensagemCielo = (transaction) => {
+    if (transaction.errorMessage) return transaction.errorMessage;
+    const data = transaction.responseData || {};
+    return data.ReturnMessage || data.ProviderReturnMessage || data.ReasonMessage || null;
+  };
+
   if (loading) {
     return <Box p={3}><DetailSkeleton fields={8} /></Box>;
   }
@@ -683,30 +732,55 @@ function RegistrationDetails() {
                     Histórico de Transações
                   </Typography>
                   <Divider style={{ marginBottom: 16 }} />
-                  <Table>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Data</TableCell>
+                        <TableCell>Operação</TableCell>
+                        <TableCell>Resultado</TableCell>
+                        <TableCell align="right">Valor</TableCell>
+                        <TableCell>Retorno Cielo</TableCell>
+                      </TableRow>
+                    </TableHead>
                     <TableBody>
-                      {inscricao.transactions.map((transaction) => (
-                        <TableRow key={transaction.id}>
-                          <TableCell>
-                            <Typography variant="body2">
-                              <strong>{transaction.transactionType}</strong>
-                            </Typography>
-                            <Typography variant="caption" color="textSecondary">
-                              {formatarData(transaction.createdAt)}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              label={transaction.status}
-                              size="small"
-                              color={transaction.status === 'success' ? 'primary' : 'default'}
-                            />
-                          </TableCell>
-                          <TableCell align="right">
-                            {formatarPreco(transaction.amount)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {inscricao.transactions.map((transaction) => {
+                        const resultado = getResultadoTransacao(transaction);
+                        const mensagemCielo = getMensagemCielo(transaction);
+                        return (
+                          <TableRow key={transaction.id}>
+                            <TableCell>
+                              <Typography variant="caption" color="textSecondary">
+                                {formatarData(transaction.createdAt)}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2">
+                                <strong>{getTransactionTypeLabel(transaction.transactionType)}</strong>
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Chip
+                                label={resultado.label}
+                                size="small"
+                                color={resultado.color}
+                                variant={resultado.color === 'default' ? 'outlined' : 'filled'}
+                              />
+                            </TableCell>
+                            <TableCell align="right">
+                              {formatarPreco(transaction.amount)}
+                            </TableCell>
+                            <TableCell>
+                              {mensagemCielo ? (
+                                <Typography variant="caption" color={resultado.color === 'error' ? 'error' : 'textSecondary'}>
+                                  {mensagemCielo}
+                                </Typography>
+                              ) : (
+                                <Typography variant="caption" color="textSecondary">—</Typography>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </CardContent>
