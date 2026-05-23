@@ -1,13 +1,25 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet';
-import { PapperBlock } from 'dan-components';
+import { PapperBlock, Notification } from 'dan-components';
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  Badge,
+  Divider,
+  Grid,
+  IconButton,
+  LinearProgress,
+  ListItemIcon,
+  Menu,
+  Skeleton,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
   TablePagination,
+  Tooltip,
   Button,
   Dialog,
   DialogTitle,
@@ -26,8 +38,17 @@ import {
   InputLabel,
   Select,
   Checkbox,
-  ListItemText
+  ListItemText,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
+import EditIcon from '@mui/icons-material/Edit';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import FilterListOffIcon from '@mui/icons-material/FilterListOff';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import SyncIcon from '@mui/icons-material/Sync';
+import ToggleOnIcon from '@mui/icons-material/ToggleOn';
+import ToggleOffIcon from '@mui/icons-material/ToggleOff';
 
 const fallbackHost = `${window.location.protocol}//${window.location.host}`;
 const API_URL = (process.env.REACT_APP_API_URL && process.env.REACT_APP_API_URL.replace(/\/$/, '')) || fallbackHost || 'https://portal.iecg.com.br';
@@ -66,6 +87,10 @@ const UsersListPage = () => {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterNome, setFilterNome] = useState('');
   const [syncingUserId, setSyncingUserId] = useState('');
+  const [rowMenuAnchor, setRowMenuAnchor] = useState(null);
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const loadData = async () => {
     setLoading(true);
@@ -263,6 +288,15 @@ const UsersListPage = () => {
     updateField('password', generateRandomPassword());
   };
 
+  const activeFilterCount = (filterNome ? 1 : 0) + (filterPerfil ? 1 : 0) + (filterStatus ? 1 : 0);
+
+  const clearFilters = () => {
+    setFilterNome('');
+    setFilterPerfil('');
+    setFilterStatus('');
+    setPage(0);
+  };
+
   const filteredUsers = useMemo(() => users.filter((u) => {
     const matchPerfil = filterPerfil ? (u.perfilId === filterPerfil || u.Perfil?.id === filterPerfil) : true;
     const matchStatus = filterStatus ? (filterStatus === 'ativo' ? u.active : !u.active) : true;
@@ -278,114 +312,170 @@ const UsersListPage = () => {
   return (
     <PapperBlock title="Usuários" desc="Listar, editar e inativar usuários">
       <Helmet><title>Usuarios</title></Helmet>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-        {message && <Typography color="primary">{message}</Typography>}
-        <Stack direction="row" spacing={1} alignItems="center">
-          <Button variant="outlined" onClick={handleSyncAllMembers} disabled={loading}>
-            Sincronizar membros
-          </Button>
-          {loading && <CircularProgress size={20} />}
-        </Stack>
-      </Stack>
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} mb={2}>
-        <TextField
-          label="Pesquisar por nome"
-          value={filterNome}
-          onChange={(e) => { setFilterNome(e.target.value); setPage(0); }}
-          fullWidth
-        />
-        <TextField
-          select
-          label="Perfil"
-          value={filterPerfil}
-          onChange={(e) => { setFilterPerfil(e.target.value); setPage(0); }}
-          sx={{ minWidth: 200 }}
+      <Stack direction="row" justifyContent="flex-end" alignItems="center" mb={2} flexWrap="wrap" gap={1}>
+        <Button
+          variant="outlined"
+          startIcon={<SyncIcon />}
+          onClick={handleSyncAllMembers}
+          disabled={loading}
         >
-          <MenuItem value="">Todos</MenuItem>
-          {perfis.map((p) => (
-            <MenuItem key={p.id} value={p.id}>{p.descricao}</MenuItem>
-          ))}
-        </TextField>
-        <TextField
-          select
-          label="Status"
-          value={filterStatus}
-          onChange={(e) => { setFilterStatus(e.target.value); setPage(0); }}
-          sx={{ minWidth: 160 }}
-        >
-          <MenuItem value="">Todos</MenuItem>
-          <MenuItem value="ativo">Ativo</MenuItem>
-          <MenuItem value="inativo">Inativo</MenuItem>
-        </TextField>
+          Sincronizar membros
+        </Button>
       </Stack>
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell>Nome</TableCell>
-            <TableCell>Email</TableCell>
-            <TableCell>Perfil</TableCell>
-            <TableCell>Membro</TableCell>
-            <TableCell>Status</TableCell>
-            <TableCell align="right">Ações</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {pagedUsers.map(u => (
-            <TableRow key={u.id} hover>
-              <TableCell>{u.name}</TableCell>
-              <TableCell>{u.email}</TableCell>
-              <TableCell>{u.Perfil?.descricao || u.perfil?.descricao || '-'}</TableCell>
-              <TableCell>
-                {u.linkedMember ? (
-                  <Stack spacing={0.5}>
-                    <Chip color="primary" label="Vinculado" size="small" />
-                    <Typography variant="caption" color="textSecondary">
-                      {u.linkedMember.fullName}
-                    </Typography>
-                  </Stack>
-                ) : (
-                  <Chip color="warning" variant="outlined" label="Sem membro" size="small" />
-                )}
-              </TableCell>
-              <TableCell>
-                <Chip color={u.active ? 'success' : 'default'} label={u.active ? 'Ativo' : 'Inativo'} size="small" />
-              </TableCell>
-              <TableCell align="right">
-                <Stack direction="row" spacing={1} justifyContent="flex-end">
-                  <Button
-                    size="small"
-                    variant="text"
-                    onClick={() => handleSyncUserMember(u)}
-                    disabled={loading || syncingUserId === u.id}
-                  >
-                    {syncingUserId === u.id ? 'Sincronizando...' : 'Sincronizar'}
-                  </Button>
-                  <Button size="small" variant="outlined" onClick={() => handleEdit(u)}>Editar</Button>
-                  <Button size="small" variant="text" onClick={() => handleToggleActive(u)}>
-                    {u.active ? 'Inativar' : 'Reativar'}
-                  </Button>
-                </Stack>
-              </TableCell>
-            </TableRow>
-          ))}
-          {!pagedUsers.length && !loading && (
+      <Box display="flex" gap={1} flexWrap="wrap" alignItems="flex-start" mb={2}>
+        <Accordion
+          defaultExpanded
+          disableGutters
+          sx={{
+            flex: 1,
+            minWidth: 280,
+            boxShadow: 'none',
+            border: 1,
+            borderColor: 'divider',
+            borderRadius: 1,
+            '&:before': { display: 'none' }
+          }}
+        >
+          <AccordionSummary
+            expandIcon={<ExpandMoreIcon />}
+            sx={{ minHeight: 44, '& .MuiAccordionSummary-content': { my: 0.75 } }}
+          >
+            <Box display="flex" alignItems="center" gap={1.5}>
+              <Typography variant="subtitle2">Filtros</Typography>
+              {activeFilterCount > 0 && (
+                <Badge
+                  badgeContent={activeFilterCount}
+                  color="primary"
+                  sx={{ '& .MuiBadge-badge': { position: 'static', transform: 'none' } }}
+                />
+              )}
+            </Box>
+          </AccordionSummary>
+          <AccordionDetails sx={{ pt: 0 }}>
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} md={5}>
+                <TextField
+                  label="Pesquisar por nome"
+                  size="small"
+                  value={filterNome}
+                  onChange={(e) => { setFilterNome(e.target.value); setPage(0); }}
+                  fullWidth
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={4}>
+                <TextField
+                  select
+                  label="Perfil"
+                  size="small"
+                  value={filterPerfil}
+                  onChange={(e) => { setFilterPerfil(e.target.value); setPage(0); }}
+                  fullWidth
+                >
+                  <MenuItem value="">Todos</MenuItem>
+                  {perfis.map((p) => (
+                    <MenuItem key={p.id} value={p.id}>{p.descricao}</MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <TextField
+                  select
+                  label="Status"
+                  size="small"
+                  value={filterStatus}
+                  onChange={(e) => { setFilterStatus(e.target.value); setPage(0); }}
+                  fullWidth
+                >
+                  <MenuItem value="">Todos</MenuItem>
+                  <MenuItem value="ativo">Ativo</MenuItem>
+                  <MenuItem value="inativo">Inativo</MenuItem>
+                </TextField>
+              </Grid>
+              {activeFilterCount > 0 && (
+                <Grid item xs={12}>
+                  <Button size="small" onClick={clearFilters}>Limpar filtros</Button>
+                </Grid>
+              )}
+            </Grid>
+          </AccordionDetails>
+        </Accordion>
+      </Box>
+      {loading && users.length > 0 && <LinearProgress sx={{ mb: 1, borderRadius: 1 }} />}
+      <Box sx={{ overflowX: 'auto' }}>
+        <Table size="small" sx={{ minWidth: 720 }}>
+          <TableHead>
             <TableRow>
-              <TableCell colSpan={6}>
-                <Typography color="textSecondary">Nenhum usuario encontrado.</Typography>
-              </TableCell>
+              <TableCell>Nome</TableCell>
+              <TableCell>Email</TableCell>
+              <TableCell>Perfil</TableCell>
+              <TableCell>Membro</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell align="right">Ações</TableCell>
             </TableRow>
-          )}
-          {loading && (
-            <TableRow>
-              <TableCell colSpan={6}>
-                <Box display="flex" justifyContent="center" py={2}>
-                  <CircularProgress size={24} />
-                </Box>
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+          </TableHead>
+          <TableBody>
+            {loading && users.length === 0 && (
+              Array.from({ length: 6 }).map((_, i) => (
+                <TableRow key={`skel-${i}`}>
+                  {Array.from({ length: 6 }).map((__, j) => (
+                    <TableCell key={j}><Skeleton variant="text" /></TableCell>
+                  ))}
+                </TableRow>
+              ))
+            )}
+            {!loading && pagedUsers.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
+                  <FilterListOffIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    Nenhum usuário encontrado.
+                  </Typography>
+                  {activeFilterCount > 0 && (
+                    <Button size="small" onClick={clearFilters} sx={{ mt: 1 }}>
+                      Limpar filtros
+                    </Button>
+                  )}
+                </TableCell>
+              </TableRow>
+            )}
+            {pagedUsers.map(u => (
+              <TableRow key={u.id} hover>
+                <TableCell>{u.name}</TableCell>
+                <TableCell>{u.email}</TableCell>
+                <TableCell>{u.Perfil?.descricao || u.perfil?.descricao || '-'}</TableCell>
+                <TableCell>
+                  {u.linkedMember ? (
+                    <Stack spacing={0.5}>
+                      <Chip color="primary" label="Vinculado" size="small" />
+                      <Typography variant="caption" color="textSecondary">
+                        {u.linkedMember.fullName}
+                      </Typography>
+                    </Stack>
+                  ) : (
+                    <Chip color="warning" variant="outlined" label="Sem membro" size="small" />
+                  )}
+                </TableCell>
+                <TableCell>
+                  <Chip color={u.active ? 'success' : 'default'} label={u.active ? 'Ativo' : 'Inativo'} size="small" />
+                </TableCell>
+                <TableCell align="right">
+                  <Tooltip title="Ações">
+                    <span>
+                      <IconButton
+                        size="small"
+                        disabled={loading}
+                        onClick={(e) => setRowMenuAnchor({ anchorEl: e.currentTarget, userId: u.id })}
+                      >
+                        {syncingUserId === u.id ? <CircularProgress size={16} /> : <MoreVertIcon />}
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
       <TablePagination
         component="div"
         count={filteredUsers.length}
@@ -394,7 +484,51 @@ const UsersListPage = () => {
         rowsPerPage={rowsPerPage}
         onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
         rowsPerPageOptions={[5, 10, 20]}
+        labelRowsPerPage={isMobile ? 'Linhas:' : 'Linhas por página:'}
       />
+
+      <Menu
+        anchorEl={rowMenuAnchor?.anchorEl}
+        open={Boolean(rowMenuAnchor)}
+        onClose={() => setRowMenuAnchor(null)}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+      >
+        {(() => {
+          const u = pagedUsers.find((user) => user.id === rowMenuAnchor?.userId);
+          if (!u) return null;
+          return [
+            <MenuItem
+              key="editar"
+              onClick={() => { setRowMenuAnchor(null); handleEdit(u); }}
+            >
+              <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Editar</ListItemText>
+            </MenuItem>,
+            <MenuItem
+              key="sync"
+              disabled={syncingUserId === u.id}
+              onClick={() => { setRowMenuAnchor(null); handleSyncUserMember(u); }}
+            >
+              <ListItemIcon><SyncIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Sincronizar membro</ListItemText>
+            </MenuItem>,
+            <Divider key="div" />,
+            <MenuItem
+              key="toggle"
+              onClick={() => { setRowMenuAnchor(null); handleToggleActive(u); }}
+              sx={{ color: u.active ? 'error.main' : 'success.main' }}
+            >
+              <ListItemIcon>
+                {u.active
+                  ? <ToggleOffIcon fontSize="small" sx={{ color: 'error.main' }} />
+                  : <ToggleOnIcon fontSize="small" sx={{ color: 'success.main' }} />}
+              </ListItemIcon>
+              <ListItemText>{u.active ? 'Inativar' : 'Reativar'}</ListItemText>
+            </MenuItem>,
+          ];
+        })()}
+      </Menu>
 
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>Editar usuário</DialogTitle>
@@ -484,6 +618,7 @@ const UsersListPage = () => {
           <Button variant="contained" onClick={handleSave}>Salvar</Button>
         </DialogActions>
       </Dialog>
+      <Notification message={message} close={() => setMessage('')} />
     </PapperBlock>
   );
 };

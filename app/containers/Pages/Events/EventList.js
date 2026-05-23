@@ -5,11 +5,17 @@ import {
 } from '@tanstack/react-query';
 import { PapperBlock, Notification } from 'dan-components';
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  Badge,
+  Box,
   Grid,
   Card,
   CardContent,
   Typography,
   Button,
+  Divider,
   Table,
   TableContainer,
   TableBody,
@@ -22,10 +28,15 @@ import {
   TextField,
   FormControl,
   InputLabel,
+  ListItemIcon,
+  ListItemText,
+  Menu,
   Select,
   MenuItem,
   Collapse,
-  LinearProgress
+  LinearProgress,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -39,6 +50,9 @@ import DuplicateIcon from '@mui/icons-material/FileCopy';
 import UploadIcon from '@mui/icons-material/Upload';
 import ExpandMoreIcon from '@mui/icons-material/KeyboardArrowDown';
 import ExpandLessIcon from '@mui/icons-material/KeyboardArrowUp';
+import AccordionExpandIcon from '@mui/icons-material/ExpandMore';
+import FilterListOffIcon from '@mui/icons-material/FilterListOff';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import { useHistory } from 'react-router-dom';
@@ -68,6 +82,11 @@ function EventList() {
     finalizados: false
   });
   const [expandedEvents, setExpandedEvents] = useState({});
+  const [rowMenuAnchor, setRowMenuAnchor] = useState(null);
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const tableMinWidth = isMobile ? 720 : 980;
 
   // Lista de eventos — cache 60s; refetch automatico quando 'finalizados' muda.
   const eventosQuery = useQuery({
@@ -196,6 +215,14 @@ function EventList() {
     setFiltros((prev) => ({ ...prev, [campo]: valor }));
   };
 
+  const activeFilterCount = (filtros.busca ? 1 : 0)
+    + (filtros.status !== 'todos' ? 1 : 0)
+    + (filtros.finalizados ? 1 : 0);
+
+  const clearFilters = () => {
+    setFiltros({ busca: '', status: 'todos', finalizados: false });
+  };
+
   const handleDeletar = async (id, titulo) => {
     const ok = await confirm({
       title: 'Deletar evento', message: `Tem certeza que deseja deletar o evento "${titulo}"?`, confirmText: 'Deletar', confirmColor: 'error', severity: 'error'
@@ -235,7 +262,7 @@ function EventList() {
   const eventsTableContainerSx = {
     width: '100%',
     overflowX: 'auto',
-    '& .MuiTable-root': { minWidth: 980 },
+    '& .MuiTable-root': { minWidth: tableMinWidth },
     '& .MuiTableCell-root': { whiteSpace: 'nowrap' }
   };
   const ticketSummaryTableContainerSx = {
@@ -399,42 +426,81 @@ function EventList() {
         desc="Gerenciar eventos e inscrições"
         overflowX
       >
-        {/* Filtros */}
-        <Grid container spacing={2} style={{ marginBottom: 16 }}>
-          <Grid item xs={12} sm={6} md={4}>
-            <TextField
-              fullWidth
-              size="small"
-              label="Buscar eventos"
-              value={filtros.busca}
-              onChange={(e) => handleChangeFiltro('busca', e.target.value)}
-              placeholder="Título, descrição ou local"
-            />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <FormControl fullWidth size="small">
-              <InputLabel>Status</InputLabel>
-              <Select
-                value={filtros.status}
-                onChange={(e) => handleChangeFiltro('status', e.target.value)}
-              >
-                <MenuItem value="todos">Todos</MenuItem>
-                <MenuItem value="ativos">Ativos</MenuItem>
-                <MenuItem value="inativos">Inativos</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs="auto">
-            <Button
-              variant={filtros.finalizados ? 'contained' : 'outlined'}
-              color="secondary"
-              size="small"
-              onClick={() => handleChangeFiltro('finalizados', !filtros.finalizados)}
+        {/* Filtros + ação principal */}
+        <Box display="flex" gap={1} flexWrap="wrap" alignItems="flex-start" mb={2}>
+          <Accordion
+            defaultExpanded
+            disableGutters
+            sx={{
+              flex: 1,
+              minWidth: 280,
+              boxShadow: 'none',
+              border: 1,
+              borderColor: 'divider',
+              borderRadius: 1,
+              '&:before': { display: 'none' }
+            }}
+          >
+            <AccordionSummary
+              expandIcon={<AccordionExpandIcon />}
+              sx={{ minHeight: 44, '& .MuiAccordionSummary-content': { my: 0.75 } }}
             >
-              {filtros.finalizados ? 'Ocultando futuros' : 'Ver finalizados'}
-            </Button>
-          </Grid>
-          <Grid item xs={12} sm={12} md="auto">
+              <Box display="flex" alignItems="center" gap={1.5}>
+                <Typography variant="subtitle2">Filtros</Typography>
+                {activeFilterCount > 0 && (
+                  <Badge
+                    badgeContent={activeFilterCount}
+                    color="primary"
+                    sx={{ '& .MuiBadge-badge': { position: 'static', transform: 'none' } }}
+                  />
+                )}
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails sx={{ pt: 0 }}>
+              <Grid container spacing={2} alignItems="center">
+                <Grid item xs={12} sm={6} md={5}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Buscar eventos"
+                    value={filtros.busca}
+                    onChange={(e) => handleChangeFiltro('busca', e.target.value)}
+                    placeholder="Título, descrição ou local"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Status</InputLabel>
+                    <Select
+                      value={filtros.status}
+                      label="Status"
+                      onChange={(e) => handleChangeFiltro('status', e.target.value)}
+                    >
+                      <MenuItem value="todos">Todos</MenuItem>
+                      <MenuItem value="ativos">Ativos</MenuItem>
+                      <MenuItem value="inativos">Inativos</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs="auto">
+                  <Button
+                    variant={filtros.finalizados ? 'contained' : 'outlined'}
+                    color="secondary"
+                    size="small"
+                    onClick={() => handleChangeFiltro('finalizados', !filtros.finalizados)}
+                  >
+                    {filtros.finalizados ? 'Ocultando futuros' : 'Ver finalizados'}
+                  </Button>
+                </Grid>
+                {activeFilterCount > 0 && (
+                  <Grid item xs="auto">
+                    <Button size="small" onClick={clearFilters}>Limpar filtros</Button>
+                  </Grid>
+                )}
+              </Grid>
+            </AccordionDetails>
+          </Accordion>
+          <Box flexShrink={0} mt={0.5}>
             <Button
               variant="contained"
               color="primary"
@@ -443,16 +509,29 @@ function EventList() {
             >
               Novo Evento
             </Button>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
 
         {/* Tabela */}
+        {!loading && eventosQuery.isFetching && (
+          <LinearProgress sx={{ mb: 1, borderRadius: 1 }} />
+        )}
         {loading ? (
           <TableSkeleton cols={5} showToolbar={false} />
         ) : eventosFiltrados.length === 0 ? (
-          <Typography>
-            {eventos.length === 0 ? 'Nenhum evento cadastrado' : 'Nenhum evento encontrado com os filtros aplicados'}
-          </Typography>
+          <Box sx={{ py: 6, textAlign: 'center' }}>
+            <FilterListOffIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              {eventos.length === 0
+                ? 'Nenhum evento cadastrado'
+                : 'Nenhum evento encontrado com os filtros aplicados'}
+            </Typography>
+            {activeFilterCount > 0 && (
+              <Button size="small" onClick={clearFilters} sx={{ mt: 1 }}>
+                Limpar filtros
+              </Button>
+            )}
+          </Box>
         ) : (
           <TableContainer sx={eventsTableContainerSx}>
             <Table>
@@ -506,45 +585,12 @@ function EventList() {
                         </Button>
                       </TableCell>
                       <TableCell align="center">
-                        <Tooltip title="Ver Detalhes">
+                        <Tooltip title="Ações">
                           <IconButton
                             size="small"
-                            onClick={() => history.push(`/app/events/${evento.id}`, { pageTitle: evento.title })}
+                            onClick={(e) => setRowMenuAnchor({ anchorEl: e.currentTarget, eventId: evento.id })}
                           >
-                            <ViewIcon />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Editar">
-                          <IconButton
-                            size="small"
-                            onClick={() => history.push(`/app/events/${evento.id}/editar`)}
-                          >
-                            <EditIcon />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Deletar">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleDeletar(evento.id, evento.title)}
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Duplicar">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleDuplicar(evento)}
-                          >
-                            <DuplicateIcon />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Importar inscritos como membros">
-                          <IconButton
-                            size="small"
-                            color="info"
-                            onClick={() => history.push(`/app/events/importar?eventId=${evento.id}`)}
-                          >
-                            <UploadIcon />
+                            <MoreVertIcon />
                           </IconButton>
                         </Tooltip>
                       </TableCell>
@@ -570,6 +616,74 @@ function EventList() {
           </TableContainer>
         )}
       </PapperBlock>
+
+      <Menu
+        anchorEl={rowMenuAnchor?.anchorEl}
+        open={Boolean(rowMenuAnchor)}
+        onClose={() => setRowMenuAnchor(null)}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+      >
+        {(() => {
+          const evento = eventosFiltrados.find((ev) => ev.id === rowMenuAnchor?.eventId);
+          if (!evento) return null;
+          return [
+            <MenuItem
+              key="ver"
+              onClick={() => {
+                setRowMenuAnchor(null);
+                history.push(`/app/events/${evento.id}`, { pageTitle: evento.title });
+              }}
+            >
+              <ListItemIcon><ViewIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Ver detalhes</ListItemText>
+            </MenuItem>,
+            <MenuItem
+              key="editar"
+              onClick={() => {
+                setRowMenuAnchor(null);
+                history.push(`/app/events/${evento.id}/editar`);
+              }}
+            >
+              <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Editar</ListItemText>
+            </MenuItem>,
+            <MenuItem
+              key="duplicar"
+              onClick={() => {
+                setRowMenuAnchor(null);
+                handleDuplicar(evento);
+              }}
+            >
+              <ListItemIcon><DuplicateIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Duplicar</ListItemText>
+            </MenuItem>,
+            <MenuItem
+              key="importar"
+              onClick={() => {
+                setRowMenuAnchor(null);
+                history.push(`/app/events/importar?eventId=${evento.id}`);
+              }}
+            >
+              <ListItemIcon><UploadIcon fontSize="small" sx={{ color: 'info.main' }} /></ListItemIcon>
+              <ListItemText>Importar inscritos como membros</ListItemText>
+            </MenuItem>,
+            <Divider key="div" />,
+            <MenuItem
+              key="deletar"
+              onClick={() => {
+                setRowMenuAnchor(null);
+                handleDeletar(evento.id, evento.title);
+              }}
+              sx={{ color: 'error.main' }}
+            >
+              <ListItemIcon><DeleteIcon fontSize="small" sx={{ color: 'error.main' }} /></ListItemIcon>
+              <ListItemText>Deletar</ListItemText>
+            </MenuItem>,
+          ];
+        })()}
+      </Menu>
+
       <Notification message={notification} close={() => setNotification('')} />
       {ConfirmDialog}
     </div>

@@ -3,8 +3,11 @@ import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableFooter,
   Paper, Toolbar, Typography, Pagination, IconButton, Tooltip, TextField, Box, MenuItem,
   Button, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress, Badge, Divider, TableSortLabel, Chip,
-  FormControl, InputLabel, Select, Checkbox, ListItemText, OutlinedInput
+  FormControl, InputLabel, Select, Checkbox, ListItemText, OutlinedInput,
+  Accordion, AccordionSummary, AccordionDetails,
+  Menu, Skeleton, useTheme, useMediaQuery
 } from '@mui/material';
+import ListItemIcon from '@mui/material/ListItemIcon';
 import { Helmet } from 'react-helmet';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -13,6 +16,12 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import MergeIcon from '@mui/icons-material/MergeType';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
+import SettingsIcon from '@mui/icons-material/Settings';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import FilterListOffIcon from '@mui/icons-material/FilterListOff';
+import GetAppIcon from '@mui/icons-material/GetApp';
+import SyncIcon from '@mui/icons-material/Sync';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { useHistory } from 'react-router-dom';
 import useStyles from 'dan-components/Tables/tableStyle-jss';
 import Notification from 'dan-components/Notification/Notification';
@@ -146,6 +155,13 @@ const ListagemCelulasPage = () => {
   });
   const [referenceLocation, setReferenceLocation] = useState(null);
   const [referenceRadiusKm, setReferenceRadiusKm] = useState(3);
+  const [loading, setLoading] = useState(false);
+  const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
+  const [rowMenuAnchor, setRowMenuAnchor] = useState(null);
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
 
   const API_URL = resolveApiUrl();
   const mapKey = process.env.REACT_APP_GOOGLE_GEOCODE_KEY || '';
@@ -410,6 +426,7 @@ const ListagemCelulasPage = () => {
 
   async function fetchCelulas() {
     const token = localStorage.getItem('token');
+    setLoading(true);
     try {
       const queryParams = buildCelulaQueryParams();
 
@@ -425,6 +442,8 @@ const ListagemCelulasPage = () => {
       fetchApeloResumo();
     } catch (err) {
       console.error('Erro ao carregar células:', err);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -729,6 +748,27 @@ const ListagemCelulasPage = () => {
       campus: celula.campusRef?.nome || celula.campus
     };
     return valueMap[column] || '';
+  };
+
+  const activeFilterCount = [
+    filterCampus,
+    filterRede?.length ? filterRede : null,
+    filterBairro,
+    filterLider,
+    filterPastorGeracao,
+    filterDia,
+    filterStatus !== 'true' ? filterStatus : null
+  ].filter(Boolean).length;
+
+  const clearFilters = () => {
+    setFilterCampus('');
+    setFilterRede([]);
+    setFilterBairro('');
+    setFilterLider('');
+    setFilterPastorGeracao('');
+    setFilterDia('');
+    setFilterStatus('true');
+    setPage(1);
   };
 
   const sortedCelulas = [...celulas].sort((a, b) => {
@@ -1092,258 +1132,295 @@ const ListagemCelulasPage = () => {
 
       <Toolbar className={classes.toolbar} sx={{ flexWrap: 'wrap', gap: 1 }}>
         <Box display="flex" flexWrap="wrap" gap={1} alignItems="center">
-          <Button variant="contained" color="primary" onClick={() => setImportDialogOpen(true)}>
-            Importar célula
-          </Button>
           <Button
             variant="contained"
             color="secondary"
+            startIcon={<UploadFileIcon />}
+            onClick={() => setImportDialogOpen(true)}
+          >
+            Importar
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
             onClick={() => history.push('/app/start/celulas/cadastrar')}
           >
             Cadastrar célula
           </Button>
           <Button
             variant="outlined"
-            component="a"
-            href={CSV_TEMPLATE_URL}
-            download
+            endIcon={<ExpandMoreIcon />}
+            onClick={(e) => setActionsMenuAnchor(e.currentTarget)}
           >
-            Baixar modelo CSV
+            Mais ações
           </Button>
-          <Button
-            variant="outlined"
-            color="info"
-            startIcon={<FileDownloadIcon />}
-            onClick={exportCelulasToExcel}
-            disabled={exporting}
+          <Menu
+            anchorEl={actionsMenuAnchor}
+            open={Boolean(actionsMenuAnchor)}
+            onClose={() => setActionsMenuAnchor(null)}
           >
-            {exporting ? 'Exportando...' : 'Exportar Excel'}
-          </Button>
-          <Button
-            variant="outlined"
-            color="success"
-            onClick={migrateCelulaLeaders}
-            disabled={migratingLeaders}
-          >
-            {migratingLeaders ? 'Sincronizando...' : 'Sincronizar líder e célula'}
-          </Button>
-          <Button
-            variant="outlined"
-            color="warning"
-            startIcon={<MergeIcon />}
-            onClick={verificarDuplicados}
-          >
-            Verificar duplicados
-          </Button>
+            <MenuItem
+              component="a"
+              href={CSV_TEMPLATE_URL}
+              download
+              onClick={() => setActionsMenuAnchor(null)}
+            >
+              <ListItemIcon><GetAppIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Baixar modelo CSV</ListItemText>
+            </MenuItem>
+            <MenuItem
+              onClick={() => { setActionsMenuAnchor(null); exportCelulasToExcel(); }}
+              disabled={exporting}
+            >
+              <ListItemIcon><FileDownloadIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>{exporting ? 'Exportando...' : 'Exportar Excel'}</ListItemText>
+            </MenuItem>
+            <MenuItem
+              onClick={() => { setActionsMenuAnchor(null); migrateCelulaLeaders(); }}
+              disabled={migratingLeaders}
+            >
+              <ListItemIcon><SyncIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>{migratingLeaders ? 'Sincronizando...' : 'Sincronizar líderes'}</ListItemText>
+            </MenuItem>
+            <MenuItem
+              onClick={() => { setActionsMenuAnchor(null); verificarDuplicados(); }}
+            >
+              <ListItemIcon><MergeIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Verificar duplicados</ListItemText>
+            </MenuItem>
+          </Menu>
         </Box>
       </Toolbar>
       <Box mt={2}>
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Box
-            display="flex"
-            flexWrap="wrap"
-            gap={1}
-            alignItems="center"
-            sx={{ width: '100%', justifyContent: 'flex-start' }}
-          >
-            <TextField
-              select
-              label="Campus"
-              variant="outlined"
-              size="small"
-              value={filterCampus}
-              onChange={(e) => { setFilterCampus(e.target.value); setPage(1); }}
-              sx={{ minWidth: 160, flex: { xs: '1 1 100%', sm: '0 1 180px' } }}
-            >
-              <MenuItem value="">Todos</MenuItem>
-              {campi.map((c) => (
-                <MenuItem key={c.id} value={c.id}>
-                  {c.nome}
-                </MenuItem>
-              ))}
-            </TextField>
-            <FormControl
-              variant="outlined"
-              size="small"
-              sx={{ minWidth: 200, flex: { xs: '1 1 100%', sm: '0 1 200px' } }}
-            >
-              <InputLabel id="filter-rede-label">Rede</InputLabel>
-              <Select
-                labelId="filter-rede-label"
-                multiple
-                value={filterRede}
-                onChange={(e) => {
-                  const { value } = e.target;
-                  setFilterRede(typeof value === 'string' ? value.split(',') : value);
-                  setPage(1);
-                }}
-                input={<OutlinedInput label="Rede" />}
-                renderValue={(selected) => (selected.length ? selected.join(', ') : 'Todas')}
-              >
-                {REDE_OPTIONS.map((rede) => (
-                  <MenuItem key={rede} value={rede}>
-                    <Checkbox checked={filterRede.indexOf(rede) > -1} />
-                    <ListItemText primary={rede} />
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <FormControl
-              variant="outlined"
-              size="small"
-              sx={{ minWidth: 150, flex: { xs: '1 1 100%', sm: '0 1 150px' } }}
-            >
-              <InputLabel id="filter-status-label">Status</InputLabel>
-              <Select
-                labelId="filter-status-label"
-                value={filterStatus}
-                onChange={(e) => {
-                  setFilterStatus(e.target.value);
-                  setPage(1);
-                }}
-                label="Status"
-              >
-                {STATUS_OPTIONS.map((status) => (
-                  <MenuItem key={status.value} value={status.value}>
-                    {status.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <TextField
-              select
-              label="Dia da semana"
-              variant="outlined"
-              size="small"
-              value={filterDia}
-              onChange={(e) => { setFilterDia(e.target.value); setPage(1); }}
-              sx={{ minWidth: 160, flex: { xs: '1 1 100%', sm: '0 1 180px' } }}
-            >
-              <MenuItem value="">Todos</MenuItem>
-              {DIAS_SEMANA_OPTIONS.map((dia) => (
-                <MenuItem key={dia} value={dia}>
-                  {dia}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              label="Bairro"
-              variant="outlined"
-              size="small"
-              value={filterBairro}
-              onChange={(e) => { setFilterBairro(e.target.value); setPage(1); }}
-              sx={{ minWidth: 160, flex: { xs: '1 1 100%', sm: '0 1 200px' } }}
-              placeholder="Digite o bairro"
-            />
-            <TextField
-              label="Líder"
-              variant="outlined"
-              size="small"
-              value={filterLider}
-              onChange={(e) => { setFilterLider(e.target.value); setPage(1); }}
-              sx={{ minWidth: 200, flex: { xs: '1 1 100%', sm: '0 1 220px' } }}
-              placeholder="Nome do líder"
-            />
-            <TextField
-              label="Pastor de geração"
-              variant="outlined"
-              size="small"
-              value={filterPastorGeracao}
-              onChange={(e) => { setFilterPastorGeracao(e.target.value); setPage(1); }}
-              sx={{ minWidth: 200, flex: { xs: '1 1 100%', sm: '0 1 220px' } }}
-              placeholder="Nome do pastor"
-            />
-          </Box>
-        </Paper>
-      </Box>
-      <Box mt={2}>
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="subtitle2" gutterBottom>
-            Ponto de referência (mantém os filtros atuais)
-          </Typography>
-          <Box
-            display="flex"
-            flexWrap="wrap"
-            gap={1}
-            alignItems="center"
-            sx={{ width: '100%', justifyContent: 'flex-start' }}
-          >
-            <TextField
-              label="CEP"
-              variant="outlined"
-              size="small"
-              value={referenceAddress.cep}
-              onChange={(e) => handleReferenceFieldChange('cep', e.target.value)}
-              sx={{ minWidth: 140, flex: { xs: '1 1 100%', sm: '0 1 160px' } }}
-            />
-            <TextField
-              label="Bairro"
-              variant="outlined"
-              size="small"
-              value={referenceAddress.bairro}
-              onChange={(e) => handleReferenceFieldChange('bairro', e.target.value)}
-              sx={{ minWidth: 180, flex: { xs: '1 1 100%', sm: '0 1 200px' } }}
-            />
-            <TextField
-              label="Endereço"
-              variant="outlined"
-              size="small"
-              value={referenceAddress.endereco}
-              onChange={(e) => handleReferenceFieldChange('endereco', e.target.value)}
-              sx={{ minWidth: 220, flex: { xs: '1 1 100%', sm: '0 1 280px' } }}
-            />
-            <TextField
-              label="Cidade"
-              variant="outlined"
-              size="small"
-              value={referenceAddress.cidade}
-              onChange={(e) => handleReferenceFieldChange('cidade', e.target.value)}
-              sx={{ minWidth: 160, flex: { xs: '1 1 100%', sm: '0 1 180px' } }}
-            />
-            <TextField
-              label="Estado"
-              variant="outlined"
-              size="small"
-              value={referenceAddress.estado}
-              onChange={(e) => handleReferenceFieldChange('estado', e.target.value)}
-              sx={{ minWidth: 120, flex: { xs: '1 1 100%', sm: '0 1 140px' } }}
-            />
-            <TextField
-              select
-              label="Raio (km)"
-              variant="outlined"
-              size="small"
-              value={referenceRadiusKm}
-              onChange={(e) => setReferenceRadiusKm(Number(e.target.value))}
-              sx={{ minWidth: 140, flex: { xs: '1 1 100%', sm: '0 1 160px' } }}
-            >
-              {[1, 2, 3, 5, 8, 10, 15].map((km) => (
-                <MenuItem key={km} value={km}>{km}</MenuItem>
-              ))}
-            </TextField>
-            <Button variant="contained" onClick={handleAddReference}>
-              Adicionar referência
-            </Button>
-            <Button variant="outlined" onClick={handleClearReference} disabled={!referenceLocation}>
-              Limpar referência
-            </Button>
-          </Box>
-          {referenceLocation && (
-            <Box mt={1} display="flex" flexWrap="wrap" gap={2} alignItems="center">
-              <Typography variant="caption">
-                Referência: {referenceLocation.label || `${referenceLocation.lat}, ${referenceLocation.lng}`}
-              </Typography>
-              <Typography variant="caption">
-                Próximas no raio: {nearbySummary.list.filter((item) => item.distance <= referenceRadiusKm).length}
-              </Typography>
+        <Accordion defaultExpanded variant="outlined" disableGutters>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Box display="flex" alignItems="center" gap={1}>
+              <Typography variant="subtitle2" fontWeight={600}>Filtros</Typography>
+              {activeFilterCount > 0 && (
+                <Badge badgeContent={activeFilterCount} color="primary" />
+              )}
             </Box>
-          )}
-        </Paper>
+          </AccordionSummary>
+          <AccordionDetails sx={{ pt: 1 }}>
+            <Box
+              display="flex"
+              flexWrap="wrap"
+              gap={1}
+              alignItems="center"
+              sx={{ width: '100%', justifyContent: 'flex-start' }}
+            >
+              <TextField
+                select
+                label="Campus"
+                variant="outlined"
+                size="small"
+                value={filterCampus}
+                onChange={(e) => { setFilterCampus(e.target.value); setPage(1); }}
+                sx={{ minWidth: 160, flex: { xs: '1 1 100%', sm: '0 1 180px' } }}
+              >
+                <MenuItem value="">Todos</MenuItem>
+                {campi.map((c) => (
+                  <MenuItem key={c.id} value={c.id}>
+                    {c.nome}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <FormControl
+                variant="outlined"
+                size="small"
+                sx={{ minWidth: 200, flex: { xs: '1 1 100%', sm: '0 1 200px' } }}
+              >
+                <InputLabel id="filter-rede-label">Rede</InputLabel>
+                <Select
+                  labelId="filter-rede-label"
+                  multiple
+                  value={filterRede}
+                  onChange={(e) => {
+                    const { value } = e.target;
+                    setFilterRede(typeof value === 'string' ? value.split(',') : value);
+                    setPage(1);
+                  }}
+                  input={<OutlinedInput label="Rede" />}
+                  renderValue={(selected) => (selected.length ? selected.join(', ') : 'Todas')}
+                >
+                  {REDE_OPTIONS.map((rede) => (
+                    <MenuItem key={rede} value={rede}>
+                      <Checkbox checked={filterRede.indexOf(rede) > -1} />
+                      <ListItemText primary={rede} />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl
+                variant="outlined"
+                size="small"
+                sx={{ minWidth: 150, flex: { xs: '1 1 100%', sm: '0 1 150px' } }}
+              >
+                <InputLabel id="filter-status-label">Status</InputLabel>
+                <Select
+                  labelId="filter-status-label"
+                  value={filterStatus}
+                  onChange={(e) => {
+                    setFilterStatus(e.target.value);
+                    setPage(1);
+                  }}
+                  label="Status"
+                >
+                  {STATUS_OPTIONS.map((status) => (
+                    <MenuItem key={status.value} value={status.value}>
+                      {status.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <TextField
+                select
+                label="Dia da semana"
+                variant="outlined"
+                size="small"
+                value={filterDia}
+                onChange={(e) => { setFilterDia(e.target.value); setPage(1); }}
+                sx={{ minWidth: 160, flex: { xs: '1 1 100%', sm: '0 1 180px' } }}
+              >
+                <MenuItem value="">Todos</MenuItem>
+                {DIAS_SEMANA_OPTIONS.map((dia) => (
+                  <MenuItem key={dia} value={dia}>
+                    {dia}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                label="Bairro"
+                variant="outlined"
+                size="small"
+                value={filterBairro}
+                onChange={(e) => { setFilterBairro(e.target.value); setPage(1); }}
+                sx={{ minWidth: 160, flex: { xs: '1 1 100%', sm: '0 1 200px' } }}
+                placeholder="Digite o bairro"
+              />
+              <TextField
+                label="Líder"
+                variant="outlined"
+                size="small"
+                value={filterLider}
+                onChange={(e) => { setFilterLider(e.target.value); setPage(1); }}
+                sx={{ minWidth: 200, flex: { xs: '1 1 100%', sm: '0 1 220px' } }}
+                placeholder="Nome do líder"
+              />
+              <TextField
+                label="Pastor de geração"
+                variant="outlined"
+                size="small"
+                value={filterPastorGeracao}
+                onChange={(e) => { setFilterPastorGeracao(e.target.value); setPage(1); }}
+                sx={{ minWidth: 200, flex: { xs: '1 1 100%', sm: '0 1 220px' } }}
+                placeholder="Nome do pastor"
+              />
+              {activeFilterCount > 0 && (
+                <Button size="small" variant="text" color="inherit" onClick={clearFilters}>
+                  Limpar filtros
+                </Button>
+              )}
+            </Box>
+          </AccordionDetails>
+        </Accordion>
+      </Box>
+      <Box mt={1}>
+        <Accordion variant="outlined" disableGutters>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Box display="flex" alignItems="center" gap={1}>
+              <Typography variant="subtitle2" fontWeight={600}>Ponto de referência</Typography>
+              {referenceLocation && (
+                <Chip size="small" label="Ativo" color="primary" />
+              )}
+            </Box>
+          </AccordionSummary>
+          <AccordionDetails sx={{ pt: 1 }}>
+            <Box
+              display="flex"
+              flexWrap="wrap"
+              gap={1}
+              alignItems="center"
+              sx={{ width: '100%', justifyContent: 'flex-start' }}
+            >
+              <TextField
+                label="CEP"
+                variant="outlined"
+                size="small"
+                value={referenceAddress.cep}
+                onChange={(e) => handleReferenceFieldChange('cep', e.target.value)}
+                sx={{ minWidth: 140, flex: { xs: '1 1 100%', sm: '0 1 160px' } }}
+              />
+              <TextField
+                label="Bairro"
+                variant="outlined"
+                size="small"
+                value={referenceAddress.bairro}
+                onChange={(e) => handleReferenceFieldChange('bairro', e.target.value)}
+                sx={{ minWidth: 180, flex: { xs: '1 1 100%', sm: '0 1 200px' } }}
+              />
+              <TextField
+                label="Endereço"
+                variant="outlined"
+                size="small"
+                value={referenceAddress.endereco}
+                onChange={(e) => handleReferenceFieldChange('endereco', e.target.value)}
+                sx={{ minWidth: 220, flex: { xs: '1 1 100%', sm: '0 1 280px' } }}
+              />
+              <TextField
+                label="Cidade"
+                variant="outlined"
+                size="small"
+                value={referenceAddress.cidade}
+                onChange={(e) => handleReferenceFieldChange('cidade', e.target.value)}
+                sx={{ minWidth: 160, flex: { xs: '1 1 100%', sm: '0 1 180px' } }}
+              />
+              <TextField
+                label="Estado"
+                variant="outlined"
+                size="small"
+                value={referenceAddress.estado}
+                onChange={(e) => handleReferenceFieldChange('estado', e.target.value)}
+                sx={{ minWidth: 120, flex: { xs: '1 1 100%', sm: '0 1 140px' } }}
+              />
+              <TextField
+                select
+                label="Raio (km)"
+                variant="outlined"
+                size="small"
+                value={referenceRadiusKm}
+                onChange={(e) => setReferenceRadiusKm(Number(e.target.value))}
+                sx={{ minWidth: 140, flex: { xs: '1 1 100%', sm: '0 1 160px' } }}
+              >
+                {[1, 2, 3, 5, 8, 10, 15].map((km) => (
+                  <MenuItem key={km} value={km}>{km}</MenuItem>
+                ))}
+              </TextField>
+              <Button variant="contained" onClick={handleAddReference}>
+                Adicionar referência
+              </Button>
+              <Button variant="outlined" onClick={handleClearReference} disabled={!referenceLocation}>
+                Limpar referência
+              </Button>
+            </Box>
+            {referenceLocation && (
+              <Box mt={1} display="flex" flexWrap="wrap" gap={2} alignItems="center">
+                <Typography variant="caption">
+                  Referência: {referenceLocation.label || `${referenceLocation.lat}, ${referenceLocation.lng}`}
+                </Typography>
+                <Typography variant="caption">
+                  Próximas no raio: {nearbySummary.list.filter((item) => item.distance <= referenceRadiusKm).length}
+                </Typography>
+              </Box>
+            )}
+          </AccordionDetails>
+        </Accordion>
       </Box>
       <Box mt={2} mb={2} sx={{ borderRadius: 1, overflow: 'hidden' }}>
         {mapLoaded && mapMarkers.length ? (
           <GoogleMap
-            mapContainerStyle={{ width: '100%', height: 520 }}
+            // eslint-disable-next-line no-nested-ternary
+            mapContainerStyle={{ width: '100%', height: isMobile ? 220 : isTablet ? 360 : 520 }}
             center={mapCenter}
             zoom={12}
             options={{ streetViewControl: false, fullscreenControl: false }}
@@ -1428,8 +1505,8 @@ const ListagemCelulasPage = () => {
           </Box>
         )}
       </Box>
-      <TableContainer component={Paper} className={classes.rootTable}>
-        <Table className={cx(classes.table, classes.stripped)}>
+      <TableContainer component={Paper} className={classes.rootTable} sx={{ overflowX: 'auto' }}>
+        <Table className={cx(classes.table, classes.stripped)} sx={{ minWidth: 900 }}>
           <TableHead>
             <TableRow>
               <TableCell sortDirection={sortBy === 'celula' ? sortDirection : false}>
@@ -1479,11 +1556,21 @@ const ListagemCelulasPage = () => {
                 </TableSortLabel>
               </TableCell>
               <TableCell>Status</TableCell>
-              <TableCell>Ações</TableCell>
+              <TableCell padding="checkbox" />
             </TableRow>
           </TableHead>
           <TableBody>
-            {pagedCelulas.length > 0 ? (
+            {loading ? (
+              Array.from({ length: 8 }).map((_, i) => (
+                // eslint-disable-next-line react/no-array-index-key
+                <TableRow key={i}>
+                  {Array.from({ length: 8 }).map((__, j) => (
+                    // eslint-disable-next-line react/no-array-index-key
+                    <TableCell key={j}><Skeleton variant="text" /></TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : pagedCelulas.length > 0 ? (
               pagedCelulas.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell>{c.celula}</TableCell>
@@ -1493,51 +1580,34 @@ const ListagemCelulasPage = () => {
                   <TableCell>{c.bairro}</TableCell>
                   <TableCell>{c.campusRef?.nome || c.campus}</TableCell>
                   <TableCell>{renderAtivoChip(c.ativo)}</TableCell>
-                  <TableCell>
-                    <Box display="flex" gap={1}>
-                      <Tooltip title="Apelos direcionados">
-                        <IconButton color="secondary" onClick={() => fetchApelosPorCelula(c)}>
-                          <Badge badgeContent={apeloCounts[c.id] || 0} color="error">
-                            <ListAltIcon />
-                          </Badge>
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Presença">
-                        <IconButton color="primary" onClick={() => history.push(`/app/celulas/${c.id}/presenca`)}>
-                          <PeopleAltIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Editar">
-                        <IconButton color="primary" onClick={() => handleEdit(c)}>
-                          <EditIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title={c.ativo === false ? 'Ativar célula' : 'Inativar célula'}>
-                        <IconButton
-                          color={c.ativo === false ? 'success' : 'warning'}
-                          onClick={() => {
-                            if (c.ativo === false) { alternarStatusCelula(c, true); return; }
-                            confirm({
-                              title: 'Inativar célula', message: 'Confirmar inativação desta célula?', confirmText: 'Inativar', confirmColor: 'warning', severity: 'warning'
-                            }).then((ok) => { if (ok) alternarStatusCelula(c, false); });
-                          }}
-                        >
-                          <PowerSettingsNewIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Excluir">
-                        <IconButton color="error" onClick={() => handleDelete(c.id)}>
-                          <DeleteIcon />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
+                  <TableCell padding="checkbox">
+                    <Tooltip title="Ações">
+                      <IconButton
+                        size="small"
+                        onClick={(e) => setRowMenuAnchor({ anchorEl: e.currentTarget, celulaId: c.id, celula: c })}
+                      >
+                        <Badge badgeContent={apeloCounts[c.id] || 0} color="error">
+                          <SettingsIcon fontSize="small" />
+                        </Badge>
+                      </IconButton>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={8} align="center">
-                  Nenhuma célula encontrada com esse filtro.
+                <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
+                  <Box display="flex" flexDirection="column" alignItems="center" gap={1}>
+                    <FilterListOffIcon sx={{ fontSize: 48, color: 'text.disabled' }} />
+                    <Typography variant="body2" color="text.secondary">
+                      Nenhuma célula encontrada com esse filtro.
+                    </Typography>
+                    {activeFilterCount > 0 && (
+                      <Button size="small" variant="outlined" onClick={clearFilters}>
+                        Limpar filtros
+                      </Button>
+                    )}
+                  </Box>
                 </TableCell>
               </TableRow>
             )}
@@ -1551,6 +1621,76 @@ const ListagemCelulasPage = () => {
           </TableFooter>
         </Table>
       </TableContainer>
+
+      <Menu
+        anchorEl={rowMenuAnchor?.anchorEl}
+        open={Boolean(rowMenuAnchor)}
+        onClose={() => setRowMenuAnchor(null)}
+      >
+        <MenuItem
+          onClick={() => {
+            const { celula: c } = rowMenuAnchor;
+            setRowMenuAnchor(null);
+            fetchApelosPorCelula(c);
+          }}
+        >
+          <ListItemIcon>
+            <Badge badgeContent={apeloCounts[rowMenuAnchor?.celulaId] || 0} color="error">
+              <ListAltIcon fontSize="small" />
+            </Badge>
+          </ListItemIcon>
+          <ListItemText>Apelos direcionados</ListItemText>
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            const { celulaId } = rowMenuAnchor;
+            setRowMenuAnchor(null);
+            history.push(`/app/celulas/${celulaId}/presenca`);
+          }}
+        >
+          <ListItemIcon><PeopleAltIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Presença</ListItemText>
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            const { celula: c } = rowMenuAnchor;
+            setRowMenuAnchor(null);
+            handleEdit(c);
+          }}
+        >
+          <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Editar</ListItemText>
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            const { celula: c } = rowMenuAnchor;
+            setRowMenuAnchor(null);
+            if (c.ativo === false) {
+              alternarStatusCelula(c, true);
+            } else {
+              confirm({
+                title: 'Inativar célula', message: 'Confirmar inativação desta célula?', confirmText: 'Inativar', confirmColor: 'warning', severity: 'warning'
+              }).then((ok) => { if (ok) alternarStatusCelula(c, false); });
+            }
+          }}
+        >
+          <ListItemIcon>
+            <PowerSettingsNewIcon fontSize="small" color={rowMenuAnchor?.celula?.ativo === false ? 'success' : 'warning'} />
+          </ListItemIcon>
+          <ListItemText>{rowMenuAnchor?.celula?.ativo === false ? 'Ativar célula' : 'Inativar célula'}</ListItemText>
+        </MenuItem>
+        <Divider />
+        <MenuItem
+          onClick={() => {
+            const { celulaId } = rowMenuAnchor;
+            setRowMenuAnchor(null);
+            handleDelete(celulaId);
+          }}
+        >
+          <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
+          <ListItemText sx={{ color: 'error.main' }}>Excluir</ListItemText>
+        </MenuItem>
+      </Menu>
 
       <Box mt={2} display="flex" justifyContent="center">
         <Pagination
@@ -1674,32 +1814,34 @@ const ListagemCelulasPage = () => {
               {apelosList.length === 0 ? (
                 <Typography variant="body2" color="textSecondary">Nenhum apelo direcionado para esta célula.</Typography>
               ) : (
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Nome</TableCell>
-                      <TableCell>Decisão</TableCell>
-                      <TableCell>Data direcionamento</TableCell>
-                      <TableCell>Campus IECG</TableCell>
-                      <TableCell>Status</TableCell>
-                      <TableCell>Ações</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {apelosList.map((apelo) => (
-                      <TableRow key={apelo.id}>
-                        <TableCell>{apelo.nome}</TableCell>
-                        <TableCell>{renderDecisaoChip(apelo.decisao)}</TableCell>
-                        <TableCell>{apelo.data_direcionamento || '-'}</TableCell>
-                        <TableCell>{apelo.campus_iecg}</TableCell>
-                        <TableCell>{renderStatusChip(apelo.status)}</TableCell>
-                        <TableCell>
-                          <Button size="small" variant="outlined" onClick={() => abrirStatusDialog(apelo)}>Alterar status</Button>
-                        </TableCell>
+                <TableContainer sx={{ maxHeight: 420, overflowX: 'auto' }}>
+                  <Table size="small" stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Nome</TableCell>
+                        <TableCell>Decisão</TableCell>
+                        <TableCell>Data direcionamento</TableCell>
+                        <TableCell>Campus IECG</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell>Ações</TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHead>
+                    <TableBody>
+                      {apelosList.map((apelo) => (
+                        <TableRow key={apelo.id}>
+                          <TableCell>{apelo.nome}</TableCell>
+                          <TableCell>{renderDecisaoChip(apelo.decisao)}</TableCell>
+                          <TableCell>{apelo.data_direcionamento || '-'}</TableCell>
+                          <TableCell>{apelo.campus_iecg}</TableCell>
+                          <TableCell>{renderStatusChip(apelo.status)}</TableCell>
+                          <TableCell>
+                            <Button size="small" variant="outlined" onClick={() => abrirStatusDialog(apelo)}>Alterar status</Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
               )}
             </>
           )}
@@ -1756,46 +1898,48 @@ const ListagemCelulasPage = () => {
               <Typography variant="subtitle2" fontWeight={700} gutterBottom>
                 Grupo {gi + 1}: {grupo[0]?.celula} — {grupo[0]?.rede || 'sem rede'} ({grupo.length} registros)
               </Typography>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Nome</TableCell>
-                    <TableCell>Rede</TableCell>
-                    <TableCell>Líder</TableCell>
-                    <TableCell>Campus</TableCell>
-                    <TableCell>Bairro</TableCell>
-                    <TableCell>Atualizado em</TableCell>
-                    <TableCell>Ação</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {grupo.map((c, ci) => (
-                    <TableRow key={c.id} sx={ci === 0 ? { bgcolor: 'action.hover' } : {}}>
-                      <TableCell>{c.celula}</TableCell>
-                      <TableCell>{c.rede || '-'}</TableCell>
-                      <TableCell>{c.lider || '-'}</TableCell>
-                      <TableCell>{c.campusRef?.nome || c.campus || '-'}</TableCell>
-                      <TableCell>{c.bairro || '-'}</TableCell>
-                      <TableCell>{c.updatedAt ? new Date(c.updatedAt).toLocaleDateString('pt-BR') : '-'}</TableCell>
-                      <TableCell>
-                        {grupo.map((outro) => outro.id !== c.id && (
-                          <Button
-                            key={outro.id}
-                            size="small"
-                            variant="contained"
-                            color="primary"
-                            disabled={mesclandoId === outro.id}
-                            onClick={() => mesclarCelulas(c.id, outro.id)}
-                            sx={{ mr: 0.5, mb: 0.5 }}
-                          >
-                            {mesclandoId === outro.id ? 'Unificando...' : 'Manter esta, remover outra'}
-                          </Button>
-                        ))}
-                      </TableCell>
+              <TableContainer sx={{ overflowX: 'auto' }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Nome</TableCell>
+                      <TableCell>Rede</TableCell>
+                      <TableCell>Líder</TableCell>
+                      <TableCell>Campus</TableCell>
+                      <TableCell>Bairro</TableCell>
+                      <TableCell>Atualizado em</TableCell>
+                      <TableCell>Ação</TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHead>
+                  <TableBody>
+                    {grupo.map((c, ci) => (
+                      <TableRow key={c.id} sx={ci === 0 ? { bgcolor: 'action.hover' } : {}}>
+                        <TableCell>{c.celula}</TableCell>
+                        <TableCell>{c.rede || '-'}</TableCell>
+                        <TableCell>{c.lider || '-'}</TableCell>
+                        <TableCell>{c.campusRef?.nome || c.campus || '-'}</TableCell>
+                        <TableCell>{c.bairro || '-'}</TableCell>
+                        <TableCell>{c.updatedAt ? new Date(c.updatedAt).toLocaleDateString('pt-BR') : '-'}</TableCell>
+                        <TableCell>
+                          {grupo.map((outro) => outro.id !== c.id && (
+                            <Button
+                              key={outro.id}
+                              size="small"
+                              variant="contained"
+                              color="primary"
+                              disabled={mesclandoId === outro.id}
+                              onClick={() => mesclarCelulas(c.id, outro.id)}
+                              sx={{ mr: 0.5, mb: 0.5 }}
+                            >
+                              {mesclandoId === outro.id ? 'Unificando...' : 'Manter esta, remover outra'}
+                            </Button>
+                          ))}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
               {gi < gruposDuplicados.length - 1 && <Divider sx={{ mt: 2 }} />}
             </Box>
           ))}

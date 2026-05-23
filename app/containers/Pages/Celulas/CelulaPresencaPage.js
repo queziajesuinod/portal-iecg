@@ -7,8 +7,10 @@ import { PapperBlock, Notification } from 'dan-components';
 import {
   Alert, Avatar, Box, Button, Checkbox, Chip, CircularProgress, Dialog,
   DialogActions, DialogContent, DialogTitle, Divider, FormControl,
-  Grid, IconButton, InputLabel, MenuItem, Paper, Select, Stack, Tab,
-  Tabs, TextField, Tooltip, Typography
+  Grid, IconButton, InputLabel, LinearProgress, ListItemIcon, ListItemText,
+  Menu, MenuItem, Paper, Select, Stack, Tab,
+  Tabs, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
+  useMediaQuery, useTheme
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -19,6 +21,8 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import EditIcon from '@mui/icons-material/Edit';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
 import { TableSkeleton } from '../../../components/Skeleton';
 import { useConfirm } from '../../../utils/useConfirm';
 import { formatDateInAppTimezone } from '../../../utils/dateTime';
@@ -148,7 +152,11 @@ export default function CelulaPresencaPage() {
   const [formNovo, setFormNovo] = useState({
     fullName: '', preferredName: '', phone: '', whatsapp: '', email: '', gender: '', birthDate: ''
   });
+  const [reuniaoMenuAnchor, setReuniaoMenuAnchor] = useState(null);
+
   const buscaTimer = useRef(null);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const carregarReunioes = useCallback(async () => {
     setLoadingReunioes(true);
@@ -591,9 +599,22 @@ export default function CelulaPresencaPage() {
         </Stack>
 
         <Paper elevation={2} sx={{ mb: 2, bgcolor: 'grey.100' }}>
-          <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ '& .MuiTab-root': { fontWeight: 700 } }}>
+          <Tabs
+            value={tab}
+            onChange={(_, v) => setTab(v)}
+            variant="scrollable"
+            scrollButtons="auto"
+            sx={{ '& .MuiTab-root': { fontWeight: 700, minWidth: { xs: 80, sm: 120 } } }}
+          >
             <Tab label="Reuniões" />
-            <Tab label={reuniaoAtiva ? `Presença — ${formatDateInAppTimezone(reuniaoAtiva.data, '-')}` : 'Presença'} disabled={!reuniaoAtiva} />
+            <Tab
+              label={reuniaoAtiva
+                ? (isMobile
+                  ? `Presença ${formatDateInAppTimezone(reuniaoAtiva.data, '-')}`
+                  : `Presença — ${formatDateInAppTimezone(reuniaoAtiva.data, '-')}`)
+                : 'Presença'}
+              disabled={!reuniaoAtiva}
+            />
             <Tab label={`Membros (${membros.length})`} />
           </Tabs>
         </Paper>
@@ -615,17 +636,19 @@ export default function CelulaPresencaPage() {
                 )}
                 {reunioes.map(r => (
                   <Paper key={r.id} variant="outlined" sx={{ p: 2 }}>
-                    <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
-                      <Box>
+                    <Box sx={{
+                      display: 'flex', alignItems: 'flex-start', gap: 1, flexWrap: 'wrap'
+                    }}>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography variant="subtitle1" fontWeight={700}>
                           {formatDateInAppTimezone(r.data, '-')}
                         </Typography>
-                        <Stack direction="row" spacing={1} mt={0.5}>
+                        <Stack direction="row" spacing={0.5} mt={0.5} flexWrap="wrap">
                           <Chip size="small" label={STATUS_LABEL[r.status]} color={STATUS_COLOR[r.status]} />
                           <Chip size="small" label={r.origem === 'automatica' ? 'Auto' : 'Manual'} variant="outlined" />
                         </Stack>
                       </Box>
-                      <Stack direction="row" spacing={1} alignItems="center">
+                      <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexShrink: 0 }}>
                         {(r.status === 'aberta' || r.status === 'encerrada') && (
                           <Button
                             size="small"
@@ -635,37 +658,16 @@ export default function CelulaPresencaPage() {
                             {r.status === 'aberta' ? 'Registrar presença' : 'Ver presença'}
                           </Button>
                         )}
-                        {r.status === 'encerrada' && (
-                          <Button
+                        <Tooltip title="Mais ações">
+                          <IconButton
                             size="small"
-                            variant="outlined"
-                            onClick={() => handleReabrirReuniao(r)}
+                            onClick={(e) => setReuniaoMenuAnchor({ anchorEl: e.currentTarget, reuniao: r })}
                           >
-                            Reabrir
-                          </Button>
-                        )}
-                        {r.status === 'aberta' && (
-                          <Button
-                            size="small"
-                            color="error"
-                            variant="outlined"
-                            onClick={() => { setReuniaoAtiva(r); setDialogCancelar(true); }}
-                          >
-                            Cancelar
-                          </Button>
-                        )}
-                        <Tooltip title="Editar data">
-                          <IconButton size="small" onClick={() => handleAbrirEdicaoReuniao(r)}>
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Excluir reunião">
-                          <IconButton size="small" color="error" onClick={() => handleExcluirReuniao(r)}>
-                            <DeleteOutlineIcon fontSize="small" />
+                            <MoreVertIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
                       </Stack>
-                    </Stack>
+                    </Box>
                   </Paper>
                 ))}
               </Stack>
@@ -677,28 +679,49 @@ export default function CelulaPresencaPage() {
             <Box>
               {loadingPresenca ? <TableSkeleton cols={3} rows={6} showToolbar={false} /> : (
                 <>
-                  <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-                    <Typography variant="subtitle1" fontWeight={700}>
-                      {totalPresentes} / {totalReuniao} presentes
-                    </Typography>
-                    <Stack direction="row" spacing={1}>
-                      {reuniaoAtiva.status !== 'encerrada' && (
-                        <Button
-                          size="small"
-                          startIcon={<PersonAddIcon />}
-                          variant="outlined"
-                          onClick={() => setDialogAvulso(true)}
-                        >
-                          Adicionar pessoa
-                        </Button>
-                      )}
-                      {reuniaoAtiva.status !== 'encerrada' && (
-                        <Button size="small" variant="contained" onClick={handleSalvar} disabled={salvando}>
-                          {salvando ? 'Salvando...' : 'Encerrar reunião'}
-                        </Button>
-                      )}
+                  <Box mb={2}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1} flexWrap="wrap" gap={1}>
+                      <Box>
+                        <Typography variant="h5" component="span" fontWeight={700} lineHeight={1.1}>
+                          {totalPresentes}
+                        </Typography>
+                        <Typography variant="subtitle1" component="span" color="text.secondary" sx={{ ml: 0.5 }}>
+                          / {totalReuniao} presentes
+                        </Typography>
+                      </Box>
+                      <Stack direction="row" spacing={1} flexWrap="wrap">
+                        {reuniaoAtiva.status !== 'encerrada' && (
+                          <Button
+                            size="small"
+                            startIcon={<PersonAddIcon />}
+                            variant="outlined"
+                            onClick={() => setDialogAvulso(true)}
+                          >
+                            {isMobile ? 'Adicionar' : 'Adicionar pessoa'}
+                          </Button>
+                        )}
+                        {reuniaoAtiva.status !== 'encerrada' && (
+                          <Button
+                            size="small"
+                            variant="contained"
+                            onClick={handleSalvar}
+                            disabled={salvando}
+                            startIcon={salvando ? <CircularProgress size={14} color="inherit" /> : null}
+                          >
+                            {salvando ? 'Salvando...' : `Encerrar (${totalPresentes})`}
+                          </Button>
+                        )}
+                      </Stack>
                     </Stack>
-                  </Stack>
+                    {totalReuniao > 0 && (
+                      <LinearProgress
+                        variant="determinate"
+                        value={(totalPresentes / totalReuniao) * 100}
+                        color="success"
+                        sx={{ height: 6, borderRadius: 3 }}
+                      />
+                    )}
+                  </Box>
 
                   <Stack spacing={1}>
                     {(presencaData?.membros || []).map(m => {
@@ -727,26 +750,39 @@ export default function CelulaPresencaPage() {
                               </Box>
                             </Stack>
                             {podeEditar ? (
-                              <Stack direction="row" spacing={0.5}>
-                                <Tooltip title="Presente">
-                                  <IconButton
-                                    size="small"
-                                    color={presente === true ? 'success' : 'default'}
-                                    onClick={() => setMarcacoes(prev => ({ ...prev, [`m_${m.membroId}`]: true }))}
-                                  >
-                                    <CheckCircleIcon />
-                                  </IconButton>
-                                </Tooltip>
-                                <Tooltip title="Faltou">
-                                  <IconButton
-                                    size="small"
-                                    color={presente === false ? 'error' : 'default'}
-                                    onClick={() => setMarcacoes(prev => ({ ...prev, [`m_${m.membroId}`]: false }))}
-                                  >
-                                    <CancelIcon />
-                                  </IconButton>
-                                </Tooltip>
-                              </Stack>
+                              <ToggleButtonGroup
+                                size="small"
+                                exclusive
+                                value={presente === true ? 'presente' : presente === false ? 'faltou' : null}
+                                onChange={(_, val) => {
+                                  if (val === null) return;
+                                  setMarcacoes(prev => ({ ...prev, [`m_${m.membroId}`]: val === 'presente' }));
+                                }}
+                                sx={{ flexShrink: 0 }}
+                              >
+                                <ToggleButton
+                                  value="presente"
+                                  sx={{
+                                    px: 1.5,
+                                    py: 0.5,
+                                    color: 'success.main',
+                                    '&.Mui-selected': { bgcolor: 'success.main', color: '#fff', '&:hover': { bgcolor: 'success.dark' } }
+                                  }}
+                                >
+                                  <CheckCircleIcon fontSize="small" />
+                                </ToggleButton>
+                                <ToggleButton
+                                  value="faltou"
+                                  sx={{
+                                    px: 1.5,
+                                    py: 0.5,
+                                    color: 'error.main',
+                                    '&.Mui-selected': { bgcolor: 'error.main', color: '#fff', '&:hover': { bgcolor: 'error.dark' } }
+                                  }}
+                                >
+                                  <CancelIcon fontSize="small" />
+                                </ToggleButton>
+                              </ToggleButtonGroup>
                             ) : (
                               <Chip
                                 size="small"
@@ -792,14 +828,14 @@ export default function CelulaPresencaPage() {
                                           value={a.tipoPessoa}
                                           onChange={e => handleAlterarTipo(a, e.target.value)}
                                           sx={{
-                                            fontSize: 11,
-                                            height: 22,
-                                            '& .MuiSelect-select': { py: 0, px: 1 }
+                                            fontSize: 12,
+                                            height: 30,
+                                            '& .MuiSelect-select': { py: 0.5, px: 1 }
                                           }}
                                         >
-                                          <MenuItem value="visitante" sx={{ fontSize: 12 }}>Visitante</MenuItem>
-                                          <MenuItem value="novo_integrante" sx={{ fontSize: 12 }}>Frequentador</MenuItem>
-                                          <MenuItem value="membro" sx={{ fontSize: 12, color: 'success.main', fontWeight: 700 }}>Promover a membro…</MenuItem>
+                                          <MenuItem value="visitante" sx={{ fontSize: 13 }}>Visitante</MenuItem>
+                                          <MenuItem value="novo_integrante" sx={{ fontSize: 13 }}>Frequentador</MenuItem>
+                                          <MenuItem value="membro" sx={{ fontSize: 13, color: 'success.main', fontWeight: 700 }}>Promover a membro…</MenuItem>
                                         </Select>
                                       ) : (
                                         <Chip
@@ -838,26 +874,39 @@ export default function CelulaPresencaPage() {
                                     </Tooltip>
                                   )}
                                   {podeEditar ? (
-                                    <Stack direction="row" spacing={0.5}>
-                                      <Tooltip title="Presente">
-                                        <IconButton
-                                          size="small"
-                                          color={presente === true ? 'success' : 'default'}
-                                          onClick={() => setMarcacoes(prev => ({ ...prev, [`a_${a.preCadastroId}`]: true }))}
-                                        >
-                                          <CheckCircleIcon />
-                                        </IconButton>
-                                      </Tooltip>
-                                      <Tooltip title="Faltou">
-                                        <IconButton
-                                          size="small"
-                                          color={presente === false ? 'error' : 'default'}
-                                          onClick={() => setMarcacoes(prev => ({ ...prev, [`a_${a.preCadastroId}`]: false }))}
-                                        >
-                                          <CancelIcon />
-                                        </IconButton>
-                                      </Tooltip>
-                                    </Stack>
+                                    <ToggleButtonGroup
+                                      size="small"
+                                      exclusive
+                                      value={presente === true ? 'presente' : presente === false ? 'faltou' : null}
+                                      onChange={(_, val) => {
+                                        if (val === null) return;
+                                        setMarcacoes(prev => ({ ...prev, [`a_${a.preCadastroId}`]: val === 'presente' }));
+                                      }}
+                                      sx={{ flexShrink: 0 }}
+                                    >
+                                      <ToggleButton
+                                        value="presente"
+                                        sx={{
+                                          px: 1.5,
+                                          py: 0.5,
+                                          color: 'success.main',
+                                          '&.Mui-selected': { bgcolor: 'success.main', color: '#fff', '&:hover': { bgcolor: 'success.dark' } }
+                                        }}
+                                      >
+                                        <CheckCircleIcon fontSize="small" />
+                                      </ToggleButton>
+                                      <ToggleButton
+                                        value="faltou"
+                                        sx={{
+                                          px: 1.5,
+                                          py: 0.5,
+                                          color: 'error.main',
+                                          '&.Mui-selected': { bgcolor: 'error.main', color: '#fff', '&:hover': { bgcolor: 'error.dark' } }
+                                        }}
+                                      >
+                                        <CancelIcon fontSize="small" />
+                                      </ToggleButton>
+                                    </ToggleButtonGroup>
                                   ) : (
                                     <Chip
                                       size="small"
@@ -927,9 +976,15 @@ export default function CelulaPresencaPage() {
                   ))}
                   {membros.length === 0 && (
                     <Grid item xs={12}>
-                      <Typography variant="body2" color="textSecondary">
-                        Nenhum membro vinculado. Use &quot;Adicionar membro&quot; para vincular.
-                      </Typography>
+                      <Box py={5} textAlign="center">
+                        <PersonAddIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
+                        <Typography variant="body2" color="text.secondary" mb={2}>
+                          Nenhum membro vinculado ainda.
+                        </Typography>
+                        <Button variant="contained" startIcon={<PersonAddIcon />} size="small" onClick={handleAbrirDialogMembro}>
+                          Adicionar membro
+                        </Button>
+                      </Box>
                     </Grid>
                   )}
                 </Grid>
@@ -938,6 +993,60 @@ export default function CelulaPresencaPage() {
           )}
         </Box>
       </PapperBlock>
+
+      {/* ── Menu: ações por reunião ─────────────────────────────────────────── */}
+      <Menu
+        anchorEl={reuniaoMenuAnchor?.anchorEl}
+        open={Boolean(reuniaoMenuAnchor)}
+        onClose={() => setReuniaoMenuAnchor(null)}
+      >
+        {reuniaoMenuAnchor?.reuniao?.status === 'encerrada' && (
+          <MenuItem
+            onClick={() => {
+              const { reuniao } = reuniaoMenuAnchor;
+              setReuniaoMenuAnchor(null);
+              handleReabrirReuniao(reuniao);
+            }}
+          >
+            <ListItemIcon><LockOpenIcon fontSize="small" /></ListItemIcon>
+            <ListItemText>Reabrir</ListItemText>
+          </MenuItem>
+        )}
+        {reuniaoMenuAnchor?.reuniao?.status === 'aberta' && (
+          <MenuItem
+            onClick={() => {
+              const { reuniao } = reuniaoMenuAnchor;
+              setReuniaoMenuAnchor(null);
+              setReuniaoAtiva(reuniao);
+              setDialogCancelar(true);
+            }}
+          >
+            <ListItemIcon><CancelIcon fontSize="small" color="error" /></ListItemIcon>
+            <ListItemText sx={{ color: 'error.main' }}>Cancelar reunião</ListItemText>
+          </MenuItem>
+        )}
+        <MenuItem
+          onClick={() => {
+            const { reuniao } = reuniaoMenuAnchor;
+            setReuniaoMenuAnchor(null);
+            handleAbrirEdicaoReuniao(reuniao);
+          }}
+        >
+          <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Editar data</ListItemText>
+        </MenuItem>
+        <Divider />
+        <MenuItem
+          onClick={() => {
+            const { reuniao } = reuniaoMenuAnchor;
+            setReuniaoMenuAnchor(null);
+            handleExcluirReuniao(reuniao);
+          }}
+        >
+          <ListItemIcon><DeleteOutlineIcon fontSize="small" color="error" /></ListItemIcon>
+          <ListItemText sx={{ color: 'error.main' }}>Excluir</ListItemText>
+        </MenuItem>
+      </Menu>
 
       {/* ── Dialog: configurar reuniões ────────────────────────────────────── */}
       <Dialog open={dialogReunioes} onClose={() => setDialogReunioes(false)} maxWidth="sm" fullWidth>

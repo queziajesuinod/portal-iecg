@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import PropTypes from 'prop-types';
 import {
   Card,
   CardContent,
@@ -13,11 +14,11 @@ import {
   Typography,
   Box,
   CircularProgress,
-  Chip,
-  Alert
+  Chip
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import ImageIcon from '@mui/icons-material/Image';
+import { Notification } from 'dan-components';
 import {
   listarTemplates,
   enviarNotificacao,
@@ -48,15 +49,13 @@ const normalizeBuyerPhone = (buyerData) => {
   return digits.startsWith('55') ? digits : `55${digits}`;
 };
 
-const getBuyerDisplayName = (buyerData) => {
-  return (
-    buyerData?.buyer_name ||
-    buyerData?.name ||
-    buyerData?.nome ||
-    buyerData?.nome_completo ||
-    'Comprador'
-  );
-};
+const getBuyerDisplayName = (buyerData) => (
+  buyerData?.buyer_name
+    || buyerData?.name
+    || buyerData?.nome
+    || buyerData?.nome_completo
+    || 'Comprador'
+);
 
 function NotificationSender({ eventId }) {
   const messageRef = useRef(null);
@@ -117,8 +116,7 @@ function NotificationSender({ eventId }) {
     carregarDados();
   }, [eventId]);
 
-  const registrationsWithPhone = registrations.filter((registration) =>
-    Boolean(normalizeBuyerPhone(registration.buyerData))
+  const registrationsWithPhone = registrations.filter((registration) => Boolean(normalizeBuyerPhone(registration.buyerData))
   );
 
   const carregarDados = async () => {
@@ -252,8 +250,7 @@ function NotificationSender({ eventId }) {
                     labelId="registration-select-label"
                     value={formData.registrationId}
                     label="Inscrição confirmada"
-                    onChange={(event) =>
-                      setFormData({ ...formData, registrationId: event.target.value })
+                    onChange={(event) => setFormData({ ...formData, registrationId: event.target.value })
                     }
                   >
                     <MenuItem value="">
@@ -264,8 +261,8 @@ function NotificationSender({ eventId }) {
                         <Box>
                           <Typography variant="body2">
                             {registration.orderCode} — {getBuyerDisplayName(registration.buyerData)}
-                            </Typography>
-                            <Typography variant="caption" color="textSecondary">
+                          </Typography>
+                          <Typography variant="caption" color="textSecondary">
                             WhatsApp +{normalizeBuyerPhone(registration.buyerData)}
                           </Typography>
                         </Box>
@@ -339,16 +336,16 @@ function NotificationSender({ eventId }) {
             {!formData.templateId && (
               <>
                 <Box mt={2}>
-                <TextField
-                  fullWidth
-                  multiline
-                  minRows={4}
-                  label="Mensagem Personalizada"
-                  value={formData.customMessage}
-                  onChange={(e) => setFormData({ ...formData, customMessage: e.target.value })}
-                  placeholder="Digite a mensagem..."
-                  inputRef={messageRef}
-                />
+                  <TextField
+                    fullWidth
+                    multiline
+                    minRows={4}
+                    label="Mensagem Personalizada"
+                    value={formData.customMessage}
+                    onChange={(e) => setFormData({ ...formData, customMessage: e.target.value })}
+                    placeholder="Digite a mensagem..."
+                    inputRef={messageRef}
+                  />
                 </Box>
                 <Box mt={1} display="flex" flexWrap="wrap" gap={1}>
                   {NOTIFICATION_VARIABLES.map((variable) => (
@@ -394,8 +391,8 @@ function NotificationSender({ eventId }) {
                 size="large"
                 onClick={handleEnviar}
                 disabled={
-                  loading ||
-                  (formData.tipoEnvio === 'individual' && !formData.registrationId)
+                  loading
+                  || (formData.tipoEnvio === 'individual' && !formData.registrationId)
                 }
                 startIcon={loading ? <CircularProgress size={20} /> : <SendIcon />}
               >
@@ -403,17 +400,6 @@ function NotificationSender({ eventId }) {
               </Button>
             </Box>
 
-            {sucesso && (
-              <Box mt={2}>
-                <Alert severity="success">{sucesso}</Alert>
-              </Box>
-            )}
-
-            {erro && (
-              <Box mt={2}>
-                <Alert severity="error">{erro}</Alert>
-              </Box>
-            )}
           </CardContent>
         </Card>
       </Grid>
@@ -476,8 +462,14 @@ function NotificationSender({ eventId }) {
           </Card>
         </Grid>
       )}
+      <Notification message={sucesso} close={() => setSucesso('')} type="success" />
+      <Notification message={erro} close={() => setErro('')} type="error" />
     </Grid>
   );
 }
+
+NotificationSender.propTypes = {
+  eventId: PropTypes.string.isRequired,
+};
 
 export default NotificationSender;
