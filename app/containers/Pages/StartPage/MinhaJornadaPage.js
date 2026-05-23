@@ -2,24 +2,30 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useHistory } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import {
+  Alert,
   Autocomplete,
   Avatar,
   Box,
   Button,
+  Card,
+  CardContent,
   Chip,
-  CircularProgress,
+  Divider,
   Grid,
   MenuItem,
-  Paper,
+  Skeleton,
   Stack,
   TextField,
   Tooltip,
   Typography
 } from '@mui/material';
 import {
+  EventOutlined,
   FavoriteBorder,
+  Groups2Outlined,
+  HubOutlined,
   MilitaryTechOutlined,
-  TimelineOutlined
+  PersonOutline
 } from '@mui/icons-material';
 import { PapperBlock } from 'dan-components';
 import dummyContents from 'dan-api/dummy/dummyContents';
@@ -31,6 +37,10 @@ import {
 } from '../../../api/membersApi';
 import { estatisticasMembro } from '../../../api/celulaPresencaApi';
 import { fetchGeocode } from '../../../utils/googleGeocode';
+import SectionCard from '../../../components/Jornada/SectionCard';
+import FormSection from '../../../components/Jornada/FormSection';
+import MetricTile from '../../../components/Jornada/MetricTile';
+import JornadaTimeline from '../../../components/Jornada/JornadaTimeline';
 
 const GENDER_OPTIONS = ['MASCULINO', 'FEMININO'];
 const MARITAL_STATUS_OPTIONS = [
@@ -180,7 +190,7 @@ const MinhaJornadaPage = () => {
 
   const activities = useMemo(() => {
     const list = Array.isArray(member?.activities) ? member.activities : [];
-    return [...list].slice(0, 6);
+    return [...list].sort((a, b) => new Date(b?.activityDate || 0) - new Date(a?.activityDate || 0));
   }, [member]);
   const leaderCells = useMemo(() => {
     const list = Array.isArray(member?.liderancaCelulas) ? member.liderancaCelulas : [];
@@ -200,6 +210,27 @@ const MinhaJornadaPage = () => {
       hasLinkedUser: Boolean(member.spouse.userId)
     } : null)
   ), [form.spouseMemberId, member?.spouse, spouseCandidates]);
+
+  const isDirty = useMemo(() => {
+    if (!member) return false;
+    return JSON.stringify(form) !== JSON.stringify(buildFormFromMember(member));
+  }, [form, member]);
+
+  const milestoneItems = useMemo(() => milestones.map((m) => ({
+    id: m.id,
+    type: 'milestone',
+    date: formatDate(m.achievedDate),
+    title: m.displayLabel || m.milestoneType,
+    description: m.description || null
+  })), [milestones]);
+
+  const activityItems = useMemo(() => activities.map((a) => ({
+    id: a.id,
+    type: 'activity',
+    date: formatDateTime(a.activityDate),
+    title: a.displayLabel || a.activityTypeRef?.name || a.activityType,
+    description: getActivityObservation(a) || null
+  })), [activities]);
 
   const loadSpouseCandidates = async () => {
     setSpouseLoading(true);
@@ -317,530 +348,571 @@ const MinhaJornadaPage = () => {
     }
   };
 
+  const renderLoadingSkeleton = () => (
+    <Stack spacing={3}>
+      <Skeleton variant="rectangular" height={140} sx={{ borderRadius: 3 }} />
+      <Grid container spacing={3}>
+        <Grid item xs={12} lg={8}>
+          <Skeleton variant="rectangular" height={520} sx={{ borderRadius: 3 }} />
+        </Grid>
+        <Grid item xs={12} lg={4}>
+          <Stack spacing={3}>
+            <Skeleton variant="rectangular" height={160} sx={{ borderRadius: 3 }} />
+            <Skeleton variant="rectangular" height={220} sx={{ borderRadius: 3 }} />
+          </Stack>
+        </Grid>
+      </Grid>
+    </Stack>
+  );
+
+  const renderHero = () => (
+    <Card
+      elevation={0}
+      sx={{
+        borderRadius: 3,
+        bgcolor: 'primary.main',
+        color: 'primary.contrastText',
+        position: 'relative',
+        overflow: 'hidden'
+      }}
+    >
+      <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={2.5}
+          alignItems={{ xs: 'flex-start', sm: 'center' }}
+        >
+          <Avatar
+            src={member.photoUrl || ''}
+            alt={member.fullName}
+            sx={{
+              width: 72,
+              height: 72,
+              border: (theme) => `3px solid ${theme.palette.primary.light}`
+            }}
+          />
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography
+              variant="overline"
+              sx={{ letterSpacing: '0.18em', opacity: 0.82, fontSize: '0.7rem' }}
+            >
+              Área do Membro
+            </Typography>
+            <Typography
+              variant="h5"
+              component="h1"
+              sx={{ fontWeight: 700, lineHeight: 1.15, mb: 1.25 }}
+            >
+              {member.preferredName || member.fullName}
+            </Typography>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+              <Chip
+                size="small"
+                label={STAGE_COPY[member?.journey?.currentStage] || member?.journey?.currentStage || 'Sem etapa'}
+                sx={{
+                  bgcolor: 'rgba(255,255,255,0.22)',
+                  color: 'inherit',
+                  fontWeight: 600
+                }}
+              />
+              <Chip
+                size="small"
+                variant="outlined"
+                label={member.status || 'Sem status'}
+                sx={{
+                  borderColor: 'rgba(255,255,255,0.6)',
+                  color: 'inherit'
+                }}
+              />
+            </Stack>
+          </Box>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+
+  const renderFormCard = () => (
+    <SectionCard
+      icon={<PersonOutline color="primary" />}
+      title="Meus Dados"
+      action={(
+        <Stack direction="row" spacing={1.25} alignItems="center">
+          {isDirty && !saving && (
+            <Chip
+              size="small"
+              color="warning"
+              variant="outlined"
+              label="Alterações não salvas"
+            />
+          )}
+          <Button
+            variant="contained"
+            onClick={handleSave}
+            disabled={saving || !isDirty}
+          >
+            {saving ? 'Salvando...' : 'Salvar'}
+          </Button>
+        </Stack>
+      )}
+    >
+      <FormSection title="Identificação">
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              required
+              label="Nome completo"
+              value={form.fullName}
+              onChange={(event) => handleChange('fullName', event.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              label="CPF"
+              value={form.cpf}
+              onChange={(event) => handleChange('cpf', formatCpf(event.target.value))}
+            />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <TextField
+              fullWidth
+              type="date"
+              label="Nascimento"
+              InputLabelProps={{ shrink: true }}
+              value={form.birthDate}
+              onChange={(event) => handleChange('birthDate', event.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <TextField
+              select
+              fullWidth
+              label="Gênero"
+              value={form.gender}
+              onChange={(event) => handleChange('gender', event.target.value)}
+            >
+              <MenuItem value="">Não informado</MenuItem>
+              {GENDER_OPTIONS.map((option) => (
+                <MenuItem key={option} value={option}>{option}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+        </Grid>
+      </FormSection>
+
+      <Divider sx={{ my: 3, opacity: 0.4 }} />
+
+      <FormSection title="Contato">
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              type="email"
+              label="E-mail"
+              value={form.email}
+              onChange={(event) => handleChange('email', event.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12} md={3}>
+            <TextField
+              fullWidth
+              label="Telefone"
+              value={form.phone}
+              onChange={(event) => handleChange('phone', formatPhone(event.target.value))}
+            />
+          </Grid>
+          <Grid item xs={12} md={3}>
+            <TextField
+              fullWidth
+              label="WhatsApp"
+              value={form.whatsapp}
+              onChange={(event) => handleChange('whatsapp', formatPhone(event.target.value))}
+            />
+          </Grid>
+        </Grid>
+      </FormSection>
+
+      <Divider sx={{ my: 3, opacity: 0.4 }} />
+
+      <FormSection
+        title="Endereço"
+        description="Informe o CEP e use o botão para completar automaticamente."
+      >
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={3}>
+            <TextField
+              fullWidth
+              label="CEP"
+              value={form.zipCode}
+              onChange={(event) => handleChange('zipCode', event.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12} md={3}>
+            <Button
+              fullWidth
+              variant="outlined"
+              onClick={handleCompleteAddressFromCep}
+              disabled={geoLoading}
+              sx={{ height: '100%' }}
+            >
+              {geoLoading ? 'Buscando CEP...' : 'Completar endereço'}
+            </Button>
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <TextField
+              fullWidth
+              label="Bairro"
+              value={form.neighborhood}
+              onChange={(event) => handleChange('neighborhood', event.target.value)}
+            />
+          </Grid>
+          <Grid item xs={6} md={2}>
+            <TextField
+              fullWidth
+              label="UF"
+              value={form.state}
+              inputProps={{ maxLength: 2 }}
+              onChange={(event) => handleChange('state', event.target.value.toUpperCase())}
+            />
+          </Grid>
+          <Grid item xs={6} md={4}>
+            <TextField
+              fullWidth
+              label="Cidade"
+              value={form.city}
+              onChange={(event) => handleChange('city', event.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12} md={5}>
+            <TextField
+              fullWidth
+              label="Logradouro"
+              value={form.street}
+              onChange={(event) => handleChange('street', event.target.value)}
+            />
+          </Grid>
+          <Grid item xs={6} md={3}>
+            <TextField
+              fullWidth
+              label="Número"
+              value={form.number}
+              onChange={(event) => handleChange('number', event.target.value)}
+            />
+          </Grid>
+          <Grid item xs={6} md={4}>
+            <TextField
+              fullWidth
+              label="Complemento"
+              value={form.complement}
+              onChange={(event) => handleChange('complement', event.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <TextField
+              fullWidth
+              label="País"
+              value={form.country}
+              onChange={(event) => handleChange('country', event.target.value)}
+            />
+          </Grid>
+        </Grid>
+      </FormSection>
+
+      <Divider sx={{ my: 3, opacity: 0.4 }} />
+
+      <FormSection title="Família & Igreja">
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={6}>
+            <TextField
+              select
+              fullWidth
+              label="Estado civil"
+              value={form.maritalStatus}
+              onChange={(event) => handleChange('maritalStatus', event.target.value)}
+            >
+              <MenuItem value="">Não informado</MenuItem>
+              {MARITAL_STATUS_OPTIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+          {isMarried && (
+            <Grid item xs={12} md={6}>
+              <Autocomplete
+                fullWidth
+                loading={spouseLoading}
+                options={spouseCandidates}
+                value={selectedSpouse}
+                onChange={(_, value) => handleChange('spouseMemberId', value?.id || '')}
+                getOptionLabel={(option) => option?.preferredName || option?.fullName || ''}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Vincular cônjuge membro"
+                    helperText="Selecione o membro do cônjuge quando já estiver cadastrado."
+                  />
+                )}
+                renderOption={(props, option) => (
+                  <Box component="li" {...props}>
+                    <Stack direction="row" spacing={1.25} alignItems="center" sx={{ py: 0.5 }}>
+                      <Avatar src={option.photoUrl || ''} sx={{ width: 34, height: 34 }} />
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {option.preferredName || option.fullName}
+                        </Typography>
+                        <Typography variant="caption" color="textSecondary">
+                          {option.fullName}
+                          {option.hasLinkedUser ? ' • Usuário vinculado' : ''}
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  </Box>
+                )}
+              />
+            </Grid>
+          )}
+          <Grid item xs={12} md={4}>
+            <TextField
+              fullWidth
+              type="date"
+              label="Data de batismo"
+              InputLabelProps={{ shrink: true }}
+              value={form.baptismDate}
+              onChange={(event) => handleChange('baptismDate', event.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <TextField
+              fullWidth
+              label="Local de batismo"
+              value={form.baptismPlace}
+              onChange={(event) => handleChange('baptismPlace', event.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <TextField
+              fullWidth
+              type="date"
+              label="Data de conversão"
+              InputLabelProps={{ shrink: true }}
+              value={form.conversionDate}
+              onChange={(event) => handleChange('conversionDate', event.target.value)}
+            />
+          </Grid>
+        </Grid>
+      </FormSection>
+    </SectionCard>
+  );
+
+  const renderSpouseCard = () => (
+    <SectionCard icon={<FavoriteBorder color="primary" />} title="Vínculo Conjugal">
+      <Stack direction="row" spacing={2} alignItems="center">
+        <Avatar src={member.spouse.photoUrl || ''} alt={member.spouse.fullName} sx={{ width: 52, height: 52 }} />
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="body1" sx={{ fontWeight: 700 }} noWrap>
+            {member.spouse.preferredName || member.spouse.fullName}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" noWrap>
+            {member.spouse.fullName}
+          </Typography>
+          <Stack direction="row" spacing={1} mt={1} flexWrap="wrap" useFlexGap>
+            <Chip size="small" variant="outlined" label={member.spouse.status || 'Sem status'} />
+            {member.spouse.userId && (
+              <Chip size="small" color="success" label="Usuário vinculado" />
+            )}
+          </Stack>
+        </Box>
+      </Stack>
+    </SectionCard>
+  );
+
+  const renderCelulaCard = () => (
+    <SectionCard icon={<Groups2Outlined color="success" />} title="Minha Célula">
+      {member.celula?.celula && (
+        <Box mb={2}>
+          <Typography variant="body1" fontWeight={700}>
+            {member.celula.celula}
+          </Typography>
+          {member.celula.lider && (
+            <Typography variant="body2" color="text.secondary">
+              Líder: {member.celula.lider}
+            </Typography>
+          )}
+        </Box>
+      )}
+
+      <Grid container spacing={1.5} sx={{ mb: 2 }}>
+        <Grid item xs={4}>
+          <MetricTile value={`${celulaStats.percentualPresenca}%`} label="Presença" color="success" />
+        </Grid>
+        <Grid item xs={4}>
+          <MetricTile value={celulaStats.totalReunioes} label="Reuniões" color="success" />
+        </Grid>
+        <Grid item xs={4}>
+          <MetricTile value={`${celulaStats.sequenciaAtual} sem.`} label="Sequência" color="success" />
+        </Grid>
+      </Grid>
+
+      {(celulaStats.ultimas || []).length > 0 && (
+        <>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+            Últimas reuniões
+          </Typography>
+          <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
+            {(celulaStats.ultimas || []).map((r, i) => (
+              <Chip
+                // eslint-disable-next-line react/no-array-index-key
+                key={i}
+                size="small"
+                label={formatDateInAppTimezone(r.data, '—').slice(0, 5)}
+                color={r.presente === true ? 'success' : r.presente === false ? 'error' : 'default'}
+                variant={r.presente === null ? 'outlined' : 'filled'}
+              />
+            ))}
+          </Stack>
+        </>
+      )}
+
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+        Discípulo desde {formatDateInAppTimezone(celulaStats.dataEntrada, '-')}
+      </Typography>
+    </SectionCard>
+  );
+
+  const renderLeaderCellsCard = () => (
+    <SectionCard icon={<HubOutlined color="primary" />} title="Célula que lidero">
+      <Stack spacing={1.5}>
+        {leaderCells.map((cell) => (
+          <Box
+            key={cell.id}
+            sx={{
+              p: 2,
+              borderRadius: 2,
+              border: 1,
+              borderColor: 'divider',
+              bgcolor: 'action.hover'
+            }}
+          >
+            <Stack
+              direction="row"
+              justifyContent="space-between"
+              spacing={2}
+              mb={1}
+              alignItems="center"
+            >
+              <Typography variant="body1" sx={{ fontWeight: 700 }} noWrap>
+                {cell.celula || 'Célula sem nome'}
+              </Typography>
+              <Chip
+                size="small"
+                color={cell.ativo ? 'success' : 'default'}
+                label={cell.ativo ? 'Ativa' : 'Inativa'}
+              />
+            </Stack>
+            <Grid container spacing={1.25}>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="caption" color="text.secondary">Rede</Typography>
+                <Typography variant="body2">{cell.rede || 'Não informado'}</Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="caption" color="text.secondary">Campus</Typography>
+                <Typography variant="body2">{cell?.campusRef?.nome || 'Não informado'}</Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="caption" color="text.secondary">Bairro</Typography>
+                <Typography variant="body2">{cell.bairro || 'Não informado'}</Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="caption" color="text.secondary">Dia e horário</Typography>
+                <Typography variant="body2">
+                  {[cell.dia, cell.horario].filter(Boolean).join(' - ') || 'Não informado'}
+                </Typography>
+              </Grid>
+            </Grid>
+            <Box mt={1.5}>
+              <Tooltip title={!cell.ativo ? 'Célula inativa' : ''}>
+                <span>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    color="primary"
+                    disabled={!cell.ativo}
+                    onClick={() => history.push(`/app/celulas/${cell.id}/presenca`)}
+                  >
+                    Registrar Presença
+                  </Button>
+                </span>
+              </Tooltip>
+            </Box>
+          </Box>
+        ))}
+      </Stack>
+    </SectionCard>
+  );
+
   return (
     <PapperBlock title="Minha Jornada" desc="Atualize seus dados e acompanhe sua caminhada">
       <Helmet>
         <title>Minha Jornada</title>
       </Helmet>
 
-      {loading && (
-        <Box py={6} display="flex" justifyContent="center">
-          <CircularProgress size={30} />
-        </Box>
-      )}
+      {loading && renderLoadingSkeleton()}
 
       {!loading && error && !member && (
-        <Paper
-          sx={{
-            p: 4,
-            borderRadius: 4,
-            border: '1px solid rgba(12, 71, 88, 0.14)',
-            background: 'linear-gradient(145deg, rgba(255,255,255,0.98), rgba(243,246,248,0.94))'
-          }}
-        >
-          <Typography variant="h6" gutterBottom>Nenhum perfil de membro vinculado</Typography>
-          <Typography color="textSecondary">
-            Seu usuario esta autenticado, mas ainda nao ha um cadastro de membro associado a ele.
+        <Alert severity="warning" sx={{ borderRadius: 2 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+            Nenhum perfil de membro vinculado
           </Typography>
-        </Paper>
+          <Typography variant="body2" sx={{ mt: 0.5 }}>
+            Seu usuário está autenticado, mas ainda não há um cadastro de membro associado a ele.
+          </Typography>
+        </Alert>
       )}
 
       {!loading && member && (
         <Stack spacing={3}>
-          <Paper
-            sx={{
-              overflow: 'hidden',
-              borderRadius: 5,
-              border: '1px solid rgba(0, 7, 68, 0.14)',
-              background: 'linear-gradient(135deg, rgba(48, 229, 235, 0.95), rgba(22, 95, 129, 0.96))',
-              color: '#fff'
-            }}
-          >
-            <Box
-              sx={{
-                p: { xs: 3, md: 4 },
-                position: 'relative',
-                background: 'radial-gradient(circle at top right, rgba(255,255,255,0.24), transparent 32%), radial-gradient(circle at bottom left, rgba(255,255,255,0.14), transparent 28%)'
-              }}
-            >
-              <Grid container spacing={3} alignItems="center">
-                <Grid item xs={12} md={12}>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2.5} alignItems={{ xs: 'flex-start', sm: 'center' }}>
-                    <Avatar
-                      src={member.photoUrl || ''}
-                      alt={member.fullName}
-                      sx={{
-                        width: 92,
-                        height: 92,
-                        border: '3px solid rgba(255,255,255,0.45)',
-                        boxShadow: '0 16px 32px rgba(0,0,0,0.18)'
-                      }}
-                    />
-                    <Box>
-                      <Typography variant="overline" sx={{ letterSpacing: '0.2em', opacity: 0.82 }}>
-                        AREA DO MEMBRO
-                      </Typography>
-                      <Typography variant="h4" sx={{ fontWeight: 700, lineHeight: 1.05, mb: 1 }}>
-                        {member.preferredName || member.fullName}
-                      </Typography>
-                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                        <Chip
-                          label={STAGE_COPY[member?.journey?.currentStage] || member?.journey?.currentStage || 'Sem etapa'}
-                          sx={{ bgcolor: 'rgba(255,255,255,0.18)', color: '#fff' }}
-                        />
+          {renderHero()}
 
-                        <Chip
-                          label={member.status || 'Sem status'}
-                          sx={{ bgcolor: 'rgba(255,255,255,0.12)', color: '#fff' }}
-                        />
-                      </Stack>
-                    </Box>
-                  </Stack>
-                </Grid>
-              </Grid>
-            </Box>
-          </Paper>
-
-          {(message || error) && (
-            <Paper sx={{ p: 2, borderRadius: 3, border: '1px solid rgba(12, 71, 88, 0.12)' }}>
-              {message && <Typography color="primary">{message}</Typography>}
-              {error && <Typography color="error">{error}</Typography>}
-            </Paper>
+          {message && (
+            <Alert severity="success" onClose={() => setMessage('')}>{message}</Alert>
+          )}
+          {error && (
+            <Alert severity="error" role="alert" onClose={() => setError('')}>{error}</Alert>
           )}
 
           <Grid container spacing={3}>
-            <Grid item xs={12} lg={7}>
-              <Paper
-                sx={{
-                  p: { xs: 2, md: 3 },
-                  borderRadius: 4,
-                  border: '1px solid rgba(12, 71, 88, 0.12)',
-                  background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,251,0.95))'
-                }}
-              >
-                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-                  <Box>
-                    <Typography variant="h6">Meus Dados</Typography>
-                    <Typography variant="body2" color="textSecondary">
-                      Atualize apenas suas informacoes pessoais. A jornada abaixo e somente visualizacao.
-                    </Typography>
-                  </Box>
-                  <Button variant="contained" onClick={handleSave} disabled={saving}>
-                    {saving ? 'Salvando...' : 'Salvar'}
-                  </Button>
-                </Stack>
-                <Grid container spacing={2}>
-                  <Grid item xs={12} md={6}>
-                    <TextField fullWidth label="Nome completo" value={form.fullName} onChange={(event) => handleChange('fullName', event.target.value)} />
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField fullWidth label="CPF" value={form.cpf} onChange={(event) => handleChange('cpf', formatCpf(event.target.value))} />
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField fullWidth label="E-mail" type="email" value={form.email} onChange={(event) => handleChange('email', event.target.value)} />
-                  </Grid>
-                  <Grid item xs={12} md={3}>
-                    <TextField fullWidth label="Telefone" value={form.phone} onChange={(event) => handleChange('phone', formatPhone(event.target.value))} />
-                  </Grid>
-                  <Grid item xs={12} md={3}>
-                    <TextField fullWidth label="WhatsApp" value={form.whatsapp} onChange={(event) => handleChange('whatsapp', formatPhone(event.target.value))} />
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <TextField fullWidth type="date" label="Nascimento" InputLabelProps={{ shrink: true }} value={form.birthDate} onChange={(event) => handleChange('birthDate', event.target.value)} />
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <TextField select fullWidth label="Genero" value={form.gender} onChange={(event) => handleChange('gender', event.target.value)}>
-                      <MenuItem value="">Nao informado</MenuItem>
-                      {GENDER_OPTIONS.map((option) => (
-                        <MenuItem key={option} value={option}>{option}</MenuItem>
-                      ))}
-                    </TextField>
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <TextField select fullWidth label="Estado civil" value={form.maritalStatus} onChange={(event) => handleChange('maritalStatus', event.target.value)}>
-                      <MenuItem value="">Nao informado</MenuItem>
-                      {MARITAL_STATUS_OPTIONS.map((option) => (
-                        <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
-                      ))}
-                    </TextField>
-                  </Grid>
-                  {isMarried && (
-                    <Grid item xs={12}>
-                      <Autocomplete
-                        fullWidth
-                        loading={spouseLoading}
-                        options={spouseCandidates}
-                        value={selectedSpouse}
-                        onChange={(_, value) => handleChange('spouseMemberId', value?.id || '')}
-                        getOptionLabel={(option) => option?.preferredName || option?.fullName || ''}
-                        isOptionEqualToValue={(option, value) => option.id === value.id}
-                        renderInput={(params) => (
-                          <TextField
-                            {...params}
-                            label="Vincular conjuge membro"
-                            helperText="Selecione o membro do conjuge quando ele ja tiver cadastro no sistema."
-                          />
-                        )}
-                        renderOption={(props, option) => (
-                          <Box component="li" {...props}>
-                            <Stack direction="row" spacing={1.25} alignItems="center" sx={{ py: 0.5 }}>
-                              <Avatar src={option.photoUrl || ''} sx={{ width: 34, height: 34 }} />
-                              <Box>
-                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                  {option.preferredName || option.fullName}
-                                </Typography>
-                                <Typography variant="caption" color="textSecondary">
-                                  {option.fullName}
-                                  {option.hasLinkedUser ? ' • Usuario vinculado' : ''}
-                                </Typography>
-                              </Box>
-                            </Stack>
-                          </Box>
-                        )}
-                      />
-                    </Grid>
-                  )}
-                  <Grid item xs={12}>
-                    <Typography variant="subtitle2" color="textSecondary" sx={{ mt: 1 }}>
-                      Endereco
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} md={3}>
-                    <TextField fullWidth label="CEP" value={form.zipCode} onChange={(event) => handleChange('zipCode', event.target.value)} />
-                  </Grid>
-                  <Grid item xs={12} md={3}>
-                    <Button
-                      fullWidth
-                      variant="outlined"
-                      onClick={handleCompleteAddressFromCep}
-                      disabled={geoLoading}
-                      sx={{ height: '100%' }}
-                    >
-                      {geoLoading ? 'Buscando CEP...' : 'Completar endereco'}
-                    </Button>
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <TextField fullWidth label="Bairro" value={form.neighborhood} onChange={(event) => handleChange('neighborhood', event.target.value)} />
-                  </Grid>
-                  <Grid item xs={12} md={2}>
-                    <TextField fullWidth label="UF" value={form.state} inputProps={{ maxLength: 2 }} onChange={(event) => handleChange('state', event.target.value.toUpperCase())} />
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <TextField fullWidth label="Cidade" value={form.city} onChange={(event) => handleChange('city', event.target.value)} />
-                  </Grid>
-                  <Grid item xs={12} md={5}>
-                    <TextField fullWidth label="Endereco" value={form.street} onChange={(event) => handleChange('street', event.target.value)} />
-                  </Grid>
-                  <Grid item xs={12} md={3}>
-                    <TextField fullWidth label="Numero" value={form.number} onChange={(event) => handleChange('number', event.target.value)} />
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <TextField fullWidth label="Complemento" value={form.complement} onChange={(event) => handleChange('complement', event.target.value)} />
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <TextField fullWidth label="Pais" value={form.country} onChange={(event) => handleChange('country', event.target.value)} />
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <TextField fullWidth type="date" label="Data de batismo" InputLabelProps={{ shrink: true }} value={form.baptismDate} onChange={(event) => handleChange('baptismDate', event.target.value)} />
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <TextField fullWidth label="Local de batismo" value={form.baptismPlace} onChange={(event) => handleChange('baptismPlace', event.target.value)} />
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <TextField fullWidth type="date" label="Data de conversao" InputLabelProps={{ shrink: true }} value={form.conversionDate} onChange={(event) => handleChange('conversionDate', event.target.value)} />
-                  </Grid>
-                </Grid>
-              </Paper>
+            <Grid item xs={12} lg={8}>
+              {renderFormCard()}
             </Grid>
 
-            <Grid item xs={12} lg={5}>
+            <Grid item xs={12} lg={4}>
               <Stack spacing={3}>
-
-                {member?.maritalStatus === 'CASADO' && member?.spouse && (
-                  <Paper
-                    sx={{
-                      p: 3,
-                      borderRadius: 4,
-                      border: '1px solid rgba(12, 71, 88, 0.12)',
-                      background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(245,248,250,0.94))'
-                    }}
-                  >
-                    <Stack direction="row" spacing={1.5} alignItems="center" mb={2}>
-                      <FavoriteBorder color="primary" />
-                      <Typography variant="h6">Vinculo Conjugal</Typography>
-                    </Stack>
-                    <Stack direction="row" spacing={2} alignItems="center">
-                      <Avatar src={member.spouse.photoUrl || ''} alt={member.spouse.fullName} sx={{ width: 52, height: 52 }} />
-                      <Box>
-                        <Typography variant="body1" sx={{ fontWeight: 700 }}>
-                          {member.spouse.preferredName || member.spouse.fullName}
-                        </Typography>
-                        <Typography variant="body2" color="textSecondary">
-                          {member.spouse.fullName}
-                        </Typography>
-                        <Stack direction="row" spacing={1} mt={1} flexWrap="wrap" useFlexGap>
-                          <Chip size="small" variant="outlined" label={member.spouse.status || 'Sem status'} />
-                          {member.spouse.userId && (
-                            <Chip size="small" color="success" label="Usuario vinculado" />
-                          )}
-                        </Stack>
-                      </Box>
-                    </Stack>
-                  </Paper>
-                )}
-
-                {celulaStats && member?.celulaId && (
-                  <Paper
-                    sx={{
-                      p: 3,
-                      borderRadius: 4,
-                      border: '1px solid rgba(12, 71, 88, 0.12)',
-                      background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(241,247,244,0.94))'
-                    }}
-                  >
-                    <Stack direction="row" spacing={1.5} alignItems="center" mb={0.5}>
-                      <TimelineOutlined color="success" />
-                      <Typography variant="h6">Minha Célula</Typography>
-                    </Stack>
-
-                    {member.celula?.celula && (
-                      <Box mb={1.5}>
-                        <Typography variant="body1" fontWeight={700}>
-                          {member.celula.celula}
-                        </Typography>
-                        {member.celula.lider && (
-                          <Typography variant="body2" color="textSecondary">
-                            Líder: {member.celula.lider}
-                          </Typography>
-                        )}
-                      </Box>
-                    )}
-
-                    <Grid container spacing={2} mb={2}>
-                      {[
-                        { label: 'Presença', value: `${celulaStats.percentualPresenca}%` },
-                        { label: 'Reuniões', value: celulaStats.totalReunioes },
-                        { label: 'Sequência atual', value: `${celulaStats.sequenciaAtual} sem.` },
-                      ].map(item => (
-                        <Grid item xs={4} key={item.label}>
-                          <Box sx={{
-                            p: 1.5, borderRadius: 2, bgcolor: 'rgba(0,0,0,0.03)', textAlign: 'center'
-                          }}>
-                            <Typography variant="h5" fontWeight={800} color="success.main">{item.value}</Typography>
-                            <Typography variant="caption" color="textSecondary">{item.label}</Typography>
-                          </Box>
-                        </Grid>
-                      ))}
-                    </Grid>
-
-                    <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
-                      Últimas reuniões
-                    </Typography>
-                    <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
-                      {(celulaStats.ultimas || []).map((r, i) => (
-                        <Chip
-                          key={i}
-                          size="small"
-                          label={formatDateInAppTimezone(r.data, '—').slice(0, 5)}
-                          color={r.presente === true ? 'success' : r.presente === false ? 'error' : 'default'}
-                          variant={r.presente === null ? 'outlined' : 'filled'}
-                        />
-                      ))}
-                    </Stack>
-
-                    <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 1.5 }}>
-                      Discípulo desde {formatDateInAppTimezone(celulaStats.dataEntrada, '-')}
-                    </Typography>
-                  </Paper>
-                )}
-
-                {!!leaderCells.length && (
-                  <Paper
-                    sx={{
-                      p: 3,
-                      borderRadius: 4,
-                      border: '1px solid rgba(12, 71, 88, 0.12)',
-                      background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(245,248,250,0.94))'
-                    }}
-                  >
-                    <Stack direction="row" spacing={1.5} alignItems="center" mb={2}>
-                      <TimelineOutlined color="primary" />
-                      <Typography variant="h6">Célula que lidero</Typography>
-                    </Stack>
-                    <Stack spacing={1.5}>
-                      {leaderCells.map((cell) => (
-                        <Paper
-                          key={cell.id}
-                          sx={{
-                            p: 2,
-                            borderRadius: 3,
-                            border: '1px solid rgba(12, 71, 88, 0.1)',
-                            bgcolor: 'rgba(249, 250, 251, 0.92)'
-                          }}
-                        >
-                          <Stack direction="row" justifyContent="space-between" spacing={2} mb={1} alignItems="center">
-                            <Typography variant="body1" sx={{ fontWeight: 700 }}>
-                              {cell.celula || 'Celula sem nome'}
-                            </Typography>
-                            <Chip
-                              size="small"
-                              color={cell.ativo ? 'success' : 'default'}
-                              label={cell.ativo ? 'Ativa' : 'Inativa'}
-                            />
-                          </Stack>
-                          <Grid container spacing={1.25}>
-                            <Grid item xs={12} sm={6}>
-                              <Typography variant="caption" color="textSecondary">Rede</Typography>
-                              <Typography variant="body2">{cell.rede || 'Nao informado'}</Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                              <Typography variant="caption" color="textSecondary">Campus</Typography>
-                              <Typography variant="body2">{cell?.campusRef?.nome || 'Nao informado'}</Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                              <Typography variant="caption" color="textSecondary">Bairro</Typography>
-                              <Typography variant="body2">{cell.bairro || 'Nao informado'}</Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                              <Typography variant="caption" color="textSecondary">Dia e horario</Typography>
-                              <Typography variant="body2">
-                                {[cell.dia, cell.horario].filter(Boolean).join(' - ') || 'Nao informado'}
-                              </Typography>
-                            </Grid>
-                          </Grid>
-                          <Box mt={1.5}>
-                            <Tooltip title={!cell.ativo ? 'Célula inativa' : ''}>
-                              <span>
-                                <Button
-                                  size="small"
-                                  variant="contained"
-                                  color="primary"
-                                  disabled={!cell.ativo}
-                                  onClick={() => history.push(`/app/celulas/${cell.id}/presenca`)}
-                                >
-                                  Registrar Presença
-                                </Button>
-                              </span>
-                            </Tooltip>
-                          </Box>
-                        </Paper>
-                      ))}
-                    </Stack>
-                  </Paper>
-                )}
+                {member?.maritalStatus === 'CASADO' && member?.spouse && renderSpouseCard()}
+                {celulaStats && member?.celulaId && renderCelulaCard()}
+                {!!leaderCells.length && renderLeaderCellsCard()}
               </Stack>
             </Grid>
 
             <Grid item xs={12} md={6}>
-              <Paper
-                sx={{
-                  p: 3,
-                  borderRadius: 4,
-                  border: '1px solid rgba(12, 71, 88, 0.12)',
-                  minHeight: '100%'
-                }}
+              <SectionCard
+                icon={<MilitaryTechOutlined color="primary" />}
+                title="Linha do Tempo"
+                sx={{ height: '100%' }}
               >
-                <Stack direction="row" spacing={1.5} alignItems="center" mb={2}>
-                  <MilitaryTechOutlined color="primary" />
-                  <Typography variant="h6">Linha do Tempo</Typography>
-                </Stack>
-                {!milestones.length && (
-                  <Typography color="textSecondary">Nenhum marco registrado ainda.</Typography>
-                )}
-                <Stack spacing={0}>
-                  {milestones.map((milestone, index) => {
-                    const hasNext = index < milestones.length - 1;
-                    return (
-                      <Box
-                        key={milestone.id}
-                        sx={{
-                          display: 'grid',
-                          gridTemplateColumns: '18px 1fr',
-                          columnGap: 1.5
-                        }}
-                      >
-                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                          <Box
-                            sx={{
-                              width: 10,
-                              height: 10,
-                              borderRadius: '50%',
-                              bgcolor: 'primary.main',
-                              mt: 0.7
-                            }}
-                          />
-                          {hasNext && (
-                            <Box
-                              sx={{
-                                width: 2,
-                                flex: 1,
-                                minHeight: 30,
-                                bgcolor: 'divider',
-                                my: 0.6
-                              }}
-                            />
-                          )}
-                        </Box>
-                        <Box sx={{ pb: hasNext ? 2.2 : 0 }}>
-                          <Typography variant="caption" color="textSecondary">{formatDate(milestone.achievedDate)}</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                            {milestone.displayLabel || milestone.milestoneType}
-                          </Typography>
-                          {milestone.description && (
-                            <Typography variant="body2" color="textSecondary">{milestone.description}</Typography>
-                          )}
-                        </Box>
-                      </Box>
-                    );
-                  })}
-                </Stack>
-              </Paper>
+                <JornadaTimeline items={milestoneItems} emptyText="Nenhum marco registrado ainda." />
+              </SectionCard>
             </Grid>
 
             <Grid item xs={12} md={6}>
-              <Paper
-                sx={{
-                  p: 3,
-                  borderRadius: 4,
-                  border: '1px solid rgba(12, 71, 88, 0.12)',
-                  minHeight: '100%'
-                }}
+              <SectionCard
+                icon={<EventOutlined color="primary" />}
+                title="Atividades Recentes"
+                sx={{ height: '100%' }}
               >
-                <Stack direction="row" spacing={1.5} alignItems="center" mb={2}>
-                  <FavoriteBorder color="primary" />
-                  <Typography variant="h6">Atividades Recentes</Typography>
-                </Stack>
-                {!activities.length && (
-                  <Typography color="textSecondary">Nenhuma atividade recente registrada.</Typography>
-                )}
-                <Stack spacing={1.25}>
-                  {activities.map((activity) => (
-                    <Paper
-                      key={activity.id}
-                      sx={{
-                        p: 1.75,
-                        borderRadius: 3,
-                        border: '1px solid rgba(12, 71, 88, 0.08)',
-                        bgcolor: 'rgba(249, 250, 251, 0.92)'
-                      }}
-                    >
-                      <Stack direction="row" justifyContent="space-between" spacing={2}>
-                        <Box>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                            {activity.displayLabel || activity.activityTypeRef?.name || activity.activityType}
-                          </Typography>
-                          <Typography variant="caption" color="textSecondary">{formatDateTime(activity.activityDate)}</Typography>
-                          {getActivityObservation(activity) && (
-                            <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
-                              {getActivityObservation(activity)}
-                            </Typography>
-                          )}
-                        </Box>
-                      </Stack>
-                    </Paper>
-                  ))}
-                </Stack>
-              </Paper>
+                <JornadaTimeline items={activityItems} emptyText="Nenhuma atividade recente registrada." />
+              </SectionCard>
             </Grid>
           </Grid>
         </Stack>
