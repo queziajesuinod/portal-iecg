@@ -3,10 +3,11 @@ import PropTypes from 'prop-types';
 import {
   Accordion, AccordionDetails, AccordionSummary,
   Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
-  Divider, FormControl, IconButton, InputLabel, ListItemText, MenuItem, OutlinedInput,
-  Paper, Select, Table, TableBody, TableCell,
+  Divider, FormControl, IconButton, InputLabel, LinearProgress, ListItemIcon, ListItemText, Menu, MenuItem, OutlinedInput,
+  Paper, Select, Skeleton, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, TextField, Toolbar, Tooltip, Typography,
-  ToggleButton, ToggleButtonGroup
+  ToggleButton, ToggleButtonGroup,
+  useMediaQuery, useTheme
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import SendIcon from '@mui/icons-material/Send';
@@ -14,11 +15,13 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MonitorIcon from '@mui/icons-material/Assessment';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import NotificationsOffIcon from '@mui/icons-material/NotificationsOff';
 import PeopleIcon from '@mui/icons-material/People';
 import { useHistory } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import Notification from 'dan-components/Notification/Notification';
-import { TableSkeleton } from '../../../components/Skeleton';
+import SectionCard from '../../../components/Jornada/SectionCard';
 import { useConfirm } from '../../../utils/useConfirm';
 
 const resolveApiUrl = () => {
@@ -322,6 +325,10 @@ export default function NotificacoesCampanhasPage() {
   const [editando, setEditando] = useState(null);
   const [saving, setSaving] = useState(false);
   const [disparando, setDisparando] = useState(null);
+  const [rowMenuAnchor, setRowMenuAnchor] = useState(null);
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   // campos do formulário
   const [nome, setNome] = useState('');
@@ -575,18 +582,22 @@ export default function NotificacoesCampanhasPage() {
     if (res.ok) { setNotification('Campanha excluída.'); fetchAll(); } else setNotification('Erro ao excluir.');
   };
 
-  if (loading) return <Box p={2}><TableSkeleton cols={6} /></Box>;
+  const isInitialLoading = loading && campanhas.length === 0;
+  const isRefetching = loading && campanhas.length > 0;
 
   return (
     <div>
       <Helmet><title>Campanhas de Notificação</title></Helmet>
-      <Toolbar sx={{ flexWrap: 'wrap', gap: 1 }}>
+      <Toolbar sx={{ flexWrap: 'wrap', gap: 1, px: { xs: 0, sm: 2 } }}>
         <Typography variant="h6" sx={{ flex: 1 }}>Campanhas</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={abrirCriar}>Nova Campanha</Button>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={abrirCriar} size={isMobile ? 'small' : 'medium'}>
+          Nova Campanha
+        </Button>
       </Toolbar>
 
-      <TableContainer component={Paper}>
-        <Table size="small">
+      {isRefetching && <LinearProgress sx={{ mb: 1, borderRadius: 1 }} />}
+      <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
+        <Table size="small" sx={{ minWidth: 760 }}>
           <TableHead>
             <TableRow>
               <TableCell>Nome</TableCell>
@@ -594,19 +605,38 @@ export default function NotificacoesCampanhasPage() {
               <TableCell>Audiência</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Último envio</TableCell>
-              <TableCell>Ações</TableCell>
+              <TableCell align="right">Ações</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {campanhas.length === 0 && (
-              <TableRow><TableCell colSpan={6} align="center">Nenhuma campanha.</TableCell></TableRow>
+            {isInitialLoading && (
+              Array.from({ length: 6 }).map((_, i) => (
+                <TableRow key={`skel-${i}`}>
+                  {Array.from({ length: 6 }).map((__, j) => (
+                    <TableCell key={j}><Skeleton variant="text" /></TableCell>
+                  ))}
+                </TableRow>
+              ))
+            )}
+            {!loading && campanhas.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
+                  <NotificationsOffIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    Nenhuma campanha cadastrada ainda.
+                  </Typography>
+                  <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={abrirCriar} sx={{ mt: 1 }}>
+                    Criar primeira campanha
+                  </Button>
+                </TableCell>
+              </TableRow>
             )}
             {campanhas.map((c) => {
               const statusCfg = STATUS_CHIP[c.status] || { label: c.status, color: 'default' };
               const isDisparando = disparando === c.id;
               const recLabel = recurrenceLabel(c);
               return (
-                <TableRow key={c.id}>
+                <TableRow key={c.id} hover>
                   <TableCell>
                     <Typography variant="body2">{c.name}</Typography>
                     {recLabel && <Typography variant="caption" color="textSecondary">{recLabel}</Typography>}
@@ -632,23 +662,15 @@ export default function NotificacoesCampanhasPage() {
                       <Typography variant="caption" color="error" display="block">{c.totalFailed} falhas</Typography>
                     )}
                   </TableCell>
-                  <TableCell>
-                    <Box display="flex" gap={0.5}>
-                      {['draft', 'scheduled'].includes(c.status) && (
-                        <>
-                          <Tooltip title="Editar"><IconButton size="small" onClick={() => abrirEditar(c)}><EditIcon /></IconButton></Tooltip>
-                          <Tooltip title="Disparar agora"><IconButton size="small" color="primary" disabled={isDisparando} onClick={() => handleDisparar(c)}><SendIcon /></IconButton></Tooltip>
-                        </>
-                      )}
-                      <Tooltip title="Monitorar">
-                        <IconButton size="small" onClick={() => history.push(`/app/notificacoes/monitor/${c.id}`)}>
-                          <MonitorIcon />
-                        </IconButton>
-                      </Tooltip>
-                      {['draft', 'scheduled'].includes(c.status) && (
-                        <Tooltip title="Excluir"><IconButton size="small" color="error" onClick={() => handleDeletar(c)}><DeleteIcon /></IconButton></Tooltip>
-                      )}
-                    </Box>
+                  <TableCell align="right">
+                    <Tooltip title="Ações">
+                      <IconButton
+                        size="small"
+                        onClick={(e) => setRowMenuAnchor({ anchorEl: e.currentTarget, campanhaId: c.id })}
+                      >
+                        <MoreVertIcon />
+                      </IconButton>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
               );
@@ -657,215 +679,279 @@ export default function NotificacoesCampanhasPage() {
         </Table>
       </TableContainer>
 
+      <Menu
+        anchorEl={rowMenuAnchor?.anchorEl}
+        open={Boolean(rowMenuAnchor)}
+        onClose={() => setRowMenuAnchor(null)}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+      >
+        {(() => {
+          const c = campanhas.find((x) => x.id === rowMenuAnchor?.campanhaId);
+          if (!c) return null;
+          const isDisparando = disparando === c.id;
+          const isEditable = ['draft', 'scheduled'].includes(c.status);
+          const items = [];
+          items.push(
+            <MenuItem key="monitor" onClick={() => { setRowMenuAnchor(null); history.push(`/app/notificacoes/monitor/${c.id}`); }}>
+              <ListItemIcon><MonitorIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Monitorar</ListItemText>
+            </MenuItem>
+          );
+          if (isEditable) {
+            items.push(
+              <MenuItem key="editar" onClick={() => { setRowMenuAnchor(null); abrirEditar(c); }}>
+                <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
+                <ListItemText>Editar</ListItemText>
+              </MenuItem>
+            );
+            items.push(
+              <MenuItem
+                key="disparar"
+                disabled={isDisparando}
+                onClick={() => { setRowMenuAnchor(null); handleDisparar(c); }}
+              >
+                <ListItemIcon><SendIcon fontSize="small" color="primary" /></ListItemIcon>
+                <ListItemText>Disparar agora</ListItemText>
+              </MenuItem>
+            );
+            items.push(<Divider key="div" />);
+            items.push(
+              <MenuItem
+                key="excluir"
+                onClick={() => { setRowMenuAnchor(null); handleDeletar(c); }}
+                sx={{ color: 'error.main' }}
+              >
+                <ListItemIcon><DeleteIcon fontSize="small" sx={{ color: 'error.main' }} /></ListItemIcon>
+                <ListItemText>Excluir</ListItemText>
+              </MenuItem>
+            );
+          }
+          return items;
+        })()}
+      </Menu>
+
       {/* ── Dialog de criação / edição ── */}
       <Dialog open={dialogOpen} onClose={fecharDialog} fullWidth maxWidth="md">
         <DialogTitle>{editando ? 'Editar Campanha' : 'Nova Campanha'}</DialogTitle>
-        <DialogContent dividers>
+        <DialogContent dividers sx={{ bgcolor: 'action.hover' }}>
           <Box display="flex" flexDirection="column" gap={2}>
-            <TextField label="Nome da campanha" value={nome} onChange={(e) => setNome(e.target.value)} fullWidth required />
-            <TextField select label="Canal" value={channel} onChange={(e) => setChannel(e.target.value)}>
-              <MenuItem value="whatsapp">WhatsApp</MenuItem>
-              <MenuItem value="email">E-mail</MenuItem>
-            </TextField>
-
-            {channel === 'whatsapp' && (
-              <TextField
-                select
-                label="Instância Evolution"
-                value={evolutionInstance}
-                onChange={(e) => setEvolutionInstance(e.target.value)}
-                fullWidth
-                helperText="Instância do Evolution API usada para envio. Se vazio, usa a padrão do servidor."
-              >
-                <MenuItem value="">Padrão do servidor</MenuItem>
-                <MenuItem value="IECG">IECG</MenuItem>
-                <MenuItem value="START_IECG">START_IECG</MenuItem>
-              </TextField>
-            )}
-
-            <Divider><Typography variant="caption">Mensagem</Typography></Divider>
-            <TextField select label="Template" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-              <MenuItem value="">Nenhum (usar mensagem personalizada)</MenuItem>
-              {templates.map((t) => <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>)}
-            </TextField>
-            {!templateId && (
-              <TextField
-                label="Mensagem personalizada" value={customMessage}
-                onChange={(e) => setCustomMessage(e.target.value)}
-                fullWidth multiline minRows={4}
-                placeholder="Use {{nome}} para o nome do destinatário"
-              />
-            )}
-
-            <Divider><Typography variant="caption">Audiência</Typography></Divider>
-            <TextField select label="Tipo de audiência" value={audienceType} onChange={handleAudienceTypeChange}>
-              {AUDIENCE_TYPES.map((a) => <MenuItem key={a.value} value={a.value}>{a.label}</MenuItem>)}
-            </TextField>
-
-            {/* Grupo salvo */}
-            {audienceType === 'group' && (
-              <TextField select label="Grupo" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
-                <MenuItem value="">Selecione um grupo</MenuItem>
-                {grupos.map((g) => <MenuItem key={g.id} value={g.id}>{g.name}</MenuItem>)}
-              </TextField>
-            )}
-
-            {/* Envio individual */}
-            {audienceType === 'individual' && (
-              <>
-                <TextField label="Contato (telefone ou e-mail)" value={individualContact} onChange={(e) => setIndividualContact(e.target.value)} fullWidth />
-                <TextField label="Nome" value={individualName} onChange={(e) => setIndividualName(e.target.value)} fullWidth />
-              </>
-            )}
-
-            {/* Filtro rápido — source builder inline */}
-            {audienceType === 'filter' && (
+            <SectionCard title="Identificação">
               <Box display="flex" flexDirection="column" gap={2}>
-                <TextField
-                  select label="Deduplicar contatos por" value={filterDeduplicateBy}
-                  onChange={(e) => setFilterDeduplicateBy(e.target.value)} sx={{ maxWidth: 220 }}
-                >
-                  <MenuItem value="phone">Telefone</MenuItem>
+                <TextField label="Nome da campanha" value={nome} onChange={(e) => setNome(e.target.value)} fullWidth required />
+                <TextField select label="Canal" value={channel} onChange={(e) => setChannel(e.target.value)}>
+                  <MenuItem value="whatsapp">WhatsApp</MenuItem>
                   <MenuItem value="email">E-mail</MenuItem>
                 </TextField>
 
-                {filterSources.map((source, index) => (
-                  <Accordion key={index} defaultExpanded>
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                      <Typography variant="body2" fontWeight={600}>
-                        Source {index + 1}: {SOURCE_TYPES.find((t) => t.value === source.type)?.label || source.type}
-                      </Typography>
-                      {filterSources.length > 1 && (
-                        <IconButton size="small" color="error" sx={{ ml: 'auto' }}
-                          onClick={(e) => { e.stopPropagation(); removerFilterSource(index); }}>
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      )}
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      <Box display="flex" flexDirection="column" gap={2}>
-                        <TextField select label="Tipo" value={source.type}
-                          onChange={(e) => handleSourceChange(index, 'type', e.target.value)}>
-                          {SOURCE_TYPES.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
-                        </TextField>
-                        <TextField select label="Campo de contato" value={source.contactField}
-                          onChange={(e) => handleSourceChange(index, 'contactField', e.target.value)}>
-                          {(CONTACT_FIELDS[source.type] || []).map((cf) => (
-                            <MenuItem key={cf.value} value={cf.value}>{cf.label}</MenuItem>
-                          ))}
-                        </TextField>
-                        <Divider><Typography variant="caption" color="textSecondary">Filtros</Typography></Divider>
-                        <SourceFilters
-                          source={source} index={index}
-                          handleFilterChange={handleFilterChange}
-                          campus={campus} eventos={eventos} areas={areas} ministerios={ministerios}
-                        />
-                        <Typography variant="caption" color="textSecondary">
-                          Deixe os filtros em branco para incluir todos os registros deste source.
-                        </Typography>
-                      </Box>
-                    </AccordionDetails>
-                  </Accordion>
-                ))}
-
-                <Button variant="outlined" startIcon={<AddIcon />} onClick={adicionarFilterSource} sx={{ alignSelf: 'flex-start' }}>
-                  Adicionar source
-                </Button>
-
-                <Box display="flex" alignItems="center" gap={2}>
-                  <Button variant="outlined" startIcon={<PeopleIcon />} onClick={handleFilterPreview} disabled={filterPreviewLoading}>
-                    {filterPreviewLoading ? 'Calculando...' : 'Calcular prévia'}
-                  </Button>
-                  {filterPreviewTotal !== null && (
-                    <Chip label={`${filterPreviewTotal} contato(s) únicos`} color="primary" />
-                  )}
-                </Box>
+                {channel === 'whatsapp' && (
+                  <TextField
+                    select
+                    label="Instância Evolution"
+                    value={evolutionInstance}
+                    onChange={(e) => setEvolutionInstance(e.target.value)}
+                    fullWidth
+                    helperText="Instância do Evolution API usada para envio. Se vazio, usa a padrão do servidor."
+                  >
+                    <MenuItem value="">Padrão do servidor</MenuItem>
+                    <MenuItem value="IECG">IECG</MenuItem>
+                    <MenuItem value="START_IECG">START_IECG</MenuItem>
+                  </TextField>
+                )}
               </Box>
-            )}
+            </SectionCard>
 
-            <Divider><Typography variant="caption">Agendamento e Disparo</Typography></Divider>
+            <SectionCard title="Mensagem">
+              <Box display="flex" flexDirection="column" gap={2}>
+                <TextField select label="Template" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+                  <MenuItem value="">Nenhum (usar mensagem personalizada)</MenuItem>
+                  {templates.map((t) => <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>)}
+                </TextField>
+                {!templateId && (
+                  <TextField
+                    label="Mensagem personalizada" value={customMessage}
+                    onChange={(e) => setCustomMessage(e.target.value)}
+                    fullWidth multiline minRows={4}
+                    placeholder="Use {{nome}} para o nome do destinatário"
+                  />
+                )}
+              </Box>
+            </SectionCard>
 
-            <TextField
-              label="Data e hora do disparo (opcional)"
-              type="datetime-local"
-              value={scheduledAt}
-              onChange={(e) => setScheduledAt(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-              helperText="Deixe em branco para disparar manualmente"
-              size="small"
-            />
+            <SectionCard title="Audiência">
+              <Box display="flex" flexDirection="column" gap={2}>
+                <TextField select label="Tipo de audiência" value={audienceType} onChange={handleAudienceTypeChange}>
+                  {AUDIENCE_TYPES.map((a) => <MenuItem key={a.value} value={a.value}>{a.label}</MenuItem>)}
+                </TextField>
 
-            <TextField
-              label="Intervalo entre envios (segundos)"
-              type="number"
-              value={sendDelaySeconds}
-              onChange={(e) => setSendDelaySeconds(e.target.value)}
-              size="small"
-              inputProps={{ min: 0, step: 0.1 }}
-              helperText="Ex: 0.5 = meio segundo. Use 0 para sem delay (cuidado com bloqueios)."
-              sx={{ maxWidth: 300 }}
-            />
-
-            <TextField
-              select label="Recorrência"
-              value={recurrenceType}
-              onChange={(e) => setRecurrenceType(e.target.value)}
-              sx={{ maxWidth: 260 }}
-            >
-              {RECURRENCE_TYPES.map((r) => <MenuItem key={r.value} value={r.value}>{r.label}</MenuItem>)}
-            </TextField>
-
-            {recurrenceType !== 'once' && (
-              <>
-                <TextField
-                  label="Horário do disparo"
-                  type="time"
-                  value={recurrenceTime}
-                  onChange={(e) => setRecurrenceTime(e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                  size="small"
-                  sx={{ maxWidth: 180 }}
-                />
-
-                {recurrenceType === 'weekly' && (
-                  <Box>
-                    <Typography variant="caption" color="textSecondary" gutterBottom display="block">
-                      Dias da semana
-                    </Typography>
-                    <ToggleButtonGroup
-                      value={recurrenceDays}
-                      onChange={(_, v) => setRecurrenceDays(v)}
-                      size="small"
-                      sx={{ flexWrap: 'wrap', gap: 0.5 }}
-                    >
-                      {DAYS_PT.map((day, i) => (
-                        <ToggleButton key={i} value={i} sx={{ minWidth: 48 }}>{day}</ToggleButton>
-                      ))}
-                    </ToggleButtonGroup>
-                  </Box>
+                {/* Grupo salvo */}
+                {audienceType === 'group' && (
+                  <TextField select label="Grupo" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+                    <MenuItem value="">Selecione um grupo</MenuItem>
+                    {grupos.map((g) => <MenuItem key={g.id} value={g.id}>{g.name}</MenuItem>)}
+                  </TextField>
                 )}
 
-                <Box display="flex" gap={2} flexWrap="wrap">
-                  <TextField
-                    label="Período — início (opcional)"
-                    type="date"
-                    value={recurrencePeriodStart}
-                    onChange={(e) => setRecurrencePeriodStart(e.target.value)}
-                    InputLabelProps={{ shrink: true }}
-                    size="small"
-                  />
-                  <TextField
-                    label="Período — fim (opcional)"
-                    type="date"
-                    value={recurrencePeriodEnd}
-                    onChange={(e) => setRecurrencePeriodEnd(e.target.value)}
-                    InputLabelProps={{ shrink: true }}
-                    size="small"
-                    helperText="Sem data = sem fim"
-                  />
-                </Box>
-              </>
-            )}
+                {/* Envio individual */}
+                {audienceType === 'individual' && (
+                  <>
+                    <TextField label="Contato (telefone ou e-mail)" value={individualContact} onChange={(e) => setIndividualContact(e.target.value)} fullWidth />
+                    <TextField label="Nome" value={individualName} onChange={(e) => setIndividualName(e.target.value)} fullWidth />
+                  </>
+                )}
+
+                {/* Filtro rápido — source builder inline */}
+                {audienceType === 'filter' && (
+                  <Box display="flex" flexDirection="column" gap={2}>
+                    <TextField
+                      select label="Deduplicar contatos por" value={filterDeduplicateBy}
+                      onChange={(e) => setFilterDeduplicateBy(e.target.value)} sx={{ maxWidth: 220 }}
+                    >
+                      <MenuItem value="phone">Telefone</MenuItem>
+                      <MenuItem value="email">E-mail</MenuItem>
+                    </TextField>
+
+                    {filterSources.map((source, index) => (
+                      <Accordion key={index} defaultExpanded>
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                          <Typography variant="body2" fontWeight={600}>
+                        Source {index + 1}: {SOURCE_TYPES.find((t) => t.value === source.type)?.label || source.type}
+                          </Typography>
+                          {filterSources.length > 1 && (
+                            <IconButton size="small" color="error" sx={{ ml: 'auto' }}
+                              onClick={(e) => { e.stopPropagation(); removerFilterSource(index); }}>
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          )}
+                        </AccordionSummary>
+                        <AccordionDetails>
+                          <Box display="flex" flexDirection="column" gap={2}>
+                            <TextField select label="Tipo" value={source.type}
+                              onChange={(e) => handleSourceChange(index, 'type', e.target.value)}>
+                              {SOURCE_TYPES.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
+                            </TextField>
+                            <TextField select label="Campo de contato" value={source.contactField}
+                              onChange={(e) => handleSourceChange(index, 'contactField', e.target.value)}>
+                              {(CONTACT_FIELDS[source.type] || []).map((cf) => (
+                                <MenuItem key={cf.value} value={cf.value}>{cf.label}</MenuItem>
+                              ))}
+                            </TextField>
+                            <Divider><Typography variant="caption" color="textSecondary">Filtros</Typography></Divider>
+                            <SourceFilters
+                              source={source} index={index}
+                              handleFilterChange={handleFilterChange}
+                              campus={campus} eventos={eventos} areas={areas} ministerios={ministerios}
+                            />
+                            <Typography variant="caption" color="textSecondary">
+                          Deixe os filtros em branco para incluir todos os registros deste source.
+                            </Typography>
+                          </Box>
+                        </AccordionDetails>
+                      </Accordion>
+                    ))}
+
+                    <Button variant="outlined" startIcon={<AddIcon />} onClick={adicionarFilterSource} sx={{ alignSelf: 'flex-start' }}>
+                  Adicionar source
+                    </Button>
+
+                    <Box display="flex" alignItems="center" gap={2}>
+                      <Button variant="outlined" startIcon={<PeopleIcon />} onClick={handleFilterPreview} disabled={filterPreviewLoading}>
+                        {filterPreviewLoading ? 'Calculando...' : 'Calcular prévia'}
+                      </Button>
+                      {filterPreviewTotal !== null && (
+                        <Chip label={`${filterPreviewTotal} contato(s) únicos`} color="primary" />
+                      )}
+                    </Box>
+                  </Box>
+                )}
+              </Box>
+            </SectionCard>
+
+            <SectionCard title="Agendamento e Disparo">
+              <Box display="flex" flexDirection="column" gap={2}>
+                <TextField
+                  label="Data e hora do disparo (opcional)"
+                  type="datetime-local"
+                  value={scheduledAt}
+                  onChange={(e) => setScheduledAt(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                  helperText="Deixe em branco para disparar manualmente"
+                  size="small"
+                />
+
+                <TextField
+                  label="Intervalo entre envios (segundos)"
+                  type="number"
+                  value={sendDelaySeconds}
+                  onChange={(e) => setSendDelaySeconds(e.target.value)}
+                  size="small"
+                  inputProps={{ min: 0, step: 0.1 }}
+                  helperText="Ex: 0.5 = meio segundo. Use 0 para sem delay (cuidado com bloqueios)."
+                  sx={{ maxWidth: 300 }}
+                />
+
+                <TextField
+                  select label="Recorrência"
+                  value={recurrenceType}
+                  onChange={(e) => setRecurrenceType(e.target.value)}
+                  sx={{ maxWidth: 260 }}
+                >
+                  {RECURRENCE_TYPES.map((r) => <MenuItem key={r.value} value={r.value}>{r.label}</MenuItem>)}
+                </TextField>
+
+                {recurrenceType !== 'once' && (
+                  <>
+                    <TextField
+                      label="Horário do disparo"
+                      type="time"
+                      value={recurrenceTime}
+                      onChange={(e) => setRecurrenceTime(e.target.value)}
+                      InputLabelProps={{ shrink: true }}
+                      size="small"
+                      sx={{ maxWidth: 180 }}
+                    />
+
+                    {recurrenceType === 'weekly' && (
+                      <Box>
+                        <Typography variant="caption" color="textSecondary" gutterBottom display="block">
+                          Dias da semana
+                        </Typography>
+                        <ToggleButtonGroup
+                          value={recurrenceDays}
+                          onChange={(_, v) => setRecurrenceDays(v)}
+                          size="small"
+                          sx={{ flexWrap: 'wrap', gap: 0.5 }}
+                        >
+                          {DAYS_PT.map((day, i) => (
+                            <ToggleButton key={i} value={i} sx={{ minWidth: 48 }}>{day}</ToggleButton>
+                          ))}
+                        </ToggleButtonGroup>
+                      </Box>
+                    )}
+
+                    <Box display="flex" gap={2} flexWrap="wrap">
+                      <TextField
+                        label="Período — início (opcional)"
+                        type="date"
+                        value={recurrencePeriodStart}
+                        onChange={(e) => setRecurrencePeriodStart(e.target.value)}
+                        InputLabelProps={{ shrink: true }}
+                        size="small"
+                      />
+                      <TextField
+                        label="Período — fim (opcional)"
+                        type="date"
+                        value={recurrencePeriodEnd}
+                        onChange={(e) => setRecurrencePeriodEnd(e.target.value)}
+                        InputLabelProps={{ shrink: true }}
+                        size="small"
+                        helperText="Sem data = sem fim"
+                      />
+                    </Box>
+                  </>
+                )}
+              </Box>
+            </SectionCard>
           </Box>
         </DialogContent>
         <DialogActions>

@@ -11,7 +11,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import SkipNextIcon from '@mui/icons-material/SkipNext';
 import ErrorIcon from '@mui/icons-material/Error';
-import { PapperBlock } from 'dan-components';
+import { PapperBlock, Notification } from 'dan-components';
 import { useLocation } from 'react-router-dom';
 import {
   listarEventos, getImportSetup, previewImport, executeImport
@@ -369,11 +369,10 @@ export default function EventImportPage() {
         ))}
       </Stepper>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
-
       <Paper variant="outlined" sx={{ p: 3 }}>
         {STEP_CONTENT[activeStep]?.()}
       </Paper>
+      <Notification message={error || ''} close={() => setError(null)} type="error" />
     </PapperBlock>
   );
 }

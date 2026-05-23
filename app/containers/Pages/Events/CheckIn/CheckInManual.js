@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import PropTypes from 'prop-types';
 import {
   Card,
   CardContent,
@@ -9,7 +10,6 @@ import {
   CircularProgress,
   Box,
   Chip,
-  Alert,
   FormControl,
   InputLabel,
   Select,
@@ -18,6 +18,7 @@ import {
 import CheckIcon from '@mui/icons-material/CheckCircle';
 import SearchIcon from '@mui/icons-material/Search';
 import PersonIcon from '@mui/icons-material/Person';
+import { Notification } from 'dan-components';
 import { validarCodigo, realizarCheckInManual } from '../../../../api/checkInApi';
 
 function CheckInManual({ eventId }) {
@@ -82,7 +83,7 @@ function CheckInManual({ eventId }) {
         return;
       }
 
-      const registration = resultado.registration;
+      const { registration } = resultado;
       const attendees = Array.isArray(registration?.attendees) ? registration.attendees : [];
 
       if (attendees.length === 0) {
@@ -201,26 +202,12 @@ function CheckInManual({ eventId }) {
               </Button>
             </Box>
 
-            {erro && (
-              <Box mt={2}>
-                <Alert severity="error">{erro}</Alert>
-              </Box>
-            )}
-
-            {sucesso && (
-              <Box mt={2}>
-                <Alert severity="success">{sucesso}</Alert>
-              </Box>
-            )}
-
-            {aviso && (
-              <Box mt={2}>
-                <Alert severity="warning">{aviso}</Alert>
-              </Box>
-            )}
           </CardContent>
         </Card>
       </Grid>
+      <Notification message={erro} close={() => setErro('')} type="error" />
+      <Notification message={sucesso} close={() => setSucesso('')} type="success" />
+      <Notification message={aviso} close={() => setAviso('')} type="warning" />
 
       {inscricao && (
         <Grid item xs={12} md={6}>
@@ -306,5 +293,9 @@ function CheckInManual({ eventId }) {
     </Grid>
   );
 }
+
+CheckInManual.propTypes = {
+  eventId: PropTypes.string.isRequired,
+};
 
 export default CheckInManual;

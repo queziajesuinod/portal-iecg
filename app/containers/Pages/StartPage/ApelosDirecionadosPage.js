@@ -5,15 +5,25 @@ import React, {
   useState
 } from 'react';
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  Badge,
   Box,
   Button,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   Grid,
+  LinearProgress,
+  ListItemIcon,
+  ListItemText,
+  Menu,
   MenuItem,
   Paper,
+  Skeleton,
   Table,
   TableBody,
   TableCell,
@@ -23,13 +33,19 @@ import {
   TextField,
   Tooltip,
   Typography,
-  Pagination
+  Pagination,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import IconButton from '@mui/material/IconButton';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import { Helmet } from 'react-helmet';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import FilterListOffIcon from '@mui/icons-material/FilterListOff';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import HistoryIcon from '@mui/icons-material/History';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
@@ -39,6 +55,7 @@ import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import { PapperBlock, Notification } from 'dan-components';
 import { useHistory } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import JornadaTimeline from '../../../components/Jornada/JornadaTimeline';
 import { formatDateInAppTimezone, formatDateTimeInAppTimezone } from '../../../utils/dateTime';
 import { sendWebhookEvent } from '../../../utils/webhookClient';
 import { fetchGeocode } from '../../../utils/googleGeocode';
@@ -99,11 +116,15 @@ const ApelosDirecionadosPage = () => {
   const [detailBairroTemp, setDetailBairroTemp] = useState('');
   const [detailSaving, setDetailSaving] = useState(false);
   const [detailGeoLoading, setDetailGeoLoading] = useState(false);
+  const [rowMenuAnchor, setRowMenuAnchor] = useState(null);
   const [apeloCoords, setApeloCoords] = useState(null);
   const detailGeoTimerRef = useRef(null);
   const detailGeoRequestRef = useRef(0);
 
   const API_URL = resolveApiUrl();
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const apelosFilters = useMemo(
     () => ({
@@ -165,6 +186,17 @@ const ApelosDirecionadosPage = () => {
     },
   });
   const celulas = celulasQuery.data || [];
+
+  const activeFilterCount = [monthFilter, statusFilter, nomeFilter, decisaoFilter, yearFilter].filter(Boolean).length;
+
+  const clearFilters = () => {
+    setNomeFilter('');
+    setMonthFilter('');
+    setYearFilter(YEAR_OPTIONS[0]);
+    setDecisaoFilter('');
+    setStatusFilter('');
+    setPage(1);
+  };
 
   const redeOptions = useMemo(() => {
     const set = new Set();
@@ -758,106 +790,141 @@ const ApelosDirecionadosPage = () => {
         <title>Apelos Direcionados</title>
       </Helmet>
       <PapperBlock title="Apelos Direcionados" desc="Gerencie apelos direcionados e movimentações">
-        <Box display="flex" justifyContent="space-between" gap={2} flexWrap="wrap" alignItems="center" mb={2}>
-          <Box display="flex" gap={2} flexWrap="wrap" alignItems="center">
-            <TextField
-              label="Nome do apelo"
-              size="small"
-              value={nomeFilter}
-              onChange={(e) => {
-                setNomeFilter(e.target.value);
-                setPage(1);
-              }}
-              sx={{ minWidth: 220 }}
-            />
-            <TextField
-              label="Mês do direcionamento"
-              type="month"
-              size="small"
-              value={monthFilter}
-              onChange={(e) => setMonthFilter(e.target.value)}
-            />
-            <TextField
-              select
-              label="Ano"
-              size="small"
-              value={yearFilter}
-              sx={{ width: 140 }}
-              onChange={(e) => {
-                setYearFilter(e.target.value);
-                setPage(1);
-              }}
-            >
-              {YEAR_OPTIONS.map((year) => (
-                <MenuItem key={year} value={year}>
-                  {year === '' ? 'Todos' : year}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select
-              label="Decisão"
-              size="small"
-              value={decisaoFilter}
-              onChange={(e) => {
-                setDecisaoFilter(e.target.value);
-                setPage(1);
-              }}
-              sx={{ minWidth: 220 }}
-            >
-              <MenuItem value="">Todas</MenuItem>
-              {DECISAO_OPTIONS.map((opt) => (
-                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select
-              label="Status"
-              size="small"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              sx={{ minWidth: 220 }}
-            >
-              <MenuItem value="">Todos</MenuItem>
-              {Object.keys(statusConfig).map((key) => (
-                <MenuItem key={key} value={key}>{statusConfig[key].label}</MenuItem>
-              ))}
-            </TextField>
-          </Box>
-          <Box display="flex" gap={1}>
+        <Box display="flex" gap={1} flexWrap="wrap" alignItems="flex-start" mb={2}>
+          <Accordion defaultExpanded disableGutters sx={{
+            flex: 1, minWidth: 280, boxShadow: 'none', border: 1, borderColor: 'divider', borderRadius: 1, '&:before': { display: 'none' }
+          }}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 44, '& .MuiAccordionSummary-content': { my: 0.75 } }}>
+              <Box display="flex" alignItems="center" gap={1.5}>
+                <Typography variant="subtitle2">Filtros</Typography>
+                {activeFilterCount > 0 && (
+                  <Badge badgeContent={activeFilterCount} color="primary" sx={{ '& .MuiBadge-badge': { position: 'static', transform: 'none' } }} />
+                )}
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails sx={{ pt: 0 }}>
+              <Box display="flex" gap={2} flexWrap="wrap" alignItems="center">
+                <TextField
+                  label="Nome do apelo"
+                  size="small"
+                  value={nomeFilter}
+                  onChange={(e) => {
+                    setNomeFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  sx={{ minWidth: 200 }}
+                />
+                <TextField
+                  label="Mês do direcionamento"
+                  type="month"
+                  size="small"
+                  value={monthFilter}
+                  onChange={(e) => setMonthFilter(e.target.value)}
+                />
+                <TextField
+                  select
+                  label="Ano"
+                  size="small"
+                  value={yearFilter}
+                  sx={{ width: 120 }}
+                  onChange={(e) => {
+                    setYearFilter(e.target.value);
+                    setPage(1);
+                  }}
+                >
+                  {YEAR_OPTIONS.map((year) => (
+                    <MenuItem key={year} value={year}>
+                      {year === '' ? 'Todos' : year}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <TextField
+                  select
+                  label="Decisão"
+                  size="small"
+                  value={decisaoFilter}
+                  onChange={(e) => {
+                    setDecisaoFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  sx={{ minWidth: 200 }}
+                >
+                  <MenuItem value="">Todas</MenuItem>
+                  {DECISAO_OPTIONS.map((opt) => (
+                    <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                  ))}
+                </TextField>
+                <TextField
+                  select
+                  label="Status"
+                  size="small"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  sx={{ minWidth: 200 }}
+                >
+                  <MenuItem value="">Todos</MenuItem>
+                  {Object.keys(statusConfig).map((key) => (
+                    <MenuItem key={key} value={key}>{statusConfig[key].label}</MenuItem>
+                  ))}
+                </TextField>
+                {activeFilterCount > 0 && (
+                  <Button size="small" onClick={clearFilters}>Limpar filtros</Button>
+                )}
+              </Box>
+            </AccordionDetails>
+          </Accordion>
+          <Box display="flex" gap={1} flexShrink={0} flexWrap="wrap" alignItems="center" mt={0.5}>
             <Button variant="contained" color="secondary" onClick={() => history.push('/app/start/fila-apelos')}>
-            Fila de apelos
+              Fila de apelos
             </Button>
             <Button variant="outlined" onClick={() => apelosQuery.refetch()} disabled={loading}>
-            Atualizar
+              Atualizar
             </Button>
           </Box>
         </Box>
-        <TableContainer component={Paper}>
-          <Table size="small">
+        {loading && <LinearProgress sx={{ mb: 1, borderRadius: 1 }} />}
+        <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
+          <Table size="small" sx={{ minWidth: 800 }}>
             <TableHead>
               <TableRow>
                 <TableCell>Nome</TableCell>
                 <TableCell>Decisão</TableCell>
                 <TableCell>Data direcionamento</TableCell>
                 <TableCell>Célula atual</TableCell>
-                <TableCell>Lider</TableCell>
+                <TableCell>Líder</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell align="right">Ações</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {apelos.length === 0 && (
+              {loading && apelos.length === 0 && (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <TableRow key={`skel-${i}`}>
+                    {Array.from({ length: 7 }).map((__, j) => (
+                      <TableCell key={j}><Skeleton variant="text" /></TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              )}
+              {!loading && apelos.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center">
-                    {loading ? 'Carregando...' : 'Nenhum apelo encontrado.'}
+                  <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+                    <FilterListOffIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      Nenhum apelo encontrado com esse filtro.
+                    </Typography>
+                    {activeFilterCount > 0 && (
+                      <Button size="small" onClick={clearFilters} sx={{ mt: 1 }}>
+                        Limpar filtros
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               )}
               {apelos.map((apelo) => {
                 const actionsDisabled = apeloSemDirecionamento(apelo);
                 return (
-                  <TableRow key={apelo.id}>
+                  <TableRow key={apelo.id} hover>
                     <TableCell>
                       <Box display="flex" alignItems="center" gap={0.5}>
                         <span>{apelo.nome}</span>
@@ -880,12 +947,10 @@ const ApelosDirecionadosPage = () => {
                     <TableCell>{renderDecisaoChip(apelo.decisao)}</TableCell>
                     <TableCell>{formatDate(apelo.data_direcionamento)}</TableCell>
                     <TableCell>
-                      <Box display="flex" alignItems="center" gap={1}>
+                      <Box display="flex" alignItems="center" gap={0.5}>
                         <span>{celulaAtualTexto(apelo)}</span>
                         <Tooltip title="Detalhes da célula">
-                          <IconButton size="small" onClick={() => {
-                            abrirDetalheCelula(apelo.celulaAtual);
-                          }}>
+                          <IconButton size="small" sx={{ p: 0.3 }} onClick={() => abrirDetalheCelula(apelo.celulaAtual)}>
                             <InfoOutlinedIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
@@ -894,55 +959,17 @@ const ApelosDirecionadosPage = () => {
                     <TableCell>{apelo?.celulaAtual?.lider || '-'}</TableCell>
                     <TableCell>{renderStatusChip(apelo.status)}</TableCell>
                     <TableCell align="right">
-                      <Box display="flex" gap={1} justifyContent="flex-end">
-                        <Tooltip title="Histórico de movimentações">
+                      <Tooltip title="Ações">
+                        <span>
                           <IconButton
                             size="small"
                             disabled={actionsDisabled}
-                            onClick={() => !actionsDisabled && abrirHistorico(apelo)}
+                            onClick={(e) => setRowMenuAnchor({ anchorEl: e.currentTarget, apeloId: apelo.id })}
                           >
-                            <HistoryIcon fontSize="small" />
+                            <MoreVertIcon fontSize="small" />
                           </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Alterar status">
-                          <IconButton
-                            size="small"
-                            disabled={actionsDisabled}
-                            onClick={() => {
-                              if (actionsDisabled) return;
-                              setApeloSelecionado(apelo);
-                              setNovoStatus(apelo.status || '');
-                              setMotivoStatus('');
-                              setStatusDialogOpen(true);
-                            }}
-                          >
-                            <AutorenewIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Mover para outra célula">
-                          <IconButton
-                            size="small"
-                            disabled={actionsDisabled}
-                            onClick={() => !actionsDisabled && abrirMover(apelo)}
-                          >
-                            <SwapHorizIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        {apelo.celulaAtual?.id && (
-                          <Tooltip title="Notificar líder via WhatsApp para atualizar feedback">
-                            <span>
-                              <IconButton
-                                size="small"
-                                disabled={actionsDisabled || !!notificandoLider[apelo.id]}
-                                onClick={() => !actionsDisabled && notificarLider(apelo)}
-                                sx={{ color: 'success.main' }}
-                              >
-                                <WhatsAppIcon fontSize="small" />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                        )}
-                      </Box>
+                        </span>
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 );
@@ -950,7 +977,56 @@ const ApelosDirecionadosPage = () => {
             </TableBody>
           </Table>
         </TableContainer>
+        <Box mt={2} display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
+          <Typography variant="body2" color="text.secondary">
+            {totalRecords === 0
+              ? 'Nenhum registro'
+              : `Mostrando ${(page - 1) * 10 + 1}–${Math.min(page * 10, totalRecords)} de ${totalRecords} registros`}
+          </Typography>
+          <Pagination
+            count={totalPages}
+            page={page}
+            onChange={(e, value) => setPage(value)}
+            color="primary"
+            size={isMobile ? 'small' : 'medium'}
+          />
+        </Box>
       </PapperBlock>
+
+      <Menu
+        anchorEl={rowMenuAnchor?.anchorEl}
+        open={Boolean(rowMenuAnchor)}
+        onClose={() => setRowMenuAnchor(null)}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+      >
+        {(() => {
+          const apelo = apelos.find((a) => a.id === rowMenuAnchor?.apeloId);
+          return [
+            <MenuItem key="historico" onClick={() => { setRowMenuAnchor(null); if (apelo) abrirHistorico(apelo); }}>
+              <ListItemIcon><HistoryIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Histórico</ListItemText>
+            </MenuItem>,
+            <MenuItem key="status" onClick={() => { setRowMenuAnchor(null); if (apelo) { setApeloSelecionado(apelo); setNovoStatus(apelo.status || ''); setMotivoStatus(''); setStatusDialogOpen(true); } }}>
+              <ListItemIcon><AutorenewIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Alterar status</ListItemText>
+            </MenuItem>,
+            <MenuItem key="mover" onClick={() => { setRowMenuAnchor(null); if (apelo) abrirMover(apelo); }}>
+              <ListItemIcon><SwapHorizIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Mover para outra célula</ListItemText>
+            </MenuItem>,
+            <Divider key="div" />,
+            <MenuItem
+              key="whatsapp"
+              disabled={!apelo?.celulaAtual?.id || !!notificandoLider[apelo?.id]}
+              onClick={() => { setRowMenuAnchor(null); if (apelo && apelo.celulaAtual?.id) notificarLider(apelo); }}
+            >
+              <ListItemIcon><WhatsAppIcon fontSize="small" sx={{ color: 'success.main' }} /></ListItemIcon>
+              <ListItemText>Notificar líder via WhatsApp</ListItemText>
+            </MenuItem>,
+          ];
+        })()}
+      </Menu>
 
       <Dialog open={moveDialogOpen} onClose={() => setMoveDialogOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>Mover apelo</DialogTitle>
@@ -1017,20 +1093,36 @@ const ApelosDirecionadosPage = () => {
               </Typography>
             )}
             <Grid container spacing={1}>
-              {sugestoesFiltradas.map((c) => (
-                <Grid item xs={12} sm={6} key={c.id}>
-                  <Card variant="outlined" sx={{ cursor: 'pointer' }} onClick={() => setCelulaDestinoId(c.id)}>
-                    <CardContent>
-                      <Typography variant="subtitle2">{c.celula}</Typography>
-                      <Typography variant="caption" display="block">Rede: {c.rede}</Typography>
-                      <Typography variant="caption" display="block">Bairro: {c.bairro || '-'}</Typography>
-                      <Typography variant="caption" display="block">Dia: {c.dia || '-'}</Typography>
-                      <Typography variant="caption" display="block">Horário: {c.horario || '-'}</Typography>
-                      <Typography variant="caption" display="block">Distância: {c.distancia ? `${c.distancia.toFixed(1)} km` : '-'}</Typography>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))}
+              {sugestoesFiltradas.map((c) => {
+                const isSelected = celulaDestinoId === c.id;
+                return (
+                  <Grid item xs={12} sm={6} key={c.id}>
+                    <Card
+                      variant="outlined"
+                      sx={{
+                        cursor: 'pointer',
+                        borderColor: isSelected ? 'primary.main' : 'divider',
+                        borderWidth: isSelected ? 2 : 1,
+                        bgcolor: isSelected ? 'action.selected' : 'transparent',
+                        transition: 'border-color 0.15s, background-color 0.15s',
+                      }}
+                      onClick={() => setCelulaDestinoId(c.id)}
+                    >
+                      <CardContent sx={{ pb: '12px !important' }}>
+                        <Box display="flex" alignItems="center" gap={0.5} mb={0.5}>
+                          {isSelected && <CheckCircleIcon fontSize="small" color="primary" />}
+                          <Typography variant="subtitle2">{c.celula}</Typography>
+                        </Box>
+                        <Typography variant="caption" display="block">Rede: {c.rede}</Typography>
+                        <Typography variant="caption" display="block">Bairro: {c.bairro || '-'}</Typography>
+                        <Typography variant="caption" display="block">Dia: {c.dia || '-'}</Typography>
+                        <Typography variant="caption" display="block">Horário: {c.horario || '-'}</Typography>
+                        <Typography variant="caption" display="block">Distância: {c.distancia ? `${c.distancia.toFixed(1)} km` : '-'}</Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                );
+              })}
             </Grid>
             {!loadingSugestoes && limiteSugestoes < totalSugestoesFiltradas && (
               <Box mt={1} display="flex" justifyContent="center">
@@ -1050,22 +1142,38 @@ const ApelosDirecionadosPage = () => {
                   Como não há sugestões próximas, exibimos todas as células da rede (busca não altera esta lista) para que você veja qual está menos longe.
                 </Typography>
                 <Grid container spacing={1}>
-                  {celulasRedeOrdenadas.map((c) => (
-                    <Grid item xs={12} sm={6} key={`rede-${c.id}`}>
-                      <Card variant="outlined" sx={{ cursor: 'pointer' }} onClick={() => setCelulaDestinoId(c.id)}>
-                        <CardContent>
-                          <Typography variant="subtitle2">{c.celula}</Typography>
-                          <Typography variant="caption" display="block">Rede: {c.rede}</Typography>
-                          <Typography variant="caption" display="block">Bairro: {c.bairro || '-'}</Typography>
-                          <Typography variant="caption" display="block">Dia: {c.dia || '-'}</Typography>
-                          <Typography variant="caption" display="block">Horário: {c.horario || '-'}</Typography>
-                          <Typography variant="caption" display="block">
-                        Distância: {c.distancia ? `${c.distancia.toFixed(1)} km` : '-'}
-                          </Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  ))}
+                  {celulasRedeOrdenadas.map((c) => {
+                    const isSelected = celulaDestinoId === c.id;
+                    return (
+                      <Grid item xs={12} sm={6} key={`rede-${c.id}`}>
+                        <Card
+                          variant="outlined"
+                          sx={{
+                            cursor: 'pointer',
+                            borderColor: isSelected ? 'primary.main' : 'divider',
+                            borderWidth: isSelected ? 2 : 1,
+                            bgcolor: isSelected ? 'action.selected' : 'transparent',
+                            transition: 'border-color 0.15s, background-color 0.15s',
+                          }}
+                          onClick={() => setCelulaDestinoId(c.id)}
+                        >
+                          <CardContent sx={{ pb: '12px !important' }}>
+                            <Box display="flex" alignItems="center" gap={0.5} mb={0.5}>
+                              {isSelected && <CheckCircleIcon fontSize="small" color="primary" />}
+                              <Typography variant="subtitle2">{c.celula}</Typography>
+                            </Box>
+                            <Typography variant="caption" display="block">Rede: {c.rede}</Typography>
+                            <Typography variant="caption" display="block">Bairro: {c.bairro || '-'}</Typography>
+                            <Typography variant="caption" display="block">Dia: {c.dia || '-'}</Typography>
+                            <Typography variant="caption" display="block">Horário: {c.horario || '-'}</Typography>
+                            <Typography variant="caption" display="block">
+                              Distância: {c.distancia ? `${c.distancia.toFixed(1)} km` : '-'}
+                            </Typography>
+                          </CardContent>
+                        </Card>
+                      </Grid>
+                    );
+                  })}
                 </Grid>
               </Box>
             )}
@@ -1243,62 +1351,48 @@ const ApelosDirecionadosPage = () => {
         <DialogTitle>Histórico de movimentações</DialogTitle>
         <DialogContent dividers>
           {loadingHistorico ? (
-            <Typography variant="body2">Carregando histórico...</Typography>
-          ) : historicoList.length === 0 ? (
-            <Typography variant="body2" color="textSecondary">Nenhuma movimentação encontrada.</Typography>
+            <Box>
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Box key={i} display="flex" gap={2} mb={2}>
+                  <Skeleton variant="circular" width={12} height={12} sx={{ mt: 0.75, flexShrink: 0 }} />
+                  <Box flex={1}>
+                    <Skeleton variant="text" width="40%" />
+                    <Skeleton variant="text" width="80%" />
+                    <Skeleton variant="text" width="60%" />
+                  </Box>
+                </Box>
+              ))}
+            </Box>
           ) : (
-            <Box position="relative" pl={3} py={1}>
-              <Box
-                position="absolute"
-                top={0}
-                left={10}
-                bottom={0}
-                sx={{ borderLeft: '2px solid #e0e0e0' }}
-              />
-              {historicoList.map((item, idx) => {
+            <JornadaTimeline
+              emptyText="Nenhuma movimentação encontrada."
+              initialCount={20}
+              items={historicoList.map((item, idx) => {
                 const isStatus = item.tipo_evento === 'STATUS' || item.status_anterior || item.status_novo;
                 const dataFmt = formatDateTimeInAppTimezone(item.data_movimento, '-');
-                return (
-                  <Box key={item.id || idx} display="flex" mb={2} position="relative" alignItems="flex-start" gap={2}>
-                    <Box minWidth={120} textAlign="right" pr={2}>
-                      <Typography variant="caption" color="textSecondary">
-                        {dataFmt}
-                      </Typography>
-                    </Box>
-                    <Box
-                      width={14}
-                      height={14}
-                      borderRadius="50%"
-                      bgcolor={isStatus ? 'primary.main' : 'success.main'}
-                      border="2px solid #fff"
-                      boxShadow={2}
-                      position="absolute"
-                      left={-3}
-                      top={6}
-                    />
-                    <Paper variant="outlined" sx={{ p: 1.5, flex: 1 }}>
-                      <Typography variant="subtitle2" fontWeight={600} sx={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
-                        {isStatus ? 'Alteração de status' : 'Movimentação de célula'}
-                      </Typography>
-                      {isStatus ? (
-                        <Box mt={0.5}>
-                          <Typography variant="body2">De: {statusLabel(item.status_anterior)}</Typography>
-                          <Typography variant="body2">Para: {statusLabel(item.status_novo)}</Typography>
-                        </Box>
-                      ) : (
-                        <Box mt={0.5}>
-                          <Typography variant="body2">Origem: {item.celulaOrigem?.celula || '-'}</Typography>
-                          <Typography variant="body2">Destino: {item.celulaDestino?.celula || '-'}</Typography>
-                        </Box>
-                      )}
-                      <Typography variant="body2" mt={0.5}>
-                        Motivo: {item.motivo || '-'}
-                      </Typography>
-                    </Paper>
-                  </Box>
-                );
+                let description;
+                if (isStatus) {
+                  const partes = [];
+                  if (item.status_anterior) partes.push(`De: ${statusLabel(item.status_anterior)}`);
+                  if (item.status_novo) partes.push(`Para: ${statusLabel(item.status_novo)}`);
+                  if (item.motivo) partes.push(`Motivo: ${item.motivo}`);
+                  description = partes.join(' · ');
+                } else {
+                  const partes = [];
+                  partes.push(`Origem: ${item.celulaOrigem?.celula || '-'}`);
+                  partes.push(`Destino: ${item.celulaDestino?.celula || '-'}`);
+                  if (item.motivo) partes.push(`Motivo: ${item.motivo}`);
+                  description = partes.join(' · ');
+                }
+                return {
+                  id: item.id || idx,
+                  date: dataFmt,
+                  title: isStatus ? 'Alteração de status' : 'Movimentação de célula',
+                  description,
+                  type: isStatus ? 'milestone' : 'activity',
+                };
               })}
-            </Box>
+            />
           )}
         </DialogContent>
         <DialogActions>
@@ -1374,16 +1468,6 @@ const ApelosDirecionadosPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
-
-      <Box mt={2} display="flex" justifyContent="space-between" alignItems="center">
-        <Typography variant="body2">Total de registros: {totalRecords}</Typography>
-        <Pagination
-          count={totalPages}
-          page={page}
-          onChange={(e, value) => setPage(value)}
-          color="primary"
-        />
-      </Box>
 
       <Dialog open={celulaDialogOpen} onClose={fecharDetalheCelula} fullWidth maxWidth="sm">
         <DialogTitle>Detalhes da célula</DialogTitle>

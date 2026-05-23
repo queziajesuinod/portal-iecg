@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet';
 import { useHistory, useLocation } from 'react-router-dom';
 import {
-  Alert,
   Avatar,
   Box,
   Button,
@@ -30,7 +29,7 @@ import {
   Tooltip,
   Typography
 } from '@mui/material';
-import { PapperBlock } from 'dan-components';
+import { PapperBlock, Notification } from 'dan-components';
 import {
   Badge,
   Cake,
@@ -43,6 +42,7 @@ import {
   Home,
   LocationOn,
   MoreVert,
+  OpenInNew,
   Phone,
   SwapHoriz
 } from '@mui/icons-material';
@@ -721,17 +721,8 @@ const MembroDetailsPage = () => {
           </Stack>
         </Box>
 
-        {feedback && (
-          <Alert severity="success" sx={{ mb: 2 }} onClose={() => setFeedback('')}>
-            {feedback}
-          </Alert>
-        )}
-
-        {error && (
-          <Alert severity="error" role="alert" sx={{ mb: 2 }} onClose={() => setError('')}>
-            {error}
-          </Alert>
-        )}
+        <Notification message={feedback} close={() => setFeedback('')} />
+        <Notification message={error} close={() => setError('')} type="error" />
 
         {loading && (
           <Grid container spacing={2}>
@@ -832,10 +823,21 @@ const MembroDetailsPage = () => {
                         alt={spouse.fullName}
                         sx={{ width: 56, height: 56 }}
                       />
-                      <Box sx={{ minWidth: 0 }}>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography variant="body1" sx={{ fontWeight: 600 }} noWrap>
                           {spouse.fullName}
                         </Typography>
+                        {spouse.id && (
+                          <Button
+                            size="small"
+                            variant="text"
+                            startIcon={<OpenInNew fontSize="small" />}
+                            onClick={() => history.push(`/app/start/membros/detalhes?id=${spouse.id}`)}
+                            sx={{ mt: 0.5, px: 0.5, textTransform: 'none' }}
+                          >
+                            Ver detalhes
+                          </Button>
+                        )}
                       </Box>
                     </Stack>
                   ) : (

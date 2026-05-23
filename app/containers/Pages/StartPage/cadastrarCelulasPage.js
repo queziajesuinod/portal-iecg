@@ -1,25 +1,39 @@
-import React, { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useHistory, useLocation } from 'react-router-dom';
 import {
+  Autocomplete,
+  Avatar,
   Box,
-  Grid,
-  TextField,
   Button,
-  MenuItem,
-  FormGroup,
-  FormControlLabel,
-  Checkbox,
-  Paper,
-  Typography,
-  Divider,
   Chip,
+  Divider,
+  Grid,
+  InputAdornment,
   LinearProgress,
-  useTheme,
-  Stack
+  MenuItem,
+  Paper,
+  Stack,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
+  Typography,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import PropTypes from 'prop-types';
+import GroupsIcon from '@mui/icons-material/Groups';
+import PlaceIcon from '@mui/icons-material/Place';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import HomeIcon from '@mui/icons-material/Home';
+import LocationSearchingIcon from '@mui/icons-material/LocationSearching';
+import SearchIcon from '@mui/icons-material/Search';
+import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
+import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
+import SectionCard from '../../../components/Jornada/SectionCard';
 import { formatPhoneNumber } from '../../../utils/formatPhone';
 import { fetchGeocode } from '../../../utils/googleGeocode';
 
@@ -61,60 +75,152 @@ const REDE_OPTIONS = [
 ];
 
 const DIAS_SEMANA = [
-  { value: 'Segunda', disabled: false },
-  { value: 'Terça', disabled: false },
-  { value: 'Quarta', disabled: true },
-  { value: 'Quinta', disabled: false },
-  { value: 'Sexta', disabled: false },
-  { value: 'Sábado', disabled: false },
-  { value: 'Domingo', disabled: true }
+  { value: 'Segunda', short: 'Seg', disabled: false },
+  { value: 'Terça', short: 'Ter', disabled: false },
+  { value: 'Quarta', short: 'Qua', disabled: true },
+  { value: 'Quinta', short: 'Qui', disabled: false },
+  { value: 'Sexta', short: 'Sex', disabled: false },
+  { value: 'Sábado', short: 'Sáb', disabled: false },
+  { value: 'Domingo', short: 'Dom', disabled: true }
 ];
 
-const SummaryPane = ({ formData, diasSelecionados, loading }) => (
-  <Paper
-    elevation={3}
-    sx={{
-      p: 3,
-      borderRadius: 3,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 2,
-      minHeight: 320
-    }}
-  >
-    <Typography variant="subtitle1" fontWeight={600}>
-      Resumo da Célula
-    </Typography>
-    <Divider />
-    <Typography variant="body2">
-      <strong>Líder:</strong> {formData.lider || '---'}
-    </Typography>
-    <Typography variant="body2">
-      <strong>Rede:</strong> {formData.rede || '---'}
-    </Typography>
-    <Typography variant="body2">
-      <strong>Campus:</strong> {formData.campus || '---'}
-    </Typography>
-    <Typography variant="body2" color="textSecondary">
-      <strong>Endereço:</strong> {formData.endereco || '---'} {formData.numero && `, ${formData.numero}`}
-    </Typography>
-    <Box display="flex" gap={1} flexWrap="wrap">
-      {diasSelecionados.length ? diasSelecionados.map((dia) => (
-        <Chip key={dia} label={dia} size="small" />
-      )) : <Typography variant="caption">Selecione ao menos um dia</Typography>}
-    </Box>
-    <Box>
-      <Typography variant="body2">Lat: {formData.lat || '---'}</Typography>
-      <Typography variant="body2">Lon: {formData.lon || '---'}</Typography>
-    </Box>
-    {loading && <Typography variant="caption" color="textSecondary">Salvando...</Typography>}
-  </Paper>
-);
+const stringToInitials = (text = '') => text
+  .trim()
+  .split(/\s+/)
+  .slice(0, 2)
+  .map((part) => part.charAt(0).toUpperCase())
+  .join('') || '?';
+
+const stringToColor = (text = '') => {
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = (text.charCodeAt(i) + hash * 31) % 360000;
+  }
+  const hue = hash % 360;
+  return `hsl(${hue}, 55%, 45%)`;
+};
+
+const SummaryPane = ({
+  formData, diasSelecionados, loading, isEdit
+}) => {
+  const leaderName = formData.lider || '';
+  const leaderColor = stringToColor(leaderName || 'celula');
+  const hasCoords = Boolean(formData.lat && formData.lon);
+
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: 3,
+        borderRadius: 3,
+        border: 1,
+        borderColor: 'divider',
+        position: { md: 'sticky' },
+        top: { md: 24 },
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 2
+      }}
+    >
+      <Stack direction="row" spacing={2} alignItems="center">
+        <Avatar
+          sx={{
+            width: 56,
+            height: 56,
+            bgcolor: leaderColor,
+            fontWeight: 700,
+            fontSize: '1.2rem'
+          }}
+        >
+          {stringToInitials(leaderName)}
+        </Avatar>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1 }}>
+            {isEdit ? 'Editando' : 'Nova célula'}
+          </Typography>
+          <Typography variant="h6" noWrap sx={{ fontWeight: 700 }}>
+            {formData.celula || 'Sem nome ainda'}
+          </Typography>
+        </Box>
+      </Stack>
+
+      <Divider />
+
+      <Stack spacing={1.25}>
+        <Box>
+          <Typography variant="caption" color="text.secondary">Líder</Typography>
+          <Typography variant="body2" fontWeight={600}>{leaderName || '—'}</Typography>
+        </Box>
+        <Box>
+          <Typography variant="caption" color="text.secondary">Rede</Typography>
+          <Typography variant="body2">{formData.rede || '—'}</Typography>
+        </Box>
+        <Box>
+          <Typography variant="caption" color="text.secondary">Campus</Typography>
+          <Typography variant="body2">{formData.campus || '—'}</Typography>
+        </Box>
+        <Box>
+          <Typography variant="caption" color="text.secondary">Endereço</Typography>
+          <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
+            {formData.endereco
+              ? `${formData.endereco}${formData.numero ? `, ${formData.numero}` : ''}${formData.bairro ? ` — ${formData.bairro}` : ''}`
+              : '—'}
+          </Typography>
+        </Box>
+      </Stack>
+
+      <Box>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+          Dias da semana
+        </Typography>
+        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+          {diasSelecionados.length
+            ? diasSelecionados.map((dia) => <Chip key={dia} label={dia} size="small" color="primary" />)
+            : <Typography variant="caption" color="text.disabled">Nenhum dia selecionado</Typography>}
+        </Stack>
+      </Box>
+
+      {formData.horario && (
+        <Box>
+          <Typography variant="caption" color="text.secondary">Horário</Typography>
+          <Typography variant="body2" fontWeight={600}>{formData.horario}</Typography>
+        </Box>
+      )}
+
+      <Box
+        sx={{
+          mt: 'auto',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          p: 1.25,
+          borderRadius: 2,
+          bgcolor: hasCoords ? 'success.50' : 'action.hover',
+          border: 1,
+          borderColor: hasCoords ? 'success.light' : 'divider'
+        }}
+      >
+        <CheckCircleRoundedIcon
+          fontSize="small"
+          sx={{ color: hasCoords ? 'success.main' : 'text.disabled' }}
+        />
+        <Typography variant="caption" color={hasCoords ? 'success.main' : 'text.secondary'}>
+          {hasCoords
+            ? `Geolocalização: ${Number(formData.lat).toFixed(4)}, ${Number(formData.lon).toFixed(4)}`
+            : 'Geolocalização pendente'}
+        </Typography>
+      </Box>
+
+      {loading && <LinearProgress sx={{ borderRadius: 1 }} />}
+    </Paper>
+  );
+};
 
 SummaryPane.propTypes = {
   formData: PropTypes.object.isRequired,
   diasSelecionados: PropTypes.array.isRequired,
-  loading: PropTypes.bool.isRequired
+  loading: PropTypes.bool.isRequired,
+  isEdit: PropTypes.bool.isRequired
 };
 
 const resolveApiUrl = () => {
@@ -135,13 +241,15 @@ const CadastrarCelula = () => {
   const [membros, setMembros] = useState([]);
   const [diasSelecionados, setDiasSelecionados] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [geoLoading] = useState(false);
+  const [geoLoading, setGeoLoading] = useState(false);
   const [leaderSearchLoading, setLeaderSearchLoading] = useState(false);
   const [leaderSearchResult, setLeaderSearchResult] = useState(null);
   const location = useLocation();
+  const history = useHistory();
   const celulaEditando = location.state?.celula;
   const isEdit = Boolean(celulaEditando);
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const API_URL = resolveApiUrl();
 
   const formatHorarioInput = (valor = '') => {
@@ -209,6 +317,11 @@ const CadastrarCelula = () => {
     carregarDadosBase();
   }, [API_URL]);
 
+  const selectedMemberLeader = useMemo(
+    () => membros.find((m) => m.id === formData.liderMemberId) || null,
+    [membros, formData.liderMemberId]
+  );
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     let nextValue = value;
@@ -225,11 +338,10 @@ const CadastrarCelula = () => {
     setLeaderSearchResult(null);
   };
 
-  const handleMemberLeaderChange = (memberId) => {
-    const member = membros.find((item) => item.id === memberId);
+  const handleMemberLeaderChange = (member) => {
     setFormData((prev) => ({
       ...prev,
-      liderMemberId: memberId || '',
+      liderMemberId: member ? member.id : '',
       lider: member ? (member.fullName || '') : prev.lider,
       email_lider: member ? (member.email || '') : prev.email_lider,
       cel_lider: member
@@ -259,24 +371,19 @@ const CadastrarCelula = () => {
         })
       });
     } catch (error) {
-      console.error('Erro ao garantir registro do l?der:', error);
+      console.error('Erro ao garantir registro do líder:', error);
     }
   };
 
-  const handleDiaToggle = (dia) => {
-    setDiasSelecionados((prev) => {
-      if (prev.includes(dia)) {
-        return prev.filter((d) => d !== dia);
-      }
-      return [...prev, dia];
-    });
+  const handleDiaToggle = (_evt, novosDias) => {
+    setDiasSelecionados(novosDias);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!formData.celula || !formData.lider || !formData.email_lider) {
-      setNotification('Preencha os campos obrigatórios: Nome da Célula, Líder e Email do Líder.');
+      setNotification('Preencha os campos obrigatórios: Nome da Célula, Líder e E-mail do Líder.');
       return;
     }
 
@@ -376,14 +483,15 @@ const CadastrarCelula = () => {
     } = formData;
     const queryParts = [endereco, numero, bairro, cidade, estado, cep].filter(Boolean);
     if (!queryParts.length) {
-      setNotification('Informe endere�o, n�mero, bairro, cidade, estado ou CEP para buscar coordenadas.');
+      setNotification('Informe endereço, número, bairro, cidade, estado ou CEP para buscar coordenadas.');
       return;
     }
 
+    setGeoLoading(true);
     try {
       const geocodeResult = await fetchGeocode(queryParts.join(' '));
       if (!geocodeResult) {
-        setNotification('Nenhum resultado encontrado para esse endere�o.');
+        setNotification('Nenhum resultado encontrado para esse endereço.');
         return;
       }
       setFormData((prev) => ({
@@ -401,6 +509,8 @@ const CadastrarCelula = () => {
     } catch (error) {
       console.error('Erro ao buscar coordenadas:', error);
       setNotification('Erro ao buscar coordenadas.');
+    } finally {
+      setGeoLoading(false);
     }
   };
 
@@ -409,220 +519,278 @@ const CadastrarCelula = () => {
       <Helmet>
         <title>{isEdit ? 'Editar Célula' : 'Cadastrar Célula'}</title>
       </Helmet>
-      <PapperBlock title={isEdit ? 'Editar Célula' : 'Cadastro de Célula'} desc="Preencha os dados abaixo">
-        {loading && <LinearProgress sx={{ mb: 2 }} />}
+      <PapperBlock
+        title={isEdit ? 'Editar Célula' : 'Cadastro de Célula'}
+        desc="Preencha os dados para registrar uma nova célula. Campos com * são obrigatórios."
+      >
+        {(loading || geoLoading) && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
         <form onSubmit={handleSubmit}>
           <Grid container spacing={3}>
             <Grid item xs={12} md={8}>
-              <Paper elevation={3} sx={{ p: 3, borderRadius: 3, background: theme.palette.background.paper }}>
-                <Grid container spacing={2}>
-                  <Grid item xs={12}>
-                    <Typography variant="h6" gutterBottom>
-                      Identidade & Liderança
-                    </Typography>
-                    <Divider sx={{ mb: 2 }} />
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField fullWidth label="Nome da Célula" name="celula" value={formData.celula} onChange={handleChange} required />
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField
-                      select
-                      fullWidth
-                      label="Rede"
-                      name="rede"
-                      value={formData.rede}
-                      onChange={handleChange}
-                    >
-                      {REDE_OPTIONS.map((opt) => (
-                        <MenuItem key={opt} value={opt}>{opt}</MenuItem>
-                      ))}
-                    </TextField>
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField
-                      select
-                      fullWidth
-                      label="Membro lider"
-                      name="liderMemberId"
-                      value={formData.liderMemberId || ''}
-                      onChange={(e) => handleMemberLeaderChange(e.target.value)}
-                    >
-                      <MenuItem value="">Nenhum</MenuItem>
-                      {membros.map((member) => (
-                        <MenuItem key={member.id} value={member.id}>
-                          {member.fullName}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField fullWidth label="Líder" name="lider" value={formData.lider} onChange={handleChange} />
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField
-                      fullWidth
-                      label="Email do Líder"
-                      name="email_lider"
-                      value={formData.email_lider}
-                      onChange={(e) => { handleChange(e); clearLeaderSearch(); }}
-                    />
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField
-                      fullWidth
-                      label="Celular do Líder"
-                      name="cel_lider"
-                      value={formData.cel_lider}
-                      onChange={(e) => { handleChange(e); clearLeaderSearch(); }}
-                    />
-                  </Grid>
-                  <Grid item xs={12}>
-                    <Stack direction="row" spacing={2} alignItems="center">
-                      <Button
-                        variant="outlined"
-                        color="primary"
-                        onClick={handleLeaderSearch}
-                        disabled={leaderSearchLoading}
+              <Stack spacing={3}>
+                <SectionCard
+                  title="Identidade e Liderança"
+                  icon={<GroupsIcon color="primary" fontSize="small" />}
+                >
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={6}>
+                      <TextField fullWidth size="small" label="Nome da Célula *" name="celula" value={formData.celula} onChange={handleChange} required />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        select
+                        fullWidth
+                        size="small"
+                        label="Rede"
+                        name="rede"
+                        value={formData.rede}
+                        onChange={handleChange}
                       >
-                        {leaderSearchLoading ? 'Buscando líder...' : 'Buscar líder por contato'}
-                      </Button>
-                      {leaderSearchResult ? (
-                        <Typography variant="body2" color="primary">
-                          {leaderSearchResult.name} encontrado (#{leaderSearchResult.id})
-                        </Typography>
-                      ) : (
-                        <Typography variant="body2" color="textSecondary">
-                          Informe e-mail ou telefone e clique em Buscar.
-                        </Typography>
-                      )}
-                    </Stack>
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField fullWidth label="Anfitrião" name="anfitriao" value={formData.anfitriao} onChange={handleChange} />
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField
-                      select
-                      fullWidth
-                      label="Campus"
-                      name="campus"
-                      value={formData.campus}
-                      onChange={handleChange}
-                    >
-                      {campi.map((campus) => (
-                        <MenuItem key={campus.id} value={campus.nome}>
-                          {campus.nome}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  </Grid>
-                  <Grid item xs={12}>
-                    <Typography variant="h6" gutterBottom>
-                      Localização
-                    </Typography>
-                    <Divider sx={{ mb: 2 }} />
-                  </Grid>
-                  <Grid item xs={12} container spacing={1}>
-                    <Grid item xs={9}>
+                        <MenuItem value="">Nenhuma</MenuItem>
+                        {REDE_OPTIONS.map((opt) => (
+                          <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                        ))}
+                      </TextField>
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Autocomplete
+                        options={membros}
+                        getOptionLabel={(option) => option?.fullName || ''}
+                        isOptionEqualToValue={(option, value) => option?.id === value?.id}
+                        value={selectedMemberLeader}
+                        onChange={(_evt, value) => handleMemberLeaderChange(value)}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            size="small"
+                            label="Membro líder (opcional — preenche os campos automaticamente)"
+                            helperText="Selecione um membro cadastrado ou preencha manualmente abaixo."
+                          />
+                        )}
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <TextField fullWidth size="small" label="Nome do Líder *" name="lider" value={formData.lider} onChange={handleChange} required />
+                    </Grid>
+                    <Grid item xs={12} md={4}>
                       <TextField
                         fullWidth
+                        size="small"
+                        label="E-mail do Líder *"
+                        name="email_lider"
+                        value={formData.email_lider}
+                        onChange={(e) => { handleChange(e); clearLeaderSearch(); }}
+                        required
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        label="Celular do Líder"
+                        name="cel_lider"
+                        value={formData.cel_lider}
+                        onChange={(e) => { handleChange(e); clearLeaderSearch(); }}
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
+                        <Button
+                          variant="outlined"
+                          color="primary"
+                          size="small"
+                          startIcon={<SearchIcon />}
+                          onClick={handleLeaderSearch}
+                          disabled={leaderSearchLoading}
+                        >
+                          {leaderSearchLoading ? 'Buscando…' : 'Buscar líder por contato'}
+                        </Button>
+                        {leaderSearchResult ? (
+                          <Chip
+                            size="small"
+                            icon={<CheckCircleRoundedIcon />}
+                            color="success"
+                            label={`${leaderSearchResult.name} encontrado (#${leaderSearchResult.id})`}
+                          />
+                        ) : (
+                          <Typography variant="caption" color="text.secondary">
+                            Informe e-mail ou telefone e clique em Buscar para localizar um líder existente.
+                          </Typography>
+                        )}
+                      </Stack>
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <TextField fullWidth size="small" label="Anfitrião" name="anfitriao" value={formData.anfitriao} onChange={handleChange} />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        select
+                        fullWidth
+                        size="small"
+                        label="Campus"
+                        name="campus"
+                        value={formData.campus}
+                        onChange={handleChange}
+                      >
+                        <MenuItem value="">Selecione…</MenuItem>
+                        {campi.map((campus) => (
+                          <MenuItem key={campus.id} value={campus.nome}>
+                            {campus.nome}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    </Grid>
+                  </Grid>
+                </SectionCard>
+
+                <SectionCard
+                  title="Localização"
+                  icon={<PlaceIcon color="primary" fontSize="small" />}
+                  action={(
+                    <Tooltip title="Preenche cidade, bairro e coordenadas a partir do endereço informado">
+                      <span>
+                        <Button
+                          variant="contained"
+                          color="primary"
+                          size="small"
+                          startIcon={<LocationSearchingIcon />}
+                          onClick={buscarCoordenadas}
+                          disabled={geoLoading}
+                        >
+                          {geoLoading ? 'Buscando…' : 'Buscar coordenadas'}
+                        </Button>
+                      </span>
+                    </Tooltip>
+                  )}
+                >
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={8}>
+                      <TextField
+                        fullWidth
+                        size="small"
                         label="Endereço"
                         name="endereco"
                         value={formData.endereco}
                         onChange={handleChange}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <HomeIcon fontSize="small" color="action" />
+                            </InputAdornment>
+                          )
+                        }}
                       />
                     </Grid>
-                    <Grid item xs={3}>
-                      <Button
-                        variant="outlined"
-                        color="primary"
-                        fullWidth
-                        onClick={buscarCoordenadas}
-                        style={{ height: '100%' }}
-                      >
-                        Buscar coordenadas
-                      </Button>
+                    <Grid item xs={6} md={2}>
+                      <TextField fullWidth size="small" label="Número" name="numero" value={formData.numero} onChange={handleChange} />
+                    </Grid>
+                    <Grid item xs={6} md={2}>
+                      <TextField fullWidth size="small" label="CEP" name="cep" value={formData.cep} onChange={handleChange} />
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <TextField fullWidth size="small" label="Bairro" name="bairro" value={formData.bairro} onChange={handleChange} />
+                    </Grid>
+                    <Grid item xs={8} md={6}>
+                      <TextField fullWidth size="small" label="Cidade" name="cidade" value={formData.cidade} onChange={handleChange} />
+                    </Grid>
+                    <Grid item xs={4} md={2}>
+                      <TextField fullWidth size="small" label="Estado" name="estado" value={formData.estado} onChange={handleChange} />
                     </Grid>
                   </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField fullWidth label="Número da casa" name="numero" value={formData.numero} onChange={handleChange} />
+                </SectionCard>
+
+                <SectionCard
+                  title="Cronograma e Hierarquia"
+                  icon={<AccessTimeIcon color="primary" fontSize="small" />}
+                >
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={4}>
+                      <TextField fullWidth size="small" label="Liderança" name="lideranca" value={formData.lideranca} onChange={handleChange} />
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <TextField fullWidth size="small" label="Pastor de Geração" name="pastor_geracao" value={formData.pastor_geracao} onChange={handleChange} />
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <TextField fullWidth size="small" label="Pastor do Campus" name="pastor_campus" value={formData.pastor_campus} onChange={handleChange} />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+                        Dias da semana
+                      </Typography>
+                      <ToggleButtonGroup
+                        value={diasSelecionados}
+                        onChange={handleDiaToggle}
+                        size="small"
+                        color="primary"
+                        sx={{ flexWrap: 'wrap', gap: 0.5, '& .MuiToggleButton-root': { borderRadius: 2, px: 1.5 } }}
+                      >
+                        {DIAS_SEMANA.map((dia) => (
+                          <ToggleButton
+                            key={dia.value}
+                            value={dia.value}
+                            disabled={dia.disabled}
+                          >
+                            {isMobile ? dia.short : dia.value}
+                          </ToggleButton>
+                        ))}
+                      </ToggleButtonGroup>
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        label="Horário"
+                        name="horario"
+                        type="time"
+                        value={formData.horario || ''}
+                        onChange={handleChange}
+                        InputLabelProps={{ shrink: true }}
+                        inputProps={{ step: 300 }}
+                      />
+                    </Grid>
                   </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField fullWidth label="CEP" name="cep" value={formData.cep} onChange={handleChange} />
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField fullWidth label="Bairro" name="bairro" value={formData.bairro} onChange={handleChange} />
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField fullWidth label="Cidade" name="cidade" value={formData.cidade} onChange={handleChange} />
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField fullWidth label="Estado" name="estado" value={formData.estado} onChange={handleChange} />
-                  </Grid>
-                  <Grid item xs={12}>
-                    <Typography variant="h6" gutterBottom>
-                      Liderança & horários
-                    </Typography>
-                    <Divider sx={{ mb: 2 }} />
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <TextField fullWidth label="Liderança" name="lideranca" value={formData.lideranca} onChange={handleChange} />
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <TextField fullWidth label="Pastor de Geração" name="pastor_geracao" value={formData.pastor_geracao} onChange={handleChange} />
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <TextField fullWidth label="Pastor do Campus" name="pastor_campus" value={formData.pastor_campus} onChange={handleChange} />
-                  </Grid>
-                  <Grid item xs={12}>
-                    <Typography variant="subtitle2" fontWeight={600} mb={1}>
-                      Dias da semana
-                    </Typography>
-                    <FormGroup row>
-                      {DIAS_SEMANA.map((dia) => (
-                        <FormControlLabel
-                          key={dia.value}
-                          control={(
-                            <Checkbox
-                              checked={diasSelecionados.includes(dia.value)}
-                              onChange={() => !dia.disabled && handleDiaToggle(dia.value)}
-                              disabled={dia.disabled}
-                            />
-                          )}
-                          label={dia.value}
-                        />
-                      ))}
-                    </FormGroup>
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField
-                      fullWidth
-                      label="Horário"
-                      name="horario"
-                      type="time"
-                      value={formData.horario || ''}
-                      onChange={handleChange}
-                      InputLabelProps={{ shrink: true }}
-                      inputProps={{ step: 300 }}
-                    />
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <FormControlLabel
-                      control={<Checkbox checked={diasSelecionados.length > 0} disabled />}
-                      label="Dias selecionados"
-                    />
-                  </Grid>
-                  <Grid item xs={12}>
-                    <Button type="submit" variant="contained" color="primary" fullWidth>
-                      {isEdit ? 'Atualizar Célula' : 'Cadastrar Célula'}
-                    </Button>
-                  </Grid>
-                </Grid>
-              </Paper>
+                </SectionCard>
+
+                <Box
+                  sx={{
+                    display: 'flex',
+                    flexDirection: { xs: 'column-reverse', sm: 'row' },
+                    gap: 1.5,
+                    justifyContent: 'flex-end',
+                    pt: 1
+                  }}
+                >
+                  <Button
+                    variant="outlined"
+                    color="inherit"
+                    startIcon={<ArrowBackIcon />}
+                    onClick={() => history.push('/app/start/celulas')}
+                    disabled={loading}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    color="primary"
+                    size="large"
+                    startIcon={<SaveRoundedIcon />}
+                    disabled={loading}
+                    sx={{ minWidth: 220 }}
+                  >
+                    {loading ? 'Salvando…' : (isEdit ? 'Atualizar Célula' : 'Cadastrar Célula')}
+                  </Button>
+                </Box>
+              </Stack>
             </Grid>
+
             <Grid item xs={12} md={4}>
-              <SummaryPane formData={formData} diasSelecionados={diasSelecionados} loading={loading || geoLoading} />
+              <SummaryPane
+                formData={formData}
+                diasSelecionados={diasSelecionados}
+                loading={loading || geoLoading}
+                isEdit={isEdit}
+              />
             </Grid>
           </Grid>
         </form>
