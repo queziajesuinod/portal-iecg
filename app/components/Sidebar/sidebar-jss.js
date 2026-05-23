@@ -47,6 +47,19 @@ const useStyles = makeStyles()((theme, _params, classes) => ({
       width: 40,
       height: 40,
     },
+    // Hide labels/badges/titles/chevrons when sidebar is collapsed
+    [`& .${classes.primary}`]: {
+      display: 'none',
+    },
+    [`& .${classes.badge}`]: {
+      display: 'none',
+    },
+    [`& .${classes.title}`]: {
+      display: 'none',
+    },
+    [`& .${classes.head} > span:last-of-type`]: {
+      display: 'none',
+    },
     '& nav': {
       display: 'none'
     },
@@ -55,7 +68,19 @@ const useStyles = makeStyles()((theme, _params, classes) => ({
       boxShadow: theme.shadows[6],
       '& nav': {
         display: 'block'
-      }
+      },
+      [`& .${classes.primary}`]: {
+        display: 'block',
+      },
+      [`& .${classes.badge}`]: {
+        display: 'inline-flex',
+      },
+      [`& .${classes.title}`]: {
+        display: 'block',
+      },
+      [`& .${classes.head} > span:last-of-type`]: {
+        display: 'inline-block',
+      },
     },
     [`& .${classes.brand}`]: {
       display: 'none'

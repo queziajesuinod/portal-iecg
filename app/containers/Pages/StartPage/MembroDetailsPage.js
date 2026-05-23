@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet';
 import { useHistory, useLocation } from 'react-router-dom';
 import {
+  Alert,
   Avatar,
   Box,
   Button,
@@ -18,8 +19,10 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  Menu,
   MenuItem,
   Paper,
+  Skeleton,
   Stack,
   Tab,
   Tabs,
@@ -31,14 +34,20 @@ import { PapperBlock } from 'dan-components';
 import {
   Badge,
   Cake,
+  Category,
   DeleteOutline,
   Email,
+  EmojiEvents,
+  EventNote,
   Favorite,
   Home,
   LocationOn,
+  MoreVert,
   Phone,
   SwapHoriz
 } from '@mui/icons-material';
+import SectionCard from '../../../components/Jornada/SectionCard';
+import JornadaTimeline from '../../../components/Jornada/JornadaTimeline';
 import { formatDateInAppTimezone, formatDateTimeInAppTimezone } from '../../../utils/dateTime';
 import { useConfirm } from '../../../utils/useConfirm';
 import {
@@ -184,6 +193,13 @@ const MembroDetailsPage = () => {
   const [error, setError] = useState('');
   const [journeyDialogOpen, setJourneyDialogOpen] = useState(false);
   const [activityTypeDialogOpen, setActivityTypeDialogOpen] = useState(false);
+  const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
+  const [showAllVinculos, setShowAllVinculos] = useState(false);
+
+  const runAndCloseActionMenu = (action) => () => {
+    setActionMenuAnchor(null);
+    action();
+  };
   const [journeyTab, setJourneyTab] = useState(0);
   const [editingActivityType, setEditingActivityType] = useState(null);
   const [activityTypeForm, setActivityTypeForm] = useState(emptyActivityTypeForm);
@@ -258,14 +274,16 @@ const MembroDetailsPage = () => {
   const activities = Array.isArray(member?.activities) ? member.activities : [];
   const milestones = Array.isArray(member?.milestones) ? member.milestones : [];
   const journeyIndicators = member?.journey?.engagementIndicators || {};
-  const visibleMilestones = useMemo(
-    () => [...milestones]
-      .sort((a, b) => {
-        const aDate = new Date(a?.achievedDate || a?.createdAt || 0).getTime();
-        const bDate = new Date(b?.achievedDate || b?.createdAt || 0).getTime();
-        return aDate - bDate;
-      })
-      .slice(0, 8),
+  const sortedActivities = useMemo(
+    () => [...activities].sort((a, b) => new Date(b?.activityDate || 0) - new Date(a?.activityDate || 0)),
+    [activities]
+  );
+  const sortedMilestones = useMemo(
+    () => [...milestones].sort((a, b) => {
+      const aDate = new Date(a?.achievedDate || a?.createdAt || 0).getTime();
+      const bDate = new Date(b?.achievedDate || b?.createdAt || 0).getTime();
+      return aDate - bDate;
+    }),
     [milestones]
   );
   const liderancaCelulas = Array.isArray(member?.liderancaCelulas) ? member.liderancaCelulas : [];
@@ -602,60 +620,163 @@ const MembroDetailsPage = () => {
           <title>Detalhes do Membro</title>
         </Helmet>
 
-        <Box display="flex" justifyContent="space-between" mb={2} gap={1} flexWrap="wrap">
+        <Box display="flex" justifyContent="space-between" mb={2} gap={1} flexWrap="wrap" alignItems="center">
           <Button variant="outlined" onClick={() => history.push('/app/start/membros')}>
-          Voltar
+            Voltar
           </Button>
-          <Stack direction="row" spacing={1}>
-            <Button variant="outlined" onClick={handleOpenActivityTypesDialog}>
-            Cadastros atividade/marco
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Button
+              variant="contained"
+              onClick={() => openJourneyDialog(2)}
+              disabled={!member}
+            >
+              Atualizar jornada
             </Button>
-            <Button variant="outlined" onClick={() => openJourneyDialog(0)} disabled={!member}>
-            Registrar atividade
-            </Button>
-            <Button variant="outlined" onClick={() => openJourneyDialog(1)} disabled={!member}>
-            Registrar marco
-            </Button>
-            <Button variant="contained" onClick={() => openJourneyDialog(2)} disabled={!member}>
-            Atualizar jornada
-            </Button>
+            <Tooltip title="Mais ações">
+              <span>
+                <IconButton
+                  id="membro-actions-button"
+                  onClick={(event) => setActionMenuAnchor(event.currentTarget)}
+                  aria-label="Mais ações do membro"
+                  aria-haspopup="menu"
+                  aria-controls={actionMenuAnchor ? 'membro-actions-menu' : undefined}
+                  aria-expanded={Boolean(actionMenuAnchor)}
+                >
+                  <MoreVert />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Menu
+              id="membro-actions-menu"
+              anchorEl={actionMenuAnchor}
+              open={Boolean(actionMenuAnchor)}
+              onClose={() => setActionMenuAnchor(null)}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+              MenuListProps={{
+                'aria-labelledby': 'membro-actions-button',
+                dense: false
+              }}
+              disableScrollLock
+              slotProps={{
+                paper: {
+                  elevation: 4,
+                  sx: {
+                    mt: 0.5,
+                    minWidth: 260,
+                    borderRadius: 2,
+                    overflow: 'hidden'
+                  }
+                }
+              }}
+            >
+              {member && (
+                <Box sx={{ px: 2, py: 1.25, bgcolor: 'action.hover' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                    Ações para
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                    {member.fullName}
+                  </Typography>
+                </Box>
+              )}
+              {member && <Divider />}
+              <MenuItem
+                onClick={runAndCloseActionMenu(() => openJourneyDialog(0))}
+                disabled={!member}
+              >
+                <ListItemIcon>
+                  <EventNote fontSize="small" />
+                </ListItemIcon>
+                <ListItemText
+                  primary="Registrar atividade"
+                  secondary="Adicionar nova atividade ao histórico"
+                />
+              </MenuItem>
+              <MenuItem
+                onClick={runAndCloseActionMenu(() => openJourneyDialog(1))}
+                disabled={!member}
+              >
+                <ListItemIcon>
+                  <EmojiEvents fontSize="small" />
+                </ListItemIcon>
+                <ListItemText
+                  primary="Registrar marco"
+                  secondary="Conquista ou etapa importante"
+                />
+              </MenuItem>
+              <Divider sx={{ my: 0.5 }} />
+              <MenuItem
+                onClick={runAndCloseActionMenu(() => handleOpenActivityTypesDialog())}
+              >
+                <ListItemIcon>
+                  <Category fontSize="small" />
+                </ListItemIcon>
+                <ListItemText
+                  primary="Gerenciar tipos"
+                  secondary="Cadastros de atividades e marcos"
+                />
+              </MenuItem>
+            </Menu>
           </Stack>
         </Box>
 
         {feedback && (
-          <Box mb={2}>
-            <Typography color="primary">{feedback}</Typography>
-          </Box>
+          <Alert severity="success" sx={{ mb: 2 }} onClose={() => setFeedback('')}>
+            {feedback}
+          </Alert>
         )}
 
         {error && (
-          <Box mb={2}>
-            <Typography color="error">{error}</Typography>
-          </Box>
+          <Alert severity="error" role="alert" sx={{ mb: 2 }} onClose={() => setError('')}>
+            {error}
+          </Alert>
         )}
 
         {loading && (
-          <Box py={4} display="flex" justifyContent="center">
-            <CircularProgress size={28} />
-          </Box>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={8}>
+              <Skeleton variant="rectangular" height={260} sx={{ borderRadius: 2 }} />
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Stack spacing={2}>
+                <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 2 }} />
+                <Skeleton variant="rectangular" height={180} sx={{ borderRadius: 2 }} />
+              </Stack>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Skeleton variant="rectangular" height={220} sx={{ borderRadius: 2 }} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Skeleton variant="rectangular" height={220} sx={{ borderRadius: 2 }} />
+            </Grid>
+          </Grid>
         )}
 
         {!loading && member && (
           <Grid container spacing={2}>
             <Grid item xs={12} md={8}>
-              <Paper variant="outlined" sx={{ p: 2 }}>
-                <Stack direction="row" spacing={2} alignItems="center" mb={2}>
-                  <Avatar
-                    src={member.photoUrl || 'https://via.placeholder.com/80'}
-                    alt={member.fullName}
-                    sx={{ width: 80, height: 80 }}
-                  />
-                  <Box>
-                    <Typography variant="h6">{member.fullName}</Typography>
-                    <Typography variant="body2" color="textSecondary">{member.email || 'Sem e-mail'}</Typography>
-                  </Box>
-                </Stack>
-                <Divider sx={{ mb: 2 }} />
+              <SectionCard
+                divider={false}
+                title={(
+                  <Stack direction="row" spacing={2} alignItems="center">
+                    <Avatar
+                      src={member.photoUrl || ''}
+                      alt={member.fullName}
+                      sx={{ width: 64, height: 64 }}
+                    />
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="h6" component="span" sx={{ fontWeight: 700 }} noWrap>
+                        {member.fullName}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" noWrap sx={{ display: 'block' }}>
+                        {member.email || 'Sem e-mail'}
+                      </Typography>
+                    </Box>
+                  </Stack>
+                )}
+              >
+                <Divider sx={{ mb: 2, opacity: 0.4 }} />
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={6}>
                     <List dense>
@@ -698,245 +819,216 @@ const MembroDetailsPage = () => {
                     </List>
                   </Grid>
                 </Grid>
-              </Paper>
+              </SectionCard>
             </Grid>
 
             <Grid item xs={12} md={4}>
-              <Paper variant="outlined" sx={{ p: 2 }}>
-                <Typography variant="subtitle1" gutterBottom>Vinculo conjugal</Typography>
-                {spouse ? (
-                  <Stack spacing={2}>
+              <Stack spacing={2}>
+                <SectionCard title="Vínculo conjugal" icon={<Favorite color="primary" fontSize="small" />}>
+                  {spouse ? (
                     <Stack direction="row" spacing={2} alignItems="center">
                       <Avatar
-                        src={spouse.photoUrl || 'https://via.placeholder.com/60'}
+                        src={spouse.photoUrl || ''}
                         alt={spouse.fullName}
-                        sx={{ width: 60, height: 60 }}
+                        sx={{ width: 56, height: 56 }}
                       />
-                      <Box>
-                        <Typography variant="body1">{spouse.fullName}</Typography>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="body1" sx={{ fontWeight: 600 }} noWrap>
+                          {spouse.fullName}
+                        </Typography>
                       </Box>
                     </Stack>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">Nenhum cônjuge vinculado.</Typography>
+                  )}
+                </SectionCard>
+
+                <SectionCard title="Resumo da jornada">
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    <Chip size="small" color="primary" label={`Estágio: ${member?.journey?.currentStage || 'NA'}`} />
+                    <Chip size="small" color="default" label={`Saúde: ${member?.journey?.healthStatus || 'NA'}`} />
+                    <Chip size="small" color="secondary" label={`Score: ${member?.journey?.engagementScore ?? 0}`} />
+                    <Chip size="small" label={`Inativo: ${member?.journey?.daysInactive ?? 0} dias`} />
+                    <Chip size="small" color={journeyIndicators.celula ? 'success' : 'default'} label={`Célula: ${journeyIndicators.celula ? 'Ativo' : 'Sem registro recente'}`} />
+                    <Chip size="small" color={journeyIndicators.escola ? 'success' : 'default'} label={`Escolas: ${journeyIndicators.escola ? 'Ativo' : 'Sem registro recente'}`} />
+                    <Chip size="small" color={journeyIndicators.eventos ? 'success' : 'default'} label={`Eventos: ${journeyIndicators.eventos ? 'Ativo' : 'Sem registro recente'}`} />
                   </Stack>
-                ) : (
-                  <Typography variant="body2" color="textSecondary">Nenhum conjuge vinculado.</Typography>
-                )}
-              </Paper>
+                  <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 1.5 }}>
+                    Última atividade: {formatDateTime(member?.journey?.lastActivityDate)}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                    Prazos: Célula 7 dias | Eventos 120 dias | Escolas 120 dias (Fundamentos 270 dias).
+                  </Typography>
+                </SectionCard>
 
-              <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
-                <Typography variant="subtitle1" gutterBottom>Resumo da jornada</Typography>
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                  <Chip size="small" color="primary" label={`Estagio: ${member?.journey?.currentStage || 'NA'}`} />
-                  <Chip size="small" color="default" label={`Saude: ${member?.journey?.healthStatus || 'NA'}`} />
-                  <Chip size="small" color="secondary" label={`Score: ${member?.journey?.engagementScore ?? 0}`} />
-                  <Chip size="small" label={`Inativo: ${member?.journey?.daysInactive ?? 0} dias`} />
-                  <Chip size="small" color={journeyIndicators.celula ? 'success' : 'default'} label={`Celula: ${journeyIndicators.celula ? 'Ativo' : 'Sem registro recente'}`} />
-                  <Chip size="small" color={journeyIndicators.escola ? 'success' : 'default'} label={`Escolas: ${journeyIndicators.escola ? 'Ativo' : 'Sem registro recente'}`} />
-                  <Chip size="small" color={journeyIndicators.eventos ? 'success' : 'default'} label={`Eventos: ${journeyIndicators.eventos ? 'Ativo' : 'Sem registro recente'}`} />
-                </Stack>
-                <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                Ultima atividade: {formatDateTime(member?.journey?.lastActivityDate)}
-                </Typography>
-                <Typography variant="caption" color="textSecondary" display="block" sx={{ mt: 0.5 }}>
-                Prazos: Celula 7 dias | Eventos 120 dias | Escolas 120 dias (Fundamentos 270 dias).
-                </Typography>
-              </Paper>
-
-              <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
-                <Typography variant="subtitle1" gutterBottom>Celulas que lidera</Typography>
-                {liderancaCelulas.length ? (
-                  <Stack spacing={1.5}>
-                    {liderancaCelulas.map((celula) => (
-                      <Box
-                        key={celula.id}
-                        sx={{
-                          border: '1px solid',
-                          borderColor: 'divider',
-                          borderRadius: 1,
-                          p: 1.25
-                        }}
-                      >
-                        <Typography variant="body1">{celula.celula || 'Sem nome'}</Typography>
-                        <Typography variant="body2" color="textSecondary">
-                          {celula.campusRef?.nome || 'Sem campus'} - {celula.bairro || 'Sem bairro'}
-                        </Typography>
-                        <Typography variant="caption" color="textSecondary">
-                          {celula.dia || 'Dia nao informado'} - {celula.horario || 'Horario nao informado'} - {celula.ativo ? 'Ativa' : 'Inativa'}
-                        </Typography>
-                      </Box>
-                    ))}
-                  </Stack>
-                ) : (
-                  <Typography variant="body2" color="textSecondary">Este membro nao lidera nenhuma celula.</Typography>
-                )}
-              </Paper>
-
-              <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
-                <Typography variant="subtitle1" gutterBottom>Celulas que participa</Typography>
-                {celulaVinculos.length ? (
-                  <Stack spacing={1.5}>
-                    {celulaVinculos.map((vinculo) => (
-                      <Box
-                        key={vinculo.id}
-                        sx={{
-                          border: '1px solid',
-                          borderColor: 'divider',
-                          borderRadius: 1,
-                          p: 1.25
-                        }}
-                      >
-                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-                          <Box>
-                            <Typography variant="body1">{vinculo.celula?.celula || 'Sem nome'}</Typography>
-                            <Typography variant="body2" color="textSecondary">
-                              {vinculo.celula?.campusRef?.nome || 'Sem campus'} - {vinculo.celula?.bairro || 'Sem bairro'}
+                {liderancaCelulas.length > 0 && (
+                  <SectionCard title="Células que lidera">
+                    <Stack spacing={1.5}>
+                      {liderancaCelulas.map((celula) => (
+                        <Box
+                          key={celula.id}
+                          sx={{
+                            p: 1.5,
+                            borderRadius: 2,
+                            border: 1,
+                            borderColor: 'divider',
+                            bgcolor: 'action.hover'
+                          }}
+                        >
+                          <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+                            <Typography variant="body1" sx={{ fontWeight: 600 }} noWrap>
+                              {celula.celula || 'Sem nome'}
                             </Typography>
-                            <Typography variant="caption" color="textSecondary">
-                              {vinculo.celula?.dia || 'Dia nao informado'} - {vinculo.celula?.horario || 'Horario nao informado'}
-                            </Typography>
-                            <Typography variant="caption" display="block" color="textSecondary">
-                            Desde: {formatDate(vinculo.dataEntrada)}
-                            </Typography>
-                          </Box>
-                          <Stack direction="column" alignItems="flex-end" spacing={0.5}>
-                            <Chip size="small" label={PAPEL_LABEL[vinculo.papel] || vinculo.papel} color="primary" variant="outlined" />
-                            {vinculo.celula?.ativo === false && (
-                              <Chip size="small" label="Inativa" color="default" />
-                            )}
-                            <Button
-                              size="small"
-                              variant="text"
-                              disabled={vinculo.celula?.ativo === false}
-                              onClick={() => history.push(`/app/celulas/${vinculo.celula?.id}/presenca`)}
-                            >
-                            Ver presença
-                            </Button>
-                            <Tooltip title={vinculo.celula?.ativo === false ? 'Célula inativa' : 'Transferir para outra célula'}>
-                              <span>
-                                <Button
-                                  size="small"
-                                  variant="outlined"
-                                  color="warning"
-                                  startIcon={<SwapHoriz fontSize="small" />}
-                                  disabled={vinculo.celula?.ativo === false}
-                                  onClick={() => openTransferDialog(vinculo)}
-                                >
-                                Transferir
-                                </Button>
-                              </span>
-                            </Tooltip>
+                            <Chip size="small" color={celula.ativo ? 'success' : 'default'} label={celula.ativo ? 'Ativa' : 'Inativa'} />
                           </Stack>
-                        </Stack>
-                      </Box>
-                    ))}
-                  </Stack>
-                ) : (
-                  <Typography variant="body2" color="textSecondary">Membro nao vinculado a nenhuma celula.</Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {celula.campusRef?.nome || 'Sem campus'} • {celula.bairro || 'Sem bairro'}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {celula.dia || 'Dia não informado'} • {celula.horario || 'Horário não informado'}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Stack>
+                  </SectionCard>
                 )}
-              </Paper>
-            </Grid>
 
-            <Grid item xs={12} md={6}>
-              <Paper variant="outlined" sx={{ p: 2 }}>
-                <Typography variant="subtitle1" gutterBottom>Ultimas atividades</Typography>
-                {!activities.length && <Typography color="textSecondary">Nenhuma atividade registrada.</Typography>}
-                <Stack spacing={1}>
-                  {activities.slice(0, 8).map((activity) => (
-                    <Box
-                      key={activity.id}
-                      sx={{
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        borderRadius: 1,
-                        p: 1
-                      }}
-                    >
-                      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
-                        <Typography variant="body2">
-                          {activityTypeNameByCode[activity.activityType] || ACTIVITY_CODE_LABELS[activity.activityType] || activity.activityType}
-                        </Typography>
-                        <Tooltip title="Excluir atividade">
-                          <span>
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => handleDeleteActivity(activity)}
-                              disabled={Boolean(deletingActivityId)}
-                            >
-                              <DeleteOutline fontSize="small" />
-                            </IconButton>
-                          </span>
-                        </Tooltip>
-                      </Stack>
-                      <Typography variant="caption" color="textSecondary">
-                        {formatDateTime(activity.activityDate)} - {activity.points || 0} pontos
-                      </Typography>
-                      {getActivityObservation(activity) && (
-                        <Typography variant="caption" display="block" color="textSecondary">
-                          {getActivityObservation(activity)}
-                        </Typography>
-                      )}
-                    </Box>
-                  ))}
-                </Stack>
-              </Paper>
-            </Grid>
-
-            <Grid item xs={12} md={6}>
-              <Paper variant="outlined" sx={{ p: 2 }}>
-                <Typography variant="subtitle1" gutterBottom>Marcos</Typography>
-                {!milestones.length && <Typography color="textSecondary">Nenhum marco registrado.</Typography>}
-                <Stack spacing={0}>
-                  {visibleMilestones.map((milestone, index) => {
-                    const hasNext = index < visibleMilestones.length - 1;
-                    return (
-                      <Box
-                        key={milestone.id}
-                        sx={{
-                          display: 'grid',
-                          gridTemplateColumns: '20px 1fr',
-                          columnGap: 1.5
-                        }}
-                      >
-                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <SectionCard title="Células que participa">
+                  {celulaVinculos.length ? (
+                    <>
+                      <Stack spacing={1.5}>
+                        {(showAllVinculos ? celulaVinculos : celulaVinculos.slice(0, 3)).map((vinculo) => (
                           <Box
+                            key={vinculo.id}
                             sx={{
-                              width: 10,
-                              height: 10,
-                              borderRadius: '50%',
-                              backgroundColor: 'primary.main',
-                              mt: 0.5
+                              p: 1.5,
+                              borderRadius: 2,
+                              border: 1,
+                              borderColor: 'divider',
+                              bgcolor: 'action.hover'
                             }}
-                          />
-                          {hasNext && (
-                            <Box
-                              sx={{
-                                width: 2,
-                                flex: 1,
-                                minHeight: 24,
-                                backgroundColor: 'divider',
-                                my: 0.5
-                              }}
-                            />
-                          )}
-                        </Box>
-                        <Box sx={{ pb: hasNext ? 2 : 0 }}>
-                          <Typography variant="caption" color="textSecondary">
-                            {formatDate(milestone.achievedDate)}
+                          >
+                            <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                              <Box sx={{ minWidth: 0 }}>
+                                <Typography variant="body1" sx={{ fontWeight: 600 }} noWrap>
+                                  {vinculo.celula?.celula || 'Sem nome'}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  {vinculo.celula?.campusRef?.nome || 'Sem campus'} • {vinculo.celula?.bairro || 'Sem bairro'}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" display="block">
+                                  {vinculo.celula?.dia || 'Dia não informado'} • {vinculo.celula?.horario || 'Horário não informado'}
+                                </Typography>
+                                <Typography variant="caption" display="block" color="text.secondary">
+                                  Desde: {formatDate(vinculo.dataEntrada)}
+                                </Typography>
+                              </Box>
+                              <Stack direction="column" alignItems="flex-end" spacing={0.5}>
+                                <Chip size="small" label={PAPEL_LABEL[vinculo.papel] || vinculo.papel} color="primary" variant="outlined" />
+                                {vinculo.celula?.ativo === false && (
+                                  <Chip size="small" label="Inativa" color="default" />
+                                )}
+                              </Stack>
+                            </Stack>
+                            <Stack direction="row" spacing={1} sx={{ mt: 1.25 }}>
+                              <Button
+                                size="small"
+                                variant="text"
+                                disabled={vinculo.celula?.ativo === false}
+                                onClick={() => history.push(`/app/celulas/${vinculo.celula?.id}/presenca`)}
+                              >
+                                Ver presença
+                              </Button>
+                              <Tooltip title={vinculo.celula?.ativo === false ? 'Célula inativa' : 'Transferir para outra célula'}>
+                                <span>
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    color="warning"
+                                    startIcon={<SwapHoriz fontSize="small" />}
+                                    disabled={vinculo.celula?.ativo === false}
+                                    onClick={() => openTransferDialog(vinculo)}
+                                  >
+                                    Transferir
+                                  </Button>
+                                </span>
+                              </Tooltip>
+                            </Stack>
+                          </Box>
+                        ))}
+                      </Stack>
+                      {celulaVinculos.length > 3 && (
+                        <Stack
+                          direction="row"
+                          alignItems="center"
+                          justifyContent="space-between"
+                          sx={{
+                            mt: 1.5, pt: 1, borderTop: 1, borderColor: 'divider'
+                          }}
+                        >
+                          <Typography variant="caption" color="text.secondary">
+                            {showAllVinculos
+                              ? `Exibindo todas as ${celulaVinculos.length}`
+                              : `Exibindo 3 de ${celulaVinculos.length}`}
                           </Typography>
-                          <Typography variant="body2">
-                            {activityTypeNameByCode[milestone.milestoneType] || milestone.milestoneType}
-                          </Typography>
-                          {milestone.description && (
-                            <Typography variant="caption" display="block" color="textSecondary">
-                              {milestone.description}
-                            </Typography>
-                          )}
-                        </Box>
-                      </Box>
-                    );
-                  })}
-                </Stack>
-              </Paper>
+                          <Button size="small" onClick={() => setShowAllVinculos((prev) => !prev)}>
+                            {showAllVinculos ? 'Ver menos' : `Ver mais (${celulaVinculos.length - 3})`}
+                          </Button>
+                        </Stack>
+                      )}
+                    </>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">Membro não vinculado a nenhuma célula.</Typography>
+                  )}
+                </SectionCard>
+              </Stack>
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <SectionCard title="Últimas atividades" sx={{ height: '100%' }}>
+                <JornadaTimeline
+                  emptyText="Nenhuma atividade registrada."
+                  initialCount={6}
+                  items={sortedActivities.map((activity) => ({
+                    id: activity.id,
+                    type: 'activity',
+                    date: `${formatDateTime(activity.activityDate)} • ${activity.points || 0} pontos`,
+                    title: activityTypeNameByCode[activity.activityType] || ACTIVITY_CODE_LABELS[activity.activityType] || activity.activityType,
+                    description: getActivityObservation(activity) || null,
+                    action: (
+                      <Tooltip title="Excluir atividade">
+                        <span>
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => handleDeleteActivity(activity)}
+                            disabled={Boolean(deletingActivityId)}
+                            aria-label="Excluir atividade"
+                          >
+                            <DeleteOutline fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    )
+                  }))}
+                />
+              </SectionCard>
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <SectionCard title="Marcos" sx={{ height: '100%' }}>
+                <JornadaTimeline
+                  emptyText="Nenhum marco registrado."
+                  initialCount={6}
+                  items={sortedMilestones.map((milestone) => ({
+                    id: milestone.id,
+                    type: 'milestone',
+                    date: formatDate(milestone.achievedDate),
+                    title: activityTypeNameByCode[milestone.milestoneType] || milestone.milestoneType,
+                    description: milestone.description || null
+                  }))}
+                />
+              </SectionCard>
             </Grid>
           </Grid>
         )}

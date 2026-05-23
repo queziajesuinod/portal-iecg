@@ -2,10 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { PapperBlock } from 'dan-components';
 import {
+  Alert,
   Box,
   Grid,
   Card,
   CardContent,
+  CircularProgress,
   Typography,
   Button,
   Chip,
@@ -25,6 +27,8 @@ import {
   Select,
   MenuItem,
   IconButton,
+  InputAdornment,
+  TableContainer,
   Tooltip
 } from '@mui/material';
 import BackIcon from '@mui/icons-material/ArrowBack';
@@ -33,6 +37,9 @@ import ReceiptIcon from '@mui/icons-material/Receipt';
 import ReplayIcon from '@mui/icons-material/Replay';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { useHistory, useParams } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
 import { DetailSkeleton } from '../../../components/Skeleton';
@@ -73,7 +80,9 @@ function RegistrationDetails() {
   const { id } = useParams();
   const [inscricao, setInscricao] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [notification, setNotification] = useState('');
+  const [notification, setNotification] = useState({ message: '', type: 'success' });
+  const notify = (message, type = 'success') => setNotification({ message, type });
+  const fecharNotificacao = () => setNotification((prev) => ({ ...prev, message: '' }));
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelDialogInfo, setCancelDialogInfo] = useState(null);
   const [cancelDialogLoading, setCancelDialogLoading] = useState(false);
@@ -158,7 +167,7 @@ function RegistrationDetails() {
       }
     } catch (error) {
       console.error('Erro ao carregar inscrição:', error);
-      setNotification('Erro ao carregar inscrição');
+      notify('Erro ao carregar inscrição', 'error');
     } finally {
       setLoading(false);
     }
@@ -191,7 +200,7 @@ function RegistrationDetails() {
       setCancelDialogOpen(true);
     } catch (error) {
       console.error('Erro ao obter info de cancelamento:', error);
-      setNotification('Não foi possível verificar o tipo de cancelamento');
+      notify('Não foi possível verificar o tipo de cancelamento', 'error');
     }
   };
 
@@ -207,12 +216,12 @@ function RegistrationDetails() {
     setCancelDialogLoading(true);
     try {
       await cancelarInscricao(id);
-      setNotification('Inscrição cancelada com sucesso!');
+      notify('Inscrição cancelada com sucesso!', 'success');
       fecharDialogCancelamento();
       carregarInscricao();
     } catch (error) {
       console.error('Erro ao cancelar inscrição:', error);
-      setNotification(error.response?.data?.message || 'Erro ao cancelar inscrição');
+      notify(error.response?.data?.message || 'Erro ao cancelar inscrição', 'error');
     } finally {
       setCancelDialogLoading(false);
     }
@@ -268,12 +277,12 @@ function RegistrationDetails() {
     try {
       if (formPagamentoOffline.method === 'credit_card') {
         if (!formPagamentoOffline.cardBrand) {
-          setNotification('Selecione a bandeira do cartao');
+          notify('Selecione a bandeira do cartao', 'warning');
           return;
         }
         const parcelas = Number.parseInt(formPagamentoOffline.installments, 10);
         if (!Number.isInteger(parcelas) || parcelas < 1 || parcelas > 12) {
-          setNotification('Informe uma quantidade de parcelas valida (1 a 12)');
+          notify('Informe uma quantidade de parcelas valida (1 a 12)', 'warning');
           return;
         }
       }
@@ -289,23 +298,23 @@ function RegistrationDetails() {
       }
       if (pagamentoOfflineEdicao?.id) {
         await atualizarPagamentoOfflineInscricao(id, pagamentoOfflineEdicao.id, payload);
-        setNotification('Pagamento offline atualizado com sucesso!');
+        notify('Pagamento offline atualizado com sucesso!', 'success');
       } else {
         await criarPagamentoOfflineInscricao(id, payload);
-        setNotification('Pagamento presencial registrado com sucesso!');
+        notify('Pagamento presencial registrado com sucesso!', 'success');
       }
       handleFecharPagamentoOffline();
       carregarInscricao();
     } catch (error) {
       console.error('Erro ao salvar pagamento presencial:', error);
-      setNotification(error.response?.data?.message || error.message || 'Erro ao salvar pagamento presencial');
+      notify(error.response?.data?.message || error.message || 'Erro ao salvar pagamento presencial', 'error');
     }
   };
 
   const handleCancelarPagamento = async (payment) => {
     if (!payment?.id) return;
     if (!PAYMENT_STATUSES_ALLOWED_FOR_CANCELLATION.includes(payment.status)) {
-      setNotification('Somente pagamentos pendentes ou expirados podem ser cancelados.');
+      notify('Somente pagamentos pendentes ou expirados podem ser cancelados.', 'warning');
       return;
     }
     const ok = await confirm({
@@ -314,11 +323,11 @@ function RegistrationDetails() {
     if (!ok) return;
     try {
       await deletarPagamentoInscricao(id, payment.id);
-      setNotification('Pagamento cancelado com sucesso!');
+      notify('Pagamento cancelado com sucesso!', 'success');
       carregarInscricao();
     } catch (error) {
       console.error('Erro ao cancelar pagamento:', error);
-      setNotification(error.response?.data?.message || error.message || 'Erro ao cancelar pagamento');
+      notify(error.response?.data?.message || error.message || 'Erro ao cancelar pagamento', 'error');
     }
   };
 
@@ -326,11 +335,11 @@ function RegistrationDetails() {
     setRecalculatingPayment(true);
     try {
       await recalcularStatusInscricao(id);
-      setNotification('Status recalculado com sucesso');
+      notify('Status recalculado com sucesso', 'success');
       carregarInscricao();
     } catch (error) {
       console.error('Erro ao recalcular status da inscrição:', error);
-      setNotification(error.message || 'Erro ao recalcular status da inscrição');
+      notify(error.message || 'Erro ao recalcular status da inscrição', 'error');
     } finally {
       setRecalculatingPayment(false);
     }
@@ -402,12 +411,36 @@ function RegistrationDetails() {
     return data.ReturnMessage || data.ProviderReturnMessage || data.ReasonMessage || null;
   };
 
+  const copiarParaAreaTransferencia = async (texto, rotulo = 'Texto') => {
+    if (!texto) return;
+    try {
+      await navigator.clipboard.writeText(String(texto));
+      notify(`${rotulo} copiado para a área de transferência`, 'success');
+    } catch (error) {
+      notify(`Não foi possível copiar ${rotulo.toLowerCase()}`, 'error');
+    }
+  };
+
   if (loading) {
     return <Box p={3}><DetailSkeleton fields={8} /></Box>;
   }
 
   if (!inscricao) {
-    return <Typography>Inscrição não encontrada</Typography>;
+    return (
+      <Box p={3}>
+        <Alert
+          severity="error"
+          role="alert"
+          action={(
+            <Button color="inherit" size="small" startIcon={<BackIcon />} onClick={() => history.goBack()}>
+              Voltar
+            </Button>
+          )}
+        >
+          Inscrição não encontrada. Verifique se o link está correto ou volte para a lista de inscrições.
+        </Alert>
+      </Box>
+    );
   }
 
   const title = brand.name + ' - Detalhes da Inscrição';
@@ -462,7 +495,7 @@ function RegistrationDetails() {
           <Grid item xs={12}>
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" component="h2" gutterBottom>
                   Informações Gerais
                 </Typography>
                 <Divider style={{ marginBottom: 16 }} />
@@ -471,7 +504,18 @@ function RegistrationDetails() {
                     <Typography variant="body2" color="textSecondary">
                       <strong>Código do Pedido:</strong>
                     </Typography>
-                    <Typography variant="body1">{inscricao.orderCode}</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Typography variant="body1">{inscricao.orderCode}</Typography>
+                      <Tooltip title="Copiar código">
+                        <IconButton
+                          size="small"
+                          aria-label="Copiar código do pedido"
+                          onClick={() => copiarParaAreaTransferencia(inscricao.orderCode, 'Código do pedido')}
+                        >
+                          <ContentCopyIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <Typography variant="body2" color="textSecondary">
@@ -515,7 +559,7 @@ function RegistrationDetails() {
           <Grid item xs={12} md={6}>
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" component="h2" gutterBottom>
                   Dados do Comprador
                 </Typography>
                 <Divider style={{ marginBottom: 16 }} />
@@ -528,7 +572,7 @@ function RegistrationDetails() {
           <Grid item xs={12} md={6}>
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" component="h2" gutterBottom>
                   Informações de Pagamento
                 </Typography>
                 <Divider style={{ marginBottom: 16 }} />
@@ -555,7 +599,7 @@ function RegistrationDetails() {
                     <TableRow>
                       <TableCell><strong>Valor Final:</strong></TableCell>
                       <TableCell>
-                        <Typography variant="h6" color="primary">
+                        <Typography variant="body1" color="primary" sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
                           {formatarPreco(inscricao.finalPrice)}
                         </Typography>
                       </TableCell>
@@ -565,8 +609,22 @@ function RegistrationDetails() {
                       <TableCell>{formatarPreco(paidTotal)}</TableCell>
                     </TableRow>
                     <TableRow>
-                      <TableCell><strong>Saldo Restante:</strong></TableCell>
-                      <TableCell>{formatarPreco(remaining)}</TableCell>
+                      <TableCell>
+                        <strong>Saldo Restante:</strong>
+                      </TableCell>
+                      <TableCell>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: remaining > 0 ? 'warning.main' : 'text.primary',
+                            fontWeight: remaining > 0 ? 600 : 400
+                          }}
+                        >
+                          {remaining > 0 && <ErrorOutlineIcon style={{ fontSize: 16, verticalAlign: 'text-bottom', marginRight: 4 }} />}
+                          {formatarPreco(remaining)}
+                          {remaining > 0 && ' — falta pagar'}
+                        </Typography>
+                      </TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell><strong>Modo:</strong></TableCell>
@@ -598,7 +656,7 @@ function RegistrationDetails() {
               <CardContent>
                 <Grid container spacing={2} alignItems="center" justifyContent="space-between">
                   <Grid item>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="h6" component="h2" gutterBottom>
                       Pagamentos realizados
                     </Typography>
                   </Grid>
@@ -617,73 +675,90 @@ function RegistrationDetails() {
                 </Grid>
                 <Divider style={{ marginBottom: 16 }} />
                 {payments.length === 0 ? (
-                  <Typography variant="body2" color="textSecondary">
-                    Nenhum pagamento registrado
-                  </Typography>
-                ) : (
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Data</TableCell>
-                        <TableCell>Canal</TableCell>
-                        <TableCell>Método</TableCell>
-                        <TableCell>Status</TableCell>
-                        <TableCell align="right">Valor</TableCell>
-                        <TableCell align="right">Taxa</TableCell>
-                        <TableCell align="center">Ações</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {payments.map((payment) => (
-                        <TableRow key={payment.id}>
-                          <TableCell>
-                            <Typography variant="body2">
-                              {formatarData(payment.createdAt)}
-                            </Typography>
-                            {payment.channel === 'OFFLINE' && payment.notes && (
-                              <Typography variant="caption" color="textSecondary" display="block">
-                                Obs: {payment.notes}
-                              </Typography>
-                            )}
-                          </TableCell>
-                          <TableCell>{payment.channel === 'OFFLINE' ? 'Offline' : 'Online'}</TableCell>
-                          <TableCell>{getMetodoPagamentoLabel(payment.method)}</TableCell>
-                          <TableCell>
-                            <Chip
-                              label={getPaymentStatusLabel(payment.status)}
-                              size="small"
-                              sx={getPaymentStatusChipSx(payment.status)}
-                            />
-                          </TableCell>
-                          <TableCell align="right">{formatarPreco(payment.amount)}</TableCell>
-                          <TableCell align="right">{formatarPreco(payment.taxa || 0)}</TableCell>
-                          <TableCell align="center">
-                            {canRegisterOffline && payment.channel === 'OFFLINE' && (
-                              <Tooltip title="Editar pagamento offline">
-                                <IconButton size="small" onClick={() => handleAbrirEdicaoPagamentoOffline(payment)}>
-                                  <EditIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                            )}
-                            {canRegisterOffline && PAYMENT_STATUSES_ALLOWED_FOR_CANCELLATION.includes(payment.status) && (
-                              <Tooltip title="Cancelar pagamento pendente ou expirado">
-                                <IconButton size="small" onClick={() => handleCancelarPagamento(payment)}>
-                                  <DeleteIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-                {remaining === 0 && (
-                  <div style={{ marginTop: 12 }}>
-                    <Typography variant="body2" color="primary">
-                      Quitado: pagamento total confirmado.
+                  <Box sx={{ py: 4, textAlign: 'center' }}>
+                    <ReceiptIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
+                    <Typography variant="body1" color="textSecondary" gutterBottom>
+                      Nenhum pagamento registrado
                     </Typography>
-                  </div>
+                    {canRegisterOffline && remaining > 0 && (
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={handleAbrirPagamentoOffline}
+                        sx={{ mt: 1 }}
+                      >
+                        Registrar pagamento presencial
+                      </Button>
+                    )}
+                  </Box>
+                ) : (
+                  <TableContainer sx={{ width: '100%', overflowX: 'auto' }}>
+                    <Table size="small" sx={{ minWidth: 720 }}>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Data</TableCell>
+                          <TableCell>Canal</TableCell>
+                          <TableCell>Método</TableCell>
+                          <TableCell>Status</TableCell>
+                          <TableCell align="right">Valor</TableCell>
+                          <TableCell align="right">Taxa</TableCell>
+                          <TableCell align="center">Ações</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {payments.map((payment) => (
+                          <TableRow key={payment.id}>
+                            <TableCell>
+                              <Typography variant="body2">
+                                {formatarData(payment.createdAt)}
+                              </Typography>
+                              {payment.channel === 'OFFLINE' && payment.notes && (
+                                <Typography variant="caption" color="textSecondary" display="block">
+                                Obs: {payment.notes}
+                                </Typography>
+                              )}
+                            </TableCell>
+                            <TableCell>{payment.channel === 'OFFLINE' ? 'Offline' : 'Online'}</TableCell>
+                            <TableCell>{getMetodoPagamentoLabel(payment.method)}</TableCell>
+                            <TableCell>
+                              <Chip
+                                label={getPaymentStatusLabel(payment.status)}
+                                size="small"
+                                sx={getPaymentStatusChipSx(payment.status)}
+                              />
+                            </TableCell>
+                            <TableCell align="right">{formatarPreco(payment.amount)}</TableCell>
+                            <TableCell align="right">{formatarPreco(payment.taxa || 0)}</TableCell>
+                            <TableCell align="center">
+                              {canRegisterOffline && payment.channel === 'OFFLINE' && (
+                                <Tooltip title="Editar pagamento offline">
+                                  <IconButton size="small" onClick={() => handleAbrirEdicaoPagamentoOffline(payment)}>
+                                    <EditIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                              {canRegisterOffline && PAYMENT_STATUSES_ALLOWED_FOR_CANCELLATION.includes(payment.status) && (
+                                <Tooltip title="Cancelar pagamento pendente ou expirado">
+                                  <IconButton size="small" onClick={() => handleCancelarPagamento(payment)}>
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+                {remaining === 0 && payments.length > 0 && (
+                  <Alert
+                    severity="success"
+                    icon={<CheckCircleIcon fontSize="inherit" />}
+                    sx={{ mt: 1.5 }}
+                  >
+                    Pagamento quitado — valor total confirmado.
+                  </Alert>
                 )}
               </CardContent>
             </Card>
@@ -693,7 +768,7 @@ function RegistrationDetails() {
           <Grid item xs={12}>
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" component="h2" gutterBottom>
                   Dados dos Inscritos ({inscricao.attendees?.length || 0})
                 </Typography>
                 <Divider style={{ marginBottom: 16 }} />
@@ -703,7 +778,7 @@ function RegistrationDetails() {
                       <Grid item xs={12} md={6} key={attendee.id}>
                         <Card variant="outlined">
                           <CardContent>
-                            <Typography variant="subtitle1" gutterBottom>
+                            <Typography variant="subtitle1" component="h3" gutterBottom>
                               Inscrito #{attendee.attendeeNumber}
                             </Typography>
                             <Divider style={{ marginBottom: 8 }} />
@@ -727,62 +802,71 @@ function RegistrationDetails() {
             <Grid item xs={12}>
               <Card>
                 <CardContent>
-                  <Typography variant="h6" gutterBottom>
+                  <Typography variant="h6" component="h2" gutterBottom>
                     <ReceiptIcon style={{ verticalAlign: 'middle', marginRight: 8 }} />
                     Histórico de Transações
                   </Typography>
                   <Divider style={{ marginBottom: 16 }} />
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Data</TableCell>
-                        <TableCell>Operação</TableCell>
-                        <TableCell>Resultado</TableCell>
-                        <TableCell align="right">Valor</TableCell>
-                        <TableCell>Retorno Cielo</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {inscricao.transactions.map((transaction) => {
-                        const resultado = getResultadoTransacao(transaction);
-                        const mensagemCielo = getMensagemCielo(transaction);
-                        return (
-                          <TableRow key={transaction.id}>
-                            <TableCell>
-                              <Typography variant="caption" color="textSecondary">
-                                {formatarData(transaction.createdAt)}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="body2">
-                                <strong>{getTransactionTypeLabel(transaction.transactionType)}</strong>
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Chip
-                                label={resultado.label}
-                                size="small"
-                                color={resultado.color}
-                                variant={resultado.color === 'default' ? 'outlined' : 'filled'}
-                              />
-                            </TableCell>
-                            <TableCell align="right">
-                              {formatarPreco(transaction.amount)}
-                            </TableCell>
-                            <TableCell>
-                              {mensagemCielo ? (
-                                <Typography variant="caption" color={resultado.color === 'error' ? 'error' : 'textSecondary'}>
-                                  {mensagemCielo}
+                  <TableContainer sx={{ width: '100%', overflowX: 'auto' }}>
+                    <Table size="small" sx={{ minWidth: 640 }}>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Data</TableCell>
+                          <TableCell>Operação</TableCell>
+                          <TableCell>Resultado</TableCell>
+                          <TableCell align="right">Valor</TableCell>
+                          <TableCell>Retorno Cielo</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {inscricao.transactions.map((transaction) => {
+                          const resultado = getResultadoTransacao(transaction);
+                          const mensagemCielo = getMensagemCielo(transaction);
+                          return (
+                            <TableRow key={transaction.id}>
+                              <TableCell>
+                                <Typography variant="caption" color="textSecondary">
+                                  {formatarData(transaction.createdAt)}
                                 </Typography>
-                              ) : (
-                                <Typography variant="caption" color="textSecondary">—</Typography>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2">
+                                  <strong>{getTransactionTypeLabel(transaction.transactionType)}</strong>
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={resultado.label}
+                                  size="small"
+                                  color={resultado.color}
+                                  variant={resultado.color === 'default' ? 'outlined' : 'filled'}
+                                  icon={
+                                    resultado.color === 'success'
+                                      ? <CheckCircleIcon style={{ fontSize: 16 }} />
+                                      : resultado.color === 'error'
+                                        ? <ErrorOutlineIcon style={{ fontSize: 16 }} />
+                                        : undefined
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell align="right">
+                                {formatarPreco(transaction.amount)}
+                              </TableCell>
+                              <TableCell>
+                                {mensagemCielo ? (
+                                  <Typography variant="caption" color={resultado.color === 'error' ? 'error' : 'textSecondary'}>
+                                    {mensagemCielo}
+                                  </Typography>
+                                ) : (
+                                  <Typography variant="caption" color="textSecondary">—</Typography>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
                 </CardContent>
               </Card>
             </Grid>
@@ -790,34 +874,53 @@ function RegistrationDetails() {
 
           {/* Botões de Ação */}
           <Grid item xs={12}>
-            <div style={{ display: 'flex', gap: 16 }}>
+            <Box sx={{
+              display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center'
+            }}>
               <Button
                 variant="outlined"
                 startIcon={<BackIcon />}
                 onClick={() => history.goBack()}
+                sx={{ mr: 'auto' }}
               >
                 Voltar
               </Button>
-              <Button
-                variant="outlined"
-                color="primary"
-                startIcon={<ReplayIcon />}
-                onClick={handleRecalcularStatus}
-                disabled={recalculatingPayment}
-              >
-                Recalcular status de pagamento
-              </Button>
-              {paymentStatusLabel === 'confirmed' && (
-                <Button
-                  variant="outlined"
-                  color="secondary"
-                  startIcon={<CancelIcon />}
-                  onClick={abrirDialogCancelamento}
+              <Tooltip title="Recalcula o status de pagamento da inscrição com base nos pagamentos confirmados">
+                <span>
+                  <Button
+                    variant="outlined"
+                    color="primary"
+                    startIcon={recalculatingPayment ? <CircularProgress size={16} color="inherit" /> : <ReplayIcon />}
+                    onClick={handleRecalcularStatus}
+                    disabled={recalculatingPayment}
+                    aria-busy={recalculatingPayment || undefined}
+                  >
+                    {recalculatingPayment ? 'Recalculando…' : 'Recalcular status'}
+                  </Button>
+                </span>
+              </Tooltip>
+              {!['cancelled', 'refunded'].includes(paymentStatusLabel) && (
+                <Tooltip
+                  title={
+                    paymentStatusLabel === 'confirmed'
+                      ? ''
+                      : 'Cancelamento disponível somente após a confirmação do pagamento'
+                  }
                 >
-                    Cancelar Inscrição
-                </Button>
+                  <span>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      startIcon={<CancelIcon />}
+                      onClick={abrirDialogCancelamento}
+                      disabled={paymentStatusLabel !== 'confirmed'}
+                    >
+                      Cancelar Inscrição
+                    </Button>
+                  </span>
+                </Tooltip>
               )}
-            </div>
+            </Box>
           </Grid>
         </Grid>
       </PapperBlock>
@@ -834,15 +937,27 @@ function RegistrationDetails() {
       <Dialog open={dialogPagamentoOffline} onClose={handleFecharPagamentoOffline} maxWidth="sm" fullWidth>
         <DialogTitle>{pagamentoOfflineEdicao ? 'Editar pagamento offline' : 'Registrar pagamento presencial'}</DialogTitle>
         <DialogContent>
-          <TextField
-            fullWidth
-            label="Valor do pagamento"
-            type="number"
-            value={formPagamentoOffline.amount}
-            onChange={(event) => setFormPagamentoOffline(prev => ({ ...prev, amount: event.target.value }))}
-            inputProps={{ min: '0.01', step: '0.01' }}
-            style={{ marginBottom: 16 }}
-          />
+          {(() => {
+            const valorParsed = parseFloat(formPagamentoOffline.amount);
+            const valorInvalido = formPagamentoOffline.amount !== ''
+              && (Number.isNaN(valorParsed) || valorParsed <= 0);
+            return (
+              <TextField
+                fullWidth
+                label="Valor do pagamento"
+                type="number"
+                value={formPagamentoOffline.amount}
+                onChange={(event) => setFormPagamentoOffline(prev => ({ ...prev, amount: event.target.value }))}
+                inputProps={{ min: '0.01', step: '0.01', inputMode: 'decimal' }}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">R$</InputAdornment>
+                }}
+                error={valorInvalido}
+                helperText={valorInvalido ? 'Informe um valor maior que zero' : ' '}
+                style={{ marginBottom: 16 }}
+              />
+            );
+          })()}
           <FormControl fullWidth style={{ marginBottom: 16 }}>
             <InputLabel id="metodo-offline-label">Método</InputLabel>
             <Select
@@ -910,12 +1025,24 @@ function RegistrationDetails() {
           <Button onClick={handleFecharPagamentoOffline}>
             Cancelar
           </Button>
-          <Button onClick={handleSalvarPagamentoOffline} color="primary" variant="contained">
+          <Button
+            onClick={handleSalvarPagamentoOffline}
+            color="primary"
+            variant="contained"
+            disabled={(() => {
+              const v = parseFloat(formPagamentoOffline.amount);
+              return formPagamentoOffline.amount === '' || Number.isNaN(v) || v <= 0;
+            })()}
+          >
             {pagamentoOfflineEdicao ? 'Salvar alterações' : 'Registrar pagamento'}
           </Button>
         </DialogActions>
       </Dialog>
-      <Notification message={notification} close={() => setNotification('')} />
+      <Notification
+        message={notification.message}
+        type={notification.type}
+        close={fecharNotificacao}
+      />
       {ConfirmDialog}
     </div>
   );
