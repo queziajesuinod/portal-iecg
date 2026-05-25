@@ -1,16 +1,40 @@
-const { Campus } = require('../models');
 const uuid = require('uuid');
+const { Campus, Member } = require('../models');
+
+const PASTOR_INCLUDE = {
+  model: Member,
+  as: 'pastoresResponsaveisMembers',
+  attributes: ['id', 'fullName', 'photoUrl'],
+  through: { attributes: [] }
+};
 
 async function listar() {
-  return Campus.findAll({ order: [['nome', 'ASC']] });
+  return Campus.findAll({
+    include: [PASTOR_INCLUDE],
+    order: [['nome', 'ASC']]
+  });
+}
+
+async function syncPastoresResponsaveis(campus, body) {
+  if (!Object.prototype.hasOwnProperty.call(body, 'pastoresResponsaveisMemberIds')) return;
+  const ids = Array.isArray(body.pastoresResponsaveisMemberIds)
+    ? body.pastoresResponsaveisMemberIds.filter(Boolean)
+    : [];
+  await campus.setPastoresResponsaveisMembers(ids);
+}
+
+async function reloadWithIncludes(campus) {
+  return Campus.findByPk(campus.id, { include: [PASTOR_INCLUDE] });
 }
 
 async function criar(body) {
-  const { nome, endereco, pastoresResponsaveis, bairro, cidade, estado, lat, lon, transmiteOnline } = body;
+  const {
+    nome, endereco, pastoresResponsaveis, bairro, cidade, estado, lat, lon, transmiteOnline
+  } = body;
   if (!nome) {
     throw new Error('Nome do campus é obrigatório');
   }
-  return Campus.create({
+  const campus = await Campus.create({
     id: uuid.v4(),
     nome,
     endereco,
@@ -22,6 +46,8 @@ async function criar(body) {
     lon,
     transmiteOnline: transmiteOnline ?? false,
   });
+  await syncPastoresResponsaveis(campus, body);
+  return reloadWithIncludes(campus);
 }
 
 async function atualizar(id, body) {
@@ -39,7 +65,8 @@ async function atualizar(id, body) {
   campus.lon = body.lon ?? campus.lon;
   if (body.transmiteOnline !== undefined) campus.transmiteOnline = body.transmiteOnline;
   await campus.save();
-  return campus;
+  await syncPastoresResponsaveis(campus, body);
+  return reloadWithIncludes(campus);
 }
 
 async function deletar(id) {

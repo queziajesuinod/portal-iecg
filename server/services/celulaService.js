@@ -1,8 +1,9 @@
 const { Op } = require('sequelize');
 const {
-  Celula, Campus, Member, User, ApeloDirecionadoCelula
+  Celula, Campus, Member, User, ApeloDirecionadoCelula, MemberCargo
 } = require('../models');
 const webhookEmitter = require('./webhookEmitter');
+const { topMatches } = require('../utils/nameMatcher');
 
 const sanitizeCelular = (valor) => {
   if (!valor) return '';
@@ -59,6 +60,21 @@ const defaultCelulaIncludes = [
     model: Member,
     as: 'liderMemberRef',
     attributes: ['id', 'fullName', 'userId', 'email', 'phone', 'whatsapp', 'photoUrl']
+  },
+  {
+    model: Member,
+    as: 'liderancaMemberRef',
+    attributes: ['id', 'fullName', 'photoUrl']
+  },
+  {
+    model: Member,
+    as: 'pastorGeracaoMemberRef',
+    attributes: ['id', 'fullName', 'photoUrl']
+  },
+  {
+    model: Member,
+    as: 'pastorCampusMemberRef',
+    attributes: ['id', 'fullName', 'photoUrl']
   }
 ];
 
@@ -111,6 +127,36 @@ const CelulaService = {
     return payload;
   },
 
+  /**
+   * Quando o payload define liderancaMemberId mas omite PdG/PdC, busca o
+   * cadastro da LA e preenche a trinca. Util para edicoes parciais (batch
+   * panel, API direta) sem precisar o frontend repetir a logica.
+   */
+  async resolveHierarchyFromLideranca(payload = {}, options = {}) {
+    const transaction = options.transaction || null;
+    if (!Object.prototype.hasOwnProperty.call(payload, 'liderancaMemberId')) return payload;
+    if (!payload.liderancaMemberId) return payload;
+
+    const hasPdg = Object.prototype.hasOwnProperty.call(payload, 'pastorGeracaoMemberId');
+    const hasPdc = Object.prototype.hasOwnProperty.call(payload, 'pastorCampusMemberId');
+    if (hasPdg && hasPdc) return payload;
+
+    const la = await Member.findByPk(payload.liderancaMemberId, {
+      attributes: ['id', 'pastorGeracaoMemberId', 'pastorCampusMemberId'],
+      transaction
+    });
+    if (!la) return payload;
+
+    if (!hasPdg && la.pastorGeracaoMemberId) {
+      payload.pastorGeracaoMemberId = la.pastorGeracaoMemberId;
+    }
+    if (!hasPdc && la.pastorCampusMemberId) {
+      payload.pastorCampusMemberId = la.pastorCampusMemberId;
+    }
+
+    return payload;
+  },
+
   async criarCelula(dados = {}) {
     const payload = { ...dados };
     if (payload.campus && !payload.campusId) {
@@ -133,6 +179,7 @@ const CelulaService = {
       payload.cel_lider = sanitizeCelular(payload.cel_lider);
     }
     await CelulaService.resolveLeaderLinks(payload);
+    await CelulaService.resolveHierarchyFromLideranca(payload);
 
     const celula = await Celula.create(payload);
     webhookEmitter.emit('celula.created', {
@@ -187,6 +234,21 @@ const CelulaService = {
     if (filtros.pastor_geracao) {
       where.pastor_geracao = { [Op.iLike]: `%${filtros.pastor_geracao}%` };
     }
+
+    // Filtros por FK de membro — aceitam string ou array (multi-select)
+    const fkFiltros = [
+      'liderMemberId',
+      'liderancaMemberId',
+      'pastorGeracaoMemberId',
+      'pastorCampusMemberId'
+    ];
+    fkFiltros.forEach((field) => {
+      const value = filtros[field];
+      if (!value) return;
+      const ids = (Array.isArray(value) ? value : [value]).filter(Boolean);
+      if (ids.length === 0) return;
+      where[field] = ids.length === 1 ? ids[0] : { [Op.in]: ids };
+    });
     {
       const ativoValorRaw = filtros.ativo;
       const ativoValor = typeof ativoValorRaw !== 'undefined' && ativoValorRaw !== null
@@ -272,6 +334,7 @@ const CelulaService = {
         payload.cel_lider = sanitizeCelular(payload.cel_lider);
       }
       await CelulaService.resolveLeaderLinks(payload, { transaction });
+      await CelulaService.resolveHierarchyFromLideranca(payload, { transaction });
 
       const updated = await celula.update(payload, { transaction });
 
@@ -471,6 +534,95 @@ const CelulaService = {
     });
 
     return leader;
+  },
+
+  /**
+   * Lista celulas com texto legado em "lideranca" e sem liderancaMemberId,
+   * sugerindo matches por primeiro nome com membros que tem cargo
+   * lideranca_apostolica.
+   */
+  async listarCelulasComLiderancaLegada({ limit = 500 } = {}) {
+    const celulas = await Celula.findAll({
+      where: {
+        ativo: true,
+        liderancaMemberId: null,
+        lideranca: { [Op.ne]: null, [Op.ne]: '' }
+      },
+      attributes: [
+        'id', 'celula', 'rede', 'lider', 'liderMemberId',
+        'lideranca', 'pastor_geracao', 'pastor_campus',
+        'liderancaMemberId', 'pastorGeracaoMemberId', 'pastorCampusMemberId',
+        'campus', 'bairro'
+      ],
+      order: [['celula', 'ASC']],
+      limit
+    });
+
+    const liderancasApostolicas = await Member.findAll({
+      attributes: ['id', 'fullName', 'pastorGeracaoMemberId', 'pastorCampusMemberId'],
+      include: [{
+        model: MemberCargo,
+        as: 'cargos',
+        where: { cargo: 'lideranca_apostolica', ativo: true },
+        attributes: [],
+        required: true
+      }],
+      order: [['fullName', 'ASC']]
+    });
+
+    const candidatos = liderancasApostolicas.map((m) => ({
+      id: m.id,
+      fullName: m.fullName,
+      pastorGeracaoMemberId: m.pastorGeracaoMemberId,
+      pastorCampusMemberId: m.pastorCampusMemberId
+    }));
+
+    return celulas.map((c) => {
+      const matches = topMatches(c.lideranca, candidatos, { limit: 5, minScore: 0.6 });
+      return {
+        celulaId: c.id,
+        celulaNome: c.celula,
+        rede: c.rede,
+        campus: c.campus,
+        bairro: c.bairro,
+        lider: c.lider,
+        liderMemberId: c.liderMemberId,
+        textoLideranca: c.lideranca,
+        textoPastorGeracao: c.pastor_geracao,
+        textoPastorCampus: c.pastor_campus,
+        matches
+      };
+    });
+  },
+
+  /**
+   * Aplica em lote a vinculacao de Lideranca Apostolica nas celulas.
+   * Items: [{ celulaId, liderancaMemberId }]
+   * O resolveHierarchyFromLideranca dentro de atualizarCelula puxa PdG/PdC.
+   */
+  async aplicarLiderancaEmLote(items = []) {
+    if (!Array.isArray(items) || items.length === 0) {
+      return { atualizadas: 0, erros: [] };
+    }
+    let atualizadas = 0;
+    const erros = [];
+
+    for (const item of items) {
+      try {
+        if (!item || !item.celulaId || !item.liderancaMemberId) {
+          erros.push({ celulaId: item?.celulaId, erro: 'celulaId e liderancaMemberId sao obrigatorios' });
+          continue;
+        }
+        await CelulaService.atualizarCelula(item.celulaId, {
+          liderancaMemberId: item.liderancaMemberId
+        });
+        atualizadas += 1;
+      } catch (err) {
+        erros.push({ celulaId: item.celulaId, erro: err.message });
+      }
+    }
+
+    return { atualizadas, erros };
   }
 };
 

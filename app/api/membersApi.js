@@ -95,6 +95,17 @@ export const atualizarStatusTipoAtividadeMembro = (typeId, isActive) => fetchWit
   body: JSON.stringify({ isActive }),
 });
 
+export const listarCargosMembro = (id) => fetchWithAuth(`${API_URL}/api/admin/members/${id}/cargos`);
+
+export const adicionarCargoMembro = (id, cargo, observacao = null) => fetchWithAuth(`${API_URL}/api/admin/members/${id}/cargos`, {
+  method: 'POST',
+  body: JSON.stringify({ cargo, observacao }),
+});
+
+export const removerCargoMembro = (id, cargo) => fetchWithAuth(`${API_URL}/api/admin/members/${id}/cargos/${cargo}`, {
+  method: 'DELETE',
+});
+
 export const notificarDadosIncompletos = (id) => fetchWithAuth(`${API_URL}/api/admin/members/${id}/notificar-dados`, { method: 'POST' });
 
 export const sincronizarDadosDoUser = (id) => fetchWithAuth(`${API_URL}/api/admin/members/${id}/sync-from-user`, { method: 'POST' });

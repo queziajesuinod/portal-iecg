@@ -18,7 +18,9 @@ import {
   desconsiderarMembrosDuplicados,
   buscarMembro,
   sincronizarDadosDoUser,
-  notificarDadosIncompletos as notificarDadosIncompletosApi
+  notificarDadosIncompletos as notificarDadosIncompletosApi,
+  adicionarCargoMembro,
+  removerCargoMembro
 } from '../../../api/membersApi';
 import { listarCampus } from '../../../api/campusApi';
 import { queryKeys } from '../../../utils/queryKeys';
@@ -59,6 +61,12 @@ const fetchMembersPage = async ({
 // Limit alto, cache longo, ativado lazy quando o dialog em modo "Casado" precisa.
 const fetchAllMembersForSelect = async () => {
   const response = await listarMembros({ page: 1, limit: 5000 });
+  return Array.isArray(response?.members) ? response.members : [];
+};
+
+// Pool de membros com cargo especifico — usado nos selects de hierarquia do dialog.
+const fetchMembersByCargo = async (cargo) => {
+  const response = await listarMembros({ page: 1, limit: 5000, cargo });
   return Array.isArray(response?.members) ? response.members : [];
 };
 
@@ -121,6 +129,26 @@ const MembrosPage = () => {
     queryKey: queryKeys.members.allForSelect,
     queryFn: fetchAllMembersForSelect,
     enabled: needsSpouseList,
+    staleTime: 5 * 60_000,
+  });
+
+  // Listas dos cargos para os selects de hierarquia — fetcheadas lazy quando o dialog abre.
+  const liderancasApostolicasQuery = useQuery({
+    queryKey: queryKeys.members.byCargo('lideranca_apostolica'),
+    queryFn: () => fetchMembersByCargo('lideranca_apostolica'),
+    enabled: dialogOpen,
+    staleTime: 5 * 60_000,
+  });
+  const pastoresGeracaoQuery = useQuery({
+    queryKey: queryKeys.members.byCargo('pastor_geracao'),
+    queryFn: () => fetchMembersByCargo('pastor_geracao'),
+    enabled: dialogOpen,
+    staleTime: 5 * 60_000,
+  });
+  const pastoresCampusQuery = useQuery({
+    queryKey: queryKeys.members.byCargo('pastor_campus'),
+    queryFn: () => fetchMembersByCargo('pastor_campus'),
+    enabled: dialogOpen,
     staleTime: 5 * 60_000,
   });
 
@@ -255,17 +283,50 @@ const MembrosPage = () => {
     }
   };
 
+  // Sincroniza cargos do membro: diff entre lista atual e desejada, dispara add/remove.
+  // Falhas individuais nao bloqueiam o salvamento — sao apenas notificadas.
+  const syncCargos = async (memberId, originalCargos, nextCargos) => {
+    const original = new Set(originalCargos || []);
+    const desired = new Set(nextCargos || []);
+    const toAdd = [...desired].filter((c) => !original.has(c));
+    const toRemove = [...original].filter((c) => !desired.has(c));
+
+    const errors = [];
+    await Promise.all([
+      ...toAdd.map((cargo) => adicionarCargoMembro(memberId, cargo).catch((err) => errors.push({ cargo, action: 'add', err }))),
+      ...toRemove.map((cargo) => removerCargoMembro(memberId, cargo).catch((err) => errors.push({ cargo, action: 'remove', err })))
+    ]);
+    return errors;
+  };
+
   const saveMutation = useMutation({
     mutationFn: async (payload) => {
+      const originalCargos = memberEdicao?.cargos
+        ? memberEdicao.cargos.map((c) => (typeof c === 'string' ? c : c?.cargo)).filter(Boolean)
+        : [];
+      const desiredCargos = form.cargos || [];
+
+      let memberId;
+      let mode;
       if (memberEdicao?.id) {
         await atualizarMembro(memberEdicao.id, payload);
-        return { mode: 'update' };
+        memberId = memberEdicao.id;
+        mode = 'update';
+      } else {
+        const created = await criarMembro(payload);
+        memberId = created?.id;
+        mode = 'create';
       }
-      await criarMembro(payload);
-      return { mode: 'create' };
+
+      const cargoErrors = memberId ? await syncCargos(memberId, originalCargos, desiredCargos) : [];
+      return { mode, cargoErrors };
     },
     onSuccess: (result) => {
-      notify(result.mode === 'update' ? 'Membro atualizado com sucesso' : 'Membro cadastrado com sucesso');
+      if (result.cargoErrors?.length) {
+        notify(`Membro salvo, mas houve falha ao atualizar ${result.cargoErrors.length} cargo(s).`, 'warning');
+      } else {
+        notify(result.mode === 'update' ? 'Membro atualizado com sucesso' : 'Membro cadastrado com sucesso');
+      }
       setDialogOpen(false);
       resetForm();
       reloadMembersAndDuplicates();
@@ -517,6 +578,9 @@ const MembrosPage = () => {
         campi={campi}
         spouseOptions={spouseOptions}
         onSpouseChange={handleSpouseChange}
+        liderancasApostolicas={liderancasApostolicasQuery.data || []}
+        pastoresGeracao={pastoresGeracaoQuery.data || []}
+        pastoresCampus={pastoresCampusQuery.data || []}
         showWebcam={showWebcam}
         setShowWebcam={setShowWebcam}
         onFileUpload={handleFileUpload}

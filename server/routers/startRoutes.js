@@ -10,6 +10,8 @@ router.get('/celula/', CelulaController.listar);
 router.get('/celula/leader/contact', CelulaController.buscarPorLeaderContact);
 router.get('/celula/duplicados', CelulaController.buscarDuplicados);
 router.post('/celula/mesclar', CelulaController.mesclar);
+router.get('/celula/lideranca-legada', (req, res) => CelulaController.listarCelulasComLiderancaLegada(req, res));
+router.post('/celula/lideranca-legada/aplicar-lote', (req, res) => CelulaController.aplicarLiderancaEmLote(req, res));
 router.get('/celula/:id', CelulaController.buscarPorId);
 router.put('/celula/:id', CelulaController.atualizar);
 router.delete('/celula/:id', CelulaController.deletar);

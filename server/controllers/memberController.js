@@ -33,6 +33,9 @@ function sanitizeMemberPayload(payload = {}) {
     'campusId',
     'celulaId',
     'spouseMemberId',
+    'liderancaApostolicaMemberId',
+    'pastorGeracaoMemberId',
+    'pastorCampusMemberId',
     'photoUrl',
     'notes'
   ];
@@ -162,7 +165,7 @@ async function list(req, res) {
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 5000);
     const filters = {};
-    ['status', 'campusId', 'celulaId', 'search'].forEach((key) => {
+    ['status', 'campusId', 'celulaId', 'search', 'cargo'].forEach((key) => {
       const value = req.query[key];
       if (value && value !== 'undefined') {
         filters[key] = value;
@@ -416,6 +419,41 @@ async function notificarDadosIncompletos(req, res) {
   }
 }
 
+async function listCargos(req, res) {
+  try {
+    const cargos = await memberService.listMemberCargos(req.params.id);
+    return res.status(200).json(cargos);
+  } catch (error) {
+    const status = /nao encontrado/i.test(error.message) ? 404 : 500;
+    return res.status(status).json({ message: error.message });
+  }
+}
+
+async function addCargo(req, res) {
+  try {
+    const { cargo, observacao } = req.body || {};
+    const registro = await memberService.addMemberCargo(req.params.id, cargo, { observacao });
+    return res.status(201).json(registro);
+  } catch (error) {
+    let status = 500;
+    if (/invalido/i.test(error.message)) status = 400;
+    else if (/nao encontrado/i.test(error.message)) status = 404;
+    return res.status(status).json({ message: error.message });
+  }
+}
+
+async function removeCargo(req, res) {
+  try {
+    const { cargo } = req.params;
+    const result = await memberService.removeMemberCargo(req.params.id, cargo);
+    if (!result.removed) return res.status(404).json({ message: 'Cargo nao encontrado para este membro' });
+    return res.status(204).end();
+  } catch (error) {
+    const status = /invalido/i.test(error.message) ? 400 : 500;
+    return res.status(status).json({ message: error.message });
+  }
+}
+
 async function syncFromUser(req, res) {
   try {
     const { id } = req.params;
@@ -458,5 +496,8 @@ module.exports = {
   updateActivityType,
   setActivityTypeActive,
   notificarDadosIncompletos,
-  syncFromUser
+  syncFromUser,
+  listCargos,
+  addCargo,
+  removeCargo
 };

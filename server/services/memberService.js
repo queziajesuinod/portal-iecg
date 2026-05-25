@@ -8,6 +8,7 @@ const {
   MemberActivity,
   MemberActivityType,
   MemberMilestone,
+  MemberCargo,
   Voluntariado,
   MemberDuplicateDismissal,
   MIA,
@@ -51,6 +52,7 @@ const MILESTONE_TYPES = [
   'ANIVERSARIO_CONVERSAO'
 ];
 const ACTIVITY_CODE_REGEX = /^[A-Z0-9_]+$/;
+const VALID_MEMBER_CARGOS = ['lideranca_apostolica', 'pastor_geracao', 'pastor_campus'];
 const STATUS_PRIORITY = {
   VISITANTE: 1,
   CONGREGADO: 2,
@@ -145,6 +147,22 @@ class MemberService {
     return normalizeText(value);
   }
 
+  areNamesExactlyEqual(nameA = '', nameB = '') {
+    const a = this.normalizeMemberNameForCompare(nameA);
+    const b = this.normalizeMemberNameForCompare(nameB);
+    return Boolean(a) && a === b;
+  }
+
+  // Cadastro "vazio": nome preenchido mas sem nenhum dado de contato/documento.
+  // Esse padrao quase sempre e duplicidade (alguem criou e nunca completou).
+  isOrphanMember(member) {
+    if (!member) return false;
+    const hasPhone = Boolean(sanitizePhone(member.phone || member.whatsapp));
+    const hasEmail = Boolean(normalizeEmail(member.email));
+    const hasCpf = Boolean(normalizeCpf(member.cpf));
+    return !hasPhone && !hasEmail && !hasCpf;
+  }
+
   areNamesSimilar(nameA = '', nameB = '') {
     const a = this.normalizeMemberNameForCompare(nameA);
     const b = this.normalizeMemberNameForCompare(nameB);
@@ -193,7 +211,12 @@ class MemberService {
         reasons.push({ type: 'phone_suffix', label: 'Finais de telefone iguais' });
       }
     }
-    if (this.areNamesSimilar(primary?.fullName, duplicate?.fullName)) {
+    if (this.areNamesExactlyEqual(primary?.fullName, duplicate?.fullName)) {
+      reasons.push({ type: 'name_exact', label: 'Mesmo nome completo' });
+      if (this.isOrphanMember(primary) || this.isOrphanMember(duplicate)) {
+        reasons.push({ type: 'orphan_name_exact', label: 'Nome igual e um cadastro sem dados' });
+      }
+    } else if (this.areNamesSimilar(primary?.fullName, duplicate?.fullName)) {
       reasons.push({ type: 'name', label: 'Nome parecido' });
     }
 
@@ -205,6 +228,8 @@ class MemberService {
       if (reason.type === 'cpf') return total + 100;
       if (reason.type === 'email') return total + 80;
       if (reason.type === 'phone') return total + 70;
+      if (reason.type === 'name_exact') return total + 65;
+      if (reason.type === 'orphan_name_exact') return total + 30;
       if (reason.type === 'phone_suffix') return total + 40;
       if (reason.type === 'name') return total + 45;
       return total;
@@ -335,6 +360,28 @@ class MemberService {
         model: Member,
         as: 'spouse',
         attributes: ['id', 'fullName', 'preferredName', 'photoUrl', 'status', 'userId']
+      },
+      {
+        model: Member,
+        as: 'liderancaApostolica',
+        attributes: ['id', 'fullName', 'preferredName', 'photoUrl']
+      },
+      {
+        model: Member,
+        as: 'pastorGeracao',
+        attributes: ['id', 'fullName', 'preferredName', 'photoUrl']
+      },
+      {
+        model: Member,
+        as: 'pastorCampus',
+        attributes: ['id', 'fullName', 'preferredName', 'photoUrl']
+      },
+      {
+        model: MemberCargo,
+        as: 'cargos',
+        where: { ativo: true },
+        required: false,
+        attributes: ['id', 'cargo']
       },
       {
         model: MemberJourney,
@@ -1011,6 +1058,22 @@ class MemberService {
           sequelize.literal(`EXISTS (SELECT 1 FROM "${schema}"."celulas" WHERE "liderMemberId" = "Member"."id" AND "ativo" = true)`)
         ];
       }
+
+      if (filters.cargo) {
+        const cargosSolicitados = (Array.isArray(filters.cargo) ? filters.cargo : String(filters.cargo).split(','))
+          .map((c) => String(c).trim())
+          .filter((c) => VALID_MEMBER_CARGOS.includes(c));
+
+        if (cargosSolicitados.length > 0) {
+          const inList = cargosSolicitados.map((c) => `'${c}'`).join(', ');
+          where[Op.and] = [
+            ...(where[Op.and] || []),
+            sequelize.literal(
+              `EXISTS (SELECT 1 FROM "${schema}"."MemberCargos" mc WHERE mc."membroId" = "Member"."id" AND mc."ativo" = true AND mc."cargo" IN (${inList}))`
+            )
+          ];
+        }
+      }
       const { count, rows } = await Member.findAndCountAll({
         where,
         attributes: {
@@ -1024,11 +1087,15 @@ class MemberService {
         include: [
           { model: Campus, as: 'campus', attributes: ['id', 'nome'] },
           { model: Celula, as: 'celula', attributes: ['id', 'celula'] },
-          { model: MemberJourney, as: 'journey', attributes: ['currentStage', 'engagementScore', 'healthStatus'] }
+          { model: MemberJourney, as: 'journey', attributes: ['currentStage', 'engagementScore', 'healthStatus'] },
+          {
+            model: MemberCargo, as: 'cargos', attributes: ['id', 'cargo'], where: { ativo: true }, required: false
+          }
         ],
         limit,
         offset,
-        order: [['fullName', 'ASC']]
+        order: [['fullName', 'ASC']],
+        distinct: true
       });
 
       return {
@@ -1087,6 +1154,7 @@ class MemberService {
       const phoneIndex = new Map();
       const phoneSuffixIndex = new Map();
       const firstNameIndex = new Map();
+      const fullNameIndex = new Map();
 
       const pushTo = (map, key, member) => {
         if (!key) return;
@@ -1106,6 +1174,9 @@ class MemberService {
         const normalizedName = normalizeText(m.fullName || '');
         const firstToken = normalizedName.split(' ').filter((t) => t.length >= 2)[0];
         pushTo(firstNameIndex, firstToken, m);
+        // Bucket por nome completo normalizado — garante que cadastros com
+        // mesmo nome (e sem outros sinais) entrem como candidatos.
+        pushTo(fullNameIndex, normalizedName, m);
       }
 
       // Coleta pares candidatos (deduplicados) a partir dos buckets > 1.
@@ -1130,6 +1201,7 @@ class MemberService {
       collectPairsFromBuckets(phoneIndex);
       collectPairsFromBuckets(phoneSuffixIndex);
       collectPairsFromBuckets(firstNameIndex);
+      collectPairsFromBuckets(fullNameIndex);
 
       // Lookup id -> member para resolver pares.
       const membersById = new Map(members.map((m) => [String(m.id), m]));
@@ -1147,15 +1219,31 @@ class MemberService {
 
         const reasons = this.buildDuplicateReasons(older, newer);
         const hasStrongMatch = reasons.some((r) => ['cpf', 'email', 'phone'].includes(r.type));
+        const hasCpfMatch = reasons.some((r) => r.type === 'cpf');
         const hasPhoneSuffix = reasons.some((r) => r.type === 'phone_suffix');
-        const hasName = reasons.some((r) => r.type === 'name');
-        const hasNameOnlyMatch = reasons.length === 1 && reasons[0].type === 'name';
-        const phoneSuffixAloneInsufficient = hasPhoneSuffix && !hasStrongMatch && !hasName;
+        const hasNameExact = reasons.some((r) => r.type === 'name_exact');
+        const hasNameSimilar = reasons.some((r) => r.type === 'name');
+        const hasAnyName = hasNameExact || hasNameSimilar;
+        // Nome parecido (mas nao identico) sozinho nao basta — pode ser homonimo.
+        const hasNameSimilarOnly = reasons.length === 1 && reasons[0].type === 'name';
+        const phoneSuffixAloneInsufficient = hasPhoneSuffix && !hasStrongMatch && !hasAnyName;
 
-        if (!reasons.length || hasNameOnlyMatch || phoneSuffixAloneInsufficient
-          || (!hasStrongMatch && !hasPhoneSuffix && reasons.length < 2)) {
+        // Sinal negativo forte: ambos tem telefone cadastrado e sao diferentes.
+        // CPF batendo e prova de mesma pessoa, entao sobrepoe (telefone errado).
+        const olderPhone = sanitizePhone(older.phone || older.whatsapp);
+        const newerPhone = sanitizePhone(newer.phone || newer.whatsapp);
+        if (olderPhone && newerPhone && olderPhone !== newerPhone && !hasCpfMatch) {
           continue;
         }
+
+        if (!reasons.length || hasNameSimilarOnly || phoneSuffixAloneInsufficient) {
+          continue;
+        }
+        // Aceita se: sinal forte (cpf/email/phone) OU nome identico OU sufixo+nome OU 2+ sinais.
+        const accept = hasStrongMatch || hasNameExact
+          || (hasPhoneSuffix && hasAnyName)
+          || reasons.length >= 2;
+        if (!accept) continue;
 
         suggestions.push(this.serializeDuplicateSuggestion(older, newer, reasons));
       }
@@ -2068,6 +2156,54 @@ class MemberService {
     } catch (error) {
       throw new Error(`Erro ao atualizar jornada: ${error.message}`);
     }
+  }
+
+  async listMemberCargos(memberId) {
+    if (!memberId) throw new Error('ID do membro nao informado');
+    const member = await Member.findByPk(memberId, { attributes: ['id'] });
+    if (!member) throw new Error('Membro nao encontrado');
+
+    return MemberCargo.findAll({
+      where: { membroId: memberId, ativo: true },
+      order: [['cargo', 'ASC']]
+    });
+  }
+
+  async addMemberCargo(memberId, cargo, { observacao = null } = {}) {
+    if (!memberId) throw new Error('ID do membro nao informado');
+    if (!VALID_MEMBER_CARGOS.includes(cargo)) {
+      throw new Error(`Cargo invalido. Valores aceitos: ${VALID_MEMBER_CARGOS.join(', ')}`);
+    }
+
+    const member = await Member.findByPk(memberId, { attributes: ['id'] });
+    if (!member) throw new Error('Membro nao encontrado');
+
+    const existente = await MemberCargo.findOne({ where: { membroId: memberId, cargo } });
+    if (existente) {
+      if (!existente.ativo) {
+        await existente.update({ ativo: true, observacao: observacao ?? existente.observacao });
+      }
+      return existente;
+    }
+
+    return MemberCargo.create({
+      membroId: memberId, cargo, ativo: true, observacao
+    });
+  }
+
+  async removeMemberCargo(memberId, cargo) {
+    if (!memberId) throw new Error('ID do membro nao informado');
+    if (!VALID_MEMBER_CARGOS.includes(cargo)) {
+      throw new Error(`Cargo invalido. Valores aceitos: ${VALID_MEMBER_CARGOS.join(', ')}`);
+    }
+
+    const registro = await MemberCargo.findOne({
+      where: { membroId: memberId, cargo, ativo: true }
+    });
+    if (!registro) return { removed: false };
+
+    await registro.update({ ativo: false });
+    return { removed: true };
   }
 }
 

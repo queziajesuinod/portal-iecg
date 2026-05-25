@@ -24,6 +24,7 @@ export const queryKeys = {
     all: ['members'],
     list: ['members', 'list'],
     allForSelect: ['members', 'all-for-select'],
+    byCargo: (cargo) => ['members', 'by-cargo', cargo],
     duplicates: ['members', 'duplicates'],
     detail: (id) => ['members', 'detail', id],
   },

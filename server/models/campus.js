@@ -1,4 +1,3 @@
-'use strict';
 const { Model, DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
@@ -12,6 +11,14 @@ module.exports = (sequelize) => {
       }
       if (models.RegistroCulto) {
         Campus.hasMany(models.RegistroCulto, { foreignKey: 'campusId', as: 'registrosCulto' });
+      }
+      if (models.Member && models.CampusPastorResponsavel) {
+        Campus.belongsToMany(models.Member, {
+          through: models.CampusPastorResponsavel,
+          foreignKey: 'campusId',
+          otherKey: 'memberId',
+          as: 'pastoresResponsaveisMembers'
+        });
       }
     }
   }

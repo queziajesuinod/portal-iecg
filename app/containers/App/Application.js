@@ -9,6 +9,7 @@ import WelcomePage from '../Pages/StartPage/WelcomePage';
 import BlankPage from '../Pages/BlankPage';
 import ListagemCelulasPage from '../Pages/StartPage/celulasPage';
 import CadastrarCelula from '../Pages/StartPage/cadastrarCelulasPage';
+import MigrarHierarquiaCelulasPage from '../Pages/StartPage/MigrarHierarquiaCelulasPage';
 import CampusPage from '../Pages/StartPage/campusPage';
 import ApelosDirecionadosPage from '../Pages/StartPage/ApelosDirecionadosPage';
 import FilaApelosPage from '../Pages/StartPage/FilaApelosPage';
@@ -102,6 +103,7 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/diario-bordo" component={BoardJournalPage} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/start/celulas" component={ListagemCelulasPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
             <ProtectedRoute exact path="/app/start/celulas/cadastrar" component={CadastrarCelula} isAuthenticated={isAuthenticated} requiredPermission="CELULA_CADASTRAR" />
+            <ProtectedRoute exact path="/app/start/celulas/migrar-hierarquia" component={MigrarHierarquiaCelulasPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_CADASTRAR" />
             <ProtectedRoute exact path="/app/start/celulas/detalhes" component={BlankPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
             <ProtectedRoute exact path="/app/start/campus" component={CampusPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
             <ProtectedRoute exact path="/app/start/direcionamentos" component={ApelosDirecionadosPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />

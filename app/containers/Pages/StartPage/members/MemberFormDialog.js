@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import PropTypes from 'prop-types';
 import {
   Dialog,
@@ -32,6 +32,8 @@ import SchoolIcon from '@mui/icons-material/School';
 import SearchIcon from '@mui/icons-material/Search';
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import BadgeIcon from '@mui/icons-material/Badge';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import Webcam from 'react-webcam';
 import SectionCard from '../../../../components/Jornada/SectionCard';
 import {
@@ -40,6 +42,7 @@ import {
   ESTADO_CIVIL_OPTIONS,
   GENDER_OPTIONS,
   STATUS_OPTIONS,
+  CARGO_OPTIONS,
   formatPhone,
   formatCPF
 } from './membersHelpers';
@@ -95,6 +98,9 @@ const MemberFormDialog = ({
   campi,
   spouseOptions,
   onSpouseChange,
+  liderancasApostolicas,
+  pastoresGeracao,
+  pastoresCampus,
   showWebcam,
   setShowWebcam,
   onFileUpload,
@@ -113,6 +119,74 @@ const MemberFormDialog = ({
     () => spouseOptions.find((opt) => opt.id === form.spouseMemberId) || null,
     [spouseOptions, form.spouseMemberId]
   );
+
+  // Inclui o proprio membro como opcao (permite "aponta pra si mesmo" para multi-cargo)
+  const liderancasApostolicasOptions = useMemo(() => {
+    const list = Array.isArray(liderancasApostolicas) ? [...liderancasApostolicas] : [];
+    if (form.id && !list.some((p) => p.id === form.id) && (form.cargos || []).includes('lideranca_apostolica')) {
+      list.unshift({ id: form.id, fullName: form.name || '(este membro)' });
+    }
+    return list;
+  }, [liderancasApostolicas, form.id, form.name, form.cargos]);
+
+  const pastoresGeracaoOptions = useMemo(() => {
+    const list = Array.isArray(pastoresGeracao) ? [...pastoresGeracao] : [];
+    if (form.id && !list.some((p) => p.id === form.id) && (form.cargos || []).includes('pastor_geracao')) {
+      list.unshift({ id: form.id, fullName: form.name || '(este membro)' });
+    }
+    return list;
+  }, [pastoresGeracao, form.id, form.name, form.cargos]);
+
+  const pastoresCampusOptions = useMemo(() => {
+    const list = Array.isArray(pastoresCampus) ? [...pastoresCampus] : [];
+    if (form.id && !list.some((p) => p.id === form.id) && (form.cargos || []).includes('pastor_campus')) {
+      list.unshift({ id: form.id, fullName: form.name || '(este membro)' });
+    }
+    return list;
+  }, [pastoresCampus, form.id, form.name, form.cargos]);
+
+  const selectedLiderancaApostolica = useMemo(
+    () => liderancasApostolicasOptions.find((opt) => opt.id === form.liderancaApostolicaMemberId) || null,
+    [liderancasApostolicasOptions, form.liderancaApostolicaMemberId]
+  );
+
+  const selectedPastorGeracao = useMemo(
+    () => pastoresGeracaoOptions.find((opt) => opt.id === form.pastorGeracaoMemberId) || null,
+    [pastoresGeracaoOptions, form.pastorGeracaoMemberId]
+  );
+
+  const selectedPastorCampus = useMemo(
+    () => pastoresCampusOptions.find((opt) => opt.id === form.pastorCampusMemberId) || null,
+    [pastoresCampusOptions, form.pastorCampusMemberId]
+  );
+
+  // Auto-fill: se ja tem PdG mas nao tem PdC, e o PdG tem um PdC cadastrado, herda.
+  // Cobre cadastro (quando o PdG e setado por algum atalho) e edicao (membro antigo com PdC vazio).
+  useEffect(() => {
+    if (!open) return;
+    if (!form.pastorGeracaoMemberId || form.pastorCampusMemberId) return;
+    const pdg = pastoresGeracaoOptions.find((p) => p.id === form.pastorGeracaoMemberId);
+    const inheritedPdc = pdg?.pastorCampusMemberId || pdg?.pastorCampus?.id;
+    if (inheritedPdc) {
+      onFormChange('pastorCampusMemberId', inheritedPdc);
+    }
+  }, [open, form.pastorGeracaoMemberId, form.pastorCampusMemberId, pastoresGeracaoOptions, onFormChange]);
+
+  // Auto-fill via LA: se ja tem Lideranca Apostolica mas nao tem PdG/PdC, herda da LA.
+  useEffect(() => {
+    if (!open) return;
+    if (!form.liderancaApostolicaMemberId) return;
+    const la = liderancasApostolicasOptions.find((p) => p.id === form.liderancaApostolicaMemberId);
+    if (!la) return;
+    if (!form.pastorGeracaoMemberId) {
+      const inheritedPdg = la.pastorGeracaoMemberId || la.pastorGeracao?.id;
+      if (inheritedPdg) onFormChange('pastorGeracaoMemberId', inheritedPdg);
+    }
+    if (!form.pastorCampusMemberId) {
+      const inheritedPdc = la.pastorCampusMemberId || la.pastorCampus?.id;
+      if (inheritedPdc) onFormChange('pastorCampusMemberId', inheritedPdc);
+    }
+  }, [open, form.liderancaApostolicaMemberId, form.pastorGeracaoMemberId, form.pastorCampusMemberId, liderancasApostolicasOptions, onFormChange]);
 
   const initials = stringToInitials(form.preferredName || form.name);
   const avatarColor = stringToColor(form.name || 'membro');
@@ -567,6 +641,95 @@ const MemberFormDialog = ({
             </Grid>
           </SectionCard>
 
+          <SectionCard title="Cargos" icon={<BadgeIcon color="primary" fontSize="small" />}>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              Selecione os cargos eclesiásticos deste membro. Esses cargos aparecerão na seleção de líderes/pastores no cadastro de células.
+            </Typography>
+            <ToggleButtonGroup
+              value={form.cargos || []}
+              onChange={(_evt, value) => onFormChange('cargos', value)}
+              size="small"
+              color="primary"
+              sx={{ flexWrap: 'wrap', gap: 0.5, '& .MuiToggleButton-root': { borderRadius: 2, px: 2 } }}
+            >
+              {CARGO_OPTIONS.map((opt) => (
+                <ToggleButton key={opt.value} value={opt.value}>
+                  {opt.label}
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+          </SectionCard>
+
+          <SectionCard title="Hierarquia" icon={<AccountTreeIcon color="primary" fontSize="small" />}>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              Cadeia de cobertura deste membro: Liderança Apostólica → Pastor de Geração → Pastor de Campus. Selecionar a Liderança Apostólica pode preencher os pastores automaticamente. Se este membro é o próprio responsável em algum nível, selecione ele mesmo.
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={4}>
+                <Autocomplete
+                  size="small"
+                  options={liderancasApostolicasOptions}
+                  getOptionLabel={(option) => option?.fullName || ''}
+                  isOptionEqualToValue={(option, value) => option?.id === value?.id}
+                  value={selectedLiderancaApostolica}
+                  onChange={(_evt, value) => {
+                    onFormChange('liderancaApostolicaMemberId', value ? value.id : '');
+                    // Cascata: se a LA tem PdG e/ou PdC cadastrados, herda.
+                    const inheritedPdg = value?.pastorGeracaoMemberId || value?.pastorGeracao?.id;
+                    if (inheritedPdg) onFormChange('pastorGeracaoMemberId', inheritedPdg);
+                    const inheritedPdc = value?.pastorCampusMemberId || value?.pastorCampus?.id;
+                    if (inheritedPdc) onFormChange('pastorCampusMemberId', inheritedPdc);
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Liderança Apostólica responsável"
+                      helperText="Cobre líderes de célula que reportam a uma LA"
+                    />
+                  )}
+                />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Autocomplete
+                  size="small"
+                  options={pastoresGeracaoOptions}
+                  getOptionLabel={(option) => option?.fullName || ''}
+                  isOptionEqualToValue={(option, value) => option?.id === value?.id}
+                  value={selectedPastorGeracao}
+                  onChange={(_evt, value) => {
+                    onFormChange('pastorGeracaoMemberId', value ? value.id : '');
+                    // Se o PdG selecionado ja tem um PdC cadastrado, puxa automaticamente.
+                    // So preenche se vier algo — nao limpa caso o PdG nao tenha PdC.
+                    const inheritedPdc = value?.pastorCampusMemberId || value?.pastorCampus?.id;
+                    if (inheritedPdc) {
+                      onFormChange('pastorCampusMemberId', inheritedPdc);
+                    }
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Pastor de Geração responsável"
+                      helperText="Selecionar pode preencher o Pastor de Campus automaticamente"
+                    />
+                  )}
+                />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Autocomplete
+                  size="small"
+                  options={pastoresCampusOptions}
+                  getOptionLabel={(option) => option?.fullName || ''}
+                  isOptionEqualToValue={(option, value) => option?.id === value?.id}
+                  value={selectedPastorCampus}
+                  onChange={(_evt, value) => onFormChange('pastorCampusMemberId', value ? value.id : '')}
+                  renderInput={(params) => (
+                    <TextField {...params} label="Pastor de Campus responsável" />
+                  )}
+                />
+              </Grid>
+            </Grid>
+          </SectionCard>
+
           <SectionCard title="Formação" icon={<SchoolIcon color="primary" fontSize="small" />}>
             <Autocomplete
               multiple
@@ -652,6 +815,11 @@ MemberFormDialog.propTypes = {
     cidade: PropTypes.string,
     estado: PropTypes.string,
     country: PropTypes.string,
+    cargos: PropTypes.arrayOf(PropTypes.string),
+    liderancaApostolicaMemberId: PropTypes.string,
+    pastorGeracaoMemberId: PropTypes.string,
+    pastorCampusMemberId: PropTypes.string,
+    id: PropTypes.string,
   }).isRequired,
   onFormChange: PropTypes.func.isRequired,
   campi: PropTypes.arrayOf(PropTypes.shape({
@@ -663,6 +831,18 @@ MemberFormDialog.propTypes = {
     fullName: PropTypes.string,
   })),
   onSpouseChange: PropTypes.func.isRequired,
+  liderancasApostolicas: PropTypes.arrayOf(PropTypes.shape({
+    id: PropTypes.string,
+    fullName: PropTypes.string,
+  })),
+  pastoresGeracao: PropTypes.arrayOf(PropTypes.shape({
+    id: PropTypes.string,
+    fullName: PropTypes.string,
+  })),
+  pastoresCampus: PropTypes.arrayOf(PropTypes.shape({
+    id: PropTypes.string,
+    fullName: PropTypes.string,
+  })),
   showWebcam: PropTypes.bool,
   setShowWebcam: PropTypes.func.isRequired,
   onFileUpload: PropTypes.func.isRequired,
@@ -677,6 +857,9 @@ MemberFormDialog.defaultProps = {
   isEditing: false,
   campi: [],
   spouseOptions: [],
+  liderancasApostolicas: [],
+  pastoresGeracao: [],
+  pastoresCampus: [],
   showWebcam: false,
   geoLoading: false,
   submitting: false,

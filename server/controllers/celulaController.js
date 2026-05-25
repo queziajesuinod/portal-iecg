@@ -171,6 +171,10 @@ class CelulaController {
         lider,
         dia,
         pastor_geracao,
+        liderMemberId,
+        liderancaMemberId,
+        pastorGeracaoMemberId,
+        pastorCampusMemberId,
         page = 1,
         limit = 10
       } = req.query;
@@ -185,7 +189,11 @@ class CelulaController {
           ativo,
           lider,
           dia,
-          pastor_geracao
+          pastor_geracao,
+          liderMemberId,
+          liderancaMemberId,
+          pastorGeracaoMemberId,
+          pastorCampusMemberId
         },
         parseInt(page, 10),
         parseInt(limit, 10)
@@ -282,6 +290,30 @@ class CelulaController {
     } catch (error) {
       console.error('Erro ao deletar celula:', error);
       return res.status(400).json({ erro: error.message });
+    }
+  }
+
+  async listarCelulasComLiderancaLegada(req, res) {
+    try {
+      const data = await CelulaService.listarCelulasComLiderancaLegada();
+      return res.status(200).json(data);
+    } catch (error) {
+      console.error('Erro ao listar células com liderança legada:', error);
+      return res.status(500).json({ erro: error.message });
+    }
+  }
+
+  async aplicarLiderancaEmLote(req, res) {
+    try {
+      const { items } = req.body || {};
+      if (!Array.isArray(items)) {
+        return res.status(400).json({ erro: 'items deve ser um array de { celulaId, liderancaMemberId }' });
+      }
+      const resultado = await CelulaService.aplicarLiderancaEmLote(items);
+      return res.status(200).json(resultado);
+    } catch (error) {
+      console.error('Erro ao aplicar liderança em lote:', error);
+      return res.status(500).json({ erro: error.message });
     }
   }
 }

@@ -20,7 +20,14 @@ export const GENDER_OPTIONS = ['MASCULINO', 'FEMININO'];
 export const STATUS_OPTIONS = ['VISITANTE', 'CONGREGADO', 'MEMBRO', 'INATIVO', 'MIA', 'TRANSFERIDO', 'FALECIDO'];
 export const INACTIVE_STATUSES = ['INATIVO', 'MIA', 'TRANSFERIDO', 'FALECIDO'];
 
+export const CARGO_OPTIONS = [
+  { value: 'lideranca_apostolica', label: 'Liderança Apostólica' },
+  { value: 'pastor_geracao', label: 'Pastor de Geração' },
+  { value: 'pastor_campus', label: 'Pastor de Campus' }
+];
+
 export const initialFormState = {
+  id: '',
   name: '',
   preferredName: '',
   email: '',
@@ -47,6 +54,9 @@ export const initialFormState = {
   conversionDate: '',
   campusId: '',
   spouseMemberId: '',
+  liderancaApostolicaMemberId: '',
+  pastorGeracaoMemberId: '',
+  pastorCampusMemberId: '',
   photoUrl: '',
   escolaridade: '',
   nome_esposo: '',
@@ -54,7 +64,8 @@ export const initialFormState = {
   frequenta_celula: false,
   batizado: false,
   encontro: false,
-  escolas: []
+  escolas: [],
+  cargos: []
 };
 
 const maritalStatusToEnum = {
@@ -117,6 +128,7 @@ export const toFormFromMember = (member) => {
   const legacy = parseLegacyNotes(member.notes);
   return {
     ...initialFormState,
+    id: member.id || '',
     name: member.fullName || '',
     preferredName: member.preferredName || '',
     email: member.email || '',
@@ -143,6 +155,9 @@ export const toFormFromMember = (member) => {
     conversionDate: member.conversionDate || '',
     campusId: member.campusId || '',
     spouseMemberId: member.spouseMemberId || member.spouse?.id || '',
+    liderancaApostolicaMemberId: member.liderancaApostolicaMemberId || member.liderancaApostolica?.id || '',
+    pastorGeracaoMemberId: member.pastorGeracaoMemberId || member.pastorGeracao?.id || '',
+    pastorCampusMemberId: member.pastorCampusMemberId || member.pastorCampus?.id || '',
     photoUrl: member.photoUrl || '',
     escolaridade: legacy.escolaridade || '',
     nome_esposo: legacy.nome_esposo || '',
@@ -150,7 +165,10 @@ export const toFormFromMember = (member) => {
     frequenta_celula: Boolean(legacy.frequenta_celula),
     batizado: Boolean(legacy.batizado),
     encontro: Boolean(legacy.encontro),
-    escolas: normalizeEscolas(legacy.escolas)
+    escolas: normalizeEscolas(legacy.escolas),
+    cargos: Array.isArray(member.cargos)
+      ? member.cargos.map((c) => (typeof c === 'string' ? c : c?.cargo)).filter(Boolean)
+      : []
   };
 };
 
@@ -181,6 +199,9 @@ export const buildPayloadFromForm = (form) => ({
   statusReason: form.statusReason || null,
   campusId: form.campusId || null,
   spouseMemberId: form.estado_civil === 'Casado' ? (form.spouseMemberId || null) : null,
+  liderancaApostolicaMemberId: form.liderancaApostolicaMemberId || null,
+  pastorGeracaoMemberId: form.pastorGeracaoMemberId || null,
+  pastorCampusMemberId: form.pastorCampusMemberId || null,
   photoUrl: form.photoUrl || null,
   notes: JSON.stringify({
     legacy: {
