@@ -53,14 +53,17 @@ const formInicial = {
   bairro: '',
   cidade: '',
   estado: '',
-  lideranca: '',
-  pastor_geracao: '',
-  pastor_campus: '',
+  liderancaMemberId: '',
+  pastorGeracaoMemberId: '',
+  pastorCampusMemberId: '',
   dia: '',
   lat: '',
   lon: '',
   horario: ''
 };
+
+const memberHasCargo = (member, cargo) => Array.isArray(member?.cargos)
+  && member.cargos.some((c) => (typeof c === 'string' ? c : c?.cargo) === cargo);
 
 const REDE_OPTIONS = [
   'RELEVANTE JUNIORS RAPAZES',
@@ -267,6 +270,9 @@ const CadastrarCelula = () => {
       setFormData({
         ...formInicial,
         ...safeEdit,
+        liderancaMemberId: celulaEditando.liderancaMemberId || celulaEditando.liderancaMemberRef?.id || '',
+        pastorGeracaoMemberId: celulaEditando.pastorGeracaoMemberId || celulaEditando.pastorGeracaoMemberRef?.id || '',
+        pastorCampusMemberId: celulaEditando.pastorCampusMemberId || celulaEditando.pastorCampusMemberRef?.id || '',
         cel_lider: formatPhoneNumber(safeEdit.cel_lider || ''),
         horario: formatHorarioInput(safeEdit.horario || '')
       });
@@ -322,6 +328,43 @@ const CadastrarCelula = () => {
     [membros, formData.liderMemberId]
   );
 
+  const liderancasOptions = useMemo(
+    () => membros.filter((m) => memberHasCargo(m, 'lideranca_apostolica')),
+    [membros]
+  );
+  const pastoresGeracaoOptions = useMemo(
+    () => membros.filter((m) => memberHasCargo(m, 'pastor_geracao')),
+    [membros]
+  );
+  const pastoresCampusOptions = useMemo(
+    () => membros.filter((m) => memberHasCargo(m, 'pastor_campus')),
+    [membros]
+  );
+
+  const selectedLideranca = useMemo(
+    () => membros.find((m) => m.id === formData.liderancaMemberId) || null,
+    [membros, formData.liderancaMemberId]
+  );
+  const selectedPastorGeracao = useMemo(
+    () => membros.find((m) => m.id === formData.pastorGeracaoMemberId) || null,
+    [membros, formData.pastorGeracaoMemberId]
+  );
+  const selectedPastorCampus = useMemo(
+    () => membros.find((m) => m.id === formData.pastorCampusMemberId) || null,
+    [membros, formData.pastorCampusMemberId]
+  );
+
+  // Ao selecionar a Lideranca, auto-preenche os pastores a partir da hierarquia do proprio membro.
+  // Sempre editavel pelo usuario depois.
+  const handleLiderancaChange = (member) => {
+    setFormData((prev) => ({
+      ...prev,
+      liderancaMemberId: member ? member.id : '',
+      pastorGeracaoMemberId: member?.pastorGeracaoMemberId || member?.pastorGeracao?.id || prev.pastorGeracaoMemberId,
+      pastorCampusMemberId: member?.pastorCampusMemberId || member?.pastorCampus?.id || prev.pastorCampusMemberId
+    }));
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     let nextValue = value;
@@ -339,15 +382,43 @@ const CadastrarCelula = () => {
   };
 
   const handleMemberLeaderChange = (member) => {
-    setFormData((prev) => ({
-      ...prev,
-      liderMemberId: member ? member.id : '',
-      lider: member ? (member.fullName || '') : prev.lider,
-      email_lider: member ? (member.email || '') : prev.email_lider,
-      cel_lider: member
-        ? formatPhoneNumber(member.phone || member.whatsapp || '')
-        : prev.cel_lider
-    }));
+    setFormData((prev) => {
+      if (!member) {
+        return {
+          ...prev,
+          liderMemberId: '',
+          lider: '',
+          email_lider: '',
+          cel_lider: ''
+        };
+      }
+
+      // Identifica a Lideranca Apostolica do lider:
+      //  - se o proprio lider tem cargo lideranca_apostolica → ele e a LA
+      //  - senao usa o liderancaApostolicaMemberId do cadastro do lider
+      const isItselfLa = memberHasCargo(member, 'lideranca_apostolica');
+      const laId = isItselfLa
+        ? member.id
+        : (member.liderancaApostolicaMemberId || member.liderancaApostolica?.id || '');
+      const laMember = isItselfLa ? member : membros.find((m) => m.id === laId);
+
+      // Os pastores vem do cadastro da LA (ou do proprio lider se ele e a LA).
+      const sourceForPastors = laMember || member;
+      const inheritedPdg = sourceForPastors?.pastorGeracaoMemberId || sourceForPastors?.pastorGeracao?.id || '';
+      const inheritedPdc = sourceForPastors?.pastorCampusMemberId || sourceForPastors?.pastorCampus?.id || '';
+
+      return {
+        ...prev,
+        liderMemberId: member.id,
+        lider: member.fullName || '',
+        email_lider: member.email || '',
+        cel_lider: formatPhoneNumber(member.phone || member.whatsapp || ''),
+        // Auto-preenche apenas se ainda estiver vazio — nao sobrescreve escolhas explicitas.
+        liderancaMemberId: prev.liderancaMemberId || laId,
+        pastorGeracaoMemberId: prev.pastorGeracaoMemberId || inheritedPdg,
+        pastorCampusMemberId: prev.pastorCampusMemberId || inheritedPdc
+      };
+    });
     clearLeaderSearch();
   };
 
@@ -395,6 +466,9 @@ const CadastrarCelula = () => {
     const payload = {
       ...formData,
       liderMemberId: formData.liderMemberId || null,
+      liderancaMemberId: formData.liderancaMemberId || null,
+      pastorGeracaoMemberId: formData.pastorGeracaoMemberId || null,
+      pastorCampusMemberId: formData.pastorCampusMemberId || null,
       dia: diasSelecionados.join(', '),
       lat: formData.lat ? parseFloat(formData.lat) : null,
       lon: formData.lon ? parseFloat(formData.lon) : null
@@ -705,13 +779,47 @@ const CadastrarCelula = () => {
                 >
                   <Grid container spacing={2}>
                     <Grid item xs={12} md={4}>
-                      <TextField fullWidth size="small" label="Liderança" name="lideranca" value={formData.lideranca} onChange={handleChange} />
+                      <Autocomplete
+                        size="small"
+                        options={liderancasOptions}
+                        getOptionLabel={(option) => option?.fullName || ''}
+                        isOptionEqualToValue={(option, value) => option?.id === value?.id}
+                        value={selectedLideranca}
+                        onChange={(_evt, value) => handleLiderancaChange(value)}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="Liderança Apostólica"
+                            helperText="Selecionar preenche os pastores automaticamente"
+                          />
+                        )}
+                      />
                     </Grid>
                     <Grid item xs={12} md={4}>
-                      <TextField fullWidth size="small" label="Pastor de Geração" name="pastor_geracao" value={formData.pastor_geracao} onChange={handleChange} />
+                      <Autocomplete
+                        size="small"
+                        options={pastoresGeracaoOptions}
+                        getOptionLabel={(option) => option?.fullName || ''}
+                        isOptionEqualToValue={(option, value) => option?.id === value?.id}
+                        value={selectedPastorGeracao}
+                        onChange={(_evt, value) => setFormData((prev) => ({ ...prev, pastorGeracaoMemberId: value ? value.id : '' }))}
+                        renderInput={(params) => (
+                          <TextField {...params} label="Pastor de Geração" />
+                        )}
+                      />
                     </Grid>
                     <Grid item xs={12} md={4}>
-                      <TextField fullWidth size="small" label="Pastor do Campus" name="pastor_campus" value={formData.pastor_campus} onChange={handleChange} />
+                      <Autocomplete
+                        size="small"
+                        options={pastoresCampusOptions}
+                        getOptionLabel={(option) => option?.fullName || ''}
+                        isOptionEqualToValue={(option, value) => option?.id === value?.id}
+                        value={selectedPastorCampus}
+                        onChange={(_evt, value) => setFormData((prev) => ({ ...prev, pastorCampusMemberId: value ? value.id : '' }))}
+                        renderInput={(params) => (
+                          <TextField {...params} label="Pastor do Campus" />
+                        )}
+                      />
                     </Grid>
                     <Grid item xs={12}>
                       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>

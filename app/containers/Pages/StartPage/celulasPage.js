@@ -5,7 +5,8 @@ import {
   Button, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress, Badge, Divider, TableSortLabel, Chip,
   FormControl, InputLabel, Select, Checkbox, ListItemText, OutlinedInput,
   Accordion, AccordionSummary, AccordionDetails,
-  Menu, Skeleton, useTheme, useMediaQuery
+  Menu, Skeleton, useTheme, useMediaQuery,
+  Autocomplete
 } from '@mui/material';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import { Helmet } from 'react-helmet';
@@ -30,6 +31,7 @@ import {
 } from '@react-google-maps/api';
 import { useConfirm } from '../../../utils/useConfirm';
 import { fetchGeocode } from '../../../utils/googleGeocode';
+import { listarMembros } from '../../../api/membersApi';
 
 const REDE_OPTIONS = [
   'RELEVANTE JUNIORS RAPAZES',
@@ -116,8 +118,16 @@ const ListagemCelulasPage = () => {
   const [filterCampus, setFilterCampus] = useState('');
   const [filterRede, setFilterRede] = useState([]);
   const [filterBairro, setFilterBairro] = useState('');
-  const [filterLider, setFilterLider] = useState('');
-  const [filterPastorGeracao, setFilterPastorGeracao] = useState('');
+  // Filtros por membro (arrays de IDs — multi-select)
+  const [filterLiderIds, setFilterLiderIds] = useState([]);
+  const [filterLiderancaIds, setFilterLiderancaIds] = useState([]);
+  const [filterPastorGeracaoIds, setFilterPastorGeracaoIds] = useState([]);
+  const [filterPastorCampusIds, setFilterPastorCampusIds] = useState([]);
+  // Listas de opcoes (membros) para os Autocompletes
+  const [lideresOptions, setLideresOptions] = useState([]);
+  const [liderancasOptions, setLiderancasOptions] = useState([]);
+  const [pastoresGeracaoOptions, setPastoresGeracaoOptions] = useState([]);
+  const [pastoresCampusOptions, setPastoresCampusOptions] = useState([]);
   const [filterDia, setFilterDia] = useState('');
   const [mapCelulas, setMapCelulas] = useState([]);
   const [hoveredMarkerId, setHoveredMarkerId] = useState(null);
@@ -192,15 +202,18 @@ const ListagemCelulasPage = () => {
     const params = new URLSearchParams({
       campusId: filterCampus || '',
       bairro: filterBairro || '',
-      lider: filterLider || '',
       dia: filterDia || '',
-      pastor_geracao: filterPastorGeracao || '',
       page: overridePage ?? page,
       limit: overrideLimit ?? rowsPerPage
     });
     if (includeRede && filterRede?.length) {
       filterRede.filter(Boolean).forEach((rede) => params.append('rede', rede));
     }
+    // Filtros multi-select por FK — repete a chave para cada ID
+    filterLiderIds.forEach((id) => params.append('liderMemberId', id));
+    filterLiderancaIds.forEach((id) => params.append('liderancaMemberId', id));
+    filterPastorGeracaoIds.forEach((id) => params.append('pastorGeracaoMemberId', id));
+    filterPastorCampusIds.forEach((id) => params.append('pastorCampusMemberId', id));
     if (includeStatus && filterStatus && filterStatus !== 'all') {
       params.append('ativo', filterStatus);
     }
@@ -754,8 +767,10 @@ const ListagemCelulasPage = () => {
     filterCampus,
     filterRede?.length ? filterRede : null,
     filterBairro,
-    filterLider,
-    filterPastorGeracao,
+    filterLiderIds.length ? filterLiderIds : null,
+    filterLiderancaIds.length ? filterLiderancaIds : null,
+    filterPastorGeracaoIds.length ? filterPastorGeracaoIds : null,
+    filterPastorCampusIds.length ? filterPastorCampusIds : null,
     filterDia,
     filterStatus !== 'true' ? filterStatus : null
   ].filter(Boolean).length;
@@ -764,8 +779,10 @@ const ListagemCelulasPage = () => {
     setFilterCampus('');
     setFilterRede([]);
     setFilterBairro('');
-    setFilterLider('');
-    setFilterPastorGeracao('');
+    setFilterLiderIds([]);
+    setFilterLiderancaIds([]);
+    setFilterPastorGeracaoIds([]);
+    setFilterPastorCampusIds([]);
     setFilterDia('');
     setFilterStatus('true');
     setPage(1);
@@ -861,9 +878,9 @@ const ListagemCelulasPage = () => {
           c.bairro,
           c.cidade,
           c.estado,
-          c.lideranca,
-          c.pastor_geracao,
-          c.pastor_campus,
+          c.liderancaMemberRef?.fullName || c.lideranca,
+          c.pastorGeracaoMemberRef?.fullName || c.pastor_geracao,
+          c.pastorCampusMemberRef?.fullName || c.pastor_campus,
           c.dia,
           c.horario,
           c.lat,
@@ -899,9 +916,11 @@ const ListagemCelulasPage = () => {
     filterCampus,
     filterRede,
     filterBairro,
-    filterLider,
+    filterLiderIds,
+    filterLiderancaIds,
+    filterPastorGeracaoIds,
+    filterPastorCampusIds,
     filterDia,
-    filterPastorGeracao,
     filterStatus,
     API_URL
   ]);
@@ -912,12 +931,38 @@ const ListagemCelulasPage = () => {
     filterCampus,
     filterRede,
     filterBairro,
-    filterLider,
+    filterLiderIds,
+    filterLiderancaIds,
+    filterPastorGeracaoIds,
+    filterPastorCampusIds,
     filterDia,
-    filterPastorGeracao,
     filterStatus,
     API_URL
   ]);
+
+  // Carrega membros para popular os 4 Autocompletes de filtro.
+  // Lideres: apenas membros que ja sao lideres de alguma celula (isLider).
+  // Demais: membros com o cargo correspondente.
+  useEffect(() => {
+    const sortByName = (a, b) => (a?.fullName || '').localeCompare(b?.fullName || '', 'pt-BR', { sensitivity: 'base' });
+    const carregarMembros = async () => {
+      try {
+        const [lideresRes, lasRes, pgRes, pcRes] = await Promise.all([
+          listarMembros({ page: 1, limit: 5000, isLider: 'true' }),
+          listarMembros({ page: 1, limit: 5000, cargo: 'lideranca_apostolica' }),
+          listarMembros({ page: 1, limit: 5000, cargo: 'pastor_geracao' }),
+          listarMembros({ page: 1, limit: 5000, cargo: 'pastor_campus' })
+        ]);
+        setLideresOptions((lideresRes?.members || []).slice().sort(sortByName));
+        setLiderancasOptions((lasRes?.members || []).slice().sort(sortByName));
+        setPastoresGeracaoOptions((pgRes?.members || []).slice().sort(sortByName));
+        setPastoresCampusOptions((pcRes?.members || []).slice().sort(sortByName));
+      } catch (err) {
+        console.error('Erro ao carregar opções de filtro de membros:', err);
+      }
+    };
+    carregarMembros();
+  }, []);
 
   useEffect(() => {
     const carregarCampi = async () => {
@@ -1188,6 +1233,12 @@ const ListagemCelulasPage = () => {
               <ListItemIcon><MergeIcon fontSize="small" /></ListItemIcon>
               <ListItemText>Verificar duplicados</ListItemText>
             </MenuItem>
+            <MenuItem
+              onClick={() => { setActionsMenuAnchor(null); history.push('/app/start/celulas/migrar-hierarquia'); }}
+            >
+              <ListItemIcon><SyncIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Migrar liderança apostólica (texto → membro)</ListItemText>
+            </MenuItem>
           </Menu>
         </Box>
       </Toolbar>
@@ -1298,23 +1349,69 @@ const ListagemCelulasPage = () => {
                 sx={{ minWidth: 160, flex: { xs: '1 1 100%', sm: '0 1 200px' } }}
                 placeholder="Digite o bairro"
               />
-              <TextField
-                label="Líder"
-                variant="outlined"
+              <Autocomplete
+                multiple
                 size="small"
-                value={filterLider}
-                onChange={(e) => { setFilterLider(e.target.value); setPage(1); }}
-                sx={{ minWidth: 200, flex: { xs: '1 1 100%', sm: '0 1 220px' } }}
-                placeholder="Nome do líder"
+                options={lideresOptions}
+                getOptionLabel={(opt) => opt?.fullName || ''}
+                isOptionEqualToValue={(opt, val) => opt?.id === val?.id}
+                value={lideresOptions.filter((opt) => filterLiderIds.includes(opt.id))}
+                onChange={(_e, vals) => { setFilterLiderIds(vals.map((v) => v.id)); setPage(1); }}
+                renderTags={(values, getTagProps) => values.map((option, index) => (
+                  <Chip size="small" label={option.fullName} {...getTagProps({ index })} key={option.id} />
+                ))}
+                renderInput={(params) => (
+                  <TextField {...params} label="Líder de célula" placeholder={filterLiderIds.length ? '' : 'Selecione'} />
+                )}
+                sx={{ minWidth: 220, flex: { xs: '1 1 100%', sm: '0 1 260px' } }}
               />
-              <TextField
-                label="Pastor de geração"
-                variant="outlined"
+              <Autocomplete
+                multiple
                 size="small"
-                value={filterPastorGeracao}
-                onChange={(e) => { setFilterPastorGeracao(e.target.value); setPage(1); }}
-                sx={{ minWidth: 200, flex: { xs: '1 1 100%', sm: '0 1 220px' } }}
-                placeholder="Nome do pastor"
+                options={liderancasOptions}
+                getOptionLabel={(opt) => opt?.fullName || ''}
+                isOptionEqualToValue={(opt, val) => opt?.id === val?.id}
+                value={liderancasOptions.filter((opt) => filterLiderancaIds.includes(opt.id))}
+                onChange={(_e, vals) => { setFilterLiderancaIds(vals.map((v) => v.id)); setPage(1); }}
+                renderTags={(values, getTagProps) => values.map((option, index) => (
+                  <Chip size="small" label={option.fullName} {...getTagProps({ index })} key={option.id} />
+                ))}
+                renderInput={(params) => (
+                  <TextField {...params} label="Liderança Apostólica" placeholder={filterLiderancaIds.length ? '' : 'Selecione'} />
+                )}
+                sx={{ minWidth: 220, flex: { xs: '1 1 100%', sm: '0 1 260px' } }}
+              />
+              <Autocomplete
+                multiple
+                size="small"
+                options={pastoresGeracaoOptions}
+                getOptionLabel={(opt) => opt?.fullName || ''}
+                isOptionEqualToValue={(opt, val) => opt?.id === val?.id}
+                value={pastoresGeracaoOptions.filter((opt) => filterPastorGeracaoIds.includes(opt.id))}
+                onChange={(_e, vals) => { setFilterPastorGeracaoIds(vals.map((v) => v.id)); setPage(1); }}
+                renderTags={(values, getTagProps) => values.map((option, index) => (
+                  <Chip size="small" label={option.fullName} {...getTagProps({ index })} key={option.id} />
+                ))}
+                renderInput={(params) => (
+                  <TextField {...params} label="Pastor de Geração" placeholder={filterPastorGeracaoIds.length ? '' : 'Selecione'} />
+                )}
+                sx={{ minWidth: 220, flex: { xs: '1 1 100%', sm: '0 1 260px' } }}
+              />
+              <Autocomplete
+                multiple
+                size="small"
+                options={pastoresCampusOptions}
+                getOptionLabel={(opt) => opt?.fullName || ''}
+                isOptionEqualToValue={(opt, val) => opt?.id === val?.id}
+                value={pastoresCampusOptions.filter((opt) => filterPastorCampusIds.includes(opt.id))}
+                onChange={(_e, vals) => { setFilterPastorCampusIds(vals.map((v) => v.id)); setPage(1); }}
+                renderTags={(values, getTagProps) => values.map((option, index) => (
+                  <Chip size="small" label={option.fullName} {...getTagProps({ index })} key={option.id} />
+                ))}
+                renderInput={(params) => (
+                  <TextField {...params} label="Pastor de Campus" placeholder={filterPastorCampusIds.length ? '' : 'Selecione'} />
+                )}
+                sx={{ minWidth: 220, flex: { xs: '1 1 100%', sm: '0 1 260px' } }}
               />
               {activeFilterCount > 0 && (
                 <Button size="small" variant="text" color="inherit" onClick={clearFilters}>
@@ -1576,7 +1673,7 @@ const ListagemCelulasPage = () => {
                   <TableCell>{c.celula}</TableCell>
                   <TableCell>{c.rede}</TableCell>
                   <TableCell>{c.liderMemberRef?.fullName || c.lider || '-'}</TableCell>
-                  <TableCell>{c.pastor_geracao || '-'}</TableCell>
+                  <TableCell>{c.pastorGeracaoMemberRef?.fullName || c.pastor_geracao || '-'}</TableCell>
                   <TableCell>{c.bairro}</TableCell>
                   <TableCell>{c.campusRef?.nome || c.campus}</TableCell>
                   <TableCell>{renderAtivoChip(c.ativo)}</TableCell>

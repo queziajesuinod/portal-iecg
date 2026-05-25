@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Paper, Toolbar, Typography, IconButton, Tooltip, TextField, Box, Button, Dialog, DialogTitle, DialogContent, DialogActions
+  Paper, Toolbar, Typography, IconButton, Tooltip, TextField, Box, Button, Dialog, DialogTitle, DialogContent, DialogActions,
+  Autocomplete, Chip
 } from '@mui/material';
 import { Helmet } from 'react-helmet';
 import EditIcon from '@mui/icons-material/Edit';
@@ -9,6 +10,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import useStyles from 'dan-components/Tables/tableStyle-jss';
 import Notification from 'dan-components/Notification/Notification';
 import { fetchGeocode } from '../../../utils/googleGeocode';
+import { listarMembros } from '../../../api/membersApi';
 
 const resolveApiUrl = () => {
   if (process.env.REACT_APP_API_URL) {
@@ -26,11 +28,15 @@ const API_URL = resolveApiUrl();
 const CampusPage = () => {
   const { classes, cx } = useStyles();
 
+  const initialForm = {
+    nome: '', endereco: '', bairro: '', cidade: '', estado: '', lat: '', lon: '', pastoresResponsaveisMemberIds: []
+  };
   const [campi, setCampi] = useState([]);
+  const [pastoresCampus, setPastoresCampus] = useState([]);
   const [totalRegistros, setTotalRegistros] = useState(0);
   const [notification, setNotification] = useState('');
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ nome: '', endereco: '', bairro: '', cidade: '', estado: '', pastoresResponsaveis: '', lat: '', lon: '' });
+  const [form, setForm] = useState(initialForm);
   const [editingId, setEditingId] = useState(null);
 
   const token = localStorage.getItem('token');
@@ -49,9 +55,29 @@ const CampusPage = () => {
     }
   };
 
+  const fetchPastoresCampus = async () => {
+    try {
+      const response = await listarMembros({ page: 1, limit: 5000, cargo: 'pastor_campus' });
+      const lista = Array.isArray(response?.members) ? response.members : [];
+      lista.sort((a, b) => (a?.fullName || '').localeCompare(b?.fullName || '', 'pt-BR', { sensitivity: 'base' }));
+      setPastoresCampus(lista);
+    } catch (err) {
+      console.error('Erro ao carregar pastores de campus:', err);
+      setPastoresCampus([]);
+    }
+  };
+
   useEffect(() => {
     fetchCampi();
+    fetchPastoresCampus();
   }, []);
+
+  const selectedPastores = useMemo(
+    () => (form.pastoresResponsaveisMemberIds || [])
+      .map((id) => pastoresCampus.find((p) => p.id === id))
+      .filter(Boolean),
+    [form.pastoresResponsaveisMemberIds, pastoresCampus]
+  );
 
   const handleEdit = (campus) => {
     setEditingId(campus.id);
@@ -61,9 +87,11 @@ const CampusPage = () => {
       bairro: campus.bairro || '',
       cidade: campus.cidade || '',
       estado: campus.estado || '',
-      pastoresResponsaveis: campus.pastoresResponsaveis || '',
       lat: campus.lat || '',
-      lon: campus.lon || ''
+      lon: campus.lon || '',
+      pastoresResponsaveisMemberIds: Array.isArray(campus.pastoresResponsaveisMembers)
+        ? campus.pastoresResponsaveisMembers.map((p) => p.id)
+        : []
     });
     setOpen(true);
   };
@@ -102,7 +130,7 @@ const CampusPage = () => {
       setNotification('Campus salvo com sucesso');
       setOpen(false);
       setEditingId(null);
-      setForm({ nome: '', endereco: '', bairro: '', cidade: '', estado: '', pastoresResponsaveis: '', lat: '', lon: '' });
+      setForm(initialForm);
       fetchCampi();
     } catch (err) {
       setNotification(err.message);
@@ -111,7 +139,7 @@ const CampusPage = () => {
 
   const buscarCoordenadas = async () => {
     if (!form.endereco) {
-      setNotification('Preencha o endereço antes de buscar coordenadas.');
+      setNotification('Preencha o endereï¿½o antes de buscar coordenadas.');
       return;
     }
     try {
@@ -121,7 +149,7 @@ const CampusPage = () => {
         setForm((prev) => ({ ...prev, lat: geocodeResult.lat, lon: geocodeResult.lon }));
         setNotification('Coordenadas preenchidas com sucesso!');
       } else {
-        setNotification('Nenhum resultado encontrado para esse endereço.');
+        setNotification('Nenhum resultado encontrado para esse endereï¿½o.');
       }
     } catch (error) {
       console.error('Erro ao buscar coordenadas:', error);
@@ -129,7 +157,7 @@ const CampusPage = () => {
     }
   };
 
-return (
+  return (
     <div>
       <Helmet>
         <title>Campus</title>
@@ -142,7 +170,7 @@ return (
           onClick={() => {
             setOpen(true);
             setEditingId(null);
-            setForm({ nome: '', endereco: '', bairro: '', cidade: '', estado: '', pastoresResponsaveis: '', lat: '', lon: '' });
+            setForm(initialForm);
           }}
         >
           Novo Campus
@@ -168,7 +196,15 @@ return (
                 <TableRow key={c.id}>
                   <TableCell>{c.nome}</TableCell>
                   <TableCell>{c.endereco}</TableCell>
-                  <TableCell>{c.pastoresResponsaveis}</TableCell>
+                  <TableCell>
+                    {Array.isArray(c.pastoresResponsaveisMembers) && c.pastoresResponsaveisMembers.length > 0 ? (
+                      <Box display="flex" flexWrap="wrap" gap={0.5}>
+                        {c.pastoresResponsaveisMembers.map((p) => (
+                          <Chip key={p.id} size="small" label={p.fullName} />
+                        ))}
+                      </Box>
+                    ) : (c.pastoresResponsaveis || '-')}
+                  </TableCell>
                   <TableCell>
                     <Box display="flex" gap={1}>
                       <Tooltip title="Editar">
@@ -248,13 +284,35 @@ return (
               onChange={(e) => setForm((prev) => ({ ...prev, lon: e.target.value }))}
               fullWidth
             />
-            <TextField
-              label="Pastores responsÃ¡veis"
-              value={form.pastoresResponsaveis}
-              onChange={(e) => setForm((prev) => ({ ...prev, pastoresResponsaveis: e.target.value }))}
-              fullWidth
-              multiline
-              minRows={2}
+            <Autocomplete
+              multiple
+              size="small"
+              options={pastoresCampus}
+              getOptionLabel={(option) => option?.fullName || ''}
+              isOptionEqualToValue={(option, value) => option?.id === value?.id}
+              value={selectedPastores}
+              onChange={(_evt, values) => setForm((prev) => ({
+                ...prev,
+                pastoresResponsaveisMemberIds: values.map((v) => v.id)
+              }))}
+              renderTags={(values, getTagProps) => values.map((option, index) => (
+                <Chip
+                  variant="filled"
+                  color="primary"
+                  size="small"
+                  label={option.fullName}
+                  {...getTagProps({ index })}
+                  key={option.id}
+                />
+              ))}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Pastores responsÃ¡veis"
+                  placeholder={selectedPastores.length === 0 ? 'Selecione um ou mais Pastores de Campus' : ''}
+                  helperText="Apenas membros com cargo Pastor de Campus aparecem aqui"
+                />
+              )}
             />
           </Box>
         </DialogContent>

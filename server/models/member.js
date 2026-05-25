@@ -40,10 +40,40 @@ module.exports = (sequelize) => {
         });
       }
 
+      if (models.MemberCargo) {
+        Member.hasMany(models.MemberCargo, {
+          foreignKey: 'membroId',
+          as: 'cargos'
+        });
+      }
+
+      if (models.Campus && models.CampusPastorResponsavel) {
+        Member.belongsToMany(models.Campus, {
+          through: models.CampusPastorResponsavel,
+          foreignKey: 'memberId',
+          otherKey: 'campusId',
+          as: 'campiResponsavel'
+        });
+      }
+
       // Auto-relacionamento para cônjuge
       Member.belongsTo(Member, {
         foreignKey: 'spouseMemberId',
         as: 'spouse'
+      });
+
+      // Hierarquia eclesiastica (pode apontar para si mesmo se o membro for o proprio pastor)
+      Member.belongsTo(Member, {
+        foreignKey: 'liderancaApostolicaMemberId',
+        as: 'liderancaApostolica'
+      });
+      Member.belongsTo(Member, {
+        foreignKey: 'pastorGeracaoMemberId',
+        as: 'pastorGeracao'
+      });
+      Member.belongsTo(Member, {
+        foreignKey: 'pastorCampusMemberId',
+        as: 'pastorCampus'
       });
 
       // Relacionamento 1:1 com MemberJourney
@@ -258,6 +288,18 @@ module.exports = (sequelize) => {
       type: DataTypes.UUID,
       allowNull: true
     },
+    liderancaApostolicaMemberId: {
+      type: DataTypes.UUID,
+      allowNull: true
+    },
+    pastorGeracaoMemberId: {
+      type: DataTypes.UUID,
+      allowNull: true
+    },
+    pastorCampusMemberId: {
+      type: DataTypes.UUID,
+      allowNull: true
+    },
 
     // Foto
     photoUrl: {
@@ -294,6 +336,32 @@ module.exports = (sequelize) => {
       transaction: options.transaction,
       models: sequelize.models
     });
+  });
+
+  // Cascata: ao atualizar a hierarquia do membro, reflete nas celulas onde ele e lider.
+  // Roda sempre que pelo menos um dos 3 campos de hierarquia mudou.
+  Member.addHook('afterSave', async (member, options = {}) => {
+    if (options.skipCelulaHierarquiaSync) return;
+
+    const hierarchyFields = ['liderancaApostolicaMemberId', 'pastorGeracaoMemberId', 'pastorCampusMemberId'];
+    const changed = member.changed() || [];
+    if (!hierarchyFields.some((f) => changed.includes(f))) return;
+
+    // Require local pra evitar ciclo de import (util usa models, que carrega este arquivo)
+    // eslint-disable-next-line global-require
+    const { syncCelulasHierarquiaForLeader } = require('../utils/celulaHierarquiaSync');
+
+    try {
+      await syncCelulasHierarquiaForLeader(member, {
+        transaction: options.transaction,
+        models: sequelize.models,
+        force: true // hierarquia do lider e a fonte da verdade — sobrescreve a celula
+      });
+    } catch (err) {
+      // Nao quebra o save do membro se a cascata falhar
+      // eslint-disable-next-line no-console
+      console.error('[celulaHierarquiaSync] Erro ao cascatear hierarquia:', err.message);
+    }
   });
 
   Member.addHook('beforeValidate', (member) => {
