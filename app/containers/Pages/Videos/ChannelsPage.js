@@ -28,6 +28,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
+import LinkIcon from '@mui/icons-material/Link';
 import { Helmet } from 'react-helmet';
 import { useHistory, useLocation } from 'react-router-dom';
 import { PapperBlock } from 'dan-components';
@@ -106,6 +107,15 @@ const ChannelsPage = () => {
     } catch (err) {
       setFeedback({ severity: 'error', message: err.message });
       setSubmitting(false);
+    }
+  };
+
+  const handleReconnectChannel = async (channel) => {
+    try {
+      const { url } = await startChannelOAuth(channel.ownerName || '', channel.id);
+      window.location.href = url;
+    } catch (err) {
+      setFeedback({ severity: 'error', message: err.message });
     }
   };
 
@@ -274,6 +284,14 @@ const ChannelsPage = () => {
                           onClick={() => window.open(`https://www.youtube.com/channel/${channel.channelId}`, '_blank', 'noopener')}
                         >
                           <OpenInNewIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Reconectar OAuth">
+                        <IconButton
+                          color="secondary"
+                          onClick={() => handleReconnectChannel(channel)}
+                        >
+                          <LinkIcon />
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="Remover canal">

@@ -3,15 +3,29 @@ const publicVideoService = require('../services/publicVideoService');
 async function listar(req, res) {
   try {
     const {
-      channelId, search, limit, offset, all
+      channelId, search, category, limit, offset, all
     } = req.query;
     const result = await publicVideoService.listPublished({
-      channelId, search, limit, offset, all: all === 'true'
+      channelId,
+      search,
+      category,
+      limit,
+      offset,
+      all: all === 'true'
     });
     res.status(200).json(result);
   } catch (err) {
     console.error('[publicVideo] Erro ao listar:', err);
     res.status(500).json({ message: 'Erro ao listar vídeos públicos' });
+  }
+}
+
+async function listarCategorias(req, res) {
+  try {
+    const categories = await publicVideoService.listCategories();
+    res.status(200).json(categories);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 }
 
@@ -55,4 +69,5 @@ module.exports = {
   buscarPorVideoId,
   buscarPorSlug,
   listarCanais,
+  listarCategorias,
 };

@@ -53,11 +53,11 @@ export const deleteChannel = async (id) => {
   return parseOrThrow(res, 'Falha ao remover canal');
 };
 
-export const startChannelOAuth = async (ownerName) => {
+export const startChannelOAuth = async (ownerName, channelId = null) => {
   const res = await fetch(`${BASE}/channels/oauth/start`, {
     method: 'POST',
     headers: jsonHeaders(),
-    body: JSON.stringify({ ownerName }),
+    body: JSON.stringify({ ownerName, channelId }),
   });
   return parseOrThrow(res, 'Falha ao iniciar autorização OAuth');
 };
@@ -117,6 +117,22 @@ export const transcribeVideoNow = async (videoId) => {
     headers: jsonHeaders(),
   });
   return parseOrThrow(res, 'Falha ao transcrever video');
+};
+
+export const reactivateFailedTranscript = async (videoId) => {
+  const res = await fetch(`${BASE}/videos/${videoId}/transcript/reactivate`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+  });
+  return parseOrThrow(res, 'Falha ao reativar transcrição');
+};
+
+export const deleteVideo = async (videoId) => {
+  const res = await fetch(`${BASE}/videos/${videoId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  return parseOrThrow(res, 'Falha ao excluir vídeo');
 };
 
 export const fetchTranscripts = async ({

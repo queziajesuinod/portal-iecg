@@ -4,6 +4,7 @@ const {
 } = require('../models');
 const youtubeApi = require('../services/youtubeApiService');
 const channelSync = require('../services/channelSyncService');
+const transcriptionService = require('../services/transcriptionService');
 
 async function listarPorCanal(req, res) {
   try {
@@ -111,9 +112,39 @@ async function atualizarCaptions(req, res) {
   }
 }
 
+async function reativarTranscricaoFalha(req, res) {
+  try {
+    const { id } = req.params;
+    const transcript = await transcriptionService.reactivateFailedTranscriptByVideoId(id);
+    return res.status(200).json(transcript);
+  } catch (err) {
+    return res.status(400).json({ message: err.message });
+  }
+}
+
+async function removerVideo(req, res) {
+  try {
+    const { id } = req.params;
+    const video = await YoutubeVideo.findByPk(id, {
+      include: [{ model: VideoTranscript, as: 'transcript' }],
+    });
+    if (!video) return res.status(404).json({ message: 'Vídeo não encontrado' });
+    if (video.transcript?.status === 'processing') {
+      return res.status(400).json({ message: 'Não é possível excluir vídeo com transcrição em processamento' });
+    }
+
+    await video.destroy();
+    return res.status(204).send();
+  } catch (err) {
+    return res.status(400).json({ message: err.message });
+  }
+}
+
 module.exports = {
   listarPorCanal,
   sincronizarCanal,
   atualizarCaptions,
   alternarIgnorado,
+  reativarTranscricaoFalha,
+  removerVideo,
 };

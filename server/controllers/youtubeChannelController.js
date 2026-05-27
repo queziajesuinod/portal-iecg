@@ -52,7 +52,15 @@ async function remover(req, res) {
 
 async function iniciarOAuth(req, res) {
   try {
-    const ownerName = (req.body.ownerName || '').trim();
+    const channelId = req.body.channelId || null;
+    let ownerName = (req.body.ownerName || '').trim();
+
+    if (channelId) {
+      const existing = await YoutubeChannel.findByPk(channelId);
+      if (!existing) return res.status(404).json({ message: 'Canal não encontrado' });
+      ownerName = ownerName || existing.ownerName;
+    }
+
     if (!ownerName) {
       return res.status(400).json({ message: 'ownerName e obrigatorio' });
     }

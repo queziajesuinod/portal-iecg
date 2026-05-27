@@ -33,6 +33,7 @@ import TextSnippetIcon from '@mui/icons-material/TextSnippet';
 import EditIcon from '@mui/icons-material/Edit';
 import CancelIcon from '@mui/icons-material/Cancel';
 import ReplayIcon from '@mui/icons-material/Replay';
+import DeleteIcon from '@mui/icons-material/Delete';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 
@@ -45,6 +46,8 @@ import {
   refreshVideoCaptions,
   enqueueTranscripts,
   transcribeVideoNow,
+  reactivateFailedTranscript,
+  deleteVideo,
   cancelTranscript,
   fetchTranscriptProgressBatch,
   toggleVideoIgnored,
@@ -303,18 +306,29 @@ const VideosPage = () => {
     }
   };
 
-  const handleReprocess = async (video) => {
-    if (hasFilledTranscript(video)) {
-      setFeedback({
-        severity: 'info',
-        message: 'Este video ja possui transcricao. Use a acao de revisar/editar.',
-      });
-      return;
-    }
+  const handleReactivateFailed = async (video) => {
+    if (video.transcript?.status !== 'failed') return;
     try {
-      const transcript = await transcribeVideoNow(video.id);
+      const transcript = await reactivateFailedTranscript(video.id);
       setVideos((prev) => prev.map((v) => (v.id === video.id ? { ...v, transcript } : v)));
-      setFeedback({ severity: 'success', message: 'Reenfileirado/reprocessado.' });
+      setFeedback({ severity: 'success', message: 'Transcrição reativada e marcada como pendente.' });
+    } catch (err) {
+      setFeedback({ severity: 'error', message: err.message });
+    }
+  };
+
+  const handleDeleteVideo = async (video) => {
+    if (!window.confirm('Excluir este vídeo da base? Esta ação também remove a transcrição vinculada.')) return;
+    try {
+      await deleteVideo(video.id);
+      setFeedback({ severity: 'success', message: 'Vídeo excluído com sucesso.' });
+      setVideos((prev) => prev.filter((v) => v.id !== video.id));
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(video.id);
+        return next;
+      });
+      setTotal((prev) => Math.max(0, prev - 1));
     } catch (err) {
       setFeedback({ severity: 'error', message: err.message });
     }
@@ -586,10 +600,17 @@ const VideosPage = () => {
                         </IconButton>
                       </Tooltip>
                     )}
-                    {!video.ignored && video.transcript?.status === 'failed' && !hasFilledTranscript(video) && (
-                      <Tooltip title="Reprocessar (tentar de novo)">
-                        <IconButton size="small" color="warning" onClick={() => handleReprocess(video)}>
+                    {!video.ignored && video.transcript?.status === 'failed' && (
+                      <Tooltip title="Reativar transcrição (volta para pendente)">
+                        <IconButton size="small" color="warning" onClick={() => handleReactivateFailed(video)}>
                           <ReplayIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    {!video.ignored && (
+                      <Tooltip title="Excluir vídeo da fila/base">
+                        <IconButton size="small" color="error" onClick={() => handleDeleteVideo(video)}>
+                          <DeleteIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                     )}

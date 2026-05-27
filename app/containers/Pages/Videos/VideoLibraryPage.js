@@ -24,7 +24,11 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import { Helmet } from 'react-helmet';
 import { useHistory } from 'react-router-dom';
 import { PapperBlock } from 'dan-components';
-import { fetchPublicVideos, fetchPublicChannels } from '../../../utils/publicVideosClient';
+import {
+  fetchPublicVideos,
+  fetchPublicChannels,
+  fetchPublicCategories,
+} from '../../../utils/publicVideosClient';
 
 function formatDuration(seconds) {
   if (!seconds) return '';
@@ -52,7 +56,9 @@ const VideoLibraryPage = () => {
   const [search, setSearch] = useState('');
   const [searchDebounced, setSearchDebounced] = useState('');
   const [channelId, setChannelId] = useState('');
+  const [category, setCategory] = useState('');
   const [channels, setChannels] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -63,6 +69,7 @@ const VideoLibraryPage = () => {
 
   useEffect(() => {
     fetchPublicChannels().then(setChannels).catch(() => {});
+    fetchPublicCategories().then(setCategories).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -72,6 +79,7 @@ const VideoLibraryPage = () => {
         setError(null);
         const data = await fetchPublicVideos({
           channelId: channelId || undefined,
+          category: category || undefined,
           search: searchDebounced || undefined,
           all: true,
         });
@@ -84,7 +92,7 @@ const VideoLibraryPage = () => {
       }
     };
     load();
-  }, [searchDebounced, channelId]);
+  }, [searchDebounced, channelId, category]);
 
   return (
     <div>
@@ -122,6 +130,19 @@ const VideoLibraryPage = () => {
               <MenuItem value="">Todos os canais</MenuItem>
               {channels.map((c) => (
                 <MenuItem key={c.channelId} value={c.channelId}>{c.channelName || c.ownerName}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 220 }}>
+            <InputLabel>Categoria</InputLabel>
+            <Select
+              label="Categoria"
+              value={category}
+              onChange={(e) => { setCategory(e.target.value); }}
+            >
+              <MenuItem value="">Todas as categorias</MenuItem>
+              {categories.map((c) => (
+                <MenuItem key={c} value={c}>{c}</MenuItem>
               ))}
             </Select>
           </FormControl>
@@ -187,6 +208,9 @@ const VideoLibraryPage = () => {
                         <Typography variant="subtitle1" sx={{ fontWeight: 600, lineHeight: 1.3, mb: 1 }}>
                           {video.title}
                         </Typography>
+                        {video.category && (
+                          <Chip size="small" label={video.category} sx={{ mb: 1 }} />
+                        )}
                         <Typography variant="body2" color="text.secondary" sx={{
                           display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden'
                         }}>
