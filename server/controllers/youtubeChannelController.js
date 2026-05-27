@@ -16,7 +16,7 @@ async function listar(req, res) {
 async function buscarPorId(req, res) {
   try {
     const channel = await YoutubeChannel.findByPk(req.params.id);
-    if (!channel) return res.status(404).json({ message: 'Canal nao encontrado' });
+    if (!channel) return res.status(404).json({ message: 'Canal não encontrado' });
     return res.status(200).json(channel);
   } catch (err) {
     return res.status(500).json({ message: err.message });
@@ -26,7 +26,7 @@ async function buscarPorId(req, res) {
 async function atualizar(req, res) {
   try {
     const channel = await YoutubeChannel.findByPk(req.params.id);
-    if (!channel) return res.status(404).json({ message: 'Canal nao encontrado' });
+    if (!channel) return res.status(404).json({ message: 'Canal não encontrado' });
 
     const allowed = {};
     if (typeof req.body.ownerName === 'string') allowed.ownerName = req.body.ownerName;
@@ -42,7 +42,7 @@ async function atualizar(req, res) {
 async function remover(req, res) {
   try {
     const channel = await YoutubeChannel.findByPk(req.params.id);
-    if (!channel) return res.status(404).json({ message: 'Canal nao encontrado' });
+    if (!channel) return res.status(404).json({ message: 'Canal não encontrado' });
     await channel.destroy();
     return res.status(204).send();
   } catch (err) {

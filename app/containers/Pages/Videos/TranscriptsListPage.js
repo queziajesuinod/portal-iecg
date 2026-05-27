@@ -88,9 +88,9 @@ const TranscriptsListPage = () => {
   return (
     <div>
       <Helmet>
-        <title>Transcricoes | Portal IECG</title>
+        <title>Transcrições | Portal IECG</title>
       </Helmet>
-      <PapperBlock title="Transcricoes" desc="Todos os videos transcritos e resumidos." icon="ion-ios-paper-outline" whiteBg>
+      <PapperBlock title="Transcrições" desc="Todos os vídeos transcritos e resumidos." icon="ion-ios-paper-outline" whiteBg>
         <Stack direction="row" spacing={2} sx={{ mb: 2 }} alignItems="center">
           <FormControl size="small" sx={{ minWidth: 180 }}>
             <InputLabel>Status</InputLabel>
@@ -142,7 +142,7 @@ const TranscriptsListPage = () => {
               {!loading && items.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
-                    <Typography color="text.secondary">Nenhuma transcricao encontrada.</Typography>
+                    <Typography color="text.secondary">Nenhuma transcrição encontrada.</Typography>
                   </TableCell>
                 </TableRow>
               )}
@@ -168,7 +168,7 @@ const TranscriptsListPage = () => {
                     {t.source ? <Chip size="small" variant="outlined" label={t.source} /> : '-'}
                   </TableCell>
                   <TableCell>
-                    {t.published ? <Chip size="small" color="primary" label="Sim" /> : <Chip size="small" variant="outlined" label="Nao" />}
+                    {t.published ? <Chip size="small" color="primary" label="Sim" /> : <Chip size="small" variant="outlined" label="Não" />}
                   </TableCell>
                   <TableCell>
                     {t.processedAt ? new Date(t.processedAt).toLocaleString('pt-BR') : '-'}
@@ -204,7 +204,7 @@ const TranscriptsListPage = () => {
           rowsPerPage={rowsPerPage}
           onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
           rowsPerPageOptions={[10, 20, 50, 100]}
-          labelRowsPerPage="Itens por pagina"
+          labelRowsPerPage="Itens por página"
         />
       </PapperBlock>
     </div>

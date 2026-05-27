@@ -36,6 +36,16 @@ function formatDuration(seconds) {
   return `${m}min`;
 }
 
+function sanitizeRichHtml(value) {
+  const html = String(value || '')
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+    .replace(/\son\w+="[^"]*"/gi, '')
+    .replace(/\son\w+='[^']*'/gi, '')
+    .replace(/javascript:/gi, '');
+
+  return { __html: html };
+}
+
 const VideoDetailPage = () => {
   const { videoId } = useParams();
   const history = useHistory();
@@ -71,7 +81,7 @@ const VideoDetailPage = () => {
   if (error || !video) {
     return (
       <PapperBlock title="Vídeo não encontrado" whiteBg>
-        <Alert severity="error">{error || 'Video nao encontrado ou nao publicado.'}</Alert>
+        <Alert severity="error">{error || 'Vídeo não encontrado ou não publicado.'}</Alert>
         <Button startIcon={<ArrowBackIcon />} onClick={() => history.push('/app/videos')} sx={{ mt: 2 }}>
           Voltar para biblioteca
         </Button>
@@ -79,10 +89,25 @@ const VideoDetailPage = () => {
     );
   }
 
+  const seo = video.seo || {};
+  const metaTitle = seo.metaTitle || video.title;
+  const metaDesc = seo.metaDescription || '';
+  const keywords = Array.isArray(seo.keywords) ? seo.keywords : [];
+
   return (
     <div>
       <Helmet>
-        <title>{video.title} | Portal IECG</title>
+        <title>{`${metaTitle} | Portal IECG`}</title>
+        {metaDesc && <meta name="description" content={metaDesc} />}
+        {keywords.length > 0 && <meta name="keywords" content={keywords.join(', ')} />}
+        <meta property="og:title" content={metaTitle} />
+        {metaDesc && <meta property="og:description" content={metaDesc} />}
+        {video.thumbnailUrl && <meta property="og:image" content={video.thumbnailUrl} />}
+        <meta property="og:type" content="article" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={metaTitle} />
+        {metaDesc && <meta name="twitter:description" content={metaDesc} />}
+        {video.thumbnailUrl && <meta name="twitter:image" content={video.thumbnailUrl} />}
       </Helmet>
       <PapperBlock title={video.title} desc={video.channel?.channelName} icon="ion-logo-youtube" whiteBg>
         <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
@@ -150,10 +175,47 @@ const VideoDetailPage = () => {
         {video.summary && (
           <>
             <Typography variant="h6" sx={{ mb: 1 }}>Resumo</Typography>
-            <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap', mb: 3, lineHeight: 1.7 }}>
-              {video.summary}
-            </Typography>
+            <Box
+              sx={{
+                mb: 3,
+                lineHeight: 1.8,
+                fontSize: '1.05rem',
+                '& p': { mt: 0, mb: 2 },
+                '& h3': {
+                  fontSize: '1.2rem', fontWeight: 600, mt: 3, mb: 1.5, color: 'primary.main',
+                },
+                '& strong': { fontWeight: 600 },
+                '& em': { fontStyle: 'italic' },
+                '& blockquote': {
+                  borderLeft: 3,
+                  borderColor: 'primary.main',
+                  pl: 2,
+                  py: 1,
+                  my: 2,
+                  bgcolor: 'grey.50',
+                  fontStyle: 'italic',
+                  color: 'text.secondary',
+                  '& p': { mb: 0 },
+                },
+                '& a': { color: 'primary.main', textDecoration: 'underline' },
+                '& ul, & ol': { pl: 3 },
+              }}
+              dangerouslySetInnerHTML={sanitizeRichHtml(video.summary)}
+            />
           </>
+        )}
+
+        {keywords.length > 0 && (
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              Tags
+            </Typography>
+            <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+              {keywords.map((kw) => (
+                <Chip key={kw} label={kw} size="small" variant="outlined" />
+              ))}
+            </Stack>
+          </Box>
         )}
 
         {video.transcript && (
@@ -167,9 +229,14 @@ const VideoDetailPage = () => {
             </Stack>
             <Collapse in={transcriptOpen}>
               <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
-                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.7, fontFamily: 'inherit' }}>
-                  {video.transcript}
-                </Typography>
+                <Box
+                  sx={{
+                    lineHeight: 1.7,
+                    '& p': { mt: 0, mb: 1.5 },
+                    '& ul, & ol': { pl: 3 },
+                  }}
+                  dangerouslySetInnerHTML={sanitizeRichHtml(video.transcript)}
+                />
               </Paper>
             </Collapse>
             {!transcriptOpen && (

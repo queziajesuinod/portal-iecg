@@ -6,6 +6,8 @@ const router = Router();
 router.use(express.json());
 
 router.get('/transcripts', controller.listar);
+router.get('/transcripts/progress', controller.buscarProgressoBatch);
+router.get('/transcripts/:id/progress', controller.buscarProgresso);
 router.get('/transcripts/:id', controller.buscarPorId);
 router.put('/transcripts/:id', controller.atualizar);
 router.delete('/transcripts/:id', controller.remover);

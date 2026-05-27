@@ -21,6 +21,7 @@ import {
   TextField,
   Tooltip,
   Typography,
+  FormControlLabel, Switch
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import SyncIcon from '@mui/icons-material/Sync';
@@ -32,6 +33,9 @@ import TextSnippetIcon from '@mui/icons-material/TextSnippet';
 import EditIcon from '@mui/icons-material/Edit';
 import CancelIcon from '@mui/icons-material/Cancel';
 import ReplayIcon from '@mui/icons-material/Replay';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+
 import { Helmet } from 'react-helmet';
 import { useHistory, useParams } from 'react-router-dom';
 import { PapperBlock } from 'dan-components';
@@ -42,6 +46,8 @@ import {
   enqueueTranscripts,
   transcribeVideoNow,
   cancelTranscript,
+  fetchTranscriptProgressBatch,
+  toggleVideoIgnored,
 } from '../../../utils/youtubeClient';
 
 function formatDuration(seconds) {
@@ -90,7 +96,14 @@ function TranscriptBadge({ transcript }) {
         <LinearProgress
           variant={isWhisper ? 'determinate' : 'indeterminate'}
           value={isWhisper ? pct : undefined}
-          sx={{ height: 6, borderRadius: 1, mt: 0.5 }}
+          sx={{
+            height: 6,
+            borderRadius: 1,
+            mt: 0.5,
+            '& .MuiLinearProgress-bar': {
+              transition: 'transform 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            },
+          }}
         />
       </Box>
     );
@@ -104,6 +117,7 @@ TranscriptBadge.propTypes = {
     status: PropTypes.string,
     progressPercent: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
     progressStage: PropTypes.string,
+    hasText: PropTypes.bool,
   }),
 };
 
@@ -148,6 +162,27 @@ const VideosPage = () => {
   const [refreshingId, setRefreshingId] = useState(null);
   const [transcribingId, setTranscribingId] = useState(null);
   const [enqueueing, setEnqueueing] = useState(false);
+  const [showIgnored, setShowIgnored] = useState(false);
+
+  const hasFilledTranscript = (video) => Boolean(video.transcript?.hasText);
+  const isLocked = (video) => Boolean(video.ignored) || hasFilledTranscript(video);
+
+  const handleToggleIgnored = async (video) => {
+    try {
+      const updated = await toggleVideoIgnored(video.id, !video.ignored);
+      setVideos((prev) => prev.map((v) => (v.id === video.id ? { ...v, ...updated } : v)));
+      setFeedback({
+        severity: 'success',
+        message: updated.ignored ? 'Vídeo marcado como ignorado.' : 'Vídeo reativado.',
+      });
+      if (updated.ignored && !showIgnored) {
+        // some ja some da lista — recarrega
+        loadVideos();
+      }
+    } catch (err) {
+      setFeedback({ severity: 'error', message: err.message });
+    }
+  };
 
   useEffect(() => {
     const t = setTimeout(() => setSearchDebounced(search), 400);
@@ -162,6 +197,7 @@ const VideosPage = () => {
         search: searchDebounced || undefined,
         limit: rowsPerPage,
         offset: page * rowsPerPage,
+        includeIgnored: showIgnored,
       });
       setVideos(data.items);
       setTotal(data.total);
@@ -174,22 +210,52 @@ const VideosPage = () => {
 
   useEffect(() => {
     loadVideos();
-  }, [channelId, page, rowsPerPage, searchDebounced]);
+  }, [channelId, page, rowsPerPage, searchDebounced, showIgnored]);
 
   useEffect(() => {
-    const hasProcessing = videos.some((v) => v.transcript?.status === 'processing');
-    if (!hasProcessing) return undefined;
-    const interval = setInterval(() => { loadVideos(); }, 10000);
-    return () => clearInterval(interval);
-  }, [videos]);
+    const processingIds = videos
+      .filter((v) => v.transcript?.status === 'processing')
+      .map((v) => v.transcript.id);
+    if (!processingIds.length) return undefined;
+
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const updates = await fetchTranscriptProgressBatch(processingIds);
+        if (cancelled || !Array.isArray(updates) || !updates.length) return;
+        const byId = new Map(updates.map((u) => [u.id, u]));
+        let needsFullReload = false;
+        setVideos((prev) => prev.map((v) => {
+          const upd = v.transcript && byId.get(v.transcript.id);
+          if (!upd) return v;
+          if (v.transcript.status === 'processing' && upd.status !== 'processing') {
+            needsFullReload = true;
+          }
+          return { ...v, transcript: { ...v.transcript, ...upd } };
+        }));
+        if (needsFullReload) loadVideos();
+      } catch (_) {
+        // silencioso
+      }
+    };
+    const interval = setInterval(tick, 5000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [videos.map((v) => (v.transcript?.status === 'processing' ? v.transcript.id : '')).join(',')]);
 
   const handleSync = async () => {
     try {
       setSyncing(true);
       const result = await syncChannelVideos(channelId, 5);
+      const skippedParts = [];
+      if (result.skippedByPrivacy) skippedParts.push(`${result.skippedByPrivacy} não público(s)`);
+      if (result.skippedByDuration) {
+        const minMin = Math.round((result.filters?.minDurationSeconds || 0) / 60);
+        skippedParts.push(`${result.skippedByDuration} abaixo de ${minMin}min`);
+      }
+      const skippedMsg = skippedParts.length ? ` Ignorados: ${skippedParts.join(', ')}.` : '';
       setFeedback({
         severity: 'success',
-        message: `Sincronizacao concluida: ${result.created} novos, ${result.updated} atualizados (${result.total} total).`,
+        message: `Sincronização concluída: ${result.created} novos, ${result.updated} atualizados.${skippedMsg}`,
       });
       setPage(0);
       loadVideos();
@@ -201,6 +267,13 @@ const VideosPage = () => {
   };
 
   const handleTranscribeNow = async (video) => {
+    if (hasFilledTranscript(video)) {
+      setFeedback({
+        severity: 'info',
+        message: 'Este video ja possui transcricao. Use a acao de revisar/editar.',
+      });
+      return;
+    }
     try {
       setTranscribingId(video.id);
       const transcript = await transcribeVideoNow(video.id);
@@ -208,7 +281,7 @@ const VideosPage = () => {
       const msg = transcript.status === 'done'
         ? `Transcrito via legenda manual (${transcript.language || 'idioma desconhecido'}).`
         : transcript.status === 'needs_audio_transcription'
-          ? 'Sem legenda manual disponivel. Sera processado pelo Whisper (Fase 4).'
+          ? 'Sem legenda manual disponível. Será processado pelo Whisper na próxima janela do worker.'
           : `Status: ${transcript.status}`;
       setFeedback({ severity: 'success', message: msg });
     } catch (err) {
@@ -220,10 +293,10 @@ const VideosPage = () => {
 
   const handleCancel = async (video) => {
     if (!video.transcript?.id) return;
-    if (!window.confirm('Cancelar a transcricao em andamento? Sera marcada como falhou e voce podera reprocessar.')) return;
+    if (!window.confirm('Cancelar a transcrição em andamento? Será marcada como falhou e você poderá reprocessar.')) return;
     try {
       await cancelTranscript(video.transcript.id);
-      setFeedback({ severity: 'success', message: 'Transcricao cancelada.' });
+      setFeedback({ severity: 'success', message: 'Transcrição cancelada.' });
       loadVideos();
     } catch (err) {
       setFeedback({ severity: 'error', message: err.message });
@@ -231,6 +304,13 @@ const VideosPage = () => {
   };
 
   const handleReprocess = async (video) => {
+    if (hasFilledTranscript(video)) {
+      setFeedback({
+        severity: 'info',
+        message: 'Este video ja possui transcricao. Use a acao de revisar/editar.',
+      });
+      return;
+    }
     try {
       const transcript = await transcribeVideoNow(video.id);
       setVideos((prev) => prev.map((v) => (v.id === video.id ? { ...v, transcript } : v)));
@@ -244,12 +324,25 @@ const VideosPage = () => {
     if (selected.size === 0) return;
     try {
       setEnqueueing(true);
-      const result = await enqueueTranscripts(Array.from(selected));
+      const transcribableIds = videos
+        .filter((video) => selected.has(video.id) && !hasFilledTranscript(video))
+        .map((video) => video.id);
+
+      if (transcribableIds.length === 0) {
+        setFeedback({
+          severity: 'info',
+          message: 'Os videos selecionados ja possuem transcricao. Use revisar/editar.',
+        });
+        setEnqueueing(false);
+        return;
+      }
+
+      const result = await enqueueTranscripts(transcribableIds);
       const ok = result.enqueued.filter((e) => !e.error).length;
       const fail = result.enqueued.filter((e) => e.error).length;
       setFeedback({
         severity: fail === 0 ? 'success' : 'warning',
-        message: `${ok} video(s) enfileirado(s)${fail ? `, ${fail} com erro` : ''}.`,
+        message: `${ok} vídeo(s) enfileirado(s)${fail ? `, ${fail} com erro` : ''}.`,
       });
       setSelected(new Set());
       loadVideos();
@@ -273,6 +366,8 @@ const VideosPage = () => {
   };
 
   const toggleSelected = (id) => {
+    const video = videos.find((item) => item.id === id);
+    if (video && hasFilledTranscript(video)) return;
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -281,14 +376,17 @@ const VideosPage = () => {
     });
   };
 
-  const allSelected = videos.length > 0 && videos.every((v) => selected.has(v.id));
+  const selectableVideos = videos.filter((video) => !isLocked(video));
+  const allSelected = selectableVideos.length > 0 && selectableVideos.every((v) => selected.has(v.id));
   const toggleAll = () => {
     setSelected((prev) => {
       const next = new Set(prev);
       if (allSelected) {
         videos.forEach((v) => next.delete(v.id));
       } else {
-        videos.forEach((v) => next.add(v.id));
+        videos.forEach((v) => {
+          if (!hasFilledTranscript(v)) next.add(v.id);
+        });
       }
       return next;
     });
@@ -297,11 +395,11 @@ const VideosPage = () => {
   return (
     <div>
       <Helmet>
-        <title>Videos do canal | Portal IECG</title>
+        <title>Vídeos do canal | Portal IECG</title>
       </Helmet>
       <PapperBlock
-        title="Videos do canal"
-        desc="Sincronize e selecione videos para transcrever e resumir."
+        title="Vídeos do canal"
+        desc="Sincronize e selecione vídeos para transcrever e resumir."
         icon="ion-logo-youtube"
         whiteBg
       >
@@ -320,9 +418,20 @@ const VideosPage = () => {
           <Box sx={{ flexGrow: 1 }} />
           <TextField
             size="small"
-            placeholder="Buscar por titulo"
+            placeholder="Buscar por título"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+          />
+          <FormControlLabel
+            control={(
+              <Switch
+                size="small"
+                checked={showIgnored}
+                onChange={(e) => setShowIgnored(e.target.checked)}
+              />
+            )}
+            label="Mostrar ignorados"
+            sx={{ ml: 1 }}
           />
           <IconButton onClick={loadVideos}>
             <RefreshIcon />
@@ -338,7 +447,7 @@ const VideosPage = () => {
         {selected.size > 0 && (
           <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
             <Alert severity="info" sx={{ flexGrow: 1 }}>
-              {selected.size} video(s) selecionado(s).
+              {selected.size} vídeo(s) selecionado(s).
             </Alert>
             <Button
               variant="contained"
@@ -361,12 +470,12 @@ const VideosPage = () => {
                 <TableCell padding="checkbox">
                   <Checkbox checked={allSelected} indeterminate={!allSelected && selected.size > 0} onChange={toggleAll} />
                 </TableCell>
-                <TableCell>Video</TableCell>
+                <TableCell>Vídeo</TableCell>
                 <TableCell>Publicado</TableCell>
-                <TableCell>Duracao</TableCell>
+                <TableCell>Duração</TableCell>
                 <TableCell>Legenda</TableCell>
-                <TableCell>Transcricao</TableCell>
-                <TableCell align="right">Acoes</TableCell>
+                <TableCell>Transcrição</TableCell>
+                <TableCell align="right">Ações</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -381,15 +490,24 @@ const VideosPage = () => {
                 <TableRow>
                   <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
                     <Typography color="text.secondary">
-                      Nenhum video. Clique em &quot;Sincronizar com o YouTube&quot;.
+                      Nenhum vídeo. Clique em &quot;Sincronizar com o YouTube&quot;.
                     </Typography>
                   </TableCell>
                 </TableRow>
               )}
               {!loading && videos.map((video) => (
-                <TableRow key={video.id} hover selected={selected.has(video.id)}>
+                <TableRow
+                  key={video.id}
+                  hover
+                  selected={selected.has(video.id)}
+                  sx={video.ignored ? { opacity: 0.55, bgcolor: 'grey.50' } : undefined}
+                >
                   <TableCell padding="checkbox">
-                    <Checkbox checked={selected.has(video.id)} onChange={() => toggleSelected(video.id)} />
+                    <Checkbox
+                      checked={selected.has(video.id)}
+                      onChange={() => toggleSelected(video.id)}
+                      disabled={isLocked(video)}
+                    />
                   </TableCell>
                   <TableCell>
                     <Stack direction="row" spacing={1} alignItems="center">
@@ -407,9 +525,19 @@ const VideosPage = () => {
                         <Typography variant="body2" fontWeight={600} noWrap title={video.title}>
                           {video.title}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {video.videoId}
-                        </Typography>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <Typography variant="caption" color="text.secondary">
+                            {video.videoId}
+                          </Typography>
+                          {video.ignored && (
+                            <Chip
+                              size="small"
+                              color="default"
+                              variant="outlined"
+                              label={video.ignoreReason === 'too_short' ? 'Ignorado: curto' : video.ignoreReason === 'not_public' ? 'Ignorado: não público' : 'Ignorado'}
+                            />
+                          )}
+                        </Stack>
                       </Box>
                     </Stack>
                   </TableCell>
@@ -437,42 +565,53 @@ const VideosPage = () => {
                     <TranscriptBadge transcript={video.transcript} />
                   </TableCell>
                   <TableCell align="right">
-                    <Tooltip title="Transcrever agora (tenta legenda manual)">
-                      <span>
-                        <IconButton
-                          size="small"
-                          color="primary"
-                          onClick={() => handleTranscribeNow(video)}
-                          disabled={transcribingId === video.id}
-                        >
-                          {transcribingId === video.id ? <CircularProgress size={16} /> : <PlayCircleIcon fontSize="small" />}
-                        </IconButton>
-                      </span>
-                    </Tooltip>
-                    {video.transcript?.status === 'processing' && (
-                      <Tooltip title="Cancelar transcricao em andamento">
+                    {!video.ignored && !hasFilledTranscript(video) && (
+                      <Tooltip title="Transcrever agora (tenta legenda manual)">
+                        <span>
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            onClick={() => handleTranscribeNow(video)}
+                            disabled={transcribingId === video.id}
+                          >
+                            {transcribingId === video.id ? <CircularProgress size={16} /> : <PlayCircleIcon fontSize="small" />}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    )}
+                    {!video.ignored && video.transcript?.status === 'processing' && (
+                      <Tooltip title="Cancelar transcrição em andamento">
                         <IconButton size="small" color="error" onClick={() => handleCancel(video)}>
                           <CancelIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                     )}
-                    {video.transcript?.status === 'failed' && (
+                    {!video.ignored && video.transcript?.status === 'failed' && !hasFilledTranscript(video) && (
                       <Tooltip title="Reprocessar (tentar de novo)">
                         <IconButton size="small" color="warning" onClick={() => handleReprocess(video)}>
                           <ReplayIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                     )}
-                    {video.transcript?.id && (
-                      <Tooltip title="Revisar/editar transcricao">
+                    {!video.ignored && video.transcript?.id && (
+                      <Tooltip title={hasFilledTranscript(video) ? 'Editar transcrição e resumo' : 'Revisar/editar transcrição'}>
                         <IconButton
                           size="small"
+                          color={hasFilledTranscript(video) ? 'primary' : 'default'}
                           onClick={() => history.push(`/app/admin/videos/transcricoes/${video.transcript.id}`)}
                         >
                           <EditIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                     )}
+                    <Tooltip title={video.ignored ? 'Reativar (remover de ignorados)' : 'Marcar como ignorado'}>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleToggleIgnored(video)}
+                      >
+                        {video.ignored ? <VisibilityIcon fontSize="small" /> : <VisibilityOffIcon fontSize="small" />}
+                      </IconButton>
+                    </Tooltip>
                     <Tooltip title="Abrir no YouTube">
                       <IconButton
                         size="small"
@@ -499,7 +638,7 @@ const VideosPage = () => {
             setPage(0);
           }}
           rowsPerPageOptions={[10, 20, 50, 100]}
-          labelRowsPerPage="Itens por pagina"
+          labelRowsPerPage="Itens por página"
         />
       </PapperBlock>
     </div>

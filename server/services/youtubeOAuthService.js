@@ -8,7 +8,7 @@ const REQUIRED_SCOPES = [
 
 function getEnvOrThrow(name) {
   const value = process.env[name];
-  if (!value) throw new Error(`${name} nao definida no .env`);
+  if (!value) throw new Error(`${name} não definida no .env`);
   return value;
 }
 
@@ -43,11 +43,11 @@ function signState(payload) {
 }
 
 function verifyState(state) {
-  if (!state || !state.includes('.')) throw new Error('State invalido');
+  if (!state || !state.includes('.')) throw new Error('State inválido');
   const [body, sig] = state.split('.');
   const secret = getEnvOrThrow('JWT_SECRET');
   const expected = crypto.createHmac('sha256', secret).update(body).digest('base64url');
-  if (sig !== expected) throw new Error('Assinatura do state nao confere');
+  if (sig !== expected) throw new Error('Assinatura do state não confere');
   return JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
 }
 
@@ -56,7 +56,7 @@ async function exchangeCodeForTokens(code) {
   const { tokens } = await oauth2Client.getToken(code);
   if (!tokens.refresh_token) {
     throw new Error(
-      'Google nao retornou refresh_token. Revogue o acesso anterior em myaccount.google.com/permissions e refaca a autorizacao.'
+      'Google não retornou refresh_token. Revogue o acesso anterior em myaccount.google.com/permissions e refaça a autorização.'
     );
   }
   return tokens;
@@ -72,7 +72,7 @@ async function fetchOwnedChannel(tokens) {
   });
 
   if (!data.items || data.items.length === 0) {
-    throw new Error('Esta conta Google nao tem canal do YouTube associado');
+    throw new Error('Esta conta Google não tem canal do YouTube associado');
   }
 
   const channel = data.items[0];

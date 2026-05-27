@@ -3,15 +3,15 @@ const publicVideoService = require('../services/publicVideoService');
 async function listar(req, res) {
   try {
     const {
-      channelId, search, limit, offset
+      channelId, search, limit, offset, all
     } = req.query;
     const result = await publicVideoService.listPublished({
-      channelId, search, limit, offset
+      channelId, search, limit, offset, all: all === 'true'
     });
     res.status(200).json(result);
   } catch (err) {
     console.error('[publicVideo] Erro ao listar:', err);
-    res.status(500).json({ message: 'Erro ao listar videos publicos' });
+    res.status(500).json({ message: 'Erro ao listar vídeos públicos' });
   }
 }
 
@@ -20,11 +20,24 @@ async function buscarPorVideoId(req, res) {
     const { videoId } = req.params;
     const includeTranscript = req.query.includeTranscript !== 'false';
     const video = await publicVideoService.getByVideoId(videoId, { includeTranscript });
-    if (!video) return res.status(404).json({ message: 'Video nao encontrado ou nao publicado' });
+    if (!video) return res.status(404).json({ message: 'Vídeo não encontrado ou não publicado' });
     return res.status(200).json(video);
   } catch (err) {
     console.error('[publicVideo] Erro ao buscar:', err);
-    return res.status(500).json({ message: 'Erro ao buscar video' });
+    return res.status(500).json({ message: 'Erro ao buscar vídeo' });
+  }
+}
+
+async function buscarPorSlug(req, res) {
+  try {
+    const { slug } = req.params;
+    const includeTranscript = req.query.includeTranscript !== 'false';
+    const video = await publicVideoService.getBySlug(slug, { includeTranscript });
+    if (!video) return res.status(404).json({ message: 'Vídeo não encontrado ou não publicado' });
+    return res.status(200).json(video);
+  } catch (err) {
+    console.error('[publicVideo] Erro ao buscar por slug:', err);
+    return res.status(500).json({ message: 'Erro ao buscar vídeo' });
   }
 }
 
@@ -40,5 +53,6 @@ async function listarCanais(req, res) {
 module.exports = {
   listar,
   buscarPorVideoId,
+  buscarPorSlug,
   listarCanais,
 };

@@ -14,7 +14,6 @@ import {
   InputAdornment,
   InputLabel,
   MenuItem,
-  Pagination,
   Select,
   Stack,
   TextField,
@@ -27,8 +26,6 @@ import { useHistory } from 'react-router-dom';
 import { PapperBlock } from 'dan-components';
 import { fetchPublicVideos, fetchPublicChannels } from '../../../utils/publicVideosClient';
 
-const PAGE_SIZE = 12;
-
 function formatDuration(seconds) {
   if (!seconds) return '';
   const h = Math.floor(seconds / 3600);
@@ -38,15 +35,20 @@ function formatDuration(seconds) {
 }
 
 function truncate(text, max = 180) {
-  if (!text) return '';
-  return text.length > max ? `${text.slice(0, max).trim()}...` : text;
+  const plain = String(text || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!plain) return '';
+  return plain.length > max ? `${plain.slice(0, max).trim()}...` : plain;
 }
 
 const VideoLibraryPage = () => {
   const history = useHistory();
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [searchDebounced, setSearchDebounced] = useState('');
   const [channelId, setChannelId] = useState('');
@@ -71,8 +73,7 @@ const VideoLibraryPage = () => {
         const data = await fetchPublicVideos({
           channelId: channelId || undefined,
           search: searchDebounced || undefined,
-          limit: PAGE_SIZE,
-          offset: (page - 1) * PAGE_SIZE,
+          all: true,
         });
         setItems(data.items);
         setTotal(data.total);
@@ -83,9 +84,7 @@ const VideoLibraryPage = () => {
       }
     };
     load();
-  }, [page, searchDebounced, channelId]);
-
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  }, [searchDebounced, channelId]);
 
   return (
     <div>
@@ -101,9 +100,9 @@ const VideoLibraryPage = () => {
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 3 }}>
           <TextField
             size="small"
-            placeholder="Buscar por titulo..."
+            placeholder="Buscar por título..."
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            onChange={(e) => { setSearch(e.target.value); }}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
@@ -118,7 +117,7 @@ const VideoLibraryPage = () => {
             <Select
               label="Canal"
               value={channelId}
-              onChange={(e) => { setChannelId(e.target.value); setPage(1); }}
+              onChange={(e) => { setChannelId(e.target.value); }}
             >
               <MenuItem value="">Todos os canais</MenuItem>
               {channels.map((c) => (
@@ -139,7 +138,7 @@ const VideoLibraryPage = () => {
         {!loading && items.length === 0 && (
           <Box sx={{ textAlign: 'center', py: 6 }}>
             <Typography color="text.secondary">
-              Nenhum video publicado ainda.
+              Nenhum vídeo publicado ainda.
             </Typography>
           </Box>
         )}
@@ -200,19 +199,8 @@ const VideoLibraryPage = () => {
               ))}
             </Grid>
 
-            {totalPages > 1 && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-                <Pagination
-                  count={totalPages}
-                  page={page}
-                  onChange={(_, p) => setPage(p)}
-                  color="primary"
-                />
-              </Box>
-            )}
-
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2, textAlign: 'center' }}>
-              {total} video(s) publicado(s)
+              {total} vídeo(s) publicado(s)
             </Typography>
           </>
         )}

@@ -74,6 +74,23 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(32),
         allowNull: true,
       },
+      seoKeywords: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+      },
+      seoMetaTitle: {
+        type: DataTypes.STRING(160),
+        allowNull: true,
+      },
+      seoMetaDescription: {
+        type: DataTypes.STRING(320),
+        allowNull: true,
+      },
+      seoSlug: {
+        type: DataTypes.STRING(200),
+        allowNull: true,
+      },
     },
     {
       sequelize,
