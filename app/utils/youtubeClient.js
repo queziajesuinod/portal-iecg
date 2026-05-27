@@ -59,18 +59,30 @@ export const startChannelOAuth = async (ownerName) => {
     headers: jsonHeaders(),
     body: JSON.stringify({ ownerName }),
   });
-  return parseOrThrow(res, 'Falha ao iniciar autorizacao OAuth');
+  return parseOrThrow(res, 'Falha ao iniciar autorização OAuth');
 };
 
-export const fetchChannelVideos = async (channelId, { search, limit = 50, offset = 0 } = {}) => {
+export const fetchChannelVideos = async (channelId, {
+  search, limit = 50, offset = 0, includeIgnored = false,
+} = {}) => {
   const params = new URLSearchParams();
   if (search) params.set('search', search);
   params.set('limit', String(limit));
   params.set('offset', String(offset));
+  if (includeIgnored) params.set('includeIgnored', 'true');
   const res = await fetch(`${BASE}/channels/${channelId}/videos?${params.toString()}`, {
     headers: jsonHeaders(),
   });
-  return parseOrThrow(res, 'Falha ao carregar videos');
+  return parseOrThrow(res, 'Falha ao carregar vídeos');
+};
+
+export const toggleVideoIgnored = async (id, ignored) => {
+  const res = await fetch(`${BASE}/videos/${id}/ignored`, {
+    method: 'PATCH',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ ignored }),
+  });
+  return parseOrThrow(res, 'Falha ao alternar vídeo ignorado');
 };
 
 export const syncChannelVideos = async (channelId, maxPages = 5) => {
@@ -79,7 +91,7 @@ export const syncChannelVideos = async (channelId, maxPages = 5) => {
     headers: jsonHeaders(),
     body: JSON.stringify({ maxPages }),
   });
-  return parseOrThrow(res, 'Falha ao sincronizar videos');
+  return parseOrThrow(res, 'Falha ao sincronizar vídeos');
 };
 
 export const refreshVideoCaptions = async (videoId) => {
@@ -96,7 +108,7 @@ export const enqueueTranscripts = async (videoIds) => {
     headers: jsonHeaders(),
     body: JSON.stringify({ videoIds }),
   });
-  return parseOrThrow(res, 'Falha ao enfileirar videos');
+  return parseOrThrow(res, 'Falha ao enfileirar vídeos');
 };
 
 export const transcribeVideoNow = async (videoId) => {
@@ -122,7 +134,18 @@ export const fetchTranscripts = async ({
 
 export const fetchTranscriptById = async (id) => {
   const res = await fetch(`${BASE}/transcripts/${id}`, { headers: jsonHeaders() });
-  return parseOrThrow(res, 'Falha ao carregar transcricao');
+  return parseOrThrow(res, 'Falha ao carregar transcrição');
+};
+
+export const fetchTranscriptProgress = async (id) => {
+  const res = await fetch(`${BASE}/transcripts/${id}/progress`, { headers: jsonHeaders() });
+  return parseOrThrow(res, 'Falha ao carregar progresso');
+};
+
+export const fetchTranscriptProgressBatch = async (ids) => {
+  if (!ids || !ids.length) return [];
+  const res = await fetch(`${BASE}/transcripts/progress?ids=${encodeURIComponent(ids.join(','))}`, { headers: jsonHeaders() });
+  return parseOrThrow(res, 'Falha ao carregar progresso em lote');
 };
 
 export const updateTranscript = async (id, payload) => {
@@ -131,7 +154,7 @@ export const updateTranscript = async (id, payload) => {
     headers: jsonHeaders(),
     body: JSON.stringify(payload),
   });
-  return parseOrThrow(res, 'Falha ao atualizar transcricao');
+  return parseOrThrow(res, 'Falha ao atualizar transcrição');
 };
 
 export const deleteTranscript = async (id) => {
@@ -139,7 +162,7 @@ export const deleteTranscript = async (id) => {
     method: 'DELETE',
     headers: authHeaders(),
   });
-  return parseOrThrow(res, 'Falha ao remover transcricao');
+  return parseOrThrow(res, 'Falha ao remover transcrição');
 };
 
 export const cancelTranscript = async (id) => {
@@ -147,7 +170,7 @@ export const cancelTranscript = async (id) => {
     method: 'POST',
     headers: jsonHeaders(),
   });
-  return parseOrThrow(res, 'Falha ao cancelar transcricao');
+  return parseOrThrow(res, 'Falha ao cancelar transcrição');
 };
 
 export const regenerateSummary = async (id) => {

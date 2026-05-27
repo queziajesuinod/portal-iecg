@@ -6,6 +6,7 @@ const NotificationSequenceService = require('./services/notificationSequenceServ
 const ValidacaoMinisterioService = require('./services/validacaoMinisterioService');
 const celulaPresencaService = require('./services/celulaPresencaService');
 const videoTranscriptWorker = require('./services/videoTranscriptWorker');
+const channelSyncService = require('./services/channelSyncService');
 const { APP_TIMEZONE, todayDateOnly } = require('./utils/dateTime');
 
 const dispatching = new Set();
@@ -14,6 +15,8 @@ const dispatching = new Set();
 let ultimaValidacaoData = null;
 // Controle para abertura de reuniões (roda 1x por dia)
 let ultimaAberturaReunioes = null;
+// Controle para sincronização automática dos canais do YouTube (1x na semana)
+let ultimaSincronizacaoYoutubeData = null;
 
 async function tickCampaigns() {
   const now = new Date();
@@ -130,9 +133,56 @@ async function tickVideoTranscription() {
   }
 }
 
+async function tickYoutubeChannelSync() {
+  const enabled = process.env.YOUTUBE_SYNC_ENABLED !== 'false';
+  if (!enabled) return;
+
+  const targetDay = Number(process.env.YOUTUBE_SYNC_DAY ?? 1); // 1 = segunda-feira
+  const targetHour = Number(process.env.YOUTUBE_SYNC_HOUR ?? 0); // 0 = meia-noite
+
+  const agora = moment.tz(APP_TIMEZONE);
+  const hoje = agora.format('YYYY-MM-DD');
+
+  if (ultimaSincronizacaoYoutubeData === hoje) return;
+  if (agora.day() !== targetDay) return;
+  if (agora.hour() < targetHour) return;
+
+  ultimaSincronizacaoYoutubeData = hoje;
+
+  console.log('[Scheduler] Iniciando sincronização automática dos canais do YouTube...');
+  try {
+    const results = await channelSyncService.syncAllActiveChannels({ maxPages: 5 });
+    const ok = results.filter((r) => r.success).length;
+    const fail = results.filter((r) => !r.success).length;
+    const totalCreated = results.reduce((sum, r) => sum + (r.created || 0), 0);
+    const totalUpdated = results.reduce((sum, r) => sum + (r.updated || 0), 0);
+    const totalIgnoredPrivacy = results.reduce((sum, r) => sum + (r.skippedByPrivacy || 0), 0);
+    const totalIgnoredDuration = results.reduce((sum, r) => sum + (r.skippedByDuration || 0), 0);
+
+    console.log(
+      `[Scheduler] Sincronização YouTube concluída: ${ok} canal(is) ok, ${fail} com erro. `
+      + `Total: ${totalCreated} novos, ${totalUpdated} atualizados, `
+      + `${totalIgnoredPrivacy} não públicos, ${totalIgnoredDuration} curtos.`
+    );
+
+    results.filter((r) => !r.success).forEach((r) => {
+      console.warn(`[Scheduler] Canal "${r.channelName}" falhou: ${r.error}`);
+    });
+  } catch (err) {
+    console.error('[Scheduler] Erro fatal na sincronização YouTube:', err.message);
+  }
+}
+
 async function tick() {
   try {
-    await Promise.all([tickCampaigns(), tickSequences(), tickValidacaoCultos(), tickCelulas(), tickVideoTranscription()]);
+    await Promise.all([
+      tickCampaigns(),
+      tickSequences(),
+      tickValidacaoCultos(),
+      tickCelulas(),
+      tickVideoTranscription(),
+      tickYoutubeChannelSync(),
+    ]);
   } catch (err) {
     console.error('[Scheduler] Erro no tick:', err.message);
   }

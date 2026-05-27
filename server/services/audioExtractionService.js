@@ -24,7 +24,7 @@ function runYtDlp(args, { onProgress } = {}) {
     proc.on('error', (err) => {
       activeProcess = null;
       if (err.code === 'ENOENT') {
-        reject(new Error('yt-dlp nao encontrado. Instale: pip install yt-dlp (ou ajuste YT_DLP_PATH)'));
+        reject(new Error('yt-dlp não encontrado. Instale: pip install yt-dlp (ou ajuste YT_DLP_PATH)'));
       } else {
         reject(err);
       }

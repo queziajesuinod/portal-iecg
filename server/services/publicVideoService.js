@@ -31,12 +31,18 @@ function buildPublicVideoPayload(transcript, { includeFullTranscript = false } =
     language: transcript.language,
     source: transcript.source,
     processedAt: transcript.processedAt,
+    seo: {
+      metaTitle: transcript.seoMetaTitle || video?.title || null,
+      metaDescription: transcript.seoMetaDescription,
+      keywords: transcript.seoKeywords || [],
+      slug: transcript.seoSlug,
+    },
     ...(includeFullTranscript ? { transcript: transcript.transcript } : {}),
   };
 }
 
 async function listPublished({
-  channelId, search, limit = 20, offset = 0
+  channelId, search, limit = 20, offset = 0, all = false
 } = {}) {
   const safeLimit = Math.max(1, Math.min(Number(limit) || 20, 100));
   const safeOffset = Math.max(0, Number(offset) || 0);
@@ -58,7 +64,7 @@ async function listPublished({
     channelWhere.channelId = channelId;
   }
 
-  const { rows, count } = await VideoTranscript.findAndCountAll({
+  const query = {
     where,
     include: [
       {
@@ -76,16 +82,21 @@ async function listPublished({
       },
     ],
     order: [[{ model: YoutubeVideo, as: 'video' }, 'publishedAt', 'DESC']],
-    limit: safeLimit,
-    offset: safeOffset,
     distinct: true,
-  });
+  };
+
+  if (!all) {
+    query.limit = safeLimit;
+    query.offset = safeOffset;
+  }
+
+  const { rows, count } = await VideoTranscript.findAndCountAll(query);
 
   return {
     items: rows.map((r) => buildPublicVideoPayload(r, { includeFullTranscript: false })),
     total: count,
-    limit: safeLimit,
-    offset: safeOffset,
+    limit: all ? count : safeLimit,
+    offset: all ? 0 : safeOffset,
   };
 }
 
@@ -107,6 +118,23 @@ async function getByVideoId(videoId, { includeTranscript = true } = {}) {
   return buildPublicVideoPayload(transcript, { includeFullTranscript: includeTranscript });
 }
 
+async function getBySlug(slug, { includeTranscript = true } = {}) {
+  const transcript = await VideoTranscript.findOne({
+    where: { published: true, status: 'done', seoSlug: slug },
+    include: [
+      {
+        model: YoutubeVideo,
+        as: 'video',
+        required: true,
+        include: [{ model: YoutubeChannel, as: 'channel' }],
+      },
+    ],
+  });
+
+  if (!transcript) return null;
+  return buildPublicVideoPayload(transcript, { includeFullTranscript: includeTranscript });
+}
+
 async function listChannels() {
   const channels = await YoutubeChannel.findAll({
     where: { active: true },
@@ -119,6 +147,7 @@ async function listChannels() {
 module.exports = {
   listPublished,
   getByVideoId,
+  getBySlug,
   listChannels,
   buildPublicVideoPayload,
 };

@@ -38,7 +38,12 @@ async function getNextPending() {
     where: {
       status: { [Op.in]: ['pending', 'needs_audio_transcription'] },
     },
-    include: [{ model: YoutubeVideo, as: 'video', required: true }],
+    include: [{
+      model: YoutubeVideo,
+      as: 'video',
+      required: true,
+      where: { ignored: false },
+    }],
     order: [['updatedAt', 'ASC']],
   });
 }

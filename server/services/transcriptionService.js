@@ -5,20 +5,47 @@ const audioExtraction = require('./audioExtractionService');
 const whisperLocal = require('./whisperLocalService');
 const videoSummary = require('./videoSummaryService');
 
+function hasTranscriptText(transcript) {
+  return Boolean(htmlToPlainText(transcript?.transcript).trim());
+}
+
+function htmlToPlainText(value) {
+  return String(value || '')
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s+/g, '\n')
+    .trim();
+}
+
 async function generateAndSaveSummary(transcript, video) {
   if (!process.env.ANTHROPIC_API_KEY) {
-    console.warn('[summary] ANTHROPIC_API_KEY ausente, pulando geracao de resumo');
+    console.warn('[summary] ANTHROPIC_API_KEY ausente, pulando geração de resumo');
     return null;
   }
   try {
-    const result = await videoSummary.generateSummary(transcript.transcript, {
+    const { slugify } = require('../utils/slugify');
+    const result = await videoSummary.generateSummary(htmlToPlainText(transcript.transcript), {
       title: video.title,
       language: transcript.language || 'pt',
     });
     transcript.summary = result.summary;
     transcript.bulletPoints = result.bulletPoints;
+    transcript.seoMetaTitle = result.metaTitle || (video.title || '').slice(0, 160);
+    transcript.seoMetaDescription = result.metaDescription;
+    transcript.seoKeywords = result.keywords;
+    transcript.seoSlug = slugify(result.slug || video.title || '');
     await transcript.save();
-    console.log(`[summary] gerado para "${video.title}" (${result.bulletPoints.length} bullets)`);
+    console.log(`[summary] gerado para "${video.title}" (${result.bulletPoints.length} bullets, ${result.keywords.length} keywords, slug="${transcript.seoSlug}")`);
     return result;
   } catch (err) {
     console.error('[summary] erro ao gerar resumo:', err.message);
@@ -36,9 +63,15 @@ async function getOrCreateTranscript(youtubeVideoId) {
 
 async function enqueueVideo(youtubeVideoId) {
   const video = await YoutubeVideo.findByPk(youtubeVideoId);
-  if (!video) throw new Error('Video nao encontrado');
+  if (!video) throw new Error('Vídeo não encontrado');
+  if (video.ignored) {
+    throw new Error('Este vídeo está marcado como ignorado e não pode ser processado.');
+  }
 
   const transcript = await getOrCreateTranscript(youtubeVideoId);
+  if (hasTranscriptText(transcript)) {
+    throw new Error('Este vídeo já possui transcrição preenchida. Edite a transcrição e o resumo existentes.');
+  }
   if (transcript.status === 'processing') {
     return transcript;
   }
@@ -92,11 +125,11 @@ async function processWithWhisper(video, transcript) {
 
   try {
     await setStage(transcript, 'audio_download', 0);
-    console.log(`[whisper] baixando audio de ${video.videoId}...`);
+    console.log(`[whisper] baixando áudio de ${video.videoId}...`);
     audioPath = await audioExtraction.downloadAudio(video.videoId);
 
     await setStage(transcript, 'whisper', 0);
-    console.log('[whisper] transcrevendo audio (pode levar 2-3h em CPU)...');
+    console.log('[whisper] transcrevendo áudio (pode levar 2-3h em CPU)...');
 
     let lastSavedPct = 0;
     let lastSaveAt = 0;
@@ -137,12 +170,18 @@ async function processWithWhisper(video, transcript) {
 
 async function processVideoNow(youtubeVideoId, { useWhisperFallback = false } = {}) {
   const video = await YoutubeVideo.findByPk(youtubeVideoId);
-  if (!video) throw new Error('Video nao encontrado');
+  if (!video) throw new Error('Vídeo não encontrado');
+  if (video.ignored) {
+    throw new Error('Este vídeo está marcado como ignorado e não pode ser processado.');
+  }
 
   const channel = await YoutubeChannel.scope('withTokens').findByPk(video.youtubeChannelId);
-  if (!channel) throw new Error('Canal do video nao encontrado');
+  if (!channel) throw new Error('Canal do vídeo não encontrado');
 
   const transcript = await getOrCreateTranscript(youtubeVideoId);
+  if (hasTranscriptText(transcript)) {
+    throw new Error('Este vídeo já possui transcrição preenchida. Edite a transcrição e o resumo existentes.');
+  }
   transcript.status = 'processing';
   transcript.errorMessage = null;
   transcript.progressPercent = 0;
@@ -171,7 +210,7 @@ async function processVideoNow(youtubeVideoId, { useWhisperFallback = false } = 
 
 async function cancelTranscript(transcriptId) {
   const transcript = await VideoTranscript.findByPk(transcriptId);
-  if (!transcript) throw new Error('Transcricao nao encontrada');
+  if (!transcript) throw new Error('Transcrição não encontrada');
 
   const worker = require('./videoTranscriptWorker');
   let killed = { killedAudio: false, killedWhisper: false };
@@ -180,7 +219,7 @@ async function cancelTranscript(transcriptId) {
   }
 
   transcript.status = 'failed';
-  transcript.errorMessage = 'Cancelada manualmente';
+  transcript.errorMessage = 'Cancelada manualmente pelo administrador';
   transcript.progressPercent = 0;
   transcript.progressStage = null;
   await transcript.save();
@@ -192,15 +231,20 @@ async function regenerateSummary(transcriptId) {
   const transcript = await VideoTranscript.findByPk(transcriptId, {
     include: [{ model: YoutubeVideo, as: 'video' }],
   });
-  if (!transcript) throw new Error('Transcricao nao encontrada');
-  if (!transcript.transcript) throw new Error('Transcricao sem texto para resumir');
+  if (!transcript) throw new Error('Transcrição não encontrada');
+  if (!transcript.transcript) throw new Error('Transcrição sem texto para resumir');
 
-  const result = await videoSummary.generateSummary(transcript.transcript, {
+  const { slugify } = require('../utils/slugify');
+  const result = await videoSummary.generateSummary(htmlToPlainText(transcript.transcript), {
     title: transcript.video?.title,
     language: transcript.language || 'pt',
   });
   transcript.summary = result.summary;
   transcript.bulletPoints = result.bulletPoints;
+  transcript.seoMetaTitle = result.metaTitle || (transcript.video?.title || '').slice(0, 160);
+  transcript.seoMetaDescription = result.metaDescription;
+  transcript.seoKeywords = result.keywords;
+  transcript.seoSlug = slugify(result.slug || transcript.video?.title || '');
   await transcript.save();
   return transcript;
 }
@@ -212,4 +256,5 @@ module.exports = {
   processWithWhisper,
   regenerateSummary,
   cancelTranscript,
+  hasTranscriptText,
 };

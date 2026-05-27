@@ -60,7 +60,7 @@ async function transcribeAudioFile(audioPath, { languageHint = 'pt', onProgress 
     proc.on('error', (err) => {
       activeProcess = null;
       if (err.code === 'ENOENT') {
-        reject(new Error(`Python nao encontrado (${pythonBin}). Ajuste WHISPER_PYTHON_PATH.`));
+        reject(new Error(`Python não encontrado (${pythonBin}). Ajuste WHISPER_PYTHON_PATH.`));
       } else {
         reject(err);
       }

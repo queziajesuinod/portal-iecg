@@ -51,8 +51,56 @@ async function buscarPorId(req, res) {
         },
       ],
     });
-    if (!transcript) return res.status(404).json({ message: 'Transcricao nao encontrada' });
+    if (!transcript) return res.status(404).json({ message: 'Transcrição não encontrada' });
     return res.status(200).json(transcript);
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+}
+
+async function buscarProgresso(req, res) {
+  try {
+    const transcript = await VideoTranscript.findByPk(req.params.id, {
+      attributes: [
+        'id',
+        'status',
+        'source',
+        'progressPercent',
+        'progressStage',
+        'errorMessage',
+        'processedAt',
+        'updatedAt',
+      ],
+    });
+    if (!transcript) return res.status(404).json({ message: 'Transcrição não encontrada' });
+    return res.status(200).json(transcript);
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+}
+
+async function buscarProgressoBatch(req, res) {
+  try {
+    const ids = String(req.query.ids || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (!ids.length) return res.status(200).json([]);
+
+    const transcripts = await VideoTranscript.findAll({
+      where: { id: ids },
+      attributes: [
+        'id',
+        'status',
+        'source',
+        'progressPercent',
+        'progressStage',
+        'errorMessage',
+        'processedAt',
+        'updatedAt',
+      ],
+    });
+    return res.status(200).json(transcripts);
   } catch (err) {
     return res.status(500).json({ message: err.message });
   }
@@ -61,7 +109,7 @@ async function buscarPorId(req, res) {
 async function enfileirar(req, res) {
   try {
     const videoIds = Array.isArray(req.body.videoIds) ? req.body.videoIds : [];
-    if (!videoIds.length) return res.status(400).json({ message: 'videoIds e obrigatorio' });
+    if (!videoIds.length) return res.status(400).json({ message: 'videoIds é obrigatório' });
 
     const enqueued = [];
     for (const id of videoIds) {
@@ -93,13 +141,22 @@ async function processarAgora(req, res) {
 async function atualizar(req, res) {
   try {
     const transcript = await VideoTranscript.findByPk(req.params.id);
-    if (!transcript) return res.status(404).json({ message: 'Transcricao nao encontrada' });
+    if (!transcript) return res.status(404).json({ message: 'Transcrição não encontrada' });
 
     const allowed = {};
     if (typeof req.body.transcript === 'string') allowed.transcript = req.body.transcript;
     if (typeof req.body.summary === 'string') allowed.summary = req.body.summary;
     if (Array.isArray(req.body.bulletPoints)) allowed.bulletPoints = req.body.bulletPoints;
     if (typeof req.body.published === 'boolean') allowed.published = req.body.published;
+    if (typeof req.body.seoMetaTitle === 'string') allowed.seoMetaTitle = req.body.seoMetaTitle.slice(0, 160);
+    if (typeof req.body.seoMetaDescription === 'string') allowed.seoMetaDescription = req.body.seoMetaDescription.slice(0, 320);
+    if (Array.isArray(req.body.seoKeywords)) {
+      allowed.seoKeywords = req.body.seoKeywords.filter((k) => typeof k === 'string' && k.trim()).map((k) => k.trim().toLowerCase());
+    }
+    if (typeof req.body.seoSlug === 'string') {
+      const { slugify } = require('../utils/slugify');
+      allowed.seoSlug = slugify(req.body.seoSlug, { maxLength: 200 });
+    }
 
     await transcript.update(allowed);
     return res.status(200).json(transcript);
@@ -111,7 +168,7 @@ async function atualizar(req, res) {
 async function remover(req, res) {
   try {
     const transcript = await VideoTranscript.findByPk(req.params.id);
-    if (!transcript) return res.status(404).json({ message: 'Transcricao nao encontrada' });
+    if (!transcript) return res.status(404).json({ message: 'Transcrição não encontrada' });
     await transcript.destroy();
     return res.status(204).send();
   } catch (err) {
@@ -159,6 +216,8 @@ async function rodarWorkerAgora(req, res) {
 module.exports = {
   listar,
   buscarPorId,
+  buscarProgresso,
+  buscarProgressoBatch,
   enfileirar,
   processarAgora,
   atualizar,

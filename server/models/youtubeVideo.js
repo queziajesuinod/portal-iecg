@@ -77,6 +77,15 @@ module.exports = (sequelize) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      ignored: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      ignoreReason: {
+        type: DataTypes.STRING(32),
+        allowNull: true,
+      },
     },
     {
       sequelize,

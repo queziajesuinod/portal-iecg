@@ -40,24 +40,34 @@ const definition = {
           channelThumbnailUrl: { type: 'string', nullable: true },
         },
       },
+      PublicVideoSeo: {
+        type: 'object',
+        properties: {
+          metaTitle: { type: 'string', nullable: true, example: 'O Bom Pastor: confiança em meio ao caos' },
+          metaDescription: { type: 'string', nullable: true, example: 'Uma pregação sobre Salmos 23 e como Jesus, o bom pastor, conduz nossas vidas em meio às incertezas.' },
+          keywords: { type: 'array', items: { type: 'string' }, example: ['bom pastor', 'salmo 23', 'confiança em deus', 'pregação'] },
+          slug: { type: 'string', nullable: true, example: 'o-bom-pastor-confianca-em-deus' },
+        },
+      },
       PublicVideo: {
         type: 'object',
         properties: {
           id: { $ref: '#/components/schemas/UUID' },
           videoId: { type: 'string', example: 'dQw4w9WgXcQ' },
           youtubeUrl: { type: 'string', example: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
-          title: { type: 'string', example: 'Pregacao - O Bom Pastor' },
+          title: { type: 'string', example: 'Pregação - O Bom Pastor' },
           description: { type: 'string', nullable: true },
           thumbnailUrl: { type: 'string', nullable: true },
           publishedAt: { type: 'string', format: 'date-time', nullable: true },
           durationSeconds: { type: 'integer', nullable: true, example: 3600 },
           channel: { $ref: '#/components/schemas/PublicVideoChannel' },
-          summary: { type: 'string', nullable: true },
+          summary: { type: 'string', nullable: true, description: 'HTML formatado (parágrafos, negrito, blockquote, h3)' },
           bulletPoints: { type: 'array', items: { type: 'string' } },
           language: { type: 'string', nullable: true, example: 'pt' },
           source: { type: 'string', nullable: true, enum: ['caption_manual', 'caption_auto', 'whisper'] },
           processedAt: { type: 'string', format: 'date-time', nullable: true },
-          transcript: { type: 'string', nullable: true, description: 'So presente em GET /api/public/videos/{videoId}' },
+          seo: { $ref: '#/components/schemas/PublicVideoSeo' },
+          transcript: { type: 'string', nullable: true, description: 'HTML formatado. Presente em GET /api/public/videos/{videoId} e /slug/{slug}' },
         },
       },
       PublicVideoList: {
@@ -1676,6 +1686,24 @@ const definition = {
         responses: {
           200: { description: 'Video', content: { 'application/json': { schema: { $ref: '#/components/schemas/PublicVideo' } } } },
           404: { description: 'Video nao encontrado ou nao publicado', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/api/public/videos/slug/{slug}': {
+      get: {
+        tags: ['Videos (Publico)'],
+        summary: 'Detalhes de um vídeo publicado buscando por slug SEO',
+        description: 'Use o slug gerado para SEO (URL-friendly) para buscar o vídeo. Retorna metadados, resumo HTML, pontos principais e SEO.',
+        security: [],
+        parameters: [
+          {
+            name: 'slug', in: 'path', required: true, schema: { type: 'string' }, description: 'Slug SEO (ex: o-bom-pastor-confianca-em-deus)'
+          },
+          { name: 'includeTranscript', in: 'query', schema: { type: 'boolean', default: true } },
+        ],
+        responses: {
+          200: { description: 'Vídeo', content: { 'application/json': { schema: { $ref: '#/components/schemas/PublicVideo' } } } },
+          404: { description: 'Vídeo não encontrado ou não publicado', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
     },

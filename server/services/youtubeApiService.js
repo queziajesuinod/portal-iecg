@@ -44,7 +44,7 @@ async function fetchVideoDetails(youtube, videoIds) {
   const all = [];
   for (const chunk of chunks) {
     const { data } = await youtube.videos.list({
-      part: ['snippet', 'contentDetails'],
+      part: ['snippet', 'contentDetails', 'status'],
       id: chunk,
       maxResults: 50,
     });
@@ -53,10 +53,20 @@ async function fetchVideoDetails(youtube, videoIds) {
   return all;
 }
 
-async function syncChannelVideos(channel, { maxPages = 5 } = {}) {
+function getSyncFilters() {
+  const minDuration = Number(process.env.SYNC_MIN_DURATION_SECONDS);
+  return {
+    minDurationSeconds: Number.isFinite(minDuration) && minDuration >= 0 ? minDuration : 900,
+    onlyPublic: process.env.SYNC_ONLY_PUBLIC !== 'false',
+  };
+}
+
+async function syncChannelVideos(channel, { maxPages = 5, filters: overrides = {} } = {}) {
   if (!channel.uploadsPlaylistId) {
-    throw new Error('Canal nao tem uploadsPlaylistId. Reconecte via OAuth.');
+    throw new Error('Canal não tem uploadsPlaylistId. Reconecte via OAuth.');
   }
+
+  const filters = { ...getSyncFilters(), ...overrides };
 
   const youtube = await getYoutubeClient(channel);
   const playlistItems = await listPlaylistItems(youtube, channel.uploadsPlaylistId, { maxPages });
@@ -69,9 +79,29 @@ async function syncChannelVideos(channel, { maxPages = 5 } = {}) {
   const byId = new Map(details.map((v) => [v.id, v]));
 
   const now = new Date();
-  return videoIds.map((videoId) => {
+  let skippedByPrivacy = 0;
+  let skippedByDuration = 0;
+
+  const items = videoIds.map((videoId) => {
     const v = byId.get(videoId);
     if (!v) return null;
+
+    const privacy = v.status?.privacyStatus;
+    const durationSeconds = parseIsoDuration(v.contentDetails?.duration);
+
+    let ignored = false;
+    let ignoreReason = null;
+
+    if (filters.onlyPublic && privacy !== 'public') {
+      ignored = true;
+      ignoreReason = 'not_public';
+      skippedByPrivacy += 1;
+    } else if (filters.minDurationSeconds > 0 && (!durationSeconds || durationSeconds < filters.minDurationSeconds)) {
+      ignored = true;
+      ignoreReason = 'too_short';
+      skippedByDuration += 1;
+    }
+
     const thumbs = v.snippet?.thumbnails || {};
     return {
       videoId,
@@ -79,11 +109,17 @@ async function syncChannelVideos(channel, { maxPages = 5 } = {}) {
       description: v.snippet?.description || null,
       publishedAt: v.snippet?.publishedAt ? new Date(v.snippet.publishedAt) : null,
       thumbnailUrl: thumbs.high?.url || thumbs.medium?.url || thumbs.default?.url || null,
-      durationSeconds: parseIsoDuration(v.contentDetails?.duration),
+      durationSeconds,
       hasCaption: v.contentDetails?.caption === 'true',
       lastSyncedAt: now,
+      ignored,
+      ignoreReason,
     };
   }).filter(Boolean);
+
+  return {
+    items, skippedByPrivacy, skippedByDuration, filters
+  };
 }
 
 async function fetchCaptionInfo(channel, videoId) {

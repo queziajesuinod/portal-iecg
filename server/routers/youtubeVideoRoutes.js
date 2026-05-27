@@ -8,5 +8,6 @@ router.use(express.json());
 router.get('/channels/:channelId/videos', controller.listarPorCanal);
 router.post('/channels/:channelId/videos/sync', controller.sincronizarCanal);
 router.post('/videos/:id/captions/refresh', controller.atualizarCaptions);
+router.patch('/videos/:id/ignored', controller.alternarIgnorado);
 
 module.exports = router;

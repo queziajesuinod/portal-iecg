@@ -22,13 +22,17 @@ async function parseOrThrow(res, fallbackMessage) {
 }
 
 export const fetchPublicVideos = async ({
-  channelId, search, limit = 20, offset = 0
+  channelId, search, limit = 20, offset = 0, all = false
 } = {}) => {
   const params = new URLSearchParams();
   if (channelId) params.set('channelId', channelId);
   if (search) params.set('search', search);
-  params.set('limit', String(limit));
-  params.set('offset', String(offset));
+  if (all) {
+    params.set('all', 'true');
+  } else {
+    params.set('limit', String(limit));
+    params.set('offset', String(offset));
+  }
   const res = await fetch(`${BASE}?${params.toString()}`);
   return parseOrThrow(res, 'Falha ao carregar videos');
 };
