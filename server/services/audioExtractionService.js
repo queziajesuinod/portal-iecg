@@ -89,24 +89,11 @@ function killActiveDownload() {
   return false;
 }
 
-async function downloadAudio(videoId, { format = 'opus', cookies = null } = {}) {
-  const ytDlpCookies = require('./ytDlpCookiesService');
-  const tmpDir = path.join(os.tmpdir(), 'iecg-yt-audio');
-  await fs.mkdir(tmpDir, { recursive: true });
-
-  const id = crypto.randomBytes(4).toString('hex');
-  const basePath = path.join(tmpDir, `yt-${videoId}-${id}`);
-  const outputTemplate = `${basePath}.%(ext)s`;
-  const expectedFinalPath = `${basePath}.${format}`;
-
-  const url = `https://www.youtube.com/watch?v=${videoId}`;
-  const playerClients = process.env.YT_DLP_PLAYER_CLIENTS || 'tv_simply,web_safari,default';
-  const formatSelector = process.env.YT_DLP_FORMAT || 'bestaudio*/bestaudio/best*/best';
-  const jsRuntime = process.env.YT_DLP_JS_RUNTIME || 'node';
+function buildBaseArgs({
+  url, outputTemplate, format, formatSelector, jsRuntime, userAgent, playerClient,
+}) {
   const args = [
-    // Sem JS runtime, yt-dlp cai no cliente "android vr" que é bloqueado pelo anti-bot
     '--js-runtimes', jsRuntime,
-    // Aceita formato áudio puro OU combinado (ffmpeg extrai áudio do combinado depois)
     '--format', formatSelector,
     '--extract-audio',
     '--audio-format', format,
@@ -114,37 +101,102 @@ async function downloadAudio(videoId, { format = 'opus', cookies = null } = {}) 
     '--no-playlist',
     '--no-warnings',
     '--retries', '3',
-    '--extractor-args', `youtube:player_client=${playerClients}`,
-    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
     '-o', outputTemplate,
   ];
+  if (playerClient) {
+    args.push('--extractor-args', `youtube:player_client=${playerClient}`);
+  }
+  if (userAgent) {
+    args.push('--user-agent', userAgent);
+  }
+  if (process.env.FFMPEG_PATH) {
+    args.push('--ffmpeg-location', process.env.FFMPEG_PATH);
+  }
+  if (YT_DLP_EXTRA_ARGS) {
+    args.push(...parseExtraArgs(YT_DLP_EXTRA_ARGS));
+  }
+  args.push(url);
+  return args;
+}
 
-  // Prioridade: cookies por canal (param) > arquivo global do .env > cookies-from-browser
+function isRetriableYtDlpError(err) {
+  if (!err || !err.message) return false;
+  const msg = err.message;
+  return msg.includes('Requested format is not available')
+    || msg.includes('Sign in to confirm')
+    || msg.includes('Failed to extract any player response')
+    || msg.includes('Video unavailable');
+}
+
+async function downloadAudio(videoId, { format = 'opus', cookies = null } = {}) {
+  const ytDlpCookies = require('./ytDlpCookiesService');
+  const tmpDir = path.join(os.tmpdir(), 'iecg-yt-audio');
+  await fs.mkdir(tmpDir, { recursive: true });
+
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+  const formatSelector = process.env.YT_DLP_FORMAT || 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best';
+  const jsRuntime = process.env.YT_DLP_JS_RUNTIME || 'node';
+  const userAgent = process.env.YT_DLP_USER_AGENT || '';
+
+  // Player clients pra tentar em ordem. Se env definir, usa só esse (string única).
+  // Senão, tenta vários em sequência até um funcionar.
+  const playerClientChain = process.env.YT_DLP_PLAYER_CLIENTS
+    ? [process.env.YT_DLP_PLAYER_CLIENTS]
+    : [
+      'tv_simply',
+      'web_safari',
+      'tv',
+      'web',
+      'mediaconnect',
+      '', // tentativa final sem forçar nada (yt-dlp escolhe)
+    ];
+
+  // Prepara cookies (uma vez só pra todas as tentativas)
   let tempCookiesFile = null;
+  if (cookies) {
+    const normalized = ytDlpCookies.detectAndNormalize(cookies);
+    tempCookiesFile = await ytDlpCookies.writeCookiesToTempFile(normalized);
+  }
+
   try {
-    if (cookies) {
-      const normalized = ytDlpCookies.detectAndNormalize(cookies);
-      tempCookiesFile = await ytDlpCookies.writeCookiesToTempFile(normalized);
-      args.push('--cookies', tempCookiesFile);
-    } else if (YT_DLP_COOKIES_PATH) {
-      args.push('--cookies', YT_DLP_COOKIES_PATH);
-    } else if (YT_DLP_COOKIES_FROM_BROWSER) {
-      args.push('--cookies-from-browser', YT_DLP_COOKIES_FROM_BROWSER);
+    let lastError = null;
+    for (const playerClient of playerClientChain) {
+      const id = crypto.randomBytes(4).toString('hex');
+      const basePath = path.join(tmpDir, `yt-${videoId}-${id}`);
+      const outputTemplate = `${basePath}.%(ext)s`;
+      const expectedFinalPath = `${basePath}.${format}`;
+
+      const args = buildBaseArgs({
+        url, outputTemplate, format, formatSelector, jsRuntime, userAgent, playerClient,
+      });
+
+      // Insere cookies (depois dos args base, antes da URL final)
+      if (tempCookiesFile) {
+        args.splice(args.length - 1, 0, '--cookies', tempCookiesFile);
+      } else if (YT_DLP_COOKIES_PATH) {
+        args.splice(args.length - 1, 0, '--cookies', YT_DLP_COOKIES_PATH);
+      } else if (YT_DLP_COOKIES_FROM_BROWSER) {
+        args.splice(args.length - 1, 0, '--cookies-from-browser', YT_DLP_COOKIES_FROM_BROWSER);
+      }
+
+      try {
+        const label = playerClient || '(default yt-dlp)';
+        console.log(`[yt-dlp] tentando player_client=${label}...`);
+        await runYtDlp(args);
+        await fs.access(expectedFinalPath);
+        console.log(`[yt-dlp] sucesso com player_client=${label}`);
+        return expectedFinalPath;
+      } catch (err) {
+        lastError = err;
+        if (!isRetriableYtDlpError(err)) {
+          throw err;
+        }
+        console.warn(`[yt-dlp] falhou com player_client=${playerClient || '(default)'}: ${err.message.split('\n')[0]}`);
+        // limpa arquivo parcial se existir
+        await fs.unlink(expectedFinalPath).catch(() => {});
+      }
     }
-
-    if (process.env.FFMPEG_PATH) {
-      args.push('--ffmpeg-location', process.env.FFMPEG_PATH);
-    }
-
-    if (YT_DLP_EXTRA_ARGS) {
-      args.push(...parseExtraArgs(YT_DLP_EXTRA_ARGS));
-    }
-
-    args.push(url);
-
-    await runYtDlp(args);
-    await fs.access(expectedFinalPath);
-    return expectedFinalPath;
+    throw lastError || new Error('Todos os player_clients falharam');
   } finally {
     if (tempCookiesFile) {
       await ytDlpCookies.cleanupCookiesFile(tempCookiesFile);
