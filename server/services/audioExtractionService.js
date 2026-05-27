@@ -102,7 +102,10 @@ async function downloadAudio(videoId, { format = 'opus', cookies = null } = {}) 
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const playerClients = process.env.YT_DLP_PLAYER_CLIENTS || 'tv_simply,web_safari,default';
   const formatSelector = process.env.YT_DLP_FORMAT || 'bestaudio*/bestaudio/best*/best';
+  const jsRuntime = process.env.YT_DLP_JS_RUNTIME || 'node';
   const args = [
+    // Sem JS runtime, yt-dlp cai no cliente "android vr" que é bloqueado pelo anti-bot
+    '--js-runtimes', jsRuntime,
     // Aceita formato áudio puro OU combinado (ffmpeg extrai áudio do combinado depois)
     '--format', formatSelector,
     '--extract-audio',
