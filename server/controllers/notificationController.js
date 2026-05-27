@@ -4,6 +4,23 @@ const { EvolutionWebhookLog } = require('../models');
 const evolutionApiService = require('../services/evolutionApiService');
 
 class NotificationController {
+  getAllowedWebhookInstances() {
+    const raw = String(process.env.EVOLUTION_WEBHOOK_ALLOWED_INSTANCES || '').trim();
+    if (!raw) return null;
+    const list = raw.split(',').map((item) => item.trim()).filter(Boolean);
+    return list.length ? new Set(list) : null;
+  }
+
+  getAllowedWebhookEvents() {
+    const raw = String(process.env.EVOLUTION_WEBHOOK_EVENTS || 'messages.update').trim();
+    const list = raw.split(',').map((item) => item.trim()).filter(Boolean);
+    return new Set(list.length ? list : ['messages.update']);
+  }
+
+  shouldVerboseWebhookLog() {
+    return process.env.EVOLUTION_WEBHOOK_VERBOSE === 'true';
+  }
+
   // ========== GRUPOS ==========
 
   async criarGrupo(req, res) {
@@ -176,7 +193,26 @@ class NotificationController {
   async processarWebhook(req, res) {
     try {
       const { body } = req;
-      console.log('[EvolutionWebhook] Recebido:', JSON.stringify({ event: body.event, instance: body.instance, url: req.originalUrl }));
+      const eventName = body?.event || '';
+      const instanceName = body?.instance || '';
+      const allowedEvents = this.getAllowedWebhookEvents();
+      const allowedInstances = this.getAllowedWebhookInstances();
+
+      if (!allowedEvents.has(eventName)) {
+        return res.status(202).json({ message: 'Webhook ignorado - evento nao monitorado' });
+      }
+
+      if (allowedInstances && !allowedInstances.has(instanceName)) {
+        return res.status(202).json({ message: 'Webhook ignorado - instancia nao permitida' });
+      }
+
+      if (this.shouldVerboseWebhookLog()) {
+        console.log('[EvolutionWebhook] Recebido:', JSON.stringify({
+          event: eventName,
+          instance: instanceName,
+          url: req.originalUrl
+        }));
+      }
 
       const resultado = await notificationService.processarWebhook(body);
 
