@@ -92,7 +92,7 @@ function killActiveDownload() {
 function buildBaseArgs({
   url, outputTemplate, format, formatSelector, jsRuntime, userAgent, playerClient,
 }) {
-  const args = [
+    const args = [
     '--js-runtimes', jsRuntime,
     '--format', formatSelector,
     '--extract-audio',
@@ -100,6 +100,9 @@ function buildBaseArgs({
     '--audio-quality', '0',
     '--no-playlist',
     '--no-warnings',
+    '--no-check-certificates',
+    '--prefer-free-formats',
+    '--youtube-skip-dash-manifest',
     '--retries', '3',
     '-o', outputTemplate,
   ];
@@ -134,7 +137,7 @@ async function downloadAudio(videoId, { format = 'opus', cookies = null } = {}) 
   await fs.mkdir(tmpDir, { recursive: true });
 
   const url = `https://www.youtube.com/watch?v=${videoId}`;
-  const formatSelector = process.env.YT_DLP_FORMAT || 'bestaudio/best';
+  const formatSelector = process.env.YT_DLP_FORMAT || 'bestaudio/bestaudio*/best';
   const jsRuntime = process.env.YT_DLP_JS_RUNTIME || 'node';
   const userAgent = process.env.YT_DLP_USER_AGENT || '';
 
