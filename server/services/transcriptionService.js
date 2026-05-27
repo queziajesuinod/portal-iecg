@@ -119,14 +119,15 @@ async function processFromManualCaption(video, channel, transcript) {
   return transcript;
 }
 
-async function processWithWhisper(video, transcript) {
+async function processWithWhisper(video, transcript, channel) {
   let audioPath = null;
   const { VideoTranscript: VT } = require('../models');
+  const channelCookies = channel?.getYtDlpCookies?.() || null;
 
   try {
     await setStage(transcript, 'audio_download', 0);
-    console.log(`[whisper] baixando áudio de ${video.videoId}...`);
-    audioPath = await audioExtraction.downloadAudio(video.videoId);
+    console.log(`[whisper] baixando áudio de ${video.videoId}${channelCookies ? ' (com cookies do canal)' : ''}...`);
+    audioPath = await audioExtraction.downloadAudio(video.videoId, { cookies: channelCookies });
 
     await setStage(transcript, 'whisper', 0);
     console.log('[whisper] transcrevendo áudio (pode levar 2-3h em CPU)...');
@@ -199,7 +200,7 @@ async function processVideoNow(youtubeVideoId, { useWhisperFallback = false } = 
       return transcript;
     }
 
-    return await processWithWhisper(video, transcript);
+    return await processWithWhisper(video, transcript, channel);
   } catch (err) {
     transcript.status = 'failed';
     transcript.errorMessage = err.message;

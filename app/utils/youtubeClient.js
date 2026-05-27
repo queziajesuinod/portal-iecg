@@ -53,6 +53,28 @@ export const deleteChannel = async (id) => {
   return parseOrThrow(res, 'Falha ao remover canal');
 };
 
+export const fetchChannelCookiesStatus = async (channelId) => {
+  const res = await fetch(`${BASE}/channels/${channelId}/cookies`, { headers: jsonHeaders() });
+  return parseOrThrow(res, 'Falha ao consultar cookies do canal');
+};
+
+export const saveChannelCookies = async (channelId, content) => {
+  const res = await fetch(`${BASE}/channels/${channelId}/cookies`, {
+    method: 'PUT',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ content }),
+  });
+  return parseOrThrow(res, 'Falha ao salvar cookies do canal');
+};
+
+export const deleteChannelCookies = async (channelId) => {
+  const res = await fetch(`${BASE}/channels/${channelId}/cookies`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  return parseOrThrow(res, 'Falha ao remover cookies do canal');
+};
+
 export const startChannelOAuth = async (ownerName, channelId = null) => {
   const res = await fetch(`${BASE}/channels/oauth/start`, {
     method: 'POST',
