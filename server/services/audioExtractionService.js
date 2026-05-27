@@ -101,8 +101,10 @@ async function downloadAudio(videoId, { format = 'opus', cookies = null } = {}) 
 
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const playerClients = process.env.YT_DLP_PLAYER_CLIENTS || 'tv_simply,web_safari,default';
+  const formatSelector = process.env.YT_DLP_FORMAT || 'bestaudio*/bestaudio/best*/best';
   const args = [
-    '--format', 'bestaudio/best',
+    // Aceita formato áudio puro OU combinado (ffmpeg extrai áudio do combinado depois)
+    '--format', formatSelector,
     '--extract-audio',
     '--audio-format', format,
     '--audio-quality', '0',
