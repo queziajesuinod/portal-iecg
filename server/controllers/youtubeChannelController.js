@@ -50,6 +50,70 @@ async function remover(req, res) {
   }
 }
 
+async function statusCookies(req, res) {
+  try {
+    const channel = await YoutubeChannel.scope('withTokens').findByPk(req.params.id);
+    if (!channel) return res.status(404).json({ message: 'Canal não encontrado' });
+
+    const cookies = channel.getYtDlpCookies();
+    if (!cookies) {
+      return res.status(200).json({ configured: false, updatedAt: null });
+    }
+
+    const ytDlpCookies = require('../services/ytDlpCookiesService');
+    const summary = ytDlpCookies.summarize(cookies);
+    return res.status(200).json({
+      configured: true,
+      updatedAt: channel.ytDlpCookiesUpdatedAt,
+      cookieCount: summary.cookieCount,
+      domains: summary.domains,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+}
+
+async function salvarCookies(req, res) {
+  try {
+    const channel = await YoutubeChannel.scope('withTokens').findByPk(req.params.id);
+    if (!channel) return res.status(404).json({ message: 'Canal não encontrado' });
+
+    const raw = req.body?.content;
+    if (!raw || typeof raw !== 'string') {
+      return res.status(400).json({ message: 'Campo "content" é obrigatório' });
+    }
+
+    const ytDlpCookies = require('../services/ytDlpCookiesService');
+    const normalized = ytDlpCookies.detectAndNormalize(raw);
+    const summary = ytDlpCookies.summarize(normalized);
+
+    channel.setYtDlpCookies(normalized);
+    await channel.save();
+
+    return res.status(200).json({
+      configured: true,
+      updatedAt: channel.ytDlpCookiesUpdatedAt,
+      cookieCount: summary.cookieCount,
+      domains: summary.domains,
+    });
+  } catch (err) {
+    return res.status(400).json({ message: err.message });
+  }
+}
+
+async function removerCookies(req, res) {
+  try {
+    const channel = await YoutubeChannel.scope('withTokens').findByPk(req.params.id);
+    if (!channel) return res.status(404).json({ message: 'Canal não encontrado' });
+
+    channel.setYtDlpCookies(null);
+    await channel.save();
+    return res.status(204).send();
+  } catch (err) {
+    return res.status(400).json({ message: err.message });
+  }
+}
+
 async function iniciarOAuth(req, res) {
   try {
     const channelId = req.body.channelId || null;
@@ -135,4 +199,7 @@ module.exports = {
   remover,
   iniciarOAuth,
   oauthCallback,
+  statusCookies,
+  salvarCookies,
+  removerCookies,
 };

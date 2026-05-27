@@ -89,7 +89,8 @@ function killActiveDownload() {
   return false;
 }
 
-async function downloadAudio(videoId, { format = 'opus' } = {}) {
+async function downloadAudio(videoId, { format = 'opus', cookies = null } = {}) {
+  const ytDlpCookies = require('./ytDlpCookiesService');
   const tmpDir = path.join(os.tmpdir(), 'iecg-yt-audio');
   await fs.mkdir(tmpDir, { recursive: true });
 
@@ -110,28 +111,37 @@ async function downloadAudio(videoId, { format = 'opus' } = {}) {
     '-o', outputTemplate,
   ];
 
-  // YouTube pode exigir autenticação para driblar "Sign in to confirm you’re not a bot".
-  // Prioridade: arquivo de cookies > cookies-from-browser.
-  if (YT_DLP_COOKIES_PATH) {
-    args.push('--cookies', YT_DLP_COOKIES_PATH);
-  } else if (YT_DLP_COOKIES_FROM_BROWSER) {
-    args.push('--cookies-from-browser', YT_DLP_COOKIES_FROM_BROWSER);
+  // Prioridade: cookies por canal (param) > arquivo global do .env > cookies-from-browser
+  let tempCookiesFile = null;
+  try {
+    if (cookies) {
+      const normalized = ytDlpCookies.detectAndNormalize(cookies);
+      tempCookiesFile = await ytDlpCookies.writeCookiesToTempFile(normalized);
+      args.push('--cookies', tempCookiesFile);
+    } else if (YT_DLP_COOKIES_PATH) {
+      args.push('--cookies', YT_DLP_COOKIES_PATH);
+    } else if (YT_DLP_COOKIES_FROM_BROWSER) {
+      args.push('--cookies-from-browser', YT_DLP_COOKIES_FROM_BROWSER);
+    }
+
+    if (process.env.FFMPEG_PATH) {
+      args.push('--ffmpeg-location', process.env.FFMPEG_PATH);
+    }
+
+    if (YT_DLP_EXTRA_ARGS) {
+      args.push(...parseExtraArgs(YT_DLP_EXTRA_ARGS));
+    }
+
+    args.push(url);
+
+    await runYtDlp(args);
+    await fs.access(expectedFinalPath);
+    return expectedFinalPath;
+  } finally {
+    if (tempCookiesFile) {
+      await ytDlpCookies.cleanupCookiesFile(tempCookiesFile);
+    }
   }
-
-  if (process.env.FFMPEG_PATH) {
-    args.push('--ffmpeg-location', process.env.FFMPEG_PATH);
-  }
-
-  if (YT_DLP_EXTRA_ARGS) {
-    args.push(...parseExtraArgs(YT_DLP_EXTRA_ARGS));
-  }
-
-  args.push(url);
-
-  await runYtDlp(args);
-
-  await fs.access(expectedFinalPath);
-  return expectedFinalPath;
 }
 
 async function cleanupFile(filePath) {

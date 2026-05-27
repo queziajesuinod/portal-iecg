@@ -26,6 +26,20 @@ module.exports = (sequelize) => {
     getAccessToken() {
       return this.oauthAccessToken ? tokenCrypto.decrypt(this.oauthAccessToken) : null;
     }
+
+    setYtDlpCookies(plain) {
+      if (plain) {
+        this.ytDlpCookies = tokenCrypto.encrypt(plain);
+        this.ytDlpCookiesUpdatedAt = new Date();
+      } else {
+        this.ytDlpCookies = null;
+        this.ytDlpCookiesUpdatedAt = null;
+      }
+    }
+
+    getYtDlpCookies() {
+      return this.ytDlpCookies ? tokenCrypto.decrypt(this.ytDlpCookies) : null;
+    }
   }
 
   YoutubeChannel.init(
@@ -83,6 +97,14 @@ module.exports = (sequelize) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      ytDlpCookies: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      ytDlpCookiesUpdatedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
     },
     {
       sequelize,
@@ -90,11 +112,11 @@ module.exports = (sequelize) => {
       tableName: 'youtube_channels',
       schema: process.env.DB_SCHEMA || 'dev_iecg',
       defaultScope: {
-        attributes: { exclude: ['oauthRefreshToken', 'oauthAccessToken'] },
+        attributes: { exclude: ['oauthRefreshToken', 'oauthAccessToken', 'ytDlpCookies'] },
       },
       scopes: {
         withTokens: {
-          attributes: { include: ['oauthRefreshToken', 'oauthAccessToken'] },
+          attributes: { include: ['oauthRefreshToken', 'oauthAccessToken', 'ytDlpCookies'] },
         },
       },
     }
