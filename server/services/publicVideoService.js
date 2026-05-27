@@ -1,6 +1,10 @@
 const { Op } = require('sequelize');
 const { VideoTranscript, YoutubeVideo, YoutubeChannel } = require('../models');
 
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function buildPublicVideoPayload(transcript, { includeFullTranscript = false } = {}) {
   const { video } = transcript;
   const channel = video?.channel;
@@ -44,7 +48,14 @@ async function listPublished({
     videoWhere.title = { [Op.iLike]: `%${search}%` };
   }
   if (channelId) {
-    videoWhere.youtubeChannelId = channelId;
+    if (isUuid(channelId)) {
+      videoWhere.youtubeChannelId = channelId;
+    }
+  }
+
+  const channelWhere = {};
+  if (channelId && !isUuid(channelId)) {
+    channelWhere.channelId = channelId;
   }
 
   const { rows, count } = await VideoTranscript.findAndCountAll({
@@ -55,7 +66,13 @@ async function listPublished({
         as: 'video',
         required: true,
         ...(Object.keys(videoWhere).length ? { where: videoWhere } : {}),
-        include: [{ model: YoutubeChannel, as: 'channel' }],
+        include: [
+          {
+            model: YoutubeChannel,
+            as: 'channel',
+            ...(Object.keys(channelWhere).length ? { where: channelWhere, required: true } : {}),
+          },
+        ],
       },
     ],
     order: [[{ model: YoutubeVideo, as: 'video' }, 'publishedAt', 'DESC']],
