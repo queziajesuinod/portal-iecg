@@ -140,14 +140,17 @@ async function downloadAudio(videoId, { format = 'opus', cookies = null } = {}) 
 
   // Player clients pra tentar em ordem. Se env definir, usa só esse (string única).
   // Senão, tenta vários em sequência até um funcionar.
+  // Ordem otimizada pra quando o bgutil-ytdlp-pot-provider está rodando:
+  // 'web'/'web_safari'/'mweb' precisam de PO Token mas têm melhor compatibilidade;
+  // 'tv_simply'/'tv' são fallback caso o provider esteja fora.
   const playerClientChain = process.env.YT_DLP_PLAYER_CLIENTS
     ? [process.env.YT_DLP_PLAYER_CLIENTS]
     : [
-      'tv_simply',
-      'web_safari',
-      'tv',
       'web',
-      'mediaconnect',
+      'web_safari',
+      'mweb',
+      'tv_simply',
+      'tv',
       '', // tentativa final sem forçar nada (yt-dlp escolhe)
     ];
 
