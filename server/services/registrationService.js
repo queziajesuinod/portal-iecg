@@ -1813,11 +1813,6 @@ async function cancelarInscricao(id) {
   if (registration.paymentStatus === 'cancelled' || registration.paymentStatus === 'refunded') {
     throw new Error('Inscrição já foi cancelada');
   }
-  const pagamentosAtivos = (registration.getDataValue('payments') || [])
-    .filter(p => ['pending', 'authorized'].includes(p.status));
-  if (pagamentosAtivos.length > 0) {
-    throw new Error('Não é possível cancelar uma inscrição com pagamento pendente');
-  }
 
   const environment = process.env.CIELO_ENVIRONMENT || 'sandbox';
   const isProductionEnvironment = environment === 'production';
@@ -1873,6 +1868,10 @@ async function cancelarInscricao(id) {
 
   if (['expired', 'denied'].includes(registration.paymentStatus)) {
     return aplicarCancelamentoLocal('cancelled', 'Pagamento expirado/não autorizado: sem estorno necessário');
+  }
+
+  if (['pending', 'authorized'].includes(registration.paymentStatus)) {
+    return aplicarCancelamentoLocal('cancelled', 'Inscrição cancelada sem pagamento confirmado: sem estorno necessário');
   }
 
   if (!registration.paymentId || !isProductionEnvironment) {
@@ -2043,9 +2042,28 @@ async function obterInfoCancelamento(id) {
     0
   );
 
+  const alreadyCancelled = ['cancelled', 'refunded'].includes(registration.paymentStatus);
+  let noRefundReason = null;
+  if (!needsRefund && !alreadyCancelled) {
+    if (registration.paymentStatus === 'pending') {
+      noRefundReason = 'Pagamento não confirmado — nenhum valor foi cobrado.';
+    } else if (registration.paymentStatus === 'expired') {
+      noRefundReason = 'Pagamento expirou sem confirmação — nenhum valor foi cobrado.';
+    } else if (registration.paymentStatus === 'denied') {
+      noRefundReason = 'Pagamento foi negado — nenhum valor foi cobrado.';
+    } else if (registration.paymentStatus === 'authorized') {
+      noRefundReason = 'Pagamento autorizado mas não capturado — nenhum valor foi cobrado.';
+    } else {
+      noRefundReason = 'Sem pagamento confirmado para estornar.';
+    }
+  }
+
   return {
     paymentStatus: registration.paymentStatus,
+    canCancel: !alreadyCancelled,
+    alreadyCancelled,
     needsRefund,
+    noRefundReason,
     paymentId: registration.paymentId,
     amount: totalPaymentAmount > 0
       ? totalPaymentAmount
