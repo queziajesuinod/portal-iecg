@@ -30,6 +30,46 @@ const definition = {
       },
       UUID: { type: 'string', format: 'uuid', example: '550e8400-e29b-41d4-a716-446655440000' },
 
+      // ── Videos do YouTube (publico) ─────────────────────────────────────────
+      PublicVideoChannel: {
+        type: 'object',
+        properties: {
+          channelId: { type: 'string', example: 'UCxxxxxxxxxxxxxxxxxxxxxx' },
+          channelName: { type: 'string', example: 'IECG Oficial' },
+          ownerName: { type: 'string', example: 'Pastor Joao' },
+          channelThumbnailUrl: { type: 'string', nullable: true },
+        },
+      },
+      PublicVideo: {
+        type: 'object',
+        properties: {
+          id: { $ref: '#/components/schemas/UUID' },
+          videoId: { type: 'string', example: 'dQw4w9WgXcQ' },
+          youtubeUrl: { type: 'string', example: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+          title: { type: 'string', example: 'Pregacao - O Bom Pastor' },
+          description: { type: 'string', nullable: true },
+          thumbnailUrl: { type: 'string', nullable: true },
+          publishedAt: { type: 'string', format: 'date-time', nullable: true },
+          durationSeconds: { type: 'integer', nullable: true, example: 3600 },
+          channel: { $ref: '#/components/schemas/PublicVideoChannel' },
+          summary: { type: 'string', nullable: true },
+          bulletPoints: { type: 'array', items: { type: 'string' } },
+          language: { type: 'string', nullable: true, example: 'pt' },
+          source: { type: 'string', nullable: true, enum: ['caption_manual', 'caption_auto', 'whisper'] },
+          processedAt: { type: 'string', format: 'date-time', nullable: true },
+          transcript: { type: 'string', nullable: true, description: 'So presente em GET /api/public/videos/{videoId}' },
+        },
+      },
+      PublicVideoList: {
+        type: 'object',
+        properties: {
+          items: { type: 'array', items: { $ref: '#/components/schemas/PublicVideo' } },
+          total: { type: 'integer', example: 42 },
+          limit: { type: 'integer', example: 20 },
+          offset: { type: 'integer', example: 0 },
+        },
+      },
+
       // ── Autenticação ────────────────────────────────────────────────────────
       LoginRequest: {
         type: 'object',
@@ -1583,6 +1623,74 @@ const definition = {
           name: 'id', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
         }],
         responses: { 204: { description: 'Removida' } }
+      },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // VIDEOS DO YOUTUBE — API PUBLICA (consumida pelo site)
+    // ═══════════════════════════════════════════════════════════════
+    '/api/public/videos': {
+      get: {
+        tags: ['Videos (Publico)'],
+        summary: 'Listar videos transcritos e publicados',
+        description: 'Retorna videos do YouTube ja transcritos e marcados como "Publicado" pelo admin. Inclui resumo e pontos principais, mas NAO a transcricao completa (use o endpoint de detalhe). Sem autenticacao.',
+        security: [],
+        parameters: [
+          {
+            name: 'channelId', in: 'query', schema: { type: 'string' }, description: 'Filtrar por channelId interno (UUID) ou channel do YouTube'
+          },
+          {
+            name: 'search', in: 'query', schema: { type: 'string' }, description: 'Busca por titulo do video'
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            schema: {
+              type: 'integer', minimum: 1, maximum: 100, default: 20
+            }
+          },
+          { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, default: 0 } },
+        ],
+        responses: {
+          200: {
+            description: 'Lista paginada',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/PublicVideoList' } } },
+          },
+        },
+      },
+    },
+    '/api/public/videos/{videoId}': {
+      get: {
+        tags: ['Videos (Publico)'],
+        summary: 'Detalhes de um video publicado (com transcricao completa)',
+        description: 'Use o `videoId` do YouTube (11 caracteres) para buscar. Retorna metadados + resumo + pontos principais + transcricao completa.',
+        security: [],
+        parameters: [
+          {
+            name: 'videoId', in: 'path', required: true, schema: { type: 'string' }, description: 'ID do video no YouTube (ex: dQw4w9WgXcQ)'
+          },
+          {
+            name: 'includeTranscript', in: 'query', schema: { type: 'boolean', default: true }, description: 'Inclui o campo `transcript` (texto integral) na resposta'
+          },
+        ],
+        responses: {
+          200: { description: 'Video', content: { 'application/json': { schema: { $ref: '#/components/schemas/PublicVideo' } } } },
+          404: { description: 'Video nao encontrado ou nao publicado', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/api/public/videos/channels': {
+      get: {
+        tags: ['Videos (Publico)'],
+        summary: 'Listar canais ativos com videos publicados',
+        description: 'Util pra montar filtros no site. Sem autenticacao.',
+        security: [],
+        responses: {
+          200: {
+            description: 'Canais ativos',
+            content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/PublicVideoChannel' } } } },
+          },
+        },
       },
     },
   },

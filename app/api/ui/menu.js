@@ -69,6 +69,13 @@ module.exports = [
     ]
   },
   {
+    key: 'videos',
+    name: 'Vídeos',
+    icon: 'ion-logo-youtube',
+    linkParent: '/app/videos',
+    permission: ['VIDEOS_VIEW', 'VIDEOS_ADMIN'],
+  },
+  {
     key: 'eventos',
     name: 'Eventos',
     icon: 'ion-ios-calendar-outline',
@@ -262,6 +269,20 @@ module.exports = [
         link: '/app/admin/webhooks',
         icon: 'ion-ios-git-compare',
         permission: 'WEBHOOKS_VIEW'
+      },
+      {
+        key: 'videosCanais',
+        name: 'Vídeos do YouTube',
+        link: '/app/admin/videos/canais',
+        icon: 'ion-logo-youtube',
+        permission: 'VIDEOS_ADMIN'
+      },
+      {
+        key: 'videosTranscricoes',
+        name: 'Transcrições',
+        link: '/app/admin/videos/transcricoes',
+        icon: 'ion-ios-paper-outline',
+        permission: 'VIDEOS_ADMIN'
       }
     ]
   }

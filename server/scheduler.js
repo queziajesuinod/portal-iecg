@@ -5,6 +5,7 @@ const NotificationCampaignService = require('./services/notificationCampaignServ
 const NotificationSequenceService = require('./services/notificationSequenceService');
 const ValidacaoMinisterioService = require('./services/validacaoMinisterioService');
 const celulaPresencaService = require('./services/celulaPresencaService');
+const videoTranscriptWorker = require('./services/videoTranscriptWorker');
 const { APP_TIMEZONE, todayDateOnly } = require('./utils/dateTime');
 
 const dispatching = new Set();
@@ -121,15 +122,44 @@ async function tickCelulas() {
   }
 }
 
+async function tickVideoTranscription() {
+  try {
+    await videoTranscriptWorker.tick();
+  } catch (err) {
+    console.error('[Scheduler] Erro no tick de transcricao:', err.message);
+  }
+}
+
 async function tick() {
   try {
-    await Promise.all([tickCampaigns(), tickSequences(), tickValidacaoCultos(), tickCelulas()]);
+    await Promise.all([tickCampaigns(), tickSequences(), tickValidacaoCultos(), tickCelulas(), tickVideoTranscription()]);
   } catch (err) {
     console.error('[Scheduler] Erro no tick:', err.message);
   }
 }
 
+async function recoverStaleTranscripts() {
+  try {
+    const { VideoTranscript } = require('./models');
+    const [count] = await VideoTranscript.update(
+      {
+        status: 'pending',
+        progressPercent: 0,
+        progressStage: null,
+        errorMessage: 'Reiniciado apos restart do servidor',
+      },
+      { where: { status: 'processing' } }
+    );
+    if (count > 0) {
+      console.log(`[Scheduler] ${count} transcricao(oes) orfa(s) resetada(s) para pending apos restart do servidor`);
+    }
+  } catch (err) {
+    console.error('[Scheduler] Erro ao recuperar transcricoes orfas:', err.message);
+  }
+}
+
 function startScheduler() {
+  recoverStaleTranscripts();
   tick();
   setInterval(tick, 60000);
   console.log('[Scheduler] Iniciado — verificando campanhas e sequências agendadas a cada minuto.');
