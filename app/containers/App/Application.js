@@ -19,6 +19,12 @@ import MinhaJornadaPage from '../Pages/StartPage/MinhaJornadaPage';
 import ApeloPublicPage from '../Pages/Public/ApeloPublicPage';
 import ProfilePage from '../Pages/Users/Profile';
 import WebhooksPage from '../Pages/Webhooks/WebhooksPage';
+import VideosChannelsPage from '../Pages/Videos/ChannelsPage';
+import VideosListPage from '../Pages/Videos/VideosPage';
+import TranscriptsListPage from '../Pages/Videos/TranscriptsListPage';
+import TranscriptDetailPage from '../Pages/Videos/TranscriptDetailPage';
+import VideoLibraryPage from '../Pages/Videos/VideoLibraryPage';
+import VideoDetailPage from '../Pages/Videos/VideoDetailPage';
 import MiaListPage from '../Pages/MiaPage/MiaListPage';
 import MiaDetailsPage from '../Pages/MiaPage/MiaDetailsPage';
 import AttendanceListPage from '../Pages/MiaPage/AttendanceListPage';
@@ -115,6 +121,12 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/admin/usuarios/novo" component={UserCreatePage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_USUARIOS" />
             <ProtectedRoute exact path="/app/admin/usuarios" component={UsersListPage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_USUARIOS" />
             <ProtectedRoute exact path="/app/admin/webhooks" component={WebhooksPage} isAuthenticated={isAuthenticated} requiredPermission="WEBHOOKS_VIEW" />
+            <ProtectedRoute exact path="/app/admin/videos/canais" component={VideosChannelsPage} isAuthenticated={isAuthenticated} requiredPermission="VIDEOS_ADMIN" />
+            <ProtectedRoute exact path="/app/admin/videos/canais/:channelId" component={VideosListPage} isAuthenticated={isAuthenticated} requiredPermission="VIDEOS_ADMIN" />
+            <ProtectedRoute exact path="/app/admin/videos/transcricoes" component={TranscriptsListPage} isAuthenticated={isAuthenticated} requiredPermission="VIDEOS_ADMIN" />
+            <ProtectedRoute exact path="/app/admin/videos/transcricoes/:id" component={TranscriptDetailPage} isAuthenticated={isAuthenticated} requiredPermission="VIDEOS_ADMIN" />
+            <ProtectedRoute exact path="/app/videos" component={VideoLibraryPage} isAuthenticated={isAuthenticated} requiredPermission={['VIDEOS_VIEW', 'VIDEOS_ADMIN']} />
+            <ProtectedRoute exact path="/app/videos/:videoId" component={VideoDetailPage} isAuthenticated={isAuthenticated} requiredPermission={['VIDEOS_VIEW', 'VIDEOS_ADMIN']} />
             <ProtectedRoute exact path="/app/events" component={EventList} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/novo" component={EventForm} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/importar" component={EventImportPage} isAuthenticated={isAuthenticated} />

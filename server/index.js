@@ -115,6 +115,10 @@ app.use('/public', require('./routers/publicStartRoutes'));
 app.use('/api/public/voluntariado', require('./routers/publicVoluntariadoRoutes'));
 // Rotas públicas do Diário de Bordo (sem autenticação)
 app.use('/api/public/diario-bordo', require('./routers/publicBoardJournalRoutes'));
+// Callback publico de OAuth do YouTube (Google redireciona aqui)
+app.use('/api/public/youtube', require('./routers/publicYoutubeRoutes'));
+// API publica de videos transcritos e resumidos
+app.use('/api/public/videos', require('./routers/publicVideoRoutes'));
 // Rotas administrativas de eventos (protegidas)
 app.use('/api/admin/events', authMiddleware, require('./routers/eventRoutes'));
 app.use('/api/admin/event-import', authMiddleware, require('./routers/eventImportRoutes'));
@@ -132,6 +136,12 @@ app.use('/api/admin/diario-bordo', authMiddleware, require('./routers/boardJourn
 app.use('/api/admin/cultos', authMiddleware, require('./routers/cultosRoutes'));
 app.use('/api/admin/voluntariado', authMiddleware, require('./routers/voluntariadoRoutes'));
 app.use('/api/admin/celulas-presenca', authMiddleware, require('./routes/celulaPresencaRoutes'));
+// Rotas administrativas de canais do YouTube (modulo de transcricao de videos)
+const requirePermission = require('./middlewares/requirePermission');
+const requireVideosAdmin = requirePermission(['VIDEOS_ADMIN']);
+app.use('/api/admin/youtube/channels', authMiddleware, requireVideosAdmin, require('./routers/youtubeChannelRoutes'));
+app.use('/api/admin/youtube', authMiddleware, requireVideosAdmin, require('./routers/youtubeVideoRoutes'));
+app.use('/api/admin/youtube', authMiddleware, requireVideosAdmin, require('./routers/videoTranscriptRoutes'));
 // Webhook Cielo (pública - sem autenticação)
 app.use('/api/webhooks', require('./routers/webhookRoutes'));
 // Webhook Evolution API (pública - sem autenticação)
