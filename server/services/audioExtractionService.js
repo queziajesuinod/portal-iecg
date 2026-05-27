@@ -134,7 +134,7 @@ async function downloadAudio(videoId, { format = 'opus', cookies = null } = {}) 
   await fs.mkdir(tmpDir, { recursive: true });
 
   const url = `https://www.youtube.com/watch?v=${videoId}`;
-  const formatSelector = process.env.YT_DLP_FORMAT || 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best';
+  const formatSelector = process.env.YT_DLP_FORMAT || 'bestaudio/best';
   const jsRuntime = process.env.YT_DLP_JS_RUNTIME || 'node';
   const userAgent = process.env.YT_DLP_USER_AGENT || '';
 
