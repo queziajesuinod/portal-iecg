@@ -100,6 +100,7 @@ async function downloadAudio(videoId, { format = 'opus', cookies = null } = {}) 
   const expectedFinalPath = `${basePath}.${format}`;
 
   const url = `https://www.youtube.com/watch?v=${videoId}`;
+  const playerClients = process.env.YT_DLP_PLAYER_CLIENTS || 'tv_simply,web_safari,default';
   const args = [
     '--format', 'bestaudio/best',
     '--extract-audio',
@@ -108,6 +109,8 @@ async function downloadAudio(videoId, { format = 'opus', cookies = null } = {}) 
     '--no-playlist',
     '--no-warnings',
     '--retries', '3',
+    '--extractor-args', `youtube:player_client=${playerClients}`,
+    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
     '-o', outputTemplate,
   ];
 
