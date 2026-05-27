@@ -1,6 +1,7 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 import {
+  Alert,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -32,11 +33,17 @@ function CancelRegistrationDialog({
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Confirmar cancelamento</DialogTitle>
       <DialogContent dividers>
-        <Typography gutterBottom>
-          {info?.needsRefund
-            ? `Será estornado o valor de ${formatCurrency(info.amount)}.`
-            : 'Não será necessário estornar valor.'}
-        </Typography>
+        {info?.needsRefund ? (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <strong>Com reembolso:</strong> será estornado o valor de {formatCurrency(info.amount)} no cartão do comprador.
+          </Alert>
+        ) : (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <strong>Sem reembolso:</strong> {info?.noRefundReason || 'Não houve cobrança a estornar.'}
+            <br />
+            A inscrição será cancelada e o histórico registrará que não houve estorno.
+          </Alert>
+        )}
 
         {payments.length > 0 && (
           <>
@@ -88,6 +95,7 @@ CancelRegistrationDialog.propTypes = {
   loading: PropTypes.bool,
   info: PropTypes.shape({
     needsRefund: PropTypes.bool,
+    noRefundReason: PropTypes.string,
     amount: PropTypes.number,
     creditCardPayments: PropTypes.arrayOf(PropTypes.shape({
       id: PropTypes.string,

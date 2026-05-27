@@ -900,25 +900,14 @@ function RegistrationDetails() {
                 </span>
               </Tooltip>
               {!['cancelled', 'refunded'].includes(paymentStatusLabel) && (
-                <Tooltip
-                  title={
-                    paymentStatusLabel === 'confirmed'
-                      ? ''
-                      : 'Cancelamento disponível somente após a confirmação do pagamento'
-                  }
+                <Button
+                  variant="outlined"
+                  color="error"
+                  startIcon={<CancelIcon />}
+                  onClick={abrirDialogCancelamento}
                 >
-                  <span>
-                    <Button
-                      variant="outlined"
-                      color="error"
-                      startIcon={<CancelIcon />}
-                      onClick={abrirDialogCancelamento}
-                      disabled={paymentStatusLabel !== 'confirmed'}
-                    >
-                      Cancelar Inscrição
-                    </Button>
-                  </span>
-                </Tooltip>
+                  Cancelar Inscrição
+                </Button>
               )}
             </Box>
           </Grid>

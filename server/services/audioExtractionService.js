@@ -12,10 +12,43 @@ const YT_DLP_EXTRA_ARGS = process.env.YT_DLP_EXTRA_ARGS || '';
 let activeProcess = null;
 
 function parseExtraArgs(raw) {
-  return String(raw || '')
-    .split(/\s+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+  const input = String(raw || '').trim();
+  if (!input) return [];
+
+  const out = [];
+  let current = '';
+  let quote = null;
+
+  for (let i = 0; i < input.length; i += 1) {
+    const ch = input[i];
+
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
+      } else {
+        current += ch;
+      }
+      continue;
+    }
+
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+
+    if (/\s/.test(ch)) {
+      if (current) {
+        out.push(current);
+        current = '';
+      }
+      continue;
+    }
+
+    current += ch;
+  }
+
+  if (current) out.push(current);
+  return out;
 }
 
 function runYtDlp(args, { onProgress } = {}) {
