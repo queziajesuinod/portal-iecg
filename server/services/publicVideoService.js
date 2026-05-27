@@ -31,6 +31,7 @@ function buildPublicVideoPayload(transcript, { includeFullTranscript = false } =
     language: transcript.language,
     source: transcript.source,
     processedAt: transcript.processedAt,
+    category: transcript.category || null,
     seo: {
       metaTitle: transcript.seoMetaTitle || video?.title || null,
       metaDescription: transcript.seoMetaDescription,
@@ -42,12 +43,15 @@ function buildPublicVideoPayload(transcript, { includeFullTranscript = false } =
 }
 
 async function listPublished({
-  channelId, search, limit = 20, offset = 0, all = false
+  channelId, search, category, limit = 20, offset = 0, all = false
 } = {}) {
   const safeLimit = Math.max(1, Math.min(Number(limit) || 20, 100));
   const safeOffset = Math.max(0, Number(offset) || 0);
 
   const where = { published: true, status: 'done' };
+  if (category) {
+    where.category = category;
+  }
 
   const videoWhere = {};
   if (search) {
@@ -100,6 +104,24 @@ async function listPublished({
   };
 }
 
+async function listCategories() {
+  const rows = await VideoTranscript.findAll({
+    where: {
+      published: true,
+      status: 'done',
+      category: { [Op.ne]: null },
+    },
+    attributes: ['category'],
+    group: ['category'],
+    order: [['category', 'ASC']],
+    raw: true,
+  });
+
+  return rows
+    .map((item) => String(item.category || '').trim())
+    .filter(Boolean);
+}
+
 async function getByVideoId(videoId, { includeTranscript = true } = {}) {
   const transcript = await VideoTranscript.findOne({
     where: { published: true, status: 'done' },
@@ -149,5 +171,6 @@ module.exports = {
   getByVideoId,
   getBySlug,
   listChannels,
+  listCategories,
   buildPublicVideoPayload,
 };

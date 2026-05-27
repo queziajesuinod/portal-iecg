@@ -249,6 +249,28 @@ async function regenerateSummary(transcriptId) {
   return transcript;
 }
 
+async function reactivateFailedTranscriptByVideoId(youtubeVideoId) {
+  const video = await YoutubeVideo.findByPk(youtubeVideoId);
+  if (!video) throw new Error('Vídeo não encontrado');
+
+  const transcript = await VideoTranscript.findOne({ where: { youtubeVideoId } });
+  if (!transcript) throw new Error('Transcrição não encontrada');
+  if (transcript.status === 'processing') {
+    throw new Error('Transcrição em processamento não pode ser reativada');
+  }
+  if (transcript.status !== 'failed') {
+    throw new Error('Apenas transcrições com falha podem ser reativadas');
+  }
+
+  transcript.status = 'pending';
+  transcript.errorMessage = null;
+  transcript.progressPercent = 0;
+  transcript.progressStage = null;
+  transcript.processedAt = null;
+  await transcript.save();
+  return transcript;
+}
+
 module.exports = {
   getOrCreateTranscript,
   enqueueVideo,
@@ -256,5 +278,6 @@ module.exports = {
   processWithWhisper,
   regenerateSummary,
   cancelTranscript,
+  reactivateFailedTranscriptByVideoId,
   hasTranscriptText,
 };

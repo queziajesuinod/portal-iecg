@@ -91,6 +91,10 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(200),
         allowNull: true,
       },
+      category: {
+        type: DataTypes.STRING(80),
+        allowNull: true,
+      },
     },
     {
       sequelize,

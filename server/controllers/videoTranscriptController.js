@@ -4,13 +4,16 @@ const videoTranscriptWorker = require('../services/videoTranscriptWorker');
 
 async function listar(req, res) {
   try {
-    const { status, channelId, published } = req.query;
+    const {
+      status, channelId, published, category
+    } = req.query;
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const offset = Number(req.query.offset) || 0;
 
     const where = {};
     if (status) where.status = status;
     if (published !== undefined) where.published = published === 'true';
+    if (category) where.category = category;
 
     const include = [
       {
@@ -156,6 +159,11 @@ async function atualizar(req, res) {
     if (typeof req.body.seoSlug === 'string') {
       const { slugify } = require('../utils/slugify');
       allowed.seoSlug = slugify(req.body.seoSlug, { maxLength: 200 });
+    }
+    if (req.body.category === null || req.body.category === '') {
+      allowed.category = null;
+    } else if (typeof req.body.category === 'string') {
+      allowed.category = req.body.category.trim().slice(0, 80);
     }
 
     await transcript.update(allowed);

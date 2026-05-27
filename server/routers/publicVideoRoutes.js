@@ -4,6 +4,7 @@ const controller = require('../controllers/publicVideoController');
 const router = Router();
 
 router.get('/channels', controller.listarCanais);
+router.get('/categories', controller.listarCategorias);
 router.get('/slug/:slug', controller.buscarPorSlug);
 router.get('/', controller.listar);
 router.get('/:videoId', controller.buscarPorVideoId);

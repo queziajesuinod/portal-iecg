@@ -11,6 +11,7 @@ import { Editor } from 'react-draft-wysiwyg';
 import 'react-draft-wysiwyg/dist/react-draft-wysiwyg.css';
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Chip,
@@ -129,6 +130,8 @@ function RichTextEditor({ editorState, onChange, minHeight }) {
   );
 }
 
+const CATEGORY_SUGGESTIONS = ['Culto', 'Só pra Elas', 'Conferência', 'Treinamento'];
+
 RichTextEditor.propTypes = {
   editorState: PropTypes.object.isRequired,
   onChange: PropTypes.func.isRequired,
@@ -154,6 +157,7 @@ const TranscriptDetailPage = () => {
   const [seoKeywords, setSeoKeywords] = useState([]);
   const [seoKeywordInput, setSeoKeywordInput] = useState('');
   const [seoSlug, setSeoSlug] = useState('');
+  const [category, setCategory] = useState('');
 
   const load = async () => {
     try {
@@ -169,6 +173,7 @@ const TranscriptDetailPage = () => {
       setSeoMetaDescription(d.seoMetaDescription || '');
       setSeoKeywords(Array.isArray(d.seoKeywords) ? d.seoKeywords : []);
       setSeoSlug(d.seoSlug || '');
+      setCategory(d.category || '');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -213,6 +218,7 @@ const TranscriptDetailPage = () => {
         seoMetaDescription,
         seoKeywords,
         seoSlug,
+        category: category.trim() || null,
       });
       setData((prev) => ({ ...prev, ...updated }));
       setFeedback({ severity: 'success', message: 'Salvo com sucesso.' });
@@ -375,6 +381,21 @@ const TranscriptDetailPage = () => {
         <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
           <Switch checked={published} onChange={(e) => setPublished(e.target.checked)} />
           <Typography>{published ? 'Publicado na API pública' : 'Não publicado'}</Typography>
+          <Autocomplete
+            freeSolo
+            options={CATEGORY_SUGGESTIONS}
+            value={category}
+            onChange={(_, value) => setCategory(String(value || '').slice(0, 80))}
+            onInputChange={(_, value) => setCategory(String(value || '').slice(0, 80))}
+            sx={{ minWidth: 260 }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                size="small"
+                label="Categoria"
+              />
+            )}
+          />
           <Box sx={{ flexGrow: 1 }} />
           <Button
             startIcon={regenerating ? <CircularProgress size={18} color="inherit" /> : <AutoAwesomeIcon />}

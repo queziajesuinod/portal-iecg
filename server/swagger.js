@@ -65,6 +65,7 @@ const definition = {
           bulletPoints: { type: 'array', items: { type: 'string' } },
           language: { type: 'string', nullable: true, example: 'pt' },
           source: { type: 'string', nullable: true, enum: ['caption_manual', 'caption_auto', 'whisper'] },
+          category: { type: 'string', nullable: true, example: 'Família' },
           processedAt: { type: 'string', format: 'date-time', nullable: true },
           seo: { $ref: '#/components/schemas/PublicVideoSeo' },
           transcript: { type: 'string', nullable: true, description: 'HTML formatado. Presente em GET /api/public/videos/{videoId} e /slug/{slug}' },
@@ -1653,6 +1654,9 @@ const definition = {
             name: 'search', in: 'query', schema: { type: 'string' }, description: 'Busca por titulo do video'
           },
           {
+            name: 'category', in: 'query', schema: { type: 'string' }, description: 'Filtrar por categoria'
+          },
+          {
             name: 'limit',
             in: 'query',
             schema: {
@@ -1717,6 +1721,20 @@ const definition = {
           200: {
             description: 'Canais ativos',
             content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/PublicVideoChannel' } } } },
+          },
+        },
+      },
+    },
+    '/api/public/videos/categories': {
+      get: {
+        tags: ['Videos (Publico)'],
+        summary: 'Listar categorias com vídeos publicados',
+        description: 'Retorna categorias distintas dos vídeos publicados para montar filtros no site.',
+        security: [],
+        responses: {
+          200: {
+            description: 'Categorias',
+            content: { 'application/json': { schema: { type: 'array', items: { type: 'string' } } } },
           },
         },
       },
