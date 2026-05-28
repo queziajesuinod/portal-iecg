@@ -4,6 +4,7 @@ const { VideoTranscript, YoutubeVideo } = require('../models');
 const transcriptionService = require('./transcriptionService');
 const audioExtraction = require('./audioExtractionService');
 const whisperLocal = require('./whisperLocalService');
+const youtubeTranscriptApi = require('./youtubeTranscriptApiService');
 const { APP_TIMEZONE } = require('../utils/dateTime');
 
 let isWorking = false;
@@ -84,7 +85,10 @@ async function processNextOne({ force = false } = {}) {
 function cancelActive() {
   const killedAudio = audioExtraction.killActiveDownload();
   const killedWhisper = whisperLocal.killActiveTranscription();
-  return { killedAudio, killedWhisper, transcriptId: currentTranscriptId };
+  const killedTranscriptApi = youtubeTranscriptApi.killActive();
+  return {
+    killedAudio, killedWhisper, killedTranscriptApi, transcriptId: currentTranscriptId,
+  };
 }
 
 function getCurrentTranscriptId() {

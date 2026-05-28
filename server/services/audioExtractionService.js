@@ -81,6 +81,67 @@ function runYtDlp(args, { onProgress } = {}) {
   });
 }
 
+function runYtDlpJson(args) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(YT_DLP_BIN, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    activeProcess = proc;
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (c) => { stdout += c.toString(); });
+    proc.stderr.on('data', (c) => { stderr += c.toString(); });
+    proc.on('error', (err) => {
+      activeProcess = null;
+      if (err.code === 'ENOENT') {
+        reject(new Error('yt-dlp não encontrado. Instale: pip install yt-dlp (ou ajuste YT_DLP_PATH)'));
+      } else {
+        reject(err);
+      }
+    });
+    proc.on('close', (code, signal) => {
+      activeProcess = null;
+      if (code === 0) {
+        try { resolve(JSON.parse(stdout)); } catch (e) { reject(new Error(`Falha ao parsear JSON do yt-dlp: ${e.message}`)); }
+      } else if (signal) {
+        reject(new Error(`yt-dlp interrompido (signal ${signal})`));
+      } else {
+        reject(new Error(`yt-dlp falhou (exit ${code}): ${stderr || 'sem stderr'}`));
+      }
+    });
+  });
+}
+
+function pickBestAudioFormat(formats) {
+  if (!Array.isArray(formats) || !formats.length) return null;
+
+  const scoreExt = (ext) => {
+    if (ext === 'm4a') return 3;
+    if (ext === 'webm' || ext === 'opus') return 2;
+    return 1;
+  };
+
+  const audioOnly = formats.filter((f) => (f.vcodec === 'none' || !f.vcodec) && f.acodec && f.acodec !== 'none');
+  if (audioOnly.length) {
+    audioOnly.sort((a, b) => {
+      const ext = scoreExt(b.ext) - scoreExt(a.ext);
+      if (ext !== 0) return ext;
+      return (b.abr || 0) - (a.abr || 0);
+    });
+    return {
+      id: audioOnly[0].format_id, kind: 'audio-only', ext: audioOnly[0].ext, abr: audioOnly[0].abr
+    };
+  }
+
+  const withAudio = formats.filter((f) => f.acodec && f.acodec !== 'none');
+  if (withAudio.length) {
+    withAudio.sort((a, b) => (b.tbr || b.abr || 0) - (a.tbr || a.abr || 0));
+    return {
+      id: withAudio[0].format_id, kind: 'combined', ext: withAudio[0].ext, abr: withAudio[0].abr
+    };
+  }
+
+  return null;
+}
+
 function killActiveDownload() {
   if (activeProcess && !activeProcess.killed) {
     activeProcess.kill('SIGTERM');
@@ -92,7 +153,7 @@ function killActiveDownload() {
 function buildBaseArgs({
   url, outputTemplate, format, formatSelector, jsRuntime, userAgent, playerClient,
 }) {
-    const args = [
+  const args = [
     '--js-runtimes', jsRuntime,
     '--format', formatSelector,
     '--extract-audio',
@@ -100,9 +161,6 @@ function buildBaseArgs({
     '--audio-quality', '0',
     '--no-playlist',
     '--no-warnings',
-    '--no-check-certificates',
-    '--prefer-free-formats',
-    '--youtube-skip-dash-manifest',
     '--retries', '3',
     '-o', outputTemplate,
   ];
@@ -114,6 +172,29 @@ function buildBaseArgs({
   }
   if (process.env.FFMPEG_PATH) {
     args.push('--ffmpeg-location', process.env.FFMPEG_PATH);
+  }
+  if (YT_DLP_EXTRA_ARGS) {
+    args.push(...parseExtraArgs(YT_DLP_EXTRA_ARGS));
+  }
+  args.push(url);
+  return args;
+}
+
+function buildProbeArgs({
+  url, jsRuntime, userAgent, playerClient,
+}) {
+  const args = [
+    '--js-runtimes', jsRuntime,
+    '--dump-single-json',
+    '--no-download',
+    '--no-playlist',
+    '--no-warnings',
+  ];
+  if (playerClient) {
+    args.push('--extractor-args', `youtube:player_client=${playerClient}`);
+  }
+  if (userAgent) {
+    args.push('--user-agent', userAgent);
   }
   if (YT_DLP_EXTRA_ARGS) {
     args.push(...parseExtraArgs(YT_DLP_EXTRA_ARGS));
@@ -137,7 +218,9 @@ async function downloadAudio(videoId, { format = 'opus', cookies = null } = {}) 
   await fs.mkdir(tmpDir, { recursive: true });
 
   const url = `https://www.youtube.com/watch?v=${videoId}`;
-  const formatSelector = process.env.YT_DLP_FORMAT || 'bestaudio/bestaudio*/best';
+  // Se YT_DLP_FORMAT estiver vazio, faz discovery dinâmico via --dump-single-json.
+  // Se setado (ex: "bestaudio/best"), usa como override e pula o probe.
+  const formatOverride = process.env.YT_DLP_FORMAT || '';
   const jsRuntime = process.env.YT_DLP_JS_RUNTIME || 'node';
   const userAgent = process.env.YT_DLP_USER_AGENT || '';
 
@@ -164,30 +247,51 @@ async function downloadAudio(videoId, { format = 'opus', cookies = null } = {}) 
     tempCookiesFile = await ytDlpCookies.writeCookiesToTempFile(normalized);
   }
 
+  const injectCookies = (args) => {
+    if (tempCookiesFile) {
+      args.splice(args.length - 1, 0, '--cookies', tempCookiesFile);
+    } else if (YT_DLP_COOKIES_PATH) {
+      args.splice(args.length - 1, 0, '--cookies', YT_DLP_COOKIES_PATH);
+    } else if (YT_DLP_COOKIES_FROM_BROWSER) {
+      args.splice(args.length - 1, 0, '--cookies-from-browser', YT_DLP_COOKIES_FROM_BROWSER);
+    }
+  };
+
   try {
     let lastError = null;
     for (const playerClient of playerClientChain) {
+      const label = playerClient || '(default yt-dlp)';
       const id = crypto.randomBytes(4).toString('hex');
       const basePath = path.join(tmpDir, `yt-${videoId}-${id}`);
       const outputTemplate = `${basePath}.%(ext)s`;
       const expectedFinalPath = `${basePath}.${format}`;
 
-      const args = buildBaseArgs({
-        url, outputTemplate, format, formatSelector, jsRuntime, userAgent, playerClient,
-      });
-
-      // Insere cookies (depois dos args base, antes da URL final)
-      if (tempCookiesFile) {
-        args.splice(args.length - 1, 0, '--cookies', tempCookiesFile);
-      } else if (YT_DLP_COOKIES_PATH) {
-        args.splice(args.length - 1, 0, '--cookies', YT_DLP_COOKIES_PATH);
-      } else if (YT_DLP_COOKIES_FROM_BROWSER) {
-        args.splice(args.length - 1, 0, '--cookies-from-browser', YT_DLP_COOKIES_FROM_BROWSER);
-      }
-
       try {
-        const label = playerClient || '(default yt-dlp)';
-        console.log(`[yt-dlp] tentando player_client=${label}...`);
+        // Etapa 1: descobre formato (a menos que o usuário tenha forçado via env)
+        let formatSelector = formatOverride;
+        if (!formatSelector) {
+          console.log(`[yt-dlp] descobrindo formatos com player_client=${label}...`);
+          const probeArgs = buildProbeArgs({
+            url, jsRuntime, userAgent, playerClient
+          });
+          injectCookies(probeArgs);
+          const info = await runYtDlpJson(probeArgs);
+          const picked = pickBestAudioFormat(info && info.formats);
+          if (!picked) {
+            console.warn(`[yt-dlp] sem formato de áudio compatível em player_client=${label}`);
+            continue;
+          }
+          formatSelector = picked.id;
+          console.log(`[yt-dlp] formato escolhido: ${picked.id} (${picked.kind}, ${picked.ext}, ${picked.abr || '?'}kbps)`);
+        }
+
+        // Etapa 2: download com o format_id explícito
+        const args = buildBaseArgs({
+          url, outputTemplate, format, formatSelector, jsRuntime, userAgent, playerClient,
+        });
+        injectCookies(args);
+
+        console.log(`[yt-dlp] baixando com player_client=${label} format=${formatSelector}...`);
         await runYtDlp(args);
         await fs.access(expectedFinalPath);
         console.log(`[yt-dlp] sucesso com player_client=${label}`);
@@ -197,8 +301,7 @@ async function downloadAudio(videoId, { format = 'opus', cookies = null } = {}) 
         if (!isRetriableYtDlpError(err)) {
           throw err;
         }
-        console.warn(`[yt-dlp] falhou com player_client=${playerClient || '(default)'}: ${err.message.split('\n')[0]}`);
-        // limpa arquivo parcial se existir
+        console.warn(`[yt-dlp] falhou com player_client=${label}: ${err.message.split('\n')[0]}`);
         await fs.unlink(expectedFinalPath).catch(() => {});
       }
     }

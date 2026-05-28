@@ -3,6 +3,7 @@ const youtubeApi = require('./youtubeApiService');
 const captionDownload = require('./captionDownloadService');
 const audioExtraction = require('./audioExtractionService');
 const whisperLocal = require('./whisperLocalService');
+const youtubeTranscriptApi = require('./youtubeTranscriptApiService');
 const videoSummary = require('./videoSummaryService');
 
 function hasTranscriptText(transcript) {
@@ -89,20 +90,59 @@ async function setStage(transcript, stage, percent = 0) {
 }
 
 async function processFromManualCaption(video, channel, transcript) {
-  if (video.hasManualCaption === null || video.hasManualCaption === undefined) {
-    const info = await youtubeApi.fetchCaptionInfo(channel, video.videoId);
-    await video.update(info);
-  }
+  try {
+    if (video.hasManualCaption === null || video.hasManualCaption === undefined) {
+      const info = await youtubeApi.fetchCaptionInfo(channel, video.videoId);
+      await video.update(info);
+    }
 
-  if (!video.hasManualCaption) {
+    if (!video.hasManualCaption) {
+      return null;
+    }
+
+    await setStage(transcript, 'caption', 50);
+    const result = await captionDownload.downloadManualCaptionAsText(channel, video.videoId);
+    if (!result || !result.text) {
+      return null;
+    }
+
+    transcript.transcript = result.text;
+    transcript.language = result.language;
+    transcript.source = result.source;
+    transcript.status = 'done';
+    transcript.processedAt = new Date();
+    transcript.errorMessage = null;
+    transcript.progressPercent = 100;
+    transcript.progressStage = 'summary';
+    await transcript.save();
+    await generateAndSaveSummary(transcript, video);
+    transcript.progressStage = null;
+    await transcript.save();
+    return transcript;
+  } catch (err) {
+    console.warn(`[caption-manual] falhou (seguindo para youtube-transcript): ${err.message}`);
+    return null;
+  }
+}
+
+async function processWithTranscriptApi(video, transcript) {
+  await setStage(transcript, 'transcript_api', 50);
+  console.log(`[transcript-api] buscando transcricao de ${video.videoId}...`);
+
+  let result;
+  try {
+    result = await youtubeTranscriptApi.fetchTranscript(video.videoId, { languageHint: 'pt' });
+  } catch (err) {
+    console.warn(`[transcript-api] erro: ${err.message}`);
     return null;
   }
 
-  await setStage(transcript, 'caption', 50);
-  const result = await captionDownload.downloadManualCaptionAsText(channel, video.videoId);
   if (!result || !result.text) {
+    console.log(`[transcript-api] nenhuma transcricao disponivel para ${video.videoId}`);
     return null;
   }
+
+  console.log(`[transcript-api] sucesso (source=${result.source}, lang=${result.language}, ${result.text.length} chars)`);
 
   transcript.transcript = result.text;
   transcript.language = result.language;
@@ -192,6 +232,9 @@ async function processVideoNow(youtubeVideoId, { useWhisperFallback = false } = 
   try {
     const fromCaption = await processFromManualCaption(video, channel, transcript);
     if (fromCaption) return fromCaption;
+
+    const fromTranscriptApi = await processWithTranscriptApi(video, transcript);
+    if (fromTranscriptApi) return fromTranscriptApi;
 
     if (!useWhisperFallback) {
       transcript.status = 'needs_audio_transcription';
