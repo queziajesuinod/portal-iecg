@@ -98,7 +98,7 @@ class WebhookService {
       },
     });
 
-    await Promise.all(
+    const results = await Promise.all(
       hooks.map(async (hook) => {
         try {
           if (transport?.type === 'multipart') {
@@ -106,11 +106,22 @@ class WebhookService {
           } else {
             await this.postJson(hook, event, cleanPayload);
           }
+          return { hookId: hook.id, success: true };
         } catch (err) {
           console.warn(`Falha ao enviar webhook ${hook.id}`, err.message);
+          return { hookId: hook.id, success: false, error: err.message };
         }
       })
     );
+
+    const failed = results.filter((r) => !r.success).length;
+    return {
+      event,
+      total: hooks.length,
+      success: hooks.length - failed,
+      failed,
+      results,
+    };
   }
 }
 
