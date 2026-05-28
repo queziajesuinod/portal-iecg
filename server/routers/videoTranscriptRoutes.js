@@ -3,6 +3,7 @@ const express = require('express');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
+const crypto = require('crypto');
 const multer = require('multer');
 const controller = require('../controllers/videoTranscriptController');
 
@@ -24,8 +25,20 @@ const upload = multer({
 });
 
 function uploadAudioMiddleware(req, res, next) {
+  const requestId = crypto.randomUUID();
+  req.uploadRequestId = requestId;
+  req.uploadStartedAt = Date.now();
+  const contentLength = req.headers['content-length'] || 'unknown';
+  console.log(`[uploadAudio][${requestId}] start videoId=${req.params.videoId} ip=${req.ip} contentLength=${contentLength}`);
+
   upload.single('audio')(req, res, (err) => {
-    if (!err) return next();
+    if (!err) {
+      console.log(
+        `[uploadAudio][${requestId}] multer_ok videoId=${req.params.videoId} originalName=${req.file?.originalname || 'n/a'} mimetype=${req.file?.mimetype || 'n/a'} size=${req.file?.size || 0}`
+      );
+      return next();
+    }
+    console.error(`[uploadAudio][${requestId}] multer_error videoId=${req.params.videoId} code=${err.code || 'n/a'} message=${err.message}`);
     if (err.code === 'LIMIT_FILE_SIZE') {
       return res.status(413).json({ message: 'Arquivo excede o limite de 500MB' });
     }

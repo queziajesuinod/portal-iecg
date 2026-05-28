@@ -114,13 +114,19 @@ async function buscarProgressoBatch(req, res) {
 }
 
 async function uploadAudio(req, res) {
+  const requestId = req.uploadRequestId || 'no-request-id';
+  const startedAt = req.uploadStartedAt || Date.now();
   try {
     const { videoId } = req.params;
     if (!req.file) return res.status(400).json({ message: 'Arquivo de audio nao enviado' });
+    console.log(
+      `[uploadAudio][${requestId}] controller_start videoId=${videoId} tmpPath=${req.file.path} originalName=${req.file.originalname} size=${req.file.size || 0}`
+    );
 
     const video = await YoutubeVideo.findByPk(videoId);
     if (!video) {
       await audioStorage.removeAudio(req.file.path).catch(() => {});
+      console.warn(`[uploadAudio][${requestId}] video_not_found videoId=${videoId}`);
       return res.status(404).json({ message: 'Video nao encontrado' });
     }
 
@@ -129,6 +135,9 @@ async function uploadAudio(req, res) {
     }
 
     const saved = await audioStorage.saveAudio(video.videoId, req.file.path, req.file.originalname);
+    console.log(
+      `[uploadAudio][${requestId}] saved videoId=${videoId} finalPath=${saved.path} finalSize=${saved.size}`
+    );
     await video.update({
       audioPath: saved.path,
       audioSizeBytes: saved.size,
@@ -159,8 +168,12 @@ async function uploadAudio(req, res) {
     if (req.file?.path) {
       await audioStorage.removeAudio(req.file.path).catch(() => {});
     }
+    console.error(`[uploadAudio][${requestId}] controller_error videoId=${req.params.videoId} message=${err.message}`);
     console.error('[videoTranscript] Erro no upload de audio:', err);
     return res.status(500).json({ message: err.message });
+  } finally {
+    const elapsedMs = Date.now() - startedAt;
+    console.log(`[uploadAudio][${requestId}] finished videoId=${req.params.videoId} elapsedMs=${elapsedMs}`);
   }
 }
 
@@ -204,24 +217,12 @@ async function atualizar(req, res) {
     await transcript.update(allowed);
 
     const publishedChanged = typeof allowed.published === 'boolean' && allowed.published !== wasPublished;
-    let publishWebhookResult = null;
-    if (allowed.published === true && !wasPublished) {
-      const video = await YoutubeVideo.findByPk(transcript.youtubeVideoId);
-      if (video?.audioPath) {
-        publishWebhookResult = await transcriptionService.resendWebhook(transcript.id);
-        if ((publishWebhookResult?.failed || 0) === 0) {
-          await audioStorage.removeAudio(video.audioPath).catch((err) => {
-            console.warn('[publish] falha ao remover audio:', err.message);
-          });
-          await video.update({ audioPath: null, audioSizeBytes: null, audioUploadedAt: null });
-          console.log(`[publish] audio removido apos retorno do webhook no video ${video.videoId}`);
-        } else {
-          console.warn(`[publish] webhook com falha (${publishWebhookResult.failed}/${publishWebhookResult.total}); audio mantido para reenvio`);
-        }
-      }
-    }
 
     if (publishedChanged) {
+      const video = await YoutubeVideo.findByPk(transcript.youtubeVideoId, {
+        include: [{ model: YoutubeChannel, as: 'channel' }],
+      });
+
       const dynamicEvents = await WebhookEventDefinition.findAll({
         where: {
           tableName: 'video_transcripts',
@@ -230,23 +231,105 @@ async function atualizar(req, res) {
         },
       });
 
-      dynamicEvents.forEach((def) => {
-        webhookEmitter.emit(def.eventKey, {
-          transcriptId: transcript.id,
-          youtubeVideoId: transcript.youtubeVideoId,
-          previousPublished: wasPublished,
-          currentPublished: transcript.published,
-          updatedAt: transcript.updatedAt,
-        }).catch((err) => {
-          console.warn(`[videoTranscript] falha ao emitir evento ${def.eventKey}:`, err.message);
-        });
+      const turnedOn = allowed.published === true && !wasPublished;
+      const richPayload = buildPublishedPayload({
+        video,
+        transcript,
+        previousPublished: wasPublished,
+        currentPublished: transcript.published,
       });
+
+      const attachAudio = turnedOn && Boolean(video?.audioPath);
+      const ext = attachAudio ? (require('path').extname(video.audioPath) || '.mp3') : '.mp3';
+      const transport = attachAudio ? {
+        type: 'multipart',
+        audioPath: video.audioPath,
+        filename: `${video.videoId}${ext}`,
+        contentType: 'audio/mpeg',
+      } : null;
+
+      let allDelivered = true;
+      for (const def of dynamicEvents) {
+        try {
+          const result = await webhookEmitter.emit(def.eventKey, {
+            ...richPayload,
+            ...(transport ? { __webhookTransport: transport } : {}),
+          });
+          const failed = Number(result?.failed || 0);
+          if (failed > 0) {
+            allDelivered = false;
+            console.warn(`[publish] evento ${def.eventKey} falhou em ${failed}/${result.total} webhooks`);
+          }
+        } catch (err) {
+          allDelivered = false;
+          console.warn(`[publish] erro emitindo ${def.eventKey}:`, err.message);
+        }
+      }
+
+      if (turnedOn && attachAudio) {
+        if (allDelivered) {
+          await audioStorage.removeAudio(video.audioPath).catch((err) => {
+            console.warn('[publish] falha ao remover audio:', err.message);
+          });
+          await video.update({ audioPath: null, audioSizeBytes: null, audioUploadedAt: null });
+          console.log(`[publish] audio removido apos webhook 200 do video ${video.videoId}`);
+        } else {
+          console.warn(`[publish] webhook nao retornou 200; audio MANTIDO em ${video.audioPath} pra reenvio manual`);
+        }
+      }
     }
 
     return res.status(200).json(transcript);
   } catch (err) {
     return res.status(400).json({ message: err.message });
   }
+}
+
+function buildPublishedPayload({
+  video, transcript, previousPublished, currentPublished,
+}) {
+  return {
+    event: 'video_transcript.published',
+    transcriptId: transcript.id,
+    youtubeVideoId: transcript.youtubeVideoId,
+    previousPublished,
+    currentPublished,
+    updatedAt: transcript.updatedAt,
+    video: video ? {
+      id: video.id,
+      videoId: video.videoId,
+      title: video.title,
+      description: video.description,
+      publishedAt: video.publishedAt,
+      durationSeconds: video.durationSeconds,
+      thumbnailUrl: video.thumbnailUrl,
+      youtubeUrl: `https://youtu.be/${video.videoId}`,
+      audioPath: video.audioPath,
+      audioSizeBytes: video.audioSizeBytes,
+      audioUploadedAt: video.audioUploadedAt,
+      channel: video.channel ? {
+        id: video.channel.id,
+        channelId: video.channel.channelId,
+        channelTitle: video.channel.channelTitle,
+        ownerName: video.channel.ownerName,
+      } : null,
+    } : null,
+    transcript: {
+      id: transcript.id,
+      status: transcript.status,
+      source: transcript.source,
+      language: transcript.language,
+      text: transcript.transcript,
+      summary: transcript.summary,
+      bulletPoints: transcript.bulletPoints,
+      seoMetaTitle: transcript.seoMetaTitle,
+      seoMetaDescription: transcript.seoMetaDescription,
+      seoKeywords: transcript.seoKeywords,
+      seoSlug: transcript.seoSlug,
+      category: transcript.category,
+      processedAt: transcript.processedAt,
+    },
+  };
 }
 
 async function reenviarWebhook(req, res) {
