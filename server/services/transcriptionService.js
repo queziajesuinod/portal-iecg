@@ -1,6 +1,7 @@
 const { YoutubeVideo, VideoTranscript } = require('../models');
 const whisperLocal = require('./whisperLocalService');
 const videoSummary = require('./videoSummaryService');
+const transcriptWebhook = require('./transcriptWebhookService');
 
 function hasTranscriptText(transcript) {
   return Boolean(htmlToPlainText(transcript?.transcript).trim());
@@ -114,6 +115,14 @@ async function processUploadedAudio(youtubeVideoId) {
     await generateAndSaveSummary(transcript, video);
     transcript.progressStage = null;
     await transcript.save();
+
+    if (transcriptWebhook.isEnabled()) {
+      setImmediate(() => {
+        transcriptWebhook.send({ video, transcript, audioPath: video.audioPath })
+          .catch((err) => console.error('[webhook] falha ao enviar:', err.message));
+      });
+    }
+
     return transcript;
   } catch (err) {
     transcript.status = 'failed';
@@ -123,6 +132,22 @@ async function processUploadedAudio(youtubeVideoId) {
     await transcript.save();
     throw err;
   }
+}
+
+async function resendWebhook(transcriptId) {
+  const transcript = await VideoTranscript.findByPk(transcriptId, {
+    include: [{ model: YoutubeVideo, as: 'video' }],
+  });
+  if (!transcript) throw new Error('Transcrição não encontrada');
+  if (!transcript.video) throw new Error('Vídeo da transcrição não encontrado');
+  if (!transcriptWebhook.isEnabled()) {
+    throw new Error('Webhook não configurado (TRANSCRIPT_WEBHOOK_URL ausente)');
+  }
+  return transcriptWebhook.send({
+    video: transcript.video,
+    transcript,
+    audioPath: transcript.video.audioPath,
+  });
 }
 
 async function cancelTranscript(transcriptId) {
@@ -191,6 +216,7 @@ async function reactivateFailedTranscriptByVideoId(youtubeVideoId) {
 module.exports = {
   getOrCreateTranscript,
   processUploadedAudio,
+  resendWebhook,
   regenerateSummary,
   cancelTranscript,
   reactivateFailedTranscriptByVideoId,

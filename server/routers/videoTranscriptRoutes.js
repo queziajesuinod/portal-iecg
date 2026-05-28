@@ -32,6 +32,7 @@ router.delete('/transcripts/:id', express.json(), controller.remover);
 
 router.post('/transcripts/:id/cancel', express.json(), controller.cancelar);
 router.post('/transcripts/:id/summarize', express.json(), controller.regerarResumo);
+router.post('/transcripts/:id/webhook/resend', express.json(), controller.reenviarWebhook);
 
 router.post('/videos/:videoId/audio', upload.single('audio'), controller.uploadAudio);
 router.post('/videos/:videoId/transcribe', express.json(), controller.transcribeUploadedAudio);
