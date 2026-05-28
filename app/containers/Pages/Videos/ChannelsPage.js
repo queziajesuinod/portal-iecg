@@ -29,11 +29,9 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
 import LinkIcon from '@mui/icons-material/Link';
-import CookieIcon from '@mui/icons-material/Cookie';
 import { Helmet } from 'react-helmet';
 import { useHistory, useLocation } from 'react-router-dom';
 import { PapperBlock } from 'dan-components';
-import ChannelCookiesDialog from './ChannelCookiesDialog';
 import {
   fetchChannels,
   startChannelOAuth,
@@ -54,7 +52,6 @@ const ChannelsPage = () => {
   const [ownerName, setOwnerName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
-  const [cookiesChannel, setCookiesChannel] = useState(null);
   const [workerStatus, setWorkerStatus] = useState(null);
   const [runningWorker, setRunningWorker] = useState(false);
 
@@ -297,11 +294,6 @@ const ChannelsPage = () => {
                           <LinkIcon />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Configurar cookies do yt-dlp">
-                        <IconButton onClick={() => setCookiesChannel(channel)}>
-                          <CookieIcon />
-                        </IconButton>
-                      </Tooltip>
                       <Tooltip title="Remover canal">
                         <IconButton color="error" onClick={() => setConfirmDelete(channel)}>
                           <DeleteIcon />
@@ -361,11 +353,6 @@ const ChannelsPage = () => {
         </DialogActions>
       </Dialog>
 
-      <ChannelCookiesDialog
-        open={!!cookiesChannel}
-        channel={cookiesChannel}
-        onClose={() => setCookiesChannel(null)}
-      />
     </div>
   );
 };

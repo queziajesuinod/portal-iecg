@@ -1,7 +1,7 @@
 const { Model, DataTypes } = require('sequelize');
 
 const STATUS_VALUES = ['pending', 'processing', 'needs_audio_transcription', 'done', 'failed'];
-const SOURCE_VALUES = ['caption_manual', 'caption_auto', 'whisper'];
+const SOURCE_VALUES = ['caption_manual', 'caption_auto', 'whisper', 'whisper_api'];
 
 module.exports = (sequelize) => {
   class VideoTranscript extends Model {

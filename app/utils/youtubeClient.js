@@ -53,28 +53,6 @@ export const deleteChannel = async (id) => {
   return parseOrThrow(res, 'Falha ao remover canal');
 };
 
-export const fetchChannelCookiesStatus = async (channelId) => {
-  const res = await fetch(`${BASE}/channels/${channelId}/cookies`, { headers: jsonHeaders() });
-  return parseOrThrow(res, 'Falha ao consultar cookies do canal');
-};
-
-export const saveChannelCookies = async (channelId, content) => {
-  const res = await fetch(`${BASE}/channels/${channelId}/cookies`, {
-    method: 'PUT',
-    headers: jsonHeaders(),
-    body: JSON.stringify({ content }),
-  });
-  return parseOrThrow(res, 'Falha ao salvar cookies do canal');
-};
-
-export const deleteChannelCookies = async (channelId) => {
-  const res = await fetch(`${BASE}/channels/${channelId}/cookies`, {
-    method: 'DELETE',
-    headers: authHeaders(),
-  });
-  return parseOrThrow(res, 'Falha ao remover cookies do canal');
-};
-
 export const startChannelOAuth = async (ownerName, channelId = null) => {
   const res = await fetch(`${BASE}/channels/oauth/start`, {
     method: 'POST',
@@ -116,14 +94,6 @@ export const syncChannelVideos = async (channelId, maxPages = 5) => {
   return parseOrThrow(res, 'Falha ao sincronizar vídeos');
 };
 
-export const refreshVideoCaptions = async (videoId) => {
-  const res = await fetch(`${BASE}/videos/${videoId}/captions/refresh`, {
-    method: 'POST',
-    headers: jsonHeaders(),
-  });
-  return parseOrThrow(res, 'Falha ao verificar legendas');
-};
-
 export const enqueueTranscripts = async (videoIds) => {
   const res = await fetch(`${BASE}/transcripts/enqueue`, {
     method: 'POST',
@@ -133,12 +103,23 @@ export const enqueueTranscripts = async (videoIds) => {
   return parseOrThrow(res, 'Falha ao enfileirar vídeos');
 };
 
+export const uploadVideoAudio = async (videoId, file) => {
+  const form = new FormData();
+  form.append('audio', file);
+  const res = await fetch(`${BASE}/videos/${videoId}/audio`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: form,
+  });
+  return parseOrThrow(res, 'Falha ao enviar audio');
+};
+
 export const transcribeVideoNow = async (videoId) => {
   const res = await fetch(`${BASE}/videos/${videoId}/transcribe`, {
     method: 'POST',
     headers: jsonHeaders(),
   });
-  return parseOrThrow(res, 'Falha ao transcrever video');
+  return parseOrThrow(res, 'Falha ao transcrever audio anexado');
 };
 
 export const reactivateFailedTranscript = async (videoId) => {

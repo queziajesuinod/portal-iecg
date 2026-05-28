@@ -1,7 +1,8 @@
 const moment = require('moment-timezone');
+const { Op } = require('sequelize');
 const { VideoTranscript, YoutubeVideo } = require('../models');
 const transcriptionService = require('./transcriptionService');
-const youtubeTranscriptApi = require('./youtubeTranscriptApiService');
+const whisperLocal = require('./whisperLocalService');
 const { APP_TIMEZONE } = require('../utils/dateTime');
 
 let isWorking = false;
@@ -33,14 +34,15 @@ function isExceededMaxHours() {
 
 async function getNextPending() {
   return VideoTranscript.findOne({
-    where: {
-      status: 'pending',
-    },
+    where: { status: 'pending' },
     include: [{
       model: YoutubeVideo,
       as: 'video',
       required: true,
-      where: { ignored: false },
+      where: {
+        ignored: false,
+        audioPath: { [Op.ne]: null },
+      },
     }],
     order: [['updatedAt', 'ASC']],
   });
@@ -59,14 +61,14 @@ async function processNextOne({ force = false } = {}) {
   }
 
   const next = await getNextPending();
-  if (!next) return { skipped: true, reason: 'fila vazia' };
+  if (!next) return { skipped: true, reason: 'fila vazia (sem video com audio anexado)' };
 
   if (!workStartedAt) workStartedAt = Date.now();
   console.log(`[transcriptWorker] iniciando "${next.video.title}" (${next.video.videoId})`);
 
   currentTranscriptId = next.id;
   try {
-    const updated = await transcriptionService.processVideoNow(next.youtubeVideoId);
+    const updated = await transcriptionService.processUploadedAudio(next.youtubeVideoId);
     console.log(`[transcriptWorker] concluido: status=${updated.status} source=${updated.source}`);
     return { processed: true, transcriptId: updated.id, status: updated.status };
   } catch (err) {
@@ -78,10 +80,8 @@ async function processNextOne({ force = false } = {}) {
 }
 
 function cancelActive() {
-  const killedTranscriptApi = youtubeTranscriptApi.killActive();
-  return {
-    killedTranscriptApi, transcriptId: currentTranscriptId,
-  };
+  const killedWhisper = whisperLocal.killActiveTranscription();
+  return { killedWhisper, transcriptId: currentTranscriptId };
 }
 
 function getCurrentTranscriptId() {
