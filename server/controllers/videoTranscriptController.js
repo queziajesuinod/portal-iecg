@@ -203,10 +203,33 @@ async function atualizar(req, res) {
       allowed.category = req.body.category.trim().slice(0, 80);
     }
 
+    const wasPublished = transcript.published;
     await transcript.update(allowed);
+
+    if (allowed.published === true && !wasPublished) {
+      const video = await YoutubeVideo.findByPk(transcript.youtubeVideoId);
+      if (video?.audioPath) {
+        await audioStorage.removeAudio(video.audioPath).catch((err) => {
+          console.warn('[publish] falha ao remover audio:', err.message);
+        });
+        await video.update({ audioPath: null, audioSizeBytes: null, audioUploadedAt: null });
+        console.log(`[publish] audio removido apos publicacao do video ${video.videoId}`);
+      }
+    }
+
     return res.status(200).json(transcript);
   } catch (err) {
     return res.status(400).json({ message: err.message });
+  }
+}
+
+async function reenviarWebhook(req, res) {
+  try {
+    const result = await transcriptionService.resendWebhook(req.params.id);
+    res.status(200).json(result);
+  } catch (err) {
+    console.error('[videoTranscript] Erro ao reenviar webhook:', err.message);
+    res.status(500).json({ message: err.message });
   }
 }
 
@@ -269,6 +292,7 @@ module.exports = {
   remover,
   cancelar,
   regerarResumo,
+  reenviarWebhook,
   statusWorker,
   rodarWorkerAgora,
 };
