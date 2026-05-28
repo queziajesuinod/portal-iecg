@@ -301,7 +301,7 @@ const VideosPage = () => {
         } : v)));
         setFeedback({
           severity: 'success',
-          message: 'Audio anexado. Whisper esta transcrevendo em background — acompanhe na barra de progresso.',
+          message: 'Audio anexado. Use "Transcrever agora" ou aguarde o job noturno.',
         });
       } catch (err) {
         setFeedback({ severity: 'error', message: `Upload: ${err.message}` });
