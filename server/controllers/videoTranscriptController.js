@@ -210,14 +210,20 @@ async function atualizar(req, res) {
     await transcript.update(allowed);
 
     const publishedChanged = typeof allowed.published === 'boolean' && allowed.published !== wasPublished;
+    let publishWebhookResult = null;
     if (allowed.published === true && !wasPublished) {
       const video = await YoutubeVideo.findByPk(transcript.youtubeVideoId);
       if (video?.audioPath) {
-        await audioStorage.removeAudio(video.audioPath).catch((err) => {
-          console.warn('[publish] falha ao remover audio:', err.message);
-        });
-        await video.update({ audioPath: null, audioSizeBytes: null, audioUploadedAt: null });
-        console.log(`[publish] audio removido apos publicacao do video ${video.videoId}`);
+        publishWebhookResult = await transcriptionService.resendWebhook(transcript.id);
+        if ((publishWebhookResult?.failed || 0) === 0) {
+          await audioStorage.removeAudio(video.audioPath).catch((err) => {
+            console.warn('[publish] falha ao remover audio:', err.message);
+          });
+          await video.update({ audioPath: null, audioSizeBytes: null, audioUploadedAt: null });
+          console.log(`[publish] audio removido apos retorno do webhook no video ${video.videoId}`);
+        } else {
+          console.warn(`[publish] webhook com falha (${publishWebhookResult.failed}/${publishWebhookResult.total}); audio mantido para reenvio`);
+        }
       }
     }
 
