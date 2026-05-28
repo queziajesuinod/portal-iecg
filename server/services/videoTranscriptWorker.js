@@ -1,9 +1,6 @@
 const moment = require('moment-timezone');
-const { Op } = require('sequelize');
 const { VideoTranscript, YoutubeVideo } = require('../models');
 const transcriptionService = require('./transcriptionService');
-const audioExtraction = require('./audioExtractionService');
-const whisperLocal = require('./whisperLocalService');
 const youtubeTranscriptApi = require('./youtubeTranscriptApiService');
 const { APP_TIMEZONE } = require('../utils/dateTime');
 
@@ -37,7 +34,7 @@ function isExceededMaxHours() {
 async function getNextPending() {
   return VideoTranscript.findOne({
     where: {
-      status: { [Op.in]: ['pending', 'needs_audio_transcription'] },
+      status: 'pending',
     },
     include: [{
       model: YoutubeVideo,
@@ -69,9 +66,7 @@ async function processNextOne({ force = false } = {}) {
 
   currentTranscriptId = next.id;
   try {
-    const updated = await transcriptionService.processVideoNow(next.youtubeVideoId, {
-      useWhisperFallback: true,
-    });
+    const updated = await transcriptionService.processVideoNow(next.youtubeVideoId);
     console.log(`[transcriptWorker] concluido: status=${updated.status} source=${updated.source}`);
     return { processed: true, transcriptId: updated.id, status: updated.status };
   } catch (err) {
@@ -83,11 +78,9 @@ async function processNextOne({ force = false } = {}) {
 }
 
 function cancelActive() {
-  const killedAudio = audioExtraction.killActiveDownload();
-  const killedWhisper = whisperLocal.killActiveTranscription();
   const killedTranscriptApi = youtubeTranscriptApi.killActive();
   return {
-    killedAudio, killedWhisper, killedTranscriptApi, transcriptId: currentTranscriptId,
+    killedTranscriptApi, transcriptId: currentTranscriptId,
   };
 }
 

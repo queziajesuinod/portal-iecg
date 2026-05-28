@@ -209,7 +209,7 @@ async function processWithWhisper(video, transcript, channel) {
   }
 }
 
-async function processVideoNow(youtubeVideoId, { useWhisperFallback = false } = {}) {
+async function processVideoNow(youtubeVideoId) {
   const video = await YoutubeVideo.findByPk(youtubeVideoId);
   if (!video) throw new Error('Vídeo não encontrado');
   if (video.ignored) {
@@ -236,14 +236,12 @@ async function processVideoNow(youtubeVideoId, { useWhisperFallback = false } = 
     const fromTranscriptApi = await processWithTranscriptApi(video, transcript);
     if (fromTranscriptApi) return fromTranscriptApi;
 
-    if (!useWhisperFallback) {
-      transcript.status = 'needs_audio_transcription';
-      transcript.processedAt = null;
-      await transcript.save();
-      return transcript;
-    }
-
-    return await processWithWhisper(video, transcript, channel);
+    transcript.status = 'failed';
+    transcript.errorMessage = 'Vídeo sem legendas disponíveis (manual ou auto-gerada). Transcrição automática não é possível.';
+    transcript.progressPercent = 0;
+    transcript.progressStage = null;
+    await transcript.save();
+    return transcript;
   } catch (err) {
     transcript.status = 'failed';
     transcript.errorMessage = err.message;
