@@ -145,12 +145,6 @@ async function uploadAudio(req, res) {
       await transcript.save();
     }
 
-    setImmediate(() => {
-      transcriptionService.processUploadedAudio(video.id).catch((err) => {
-        console.error('[uploadAudio] processamento async falhou:', err.message);
-      });
-    });
-
     return res.status(200).json({
       video: {
         id: video.id,
