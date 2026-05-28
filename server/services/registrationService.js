@@ -1941,19 +1941,48 @@ async function cancelarInscricao(id) {
     const amountCentavos = paymentService.converterParaCentavos(valorCobrado);
     const cancelamento = await cancelarNoCielo(payment.providerPaymentId, amountCentavos, payment.status);
     if (!cancelamento.sucesso) {
-      if (cancelamento.httpStatus === 400) {
-        console.warn(`[cancelarInscricao] Cielo retornou 400 para ${payment.providerPaymentId} — pagamento já em estado terminal, prosseguindo com cancelamento local`);
-        if (payment.id) {
-          const pagamentoDb = await RegistrationPayment.findByPk(payment.id);
-          if (pagamentoDb && !['cancelled', 'refunded', 'expired', 'denied'].includes(pagamentoDb.status)) {
-            pagamentoDb.status = 'cancelled';
-            await pagamentoDb.save();
+      const erroCancelamento = cancelamento.erro || 'Falha ao cancelar/reembolsar na adquirente';
+      console.warn(
+        `[cancelarInscricao] Falha ao cancelar ${payment.providerPaymentId} (http=${cancelamento.httpStatus || 'n/a'}): ${erroCancelamento}. Aplicando cancelamento local sem reembolso.`
+      );
+
+      if (payment.id) {
+        const pagamentoDb = await RegistrationPayment.findByPk(payment.id);
+        if (pagamentoDb && !['cancelled', 'refunded', 'expired', 'denied'].includes(pagamentoDb.status)) {
+          pagamentoDb.status = 'cancelled';
+          pagamentoDb.notes = pagamentoDb.notes
+            ? `${pagamentoDb.notes} | Cancelado sem reembolso (${erroCancelamento})`
+            : `Cancelado sem reembolso (${erroCancelamento})`;
+          await pagamentoDb.save();
+        }
+      }
+
+      await paymentService.registrarTransacao(
+        registration.id,
+        'cancellation',
+        'local_no_refund',
+        {
+          sucesso: true,
+          local: true,
+          paymentId: payment.providerPaymentId,
+          amount: valorCobrado,
+          erro: erroCancelamento,
+          dadosCompletos: {
+            message: 'Cancelamento local sem reembolso aplicado apos falha na adquirente',
+            httpStatus: cancelamento.httpStatus || null,
+            providerError: cancelamento.dadosCompletos || null
           }
         }
-        cancelamentosConcluidos.push({ sucesso: true, type: 'cancellation', local: true });
-        continue;
-      }
-      throw new Error(`Erro ao cancelar pagamento ${payment.providerPaymentId || payment.id}: ${cancelamento.erro}`);
+      );
+
+      cancelamentosConcluidos.push({
+        sucesso: true,
+        type: 'cancellation',
+        local: true,
+        noRefund: true,
+        reason: erroCancelamento
+      });
+      continue;
     }
 
     if (payment.id) {
@@ -1998,20 +2027,10 @@ async function cancelarInscricao(id) {
     throw new Error('Nenhum pagamento de cartão encontrado para cancelamento');
   }
 
-  const pagamentosAtualizados = await RegistrationPayment.findAll({
-    where: { registrationId: registration.id }
-  });
-  const aindaTemPagamentoConfirmado = pagamentosAtualizados.some(payment => payment.status === 'confirmed');
-  const resumoAtualizado = calcularResumoPagamentos(registration, pagamentosAtualizados);
-
   const statusAnterior = registration.paymentStatus;
-  registration.paymentStatus = aindaTemPagamentoConfirmado
-    ? resumoAtualizado.derivedStatus
-    : 'cancelled';
+  registration.paymentStatus = 'cancelled';
   await registration.save();
-  if (registration.paymentStatus === 'cancelled') {
-    await atualizarPagamentosPorCancelamento('cancelled');
-  }
+  await atualizarPagamentosPorCancelamento('cancelled');
 
   await ajustarContadoresDeStatus(registration, statusAnterior);
   await emitirWebhookRegistroAtualizado(registration.id, {

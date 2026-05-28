@@ -23,6 +23,16 @@ const upload = multer({
   },
 });
 
+function uploadAudioMiddleware(req, res, next) {
+  upload.single('audio')(req, res, (err) => {
+    if (!err) return next();
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ message: 'Arquivo excede o limite de 500MB' });
+    }
+    return res.status(400).json({ message: err.message || 'Falha no upload de audio' });
+  });
+}
+
 router.get('/transcripts', express.json(), controller.listar);
 router.get('/transcripts/progress', express.json(), controller.buscarProgressoBatch);
 router.get('/transcripts/:id/progress', express.json(), controller.buscarProgresso);
@@ -34,7 +44,7 @@ router.post('/transcripts/:id/cancel', express.json(), controller.cancelar);
 router.post('/transcripts/:id/summarize', express.json(), controller.regerarResumo);
 router.post('/transcripts/:id/webhook/resend', express.json(), controller.reenviarWebhook);
 
-router.post('/videos/:videoId/audio', upload.single('audio'), controller.uploadAudio);
+router.post('/videos/:videoId/audio', uploadAudioMiddleware, controller.uploadAudio);
 router.post('/videos/:videoId/transcribe', express.json(), controller.transcribeUploadedAudio);
 
 router.get('/worker/status', express.json(), controller.statusWorker);
