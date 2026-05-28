@@ -6,6 +6,29 @@ const whisperLocal = require('./whisperLocalService');
 const youtubeTranscriptApi = require('./youtubeTranscriptApiService');
 const videoSummary = require('./videoSummaryService');
 
+let dataApiQuotaResetAt = 0;
+
+function isDataApiQuotaError(err) {
+  const msg = String(err?.message || '').toLowerCase();
+  return msg.includes('exceeded your quota') || msg.includes('quotaexceeded');
+}
+
+function isDataApiQuotaCircuitOpen() {
+  return Date.now() < dataApiQuotaResetAt;
+}
+
+function openDataApiQuotaCircuit() {
+  const now = new Date();
+  const reset = new Date(now);
+  reset.setUTCHours(24, 0, 0, 0);
+  if (reset.getTime() <= now.getTime()) {
+    reset.setUTCDate(reset.getUTCDate() + 1);
+  }
+  dataApiQuotaResetAt = reset.getTime();
+  const mins = Math.round((dataApiQuotaResetAt - now.getTime()) / 60000);
+  console.warn(`[caption-manual] quota da YouTube Data API esgotada, curto-circuitando ate reset (em ~${mins} min)`);
+}
+
 function hasTranscriptText(transcript) {
   return Boolean(htmlToPlainText(transcript?.transcript).trim());
 }
@@ -90,6 +113,9 @@ async function setStage(transcript, stage, percent = 0) {
 }
 
 async function processFromManualCaption(video, channel, transcript) {
+  if (isDataApiQuotaCircuitOpen()) {
+    return null;
+  }
   try {
     if (video.hasManualCaption === null || video.hasManualCaption === undefined) {
       const info = await youtubeApi.fetchCaptionInfo(channel, video.videoId);
@@ -120,6 +146,10 @@ async function processFromManualCaption(video, channel, transcript) {
     await transcript.save();
     return transcript;
   } catch (err) {
+    if (isDataApiQuotaError(err)) {
+      openDataApiQuotaCircuit();
+      return null;
+    }
     console.warn(`[caption-manual] falhou (seguindo para youtube-transcript): ${err.message}`);
     return null;
   }
