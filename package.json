@@ -170,7 +170,6 @@
     "fontfaceobserver": "2.1.0",
     "history": "4.9.0",
     "hoist-non-react-statics": "3.3.0",
-    "youtube-transcript": "^1.2.1",
     "html-to-draftjs": "^1.5.0",
     "html-webpack-plugin": "^5.5.0",
     "immer": "^9.0.6",
