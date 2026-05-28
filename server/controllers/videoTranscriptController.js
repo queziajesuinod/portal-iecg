@@ -1,7 +1,10 @@
-const { VideoTranscript, YoutubeVideo, YoutubeChannel } = require('../models');
+const {
+  VideoTranscript, YoutubeVideo, YoutubeChannel, WebhookEventDefinition
+} = require('../models');
 const transcriptionService = require('../services/transcriptionService');
 const videoTranscriptWorker = require('../services/videoTranscriptWorker');
 const audioStorage = require('../services/audioStorageService');
+const webhookEmitter = require('../services/webhookEmitter');
 
 async function listar(req, res) {
   try {
@@ -206,6 +209,7 @@ async function atualizar(req, res) {
     const wasPublished = transcript.published;
     await transcript.update(allowed);
 
+    const publishedChanged = typeof allowed.published === 'boolean' && allowed.published !== wasPublished;
     if (allowed.published === true && !wasPublished) {
       const video = await YoutubeVideo.findByPk(transcript.youtubeVideoId);
       if (video?.audioPath) {
@@ -215,6 +219,28 @@ async function atualizar(req, res) {
         await video.update({ audioPath: null, audioSizeBytes: null, audioUploadedAt: null });
         console.log(`[publish] audio removido apos publicacao do video ${video.videoId}`);
       }
+    }
+
+    if (publishedChanged) {
+      const dynamicEvents = await WebhookEventDefinition.findAll({
+        where: {
+          tableName: 'video_transcripts',
+          fieldName: 'published',
+          changeType: 'UPDATE',
+        },
+      });
+
+      dynamicEvents.forEach((def) => {
+        webhookEmitter.emit(def.eventKey, {
+          transcriptId: transcript.id,
+          youtubeVideoId: transcript.youtubeVideoId,
+          previousPublished: wasPublished,
+          currentPublished: transcript.published,
+          updatedAt: transcript.updatedAt,
+        }).catch((err) => {
+          console.warn(`[videoTranscript] falha ao emitir evento ${def.eventKey}:`, err.message);
+        });
+      });
     }
 
     return res.status(200).json(transcript);
