@@ -1,6 +1,8 @@
+const path = require('path');
 const { YoutubeVideo, VideoTranscript } = require('../models');
 const whisperLocal = require('./whisperLocalService');
 const videoSummary = require('./videoSummaryService');
+const webhookEmitter = require('./webhookEmitter');
 const transcriptWebhook = require('./transcriptWebhookService');
 
 function hasTranscriptText(transcript) {
@@ -27,7 +29,7 @@ function htmlToPlainText(value) {
 
 async function generateAndSaveSummary(transcript, video) {
   if (!process.env.ANTHROPIC_API_KEY) {
-    console.warn('[summary] ANTHROPIC_API_KEY ausente, pulando geração de resumo');
+    console.warn('[summary] ANTHROPIC_API_KEY ausente, pulando geracao de resumo');
     return null;
   }
   try {
@@ -59,19 +61,33 @@ async function getOrCreateTranscript(youtubeVideoId) {
   return transcript;
 }
 
+async function emitTranscriptCompletedWebhook({ video, transcript, audioPath }) {
+  const payload = transcriptWebhook.buildJsonPayload({ video, transcript });
+  const ext = audioPath ? (path.extname(audioPath) || '.mp3') : '.mp3';
+  return webhookEmitter.emit('transcript.completed', {
+    ...payload,
+    __webhookTransport: {
+      type: 'multipart',
+      audioPath,
+      filename: `${video.videoId}${ext}`,
+      contentType: 'audio/mpeg',
+    },
+  });
+}
+
 async function processUploadedAudio(youtubeVideoId) {
   const video = await YoutubeVideo.findByPk(youtubeVideoId);
-  if (!video) throw new Error('Vídeo não encontrado');
+  if (!video) throw new Error('Video nao encontrado');
   if (video.ignored) {
-    throw new Error('Este vídeo está marcado como ignorado.');
+    throw new Error('Este video esta marcado como ignorado.');
   }
   if (!video.audioPath) {
-    throw new Error('Vídeo sem áudio anexado. Faça upload do áudio antes.');
+    throw new Error('Video sem audio anexado. Faca upload do audio antes.');
   }
 
   const transcript = await getOrCreateTranscript(youtubeVideoId);
   if (hasTranscriptText(transcript)) {
-    throw new Error('Este vídeo já possui transcrição preenchida. Edite a transcrição e o resumo existentes.');
+    throw new Error('Este video ja possui transcricao preenchida. Edite a transcricao e o resumo existentes.');
   }
 
   transcript.status = 'processing';
@@ -116,12 +132,10 @@ async function processUploadedAudio(youtubeVideoId) {
     transcript.progressStage = null;
     await transcript.save();
 
-    if (transcriptWebhook.isEnabled()) {
-      setImmediate(() => {
-        transcriptWebhook.send({ video, transcript, audioPath: video.audioPath })
-          .catch((err) => console.error('[webhook] falha ao enviar:', err.message));
-      });
-    }
+    setImmediate(() => {
+      emitTranscriptCompletedWebhook({ video, transcript, audioPath: video.audioPath })
+        .catch((err) => console.error('[webhook] falha ao enviar:', err.message));
+    });
 
     return transcript;
   } catch (err) {
@@ -138,12 +152,9 @@ async function resendWebhook(transcriptId) {
   const transcript = await VideoTranscript.findByPk(transcriptId, {
     include: [{ model: YoutubeVideo, as: 'video' }],
   });
-  if (!transcript) throw new Error('Transcrição não encontrada');
-  if (!transcript.video) throw new Error('Vídeo da transcrição não encontrado');
-  if (!transcriptWebhook.isEnabled()) {
-    throw new Error('Webhook não configurado (TRANSCRIPT_WEBHOOK_URL ausente)');
-  }
-  return transcriptWebhook.send({
+  if (!transcript) throw new Error('Transcricao nao encontrada');
+  if (!transcript.video) throw new Error('Video da transcricao nao encontrado');
+  return emitTranscriptCompletedWebhook({
     video: transcript.video,
     transcript,
     audioPath: transcript.video.audioPath,
@@ -152,7 +163,7 @@ async function resendWebhook(transcriptId) {
 
 async function cancelTranscript(transcriptId) {
   const transcript = await VideoTranscript.findByPk(transcriptId);
-  if (!transcript) throw new Error('Transcrição não encontrada');
+  if (!transcript) throw new Error('Transcricao nao encontrada');
 
   const worker = require('./videoTranscriptWorker');
   let killed = { killedWhisper: false };
@@ -173,8 +184,8 @@ async function regenerateSummary(transcriptId) {
   const transcript = await VideoTranscript.findByPk(transcriptId, {
     include: [{ model: YoutubeVideo, as: 'video' }],
   });
-  if (!transcript) throw new Error('Transcrição não encontrada');
-  if (!transcript.transcript) throw new Error('Transcrição sem texto para resumir');
+  if (!transcript) throw new Error('Transcricao nao encontrada');
+  if (!transcript.transcript) throw new Error('Transcricao sem texto para resumir');
 
   const { slugify } = require('../utils/slugify');
   const result = await videoSummary.generateSummary(htmlToPlainText(transcript.transcript), {
@@ -193,15 +204,15 @@ async function regenerateSummary(transcriptId) {
 
 async function reactivateFailedTranscriptByVideoId(youtubeVideoId) {
   const video = await YoutubeVideo.findByPk(youtubeVideoId);
-  if (!video) throw new Error('Vídeo não encontrado');
+  if (!video) throw new Error('Video nao encontrado');
 
   const transcript = await VideoTranscript.findOne({ where: { youtubeVideoId } });
-  if (!transcript) throw new Error('Transcrição não encontrada');
+  if (!transcript) throw new Error('Transcricao nao encontrada');
   if (transcript.status === 'processing') {
-    throw new Error('Transcrição em processamento não pode ser reativada');
+    throw new Error('Transcricao em processamento nao pode ser reativada');
   }
   if (transcript.status !== 'failed') {
-    throw new Error('Apenas transcrições com falha podem ser reativadas');
+    throw new Error('Apenas transcricoes com falha podem ser reativadas');
   }
 
   transcript.status = 'pending';
