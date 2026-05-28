@@ -86,6 +86,18 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(32),
         allowNull: true,
       },
+      audioPath: {
+        type: DataTypes.STRING(1024),
+        allowNull: true,
+      },
+      audioSizeBytes: {
+        type: DataTypes.BIGINT,
+        allowNull: true,
+      },
+      audioUploadedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
     },
     {
       sequelize,

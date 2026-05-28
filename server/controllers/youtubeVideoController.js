@@ -2,7 +2,6 @@ const { Op } = require('sequelize');
 const {
   sequelize, YoutubeChannel, YoutubeVideo, VideoTranscript
 } = require('../models');
-const youtubeApi = require('../services/youtubeApiService');
 const channelSync = require('../services/channelSyncService');
 const transcriptionService = require('../services/transcriptionService');
 
@@ -93,25 +92,6 @@ async function alternarIgnorado(req, res) {
   }
 }
 
-async function atualizarCaptions(req, res) {
-  try {
-    const { id } = req.params;
-    const video = await YoutubeVideo.findByPk(id);
-    if (!video) return res.status(404).json({ message: 'Vídeo não encontrado' });
-
-    const channel = await YoutubeChannel.scope('withTokens').findByPk(video.youtubeChannelId);
-    if (!channel) return res.status(404).json({ message: 'Canal do vídeo não encontrado' });
-
-    const info = await youtubeApi.fetchCaptionInfo(channel, video.videoId);
-    await video.update(info);
-
-    return res.status(200).json(video);
-  } catch (err) {
-    console.error('[youtubeVideo] Erro ao verificar captions:', err);
-    return res.status(500).json({ message: err.message });
-  }
-}
-
 async function reativarTranscricaoFalha(req, res) {
   try {
     const { id } = req.params;
@@ -143,7 +123,6 @@ async function removerVideo(req, res) {
 module.exports = {
   listarPorCanal,
   sincronizarCanal,
-  atualizarCaptions,
   alternarIgnorado,
   reativarTranscricaoFalha,
   removerVideo,

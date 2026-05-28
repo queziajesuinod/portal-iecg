@@ -27,8 +27,8 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import SyncIcon from '@mui/icons-material/Sync';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import SubtitlesIcon from '@mui/icons-material/Subtitles';
 import PlayCircleIcon from '@mui/icons-material/PlayCircle';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
 import EditIcon from '@mui/icons-material/Edit';
 import CancelIcon from '@mui/icons-material/Cancel';
@@ -43,8 +43,8 @@ import { PapperBlock } from 'dan-components';
 import {
   fetchChannelVideos,
   syncChannelVideos,
-  refreshVideoCaptions,
   enqueueTranscripts,
+  uploadVideoAudio,
   transcribeVideoNow,
   reactivateFailedTranscript,
   deleteVideo,
@@ -124,27 +124,25 @@ TranscriptBadge.propTypes = {
   }),
 };
 
-function CaptionBadge({ video }) {
-  if (video.hasManualCaption) {
-    return <Chip size="small" color="success" icon={<SubtitlesIcon />} label="Manual" />;
+function AudioBadge({ video }) {
+  if (video.audioPath) {
+    const sizeMb = video.audioSizeBytes ? (Number(video.audioSizeBytes) / 1024 / 1024).toFixed(1) : null;
+    return (
+      <Chip
+        size="small"
+        color="success"
+        icon={<UploadFileIcon />}
+        label={sizeMb ? `${sizeMb} MB` : 'Anexado'}
+      />
+    );
   }
-  if (video.hasAutoCaption) {
-    return <Chip size="small" color="warning" icon={<SubtitlesIcon />} label="Auto" />;
-  }
-  if (video.hasManualCaption === false && video.hasAutoCaption === false) {
-    return <Chip size="small" color="error" label="Sem legenda" />;
-  }
-  if (video.hasCaption) {
-    return <Chip size="small" label="A verificar" variant="outlined" />;
-  }
-  return <Chip size="small" label="Sem legenda" variant="outlined" />;
+  return <Chip size="small" label="Sem áudio" variant="outlined" />;
 }
 
-CaptionBadge.propTypes = {
+AudioBadge.propTypes = {
   video: PropTypes.shape({
-    hasManualCaption: PropTypes.bool,
-    hasAutoCaption: PropTypes.bool,
-    hasCaption: PropTypes.bool,
+    audioPath: PropTypes.string,
+    audioSizeBytes: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
   }).isRequired,
 };
 
@@ -162,7 +160,6 @@ const VideosPage = () => {
   const [error, setError] = useState(null);
   const [feedback, setFeedback] = useState(null);
   const [selected, setSelected] = useState(new Set());
-  const [refreshingId, setRefreshingId] = useState(null);
   const [transcribingId, setTranscribingId] = useState(null);
   const [enqueueing, setEnqueueing] = useState(false);
   const [showIgnored, setShowIgnored] = useState(false);
@@ -277,21 +274,64 @@ const VideosPage = () => {
       });
       return;
     }
+    if (!video.audioPath) {
+      setFeedback({
+        severity: 'warning',
+        message: 'Anexe o audio antes de transcrever (botao de upload).',
+      });
+      return;
+    }
     try {
       setTranscribingId(video.id);
       const transcript = await transcribeVideoNow(video.id);
       setVideos((prev) => prev.map((v) => (v.id === video.id ? { ...v, transcript } : v)));
-      const msg = transcript.status === 'done'
-        ? `Transcrito via legenda manual (${transcript.language || 'idioma desconhecido'}).`
-        : transcript.status === 'needs_audio_transcription'
-          ? 'Sem legenda manual disponível. Será processado pelo Whisper na próxima janela do worker.'
-          : `Status: ${transcript.status}`;
-      setFeedback({ severity: 'success', message: msg });
+      setFeedback({
+        severity: 'success',
+        message: `Transcricao iniciada (${transcript.status}). Use a barra de progresso pra acompanhar.`,
+      });
     } catch (err) {
       setFeedback({ severity: 'error', message: err.message });
     } finally {
       setTranscribingId(null);
     }
+  };
+
+  const handlePickAudio = (video) => {
+    if (hasFilledTranscript(video)) {
+      setFeedback({
+        severity: 'info',
+        message: 'Este video ja possui transcricao. Use a acao de revisar/editar.',
+      });
+      return;
+    }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'audio/*,.mp3,.m4a,.wav,.ogg,.opus,.flac,.aac';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        setTranscribingId(video.id);
+        setFeedback({ severity: 'info', message: `Enviando ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)...` });
+        const resp = await uploadVideoAudio(video.id, file);
+        setVideos((prev) => prev.map((v) => (v.id === video.id ? {
+          ...v,
+          audioPath: resp.video.audioPath,
+          audioSizeBytes: resp.video.audioSizeBytes,
+          audioUploadedAt: resp.video.audioUploadedAt,
+          transcript: resp.transcript,
+        } : v)));
+        setFeedback({
+          severity: 'success',
+          message: 'Audio anexado. Whisper esta transcrevendo em background — acompanhe na barra de progresso.',
+        });
+      } catch (err) {
+        setFeedback({ severity: 'error', message: `Upload: ${err.message}` });
+      } finally {
+        setTranscribingId(null);
+      }
+    };
+    input.click();
   };
 
   const handleCancel = async (video) => {
@@ -364,18 +404,6 @@ const VideosPage = () => {
       setFeedback({ severity: 'error', message: err.message });
     } finally {
       setEnqueueing(false);
-    }
-  };
-
-  const handleRefreshCaptions = async (video) => {
-    try {
-      setRefreshingId(video.id);
-      const updated = await refreshVideoCaptions(video.id);
-      setVideos((prev) => prev.map((v) => (v.id === video.id ? updated : v)));
-    } catch (err) {
-      setFeedback({ severity: 'error', message: err.message });
-    } finally {
-      setRefreshingId(null);
     }
   };
 
@@ -487,7 +515,7 @@ const VideosPage = () => {
                 <TableCell>Vídeo</TableCell>
                 <TableCell>Publicado</TableCell>
                 <TableCell>Duração</TableCell>
-                <TableCell>Legenda</TableCell>
+                <TableCell>Áudio</TableCell>
                 <TableCell>Transcrição</TableCell>
                 <TableCell align="right">Ações</TableCell>
               </TableRow>
@@ -560,27 +588,28 @@ const VideosPage = () => {
                   </TableCell>
                   <TableCell>{formatDuration(video.durationSeconds)}</TableCell>
                   <TableCell>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <CaptionBadge video={video} />
-                      <Tooltip title="Verificar tipo de legenda (manual/auto)">
-                        <span>
-                          <IconButton
-                            size="small"
-                            onClick={() => handleRefreshCaptions(video)}
-                            disabled={refreshingId === video.id}
-                          >
-                            {refreshingId === video.id ? <CircularProgress size={16} /> : <RefreshIcon fontSize="small" />}
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    </Stack>
+                    <AudioBadge video={video} />
                   </TableCell>
                   <TableCell>
                     <TranscriptBadge transcript={video.transcript} />
                   </TableCell>
                   <TableCell align="right">
-                    {!video.ignored && !hasFilledTranscript(video) && (
-                      <Tooltip title="Transcrever agora (tenta legenda manual)">
+                    {!video.ignored && !hasFilledTranscript(video) && !video.audioPath && (
+                      <Tooltip title="Anexar arquivo de audio (MP3, M4A, WAV) — Whisper local transcreve em seguida">
+                        <span>
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            onClick={() => handlePickAudio(video)}
+                            disabled={transcribingId === video.id}
+                          >
+                            {transcribingId === video.id ? <CircularProgress size={16} /> : <UploadFileIcon fontSize="small" />}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    )}
+                    {!video.ignored && !hasFilledTranscript(video) && video.audioPath && video.transcript?.status !== 'processing' && (
+                      <Tooltip title="Audio ja anexado — re-disparar transcricao com Whisper local">
                         <span>
                           <IconButton
                             size="small"

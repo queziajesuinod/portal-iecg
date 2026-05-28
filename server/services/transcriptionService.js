@@ -1,33 +1,6 @@
-const { YoutubeChannel, YoutubeVideo, VideoTranscript } = require('../models');
-const youtubeApi = require('./youtubeApiService');
-const captionDownload = require('./captionDownloadService');
-const audioExtraction = require('./audioExtractionService');
+const { YoutubeVideo, VideoTranscript } = require('../models');
 const whisperLocal = require('./whisperLocalService');
-const youtubeTranscriptApi = require('./youtubeTranscriptApiService');
 const videoSummary = require('./videoSummaryService');
-
-let dataApiQuotaResetAt = 0;
-
-function isDataApiQuotaError(err) {
-  const msg = String(err?.message || '').toLowerCase();
-  return msg.includes('exceeded your quota') || msg.includes('quotaexceeded');
-}
-
-function isDataApiQuotaCircuitOpen() {
-  return Date.now() < dataApiQuotaResetAt;
-}
-
-function openDataApiQuotaCircuit() {
-  const now = new Date();
-  const reset = new Date(now);
-  reset.setUTCHours(24, 0, 0, 0);
-  if (reset.getTime() <= now.getTime()) {
-    reset.setUTCDate(reset.getUTCDate() + 1);
-  }
-  dataApiQuotaResetAt = reset.getTime();
-  const mins = Math.round((dataApiQuotaResetAt - now.getTime()) / 60000);
-  console.warn(`[caption-manual] quota da YouTube Data API esgotada, curto-circuitando ate reset (em ~${mins} min)`);
-}
 
 function hasTranscriptText(transcript) {
   return Boolean(htmlToPlainText(transcript?.transcript).trim());
@@ -85,126 +58,33 @@ async function getOrCreateTranscript(youtubeVideoId) {
   return transcript;
 }
 
-async function enqueueVideo(youtubeVideoId) {
+async function processUploadedAudio(youtubeVideoId) {
   const video = await YoutubeVideo.findByPk(youtubeVideoId);
   if (!video) throw new Error('Vídeo não encontrado');
   if (video.ignored) {
-    throw new Error('Este vídeo está marcado como ignorado e não pode ser processado.');
+    throw new Error('Este vídeo está marcado como ignorado.');
+  }
+  if (!video.audioPath) {
+    throw new Error('Vídeo sem áudio anexado. Faça upload do áudio antes.');
   }
 
   const transcript = await getOrCreateTranscript(youtubeVideoId);
   if (hasTranscriptText(transcript)) {
     throw new Error('Este vídeo já possui transcrição preenchida. Edite a transcrição e o resumo existentes.');
   }
-  if (transcript.status === 'processing') {
-    return transcript;
-  }
 
-  transcript.status = 'pending';
+  transcript.status = 'processing';
   transcript.errorMessage = null;
+  transcript.progressPercent = 0;
+  transcript.progressStage = 'whisper';
   await transcript.save();
-  return transcript;
-}
-
-async function setStage(transcript, stage, percent = 0) {
-  transcript.progressStage = stage;
-  transcript.progressPercent = percent;
-  await transcript.save();
-}
-
-async function processFromManualCaption(video, channel, transcript) {
-  if (isDataApiQuotaCircuitOpen()) {
-    return null;
-  }
-  try {
-    if (video.hasManualCaption === null || video.hasManualCaption === undefined) {
-      const info = await youtubeApi.fetchCaptionInfo(channel, video.videoId);
-      await video.update(info);
-    }
-
-    if (!video.hasManualCaption) {
-      return null;
-    }
-
-    await setStage(transcript, 'caption', 50);
-    const result = await captionDownload.downloadManualCaptionAsText(channel, video.videoId);
-    if (!result || !result.text) {
-      return null;
-    }
-
-    transcript.transcript = result.text;
-    transcript.language = result.language;
-    transcript.source = result.source;
-    transcript.status = 'done';
-    transcript.processedAt = new Date();
-    transcript.errorMessage = null;
-    transcript.progressPercent = 100;
-    transcript.progressStage = 'summary';
-    await transcript.save();
-    await generateAndSaveSummary(transcript, video);
-    transcript.progressStage = null;
-    await transcript.save();
-    return transcript;
-  } catch (err) {
-    if (isDataApiQuotaError(err)) {
-      openDataApiQuotaCircuit();
-      return null;
-    }
-    console.warn(`[caption-manual] falhou (seguindo para youtube-transcript): ${err.message}`);
-    return null;
-  }
-}
-
-async function processWithTranscriptApi(video, transcript) {
-  await setStage(transcript, 'transcript_api', 50);
-  console.log(`[transcript-api] buscando transcricao de ${video.videoId}...`);
-
-  let result;
-  try {
-    result = await youtubeTranscriptApi.fetchTranscript(video.videoId, { languageHint: 'pt' });
-  } catch (err) {
-    console.warn(`[transcript-api] erro: ${err.message}`);
-    return null;
-  }
-
-  if (!result || !result.text) {
-    console.log(`[transcript-api] nenhuma transcricao disponivel para ${video.videoId}`);
-    return null;
-  }
-
-  console.log(`[transcript-api] sucesso (source=${result.source}, lang=${result.language}, ${result.text.length} chars)`);
-
-  transcript.transcript = result.text;
-  transcript.language = result.language;
-  transcript.source = result.source;
-  transcript.status = 'done';
-  transcript.processedAt = new Date();
-  transcript.errorMessage = null;
-  transcript.progressPercent = 100;
-  transcript.progressStage = 'summary';
-  await transcript.save();
-  await generateAndSaveSummary(transcript, video);
-  transcript.progressStage = null;
-  await transcript.save();
-  return transcript;
-}
-
-async function processWithWhisper(video, transcript, channel) {
-  let audioPath = null;
-  const { VideoTranscript: VT } = require('../models');
-  const channelCookies = channel?.getYtDlpCookies?.() || null;
 
   try {
-    await setStage(transcript, 'audio_download', 0);
-    console.log(`[whisper] baixando áudio de ${video.videoId}${channelCookies ? ' (com cookies do canal)' : ''}...`);
-    audioPath = await audioExtraction.downloadAudio(video.videoId, { cookies: channelCookies });
-
-    await setStage(transcript, 'whisper', 0);
-    console.log('[whisper] transcrevendo áudio (pode levar 2-3h em CPU)...');
-
+    console.log(`[whisper] transcrevendo audio anexado de ${video.videoId} (${video.audioPath})...`);
     let lastSavedPct = 0;
     let lastSaveAt = 0;
-    const result = await whisperLocal.transcribeAudioFile(audioPath, {
+    const VT = VideoTranscript;
+    const result = await whisperLocal.transcribeAudioFile(video.audioPath, {
       languageHint: 'pt',
       onProgress: (evt) => {
         if (evt.event !== 'progress') return;
@@ -222,7 +102,7 @@ async function processWithWhisper(video, transcript, channel) {
     });
 
     transcript.transcript = result.text;
-    transcript.language = result.language;
+    transcript.language = result.language || 'pt';
     transcript.source = 'whisper';
     transcript.status = 'done';
     transcript.processedAt = new Date();
@@ -230,51 +110,16 @@ async function processWithWhisper(video, transcript, channel) {
     transcript.progressPercent = 100;
     transcript.progressStage = 'summary';
     await transcript.save();
+
     await generateAndSaveSummary(transcript, video);
-    transcript.progressStage = null;
-    await transcript.save();
-    return transcript;
-  } finally {
-    await audioExtraction.cleanupFile(audioPath);
-  }
-}
-
-async function processVideoNow(youtubeVideoId) {
-  const video = await YoutubeVideo.findByPk(youtubeVideoId);
-  if (!video) throw new Error('Vídeo não encontrado');
-  if (video.ignored) {
-    throw new Error('Este vídeo está marcado como ignorado e não pode ser processado.');
-  }
-
-  const channel = await YoutubeChannel.scope('withTokens').findByPk(video.youtubeChannelId);
-  if (!channel) throw new Error('Canal do vídeo não encontrado');
-
-  const transcript = await getOrCreateTranscript(youtubeVideoId);
-  if (hasTranscriptText(transcript)) {
-    throw new Error('Este vídeo já possui transcrição preenchida. Edite a transcrição e o resumo existentes.');
-  }
-  transcript.status = 'processing';
-  transcript.errorMessage = null;
-  transcript.progressPercent = 0;
-  transcript.progressStage = null;
-  await transcript.save();
-
-  try {
-    const fromCaption = await processFromManualCaption(video, channel, transcript);
-    if (fromCaption) return fromCaption;
-
-    const fromTranscriptApi = await processWithTranscriptApi(video, transcript);
-    if (fromTranscriptApi) return fromTranscriptApi;
-
-    transcript.status = 'failed';
-    transcript.errorMessage = 'Vídeo sem legendas disponíveis (manual ou auto-gerada). Transcrição automática não é possível.';
-    transcript.progressPercent = 0;
     transcript.progressStage = null;
     await transcript.save();
     return transcript;
   } catch (err) {
     transcript.status = 'failed';
     transcript.errorMessage = err.message;
+    transcript.progressPercent = 0;
+    transcript.progressStage = null;
     await transcript.save();
     throw err;
   }
@@ -285,7 +130,7 @@ async function cancelTranscript(transcriptId) {
   if (!transcript) throw new Error('Transcrição não encontrada');
 
   const worker = require('./videoTranscriptWorker');
-  let killed = { killedAudio: false, killedWhisper: false };
+  let killed = { killedWhisper: false };
   if (worker.getCurrentTranscriptId() === transcriptId) {
     killed = worker.cancelActive();
   }
@@ -345,9 +190,7 @@ async function reactivateFailedTranscriptByVideoId(youtubeVideoId) {
 
 module.exports = {
   getOrCreateTranscript,
-  enqueueVideo,
-  processVideoNow,
-  processWithWhisper,
+  processUploadedAudio,
   regenerateSummary,
   cancelTranscript,
   reactivateFailedTranscriptByVideoId,

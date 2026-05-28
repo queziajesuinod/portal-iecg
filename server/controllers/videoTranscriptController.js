@@ -1,6 +1,7 @@
 const { VideoTranscript, YoutubeVideo, YoutubeChannel } = require('../models');
 const transcriptionService = require('../services/transcriptionService');
 const videoTranscriptWorker = require('../services/videoTranscriptWorker');
+const audioStorage = require('../services/audioStorageService');
 
 async function listar(req, res) {
   try {
@@ -109,34 +110,70 @@ async function buscarProgressoBatch(req, res) {
   }
 }
 
-async function enfileirar(req, res) {
+async function uploadAudio(req, res) {
   try {
-    const videoIds = Array.isArray(req.body.videoIds) ? req.body.videoIds : [];
-    if (!videoIds.length) return res.status(400).json({ message: 'videoIds é obrigatório' });
+    const { videoId } = req.params;
+    if (!req.file) return res.status(400).json({ message: 'Arquivo de audio nao enviado' });
 
-    const enqueued = [];
-    for (const id of videoIds) {
-      try {
-        const t = await transcriptionService.enqueueVideo(id);
-        enqueued.push({ videoId: id, transcriptId: t.id, status: t.status });
-      } catch (err) {
-        enqueued.push({ videoId: id, error: err.message });
-      }
+    const video = await YoutubeVideo.findByPk(videoId);
+    if (!video) {
+      await audioStorage.removeAudio(req.file.path).catch(() => {});
+      return res.status(404).json({ message: 'Video nao encontrado' });
     }
 
-    return res.status(200).json({ enqueued });
+    if (video.audioPath) {
+      await audioStorage.removeAudio(video.audioPath).catch(() => {});
+    }
+
+    const saved = await audioStorage.saveAudio(video.videoId, req.file.path, req.file.originalname);
+    await video.update({
+      audioPath: saved.path,
+      audioSizeBytes: saved.size,
+      audioUploadedAt: new Date(),
+    });
+
+    const transcript = await transcriptionService.getOrCreateTranscript(video.id);
+    if (transcript.status !== 'processing') {
+      transcript.status = 'pending';
+      transcript.errorMessage = null;
+      transcript.progressPercent = 0;
+      transcript.progressStage = null;
+      transcript.processedAt = null;
+      await transcript.save();
+    }
+
+    setImmediate(() => {
+      transcriptionService.processUploadedAudio(video.id).catch((err) => {
+        console.error('[uploadAudio] processamento async falhou:', err.message);
+      });
+    });
+
+    return res.status(200).json({
+      video: {
+        id: video.id,
+        videoId: video.videoId,
+        audioPath: saved.path,
+        audioSizeBytes: saved.size,
+        audioUploadedAt: video.audioUploadedAt,
+      },
+      transcript,
+    });
   } catch (err) {
+    if (req.file?.path) {
+      await audioStorage.removeAudio(req.file.path).catch(() => {});
+    }
+    console.error('[videoTranscript] Erro no upload de audio:', err);
     return res.status(500).json({ message: err.message });
   }
 }
 
-async function processarAgora(req, res) {
+async function transcribeUploadedAudio(req, res) {
   try {
     const { videoId } = req.params;
-    const transcript = await transcriptionService.processVideoNow(videoId);
+    const transcript = await transcriptionService.processUploadedAudio(videoId);
     res.status(200).json(transcript);
   } catch (err) {
-    console.error('[videoTranscript] Erro ao processar:', err);
+    console.error('[videoTranscript] Erro ao transcrever audio anexado:', err);
     res.status(500).json({ message: err.message });
   }
 }
@@ -226,8 +263,8 @@ module.exports = {
   buscarPorId,
   buscarProgresso,
   buscarProgressoBatch,
-  enfileirar,
-  processarAgora,
+  uploadAudio,
+  transcribeUploadedAudio,
   atualizar,
   remover,
   cancelar,
