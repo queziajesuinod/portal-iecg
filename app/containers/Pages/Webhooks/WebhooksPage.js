@@ -134,6 +134,13 @@ const DEFAULT_EVENT_DEFINITIONS = [
     fieldName: 'updatedAt',
     changeType: 'UPDATE'
   },
+  {
+    eventKey: 'transcript.completed',
+    label: 'Transcricao concluida',
+    tableName: 'video_transcripts',
+    fieldName: 'processedAt',
+    changeType: 'UPDATE'
+  },
 ];
 
 const EVENT_CHANGE_TYPES = ['INSERT', 'UPDATE', 'DELETE'];
