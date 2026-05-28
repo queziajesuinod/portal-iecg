@@ -124,28 +124,6 @@ TranscriptBadge.propTypes = {
   }),
 };
 
-function AudioBadge({ video }) {
-  if (video.audioPath) {
-    const sizeMb = video.audioSizeBytes ? (Number(video.audioSizeBytes) / 1024 / 1024).toFixed(1) : null;
-    return (
-      <Chip
-        size="small"
-        color="success"
-        icon={<UploadFileIcon />}
-        label={sizeMb ? `${sizeMb} MB` : 'Anexado'}
-      />
-    );
-  }
-  return <Chip size="small" label="Sem áudio" variant="outlined" />;
-}
-
-AudioBadge.propTypes = {
-  video: PropTypes.shape({
-    audioPath: PropTypes.string,
-    audioSizeBytes: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
-  }).isRequired,
-};
-
 const VideosPage = () => {
   const { channelId } = useParams();
   const history = useHistory();
@@ -515,7 +493,6 @@ const VideosPage = () => {
                 <TableCell>Vídeo</TableCell>
                 <TableCell>Publicado</TableCell>
                 <TableCell>Duração</TableCell>
-                <TableCell>Áudio</TableCell>
                 <TableCell>Transcrição</TableCell>
                 <TableCell align="right">Ações</TableCell>
               </TableRow>
@@ -587,9 +564,6 @@ const VideosPage = () => {
                     {video.publishedAt ? new Date(video.publishedAt).toLocaleDateString('pt-BR') : '-'}
                   </TableCell>
                   <TableCell>{formatDuration(video.durationSeconds)}</TableCell>
-                  <TableCell>
-                    <AudioBadge video={video} />
-                  </TableCell>
                   <TableCell>
                     <TranscriptBadge transcript={video.transcript} />
                   </TableCell>
