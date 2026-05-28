@@ -9,6 +9,7 @@ const USER_AGENT_TV = 'Mozilla/5.0 (PlayStation; PlayStation 4/12.00) '
 const USER_AGENT_IOS = 'com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_1 like Mac OS X;)';
 
 const INNERTUBE_URL = 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false';
+const POT_PROVIDER_URL = process.env.POT_PROVIDER_URL || 'http://bgutil-provider:4416';
 
 const INNERTUBE_CLIENTS = [
   {
@@ -32,18 +33,48 @@ const INNERTUBE_CLIENTS = [
     clientNumeric: '5',
     userAgent: USER_AGENT_IOS,
     deviceModel: 'iPhone16,2',
+    deviceMake: 'Apple',
+    osName: 'iPhone',
+    osVersion: '18.1.0.22B83',
+    platform: 'MOBILE',
   },
 ];
 
+async function getPoTokenFromProvider(videoId) {
+  try {
+    const resp = await axios.post(`${POT_PROVIDER_URL}/get_pot`, {
+      content_binding: videoId,
+    }, {
+      timeout: 10000,
+      validateStatus: (s) => s >= 200 && s < 400,
+    });
+    if (resp?.data?.po_token) {
+      return {
+        poToken: resp.data.po_token,
+        visitorData: resp.data.visitor_data,
+      };
+    }
+    return null;
+  } catch (err) {
+    console.warn(`[transcript-api] PO Token provider indisponivel: ${err.message}`);
+    return null;
+  }
+}
+
 async function fetchTranscript(videoId, { languageHint = 'pt' } = {}) {
   cancelled = false;
+
+  const pot = await getPoTokenFromProvider(videoId);
+  if (pot) {
+    console.log(`[transcript-api] PO Token obtido (visitor_data=${(pot.visitorData || '').slice(0, 16)}...)`);
+  }
 
   let tracks = null;
   let usedClient = null;
   for (const client of INNERTUBE_CLIENTS) {
     if (cancelled) throw new Error('youtube-transcript cancelado');
     try {
-      const result = await fetchPlayerViaInnertube(videoId, client, languageHint);
+      const result = await fetchPlayerViaInnertube(videoId, client, languageHint, pot);
       if (result && Array.isArray(result) && result.length > 0) {
         tracks = result;
         usedClient = client.label;
@@ -114,19 +145,29 @@ async function fetchTranscript(videoId, { languageHint = 'pt' } = {}) {
   };
 }
 
-async function fetchPlayerViaInnertube(videoId, client, languageHint) {
+async function fetchPlayerViaInnertube(videoId, client, languageHint, pot) {
+  const clientCtx = {
+    clientName: client.clientName,
+    clientVersion: client.clientVersion,
+    hl: languageHint,
+    gl: 'BR',
+  };
+  if (client.deviceModel) clientCtx.deviceModel = client.deviceModel;
+  if (client.deviceMake) clientCtx.deviceMake = client.deviceMake;
+  if (client.osName) clientCtx.osName = client.osName;
+  if (client.osVersion) clientCtx.osVersion = client.osVersion;
+  if (client.platform) clientCtx.platform = client.platform;
+  if (pot?.visitorData) clientCtx.visitorData = pot.visitorData;
+
   const body = {
     videoId,
-    context: {
-      client: {
-        clientName: client.clientName,
-        clientVersion: client.clientVersion,
-        hl: languageHint,
-        gl: 'BR',
-        ...(client.deviceModel ? { deviceModel: client.deviceModel } : {}),
-      },
-    },
+    context: { client: clientCtx },
+    contentCheckOk: true,
+    racyCheckOk: true,
   };
+  if (pot?.poToken) {
+    body.serviceIntegrityDimensions = { poToken: pot.poToken };
+  }
 
   const resp = await axios.post(INNERTUBE_URL, body, {
     headers: {
@@ -142,8 +183,19 @@ async function fetchPlayerViaInnertube(videoId, client, languageHint) {
     validateStatus: (s) => s >= 200 && s < 400,
   });
 
-  const tracks = resp?.data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
-  return Array.isArray(tracks) && tracks.length > 0 ? tracks : null;
+  const data = resp?.data;
+  const tracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+  if (Array.isArray(tracks) && tracks.length > 0) {
+    return tracks;
+  }
+  const playStatus = data?.playabilityStatus?.status;
+  const playReason = data?.playabilityStatus?.reason;
+  if (playStatus && playStatus !== 'OK') {
+    console.warn(`[transcript-api] Innertube ${client.label}: playabilityStatus=${playStatus} reason="${playReason || ''}"`);
+  } else if (!data?.captions) {
+    console.warn(`[transcript-api] Innertube ${client.label}: response sem campo captions (anti-bot ocultou)`);
+  }
+  return null;
 }
 
 async function fetchTracksViaPageScrape(videoId, languageHint) {
