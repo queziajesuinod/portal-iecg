@@ -15,6 +15,7 @@ const {
   sequelize
 } = require('../models');
 const evolutionApiService = require('./evolutionApiService');
+const emailService = require('./emailService');
 
 const TIMEZONE = 'America/Campo_Grande';
 const GROUP_SEND_DELAY_MS = Number(process.env.NOTIFICATION_GROUP_DELAY_MS || 1200);
@@ -468,11 +469,32 @@ class NotificationService {
           });
         }
       } else if (channel === 'email') {
-        // TODO: Implementar envio de email
-        await notification.update({
-          status: 'failed',
-          errorMessage: 'Envio de email ainda não implementado'
-        });
+        if (!emailService.isConfigured()) {
+          await notification.update({
+            status: 'failed',
+            errorMessage: 'SMTP nao configurado (defina SMTP_HOST/USER/PASS no .env)'
+          });
+        } else {
+          try {
+            const isHtml = /<[a-z][\s\S]*>/i.test(message);
+            const result = await emailService.sendMail({
+              to: recipient,
+              subject: subject || 'Notificação IECG',
+              html: isHtml ? message : `<pre style="font-family:inherit;white-space:pre-wrap">${message}</pre>`,
+              text: isHtml ? undefined : message,
+            });
+            await notification.update({
+              status: 'sent',
+              externalId: result.messageId,
+              sentAt: moment.tz(TIMEZONE).toDate()
+            });
+          } catch (err) {
+            await notification.update({
+              status: 'failed',
+              errorMessage: `SMTP: ${err.message}`
+            });
+          }
+        }
       } else if (channel === 'sms') {
         // TODO: Implementar envio de SMS
         await notification.update({
