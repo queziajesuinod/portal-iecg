@@ -253,6 +253,13 @@ const VideosPage = () => {
       });
       return;
     }
+    const durMin = video.durationSeconds ? Math.round(video.durationSeconds / 60) : null;
+    const tempoEstimado = durMin ? Math.round(durMin * 2.5) : '60-180';
+    const msg = `Disparar transcricao de "${video.title}"?\n\n`
+      + `Whisper local vai rodar por ~${tempoEstimado} min, usando ~10GB de RAM da VPS.\n`
+      + 'Nao dispare mais de 1 transcricao por vez (risco de OOM).\n\n'
+      + 'Confirmar?';
+    if (!window.confirm(msg)) return;
     try {
       setTranscribingId(video.id);
       const transcript = await transcribeVideoNow(video.id);

@@ -115,13 +115,7 @@ async function uploadAudioHelper(req, res) {
       await transcript.save();
     }
 
-    setImmediate(() => {
-      transcriptionService.processUploadedAudio(video.id).catch((err) => {
-        console.error('[helper-upload] processamento async falhou:', err.message);
-      });
-    });
-
-    console.log(`[helper] audio recebido pra ${video.videoId} (${(saved.size / 1024 / 1024).toFixed(2)} MB)`);
+    console.log(`[helper] audio recebido pra ${video.videoId} (${(saved.size / 1024 / 1024).toFixed(2)} MB) — aguardando admin disparar transcricao`);
     return res.status(200).json({
       video: {
         id: video.id,
