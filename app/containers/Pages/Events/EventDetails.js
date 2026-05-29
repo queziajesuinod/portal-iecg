@@ -32,7 +32,9 @@ import {
   MenuItem,
   TablePagination,
   Backdrop,
-  Skeleton
+  Skeleton,
+  Stack,
+  Alert
 } from '@mui/material';
 import BackIcon from '@mui/icons-material/ArrowBack';
 import EditIcon from '@mui/icons-material/Edit';
@@ -48,6 +50,9 @@ import StoreIcon from '@mui/icons-material/Store';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import CloseIcon from '@mui/icons-material/Close';
+import SendIcon from '@mui/icons-material/Send';
+import EmailIcon from '@mui/icons-material/Email';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import BedIcon from '@mui/icons-material/KingBed';
 import GroupsIcon from '@mui/icons-material/Groups';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -68,7 +73,8 @@ import {
   atualizarFormaPagamento,
   deletarFormaPagamento,
   cancelarInscricao,
-  obterInfoCancelamentoInscricao
+  obterInfoCancelamentoInscricao,
+  reenviarTicket
 } from '../../../api/eventsApi';
 import { EVENT_TYPE_LABELS } from '../../../constants/eventTypes';
 import { getPaymentStatusChipSx, getPaymentStatusLabel } from '../../../constants/paymentStatus';
@@ -924,6 +930,42 @@ function EventDetails() {
     cancelarInscricaoMutation.mutate(cancelTarget.id);
   };
 
+  const [resendDialogOpen, setResendDialogOpen] = useState(false);
+  const [resendTarget, setResendTarget] = useState(null);
+  const [resendLoading, setResendLoading] = useState(false);
+
+  const abrirDialogReenvio = (inscricao) => {
+    setResendTarget({
+      id: inscricao.id,
+      orderCode: inscricao.orderCode,
+      email: inscricao.buyerData?.buyer_email || '',
+      whatsapp: inscricao.buyerData?.buyer_whatsapp || inscricao.buyerData?.buyer_phone || '',
+      buyerName: inscricao.buyerData?.buyer_name || '',
+    });
+    setResendDialogOpen(true);
+  };
+
+  const fecharDialogReenvio = () => {
+    if (resendLoading) return;
+    setResendDialogOpen(false);
+    setResendTarget(null);
+  };
+
+  const reenviarPorCanal = async (channel) => {
+    if (!resendTarget?.id) return;
+    try {
+      setResendLoading(true);
+      await reenviarTicket(resendTarget.id, channel);
+      setNotification(`Ticket reenviado por ${channel === 'email' ? 'email' : 'WhatsApp'}.`);
+      setResendDialogOpen(false);
+      setResendTarget(null);
+    } catch (err) {
+      setNotification(err.message || 'Erro ao reenviar ticket.');
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
   const cancelDialogTargetLabel = cancelDialogInfo?.orderCode
     ? `a inscrição ${cancelDialogInfo.orderCode}`
     : cancelTarget?.orderCode
@@ -1513,6 +1555,15 @@ function EventDetails() {
                                 <VisibilityIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
+                            <Tooltip title="Reenviar ticket por email ou WhatsApp">
+                              <IconButton
+                                size="small"
+                                color="success"
+                                onClick={() => abrirDialogReenvio(inscricao)}
+                              >
+                                <SendIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
                             {!bannableStatuses.has(inscricao.paymentStatus) && (
                               <Tooltip title="Cancelar inscrição">
                                 <IconButton
@@ -1762,6 +1813,69 @@ function EventDetails() {
         info={cancelDialogInfo}
         targetLabel={cancelDialogTargetLabel}
       />
+
+      <Dialog open={resendDialogOpen} onClose={fecharDialogReenvio} maxWidth="xs" fullWidth>
+        <DialogTitle>Reenviar ticket</DialogTitle>
+        <DialogContent>
+          {resendTarget && (
+            <Stack spacing={2} sx={{ pt: 1 }}>
+              <Box>
+                <Typography variant="caption" color="text.secondary">Pedido</Typography>
+                <Typography variant="body2" fontWeight={600}>{resendTarget.orderCode || '-'}</Typography>
+              </Box>
+              {resendTarget.buyerName && (
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Comprador</Typography>
+                  <Typography variant="body2">{resendTarget.buyerName}</Typography>
+                </Box>
+              )}
+              <Typography variant="body2" color="text.secondary">
+                Por qual canal deseja enviar o link do ticket?
+              </Typography>
+              <Stack direction="row" spacing={2} justifyContent="center" sx={{ pt: 1 }}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  startIcon={<EmailIcon />}
+                  onClick={() => reenviarPorCanal('email')}
+                  disabled={resendLoading || !resendTarget.email}
+                  fullWidth
+                >
+                  Email
+                </Button>
+                <Button
+                  variant="contained"
+                  color="success"
+                  startIcon={<WhatsAppIcon />}
+                  onClick={() => reenviarPorCanal('whatsapp')}
+                  disabled={resendLoading || !resendTarget.whatsapp}
+                  fullWidth
+                >
+                  WhatsApp
+                </Button>
+              </Stack>
+              {resendTarget.email && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  Email destino: <strong>{resendTarget.email}</strong>
+                </Typography>
+              )}
+              {resendTarget.whatsapp && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  WhatsApp destino: <strong>{resendTarget.whatsapp}</strong>
+                </Typography>
+              )}
+              {!resendTarget.email && !resendTarget.whatsapp && (
+                <Alert severity="warning">
+                  Comprador sem email nem WhatsApp em buyerData. Reenvio indisponível.
+                </Alert>
+              )}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={fecharDialogReenvio} disabled={resendLoading}>Fechar</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Dialog de Lote */}
       <Dialog open={dialogLoteAberto} onClose={handleFecharDialogLote} maxWidth="sm" fullWidth>

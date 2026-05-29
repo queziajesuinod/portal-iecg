@@ -1,4 +1,5 @@
 const registrationService = require('../services/registrationService');
+const ticketResendService = require('../services/ticketResendService');
 
 // Rotas administrativas
 async function listar(req, res) {
@@ -243,6 +244,26 @@ async function obterInfoCancelamento(req, res) {
   }
 }
 
+async function reenviarTicket(req, res) {
+  try {
+    const { id } = req.params;
+    const channel = String(req.body?.channel || '').toLowerCase().trim();
+    if (!channel) {
+      return res.status(400).json({ message: 'Campo "channel" obrigatorio ("email" ou "whatsapp")' });
+    }
+    if (channel !== 'email' && channel !== 'whatsapp') {
+      return res.status(400).json({ message: `Canal "${channel}" invalido. Use "email" ou "whatsapp".` });
+    }
+    const result = await ticketResendService.resend(id, channel, {
+      instanceName: req.body?.instanceName,
+    });
+    return res.status(200).json({ message: `Ticket reenviado via ${channel}`, ...result });
+  } catch (err) {
+    console.error('[registration] Erro ao reenviar ticket:', err.message);
+    return res.status(400).json({ message: err.message });
+  }
+}
+
 module.exports = {
   listar,
   listarPorEvento,
@@ -257,5 +278,6 @@ module.exports = {
   criarPagamento,
   criarPagamentoOffline,
   atualizarPagamentoOffline,
-  removerPagamento
+  removerPagamento,
+  reenviarTicket
 };

@@ -12,7 +12,6 @@ const teamsController = require('../controllers/teamsController');
 const requirePermission = require('../middlewares/requirePermission');
 const requireEventAccess = requirePermission(['EVENTS_ACESS', 'EVENTS_ACCESS', 'EVENTOS_LISTAR']);
 
-
 // Middleware de autenticação (assumindo que já existe)
 // const { authenticate } = require('../middlewares/auth');
 
@@ -53,6 +52,7 @@ router.get('/registrations/:id', registrationController.buscarPorId);
 router.get('/registrations/:id/cancel-info', registrationController.obterInfoCancelamento);
 router.post('/registrations/:id/recalculate-status', registrationController.recalcularStatus);
 router.post('/registrations/:id/cancel', registrationController.cancelar);
+router.post('/registrations/:id/resend-ticket', registrationController.reenviarTicket);
 router.post('/registrations/:id/payments', registrationController.criarPagamento);
 router.post('/registrations/:id/payments/offline', registrationController.criarPagamentoOffline);
 router.put('/registrations/:id/payments/:paymentId/offline', registrationController.atualizarPagamentoOffline);
