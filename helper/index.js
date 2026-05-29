@@ -157,9 +157,14 @@ async function cleanup(filePath) {
 }
 
 async function processOne(video) {
+  if (activeChannelId && video.channel?.id && video.channel.id !== activeChannelId) {
+    console.warn(`  ⚠️  pulando ${video.videoId}: canal ${video.channel.channelName} (${video.channel.id}) nao bate com filtro ${activeChannelId}`);
+    return;
+  }
   const t0 = Date.now();
   const counter = maxVideosTotal > 0 ? `[${processedCount + 1}/${maxVideosTotal}] ` : '';
-  console.log(`▶ ${counter}${video.videoId} | ${video.title?.slice(0, 60)}`);
+  const channelLog = video.channel?.channelName ? ` | ${video.channel.channelName}` : '';
+  console.log(`▶ ${counter}${video.videoId}${channelLog} | ${video.title?.slice(0, 50)}`);
   let audioPath = null;
   try {
     const dl = await downloadAudio(video.youtubeUrl, video.videoId);
@@ -226,8 +231,24 @@ async function main() {
       console.error('❌ Falha no setup interativo:', err.message);
       process.exit(1);
     }
-  } else if (!activeChannelLabel) {
-    activeChannelLabel = activeChannelId ? `canal ${activeChannelId}` : 'todos os canais';
+  } else if (activeChannelId) {
+    // Resolve o nome real do canal filtrado a partir do CHANNEL_ID do .env
+    try {
+      const channels = await listChannels();
+      const found = channels.find((c) => c.id === activeChannelId);
+      if (!found) {
+        console.error(`❌ CHANNEL_ID="${activeChannelId}" nao corresponde a nenhum canal sincronizado.`);
+        console.error('   Canais disponiveis:');
+        channels.forEach((c) => console.error(`     ${c.id}  →  ${c.channelName} (${c.pendingCount} pendentes)`));
+        process.exit(1);
+      }
+      activeChannelLabel = `${found.channelName} (${found.pendingCount} pendentes)`;
+    } catch (err) {
+      console.warn('⚠️  Nao consegui validar o CHANNEL_ID:', err.message);
+      activeChannelLabel = activeChannelLabel || `canal ${activeChannelId}`;
+    }
+  } else {
+    activeChannelLabel = 'todos os canais';
   }
 
   console.log('');
