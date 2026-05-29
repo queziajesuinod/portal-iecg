@@ -9,15 +9,20 @@ const webhookEmitter = require('../services/webhookEmitter');
 async function listar(req, res) {
   try {
     const {
-      status, channelId, published, category
+      status, channelId, published, category, speaker
     } = req.query;
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const offset = Number(req.query.offset) || 0;
 
+    const { Op } = require('sequelize');
     const where = {};
     if (status) where.status = status;
     if (published !== undefined) where.published = published === 'true';
     if (category) where.category = category;
+    if (speaker) {
+      const value = String(speaker).trim();
+      if (value) where.speaker = { [Op.iLike]: `%${value}%` };
+    }
 
     const include = [
       {
@@ -43,6 +48,40 @@ async function listar(req, res) {
     });
   } catch (err) {
     console.error('[videoTranscript] Erro ao listar:', err);
+    res.status(500).json({ message: err.message });
+  }
+}
+
+async function listarSpeakers(req, res) {
+  try {
+    const { Op, fn, col } = require('sequelize');
+    const search = String(req.query.search || '').trim();
+    const where = {
+      speaker: { [Op.ne]: null },
+    };
+    if (search) {
+      where.speaker = { [Op.and]: [{ [Op.ne]: null }, { [Op.iLike]: `%${search}%` }] };
+    }
+
+    const rows = await VideoTranscript.findAll({
+      attributes: [
+        'speaker',
+        [fn('COUNT', col('VideoTranscript.id')), 'count'],
+        [fn('MAX', col('VideoTranscript.processedAt')), 'lastProcessedAt'],
+      ],
+      where,
+      group: ['speaker'],
+      order: [[fn('COUNT', col('VideoTranscript.id')), 'DESC']],
+      raw: true,
+    });
+
+    res.status(200).json(rows.map((r) => ({
+      speaker: r.speaker,
+      count: Number(r.count) || 0,
+      lastProcessedAt: r.lastProcessedAt,
+    })));
+  } catch (err) {
+    console.error('[videoTranscript] Erro ao listar speakers:', err);
     res.status(500).json({ message: err.message });
   }
 }
@@ -462,6 +501,7 @@ async function rodarWorkerAgora(req, res) {
 
 module.exports = {
   listar,
+  listarSpeakers,
   buscarPorId,
   buscarProgresso,
   buscarProgressoBatch,

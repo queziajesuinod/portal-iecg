@@ -139,16 +139,25 @@ export const deleteVideo = async (videoId) => {
 };
 
 export const fetchTranscripts = async ({
-  status, channelId, published, limit = 50, offset = 0
+  status, channelId, published, speaker, limit = 50, offset = 0
 } = {}) => {
   const params = new URLSearchParams();
   if (status) params.set('status', status);
   if (channelId) params.set('channelId', channelId);
   if (published !== undefined) params.set('published', String(published));
+  if (speaker) params.set('speaker', speaker);
   params.set('limit', String(limit));
   params.set('offset', String(offset));
   const res = await fetch(`${BASE}/transcripts?${params.toString()}`, { headers: jsonHeaders() });
   return parseOrThrow(res, 'Falha ao carregar transcricoes');
+};
+
+export const fetchTranscriptSpeakers = async (search) => {
+  const params = new URLSearchParams();
+  if (search) params.set('search', search);
+  const qs = params.toString();
+  const res = await fetch(`${BASE}/transcripts/speakers${qs ? `?${qs}` : ''}`, { headers: jsonHeaders() });
+  return parseOrThrow(res, 'Falha ao carregar oradores');
 };
 
 export const fetchTranscriptById = async (id) => {
