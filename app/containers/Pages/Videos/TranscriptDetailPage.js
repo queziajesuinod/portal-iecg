@@ -158,6 +158,7 @@ const TranscriptDetailPage = () => {
   const [seoKeywordInput, setSeoKeywordInput] = useState('');
   const [seoSlug, setSeoSlug] = useState('');
   const [category, setCategory] = useState('');
+  const [speaker, setSpeaker] = useState('');
 
   const load = async () => {
     try {
@@ -174,6 +175,7 @@ const TranscriptDetailPage = () => {
       setSeoKeywords(Array.isArray(d.seoKeywords) ? d.seoKeywords : []);
       setSeoSlug(d.seoSlug || '');
       setCategory(d.category || '');
+      setSpeaker(d.speaker || '');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -219,6 +221,7 @@ const TranscriptDetailPage = () => {
         seoKeywords,
         seoSlug,
         category: category.trim() || null,
+        speaker: speaker.trim() || null,
       });
       setData((prev) => ({ ...prev, ...updated }));
       setFeedback({ severity: 'success', message: 'Salvo com sucesso.' });
@@ -250,6 +253,7 @@ const TranscriptDetailPage = () => {
       setSeoMetaDescription(updated.seoMetaDescription || '');
       setSeoKeywords(Array.isArray(updated.seoKeywords) ? updated.seoKeywords : []);
       setSeoSlug(updated.seoSlug || '');
+      if (updated.speaker) setSpeaker(updated.speaker);
       setFeedback({ severity: 'success', message: 'Resumo + SEO regenerados pelo Claude.' });
     } catch (err) {
       setFeedback({ severity: 'error', message: err.message });
@@ -387,7 +391,7 @@ const TranscriptDetailPage = () => {
             value={category}
             onChange={(_, value) => setCategory(String(value || '').slice(0, 80))}
             onInputChange={(_, value) => setCategory(String(value || '').slice(0, 80))}
-            sx={{ minWidth: 260 }}
+            sx={{ minWidth: 220 }}
             renderInput={(params) => (
               <TextField
                 {...params}
@@ -395,6 +399,15 @@ const TranscriptDetailPage = () => {
                 label="Categoria"
               />
             )}
+          />
+          <TextField
+            size="small"
+            label="Orador"
+            placeholder="Pr. Aldo Giovanni"
+            value={speaker}
+            onChange={(e) => setSpeaker(e.target.value.slice(0, 160))}
+            sx={{ minWidth: 220 }}
+            helperText="Quem está pregando neste vídeo"
           />
           <Box sx={{ flexGrow: 1 }} />
           <Button
