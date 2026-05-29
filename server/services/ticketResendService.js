@@ -210,10 +210,113 @@ async function resend(registrationId, channel, options = {}) {
   throw new Error(`Canal "${channel}" não suportado. Use "email" ou "whatsapp".`);
 }
 
+async function autoSendTicketEmailOnConfirmed(registrationId, { force = false } = {}) {
+  const registration = await Registration.findByPk(registrationId, {
+    include: [{ model: Event, as: 'event' }],
+  });
+  if (!registration) {
+    return { skipped: true, reason: 'registration_not_found' };
+  }
+  if (registration.paymentStatus !== 'confirmed') {
+    return { skipped: true, reason: `payment_status=${registration.paymentStatus}` };
+  }
+  if (!registration.orderCode) {
+    return { skipped: true, reason: 'no_order_code' };
+  }
+  if (!force && registration.ticketEmailSentAt) {
+    return { skipped: true, reason: 'already_sent', sentAt: registration.ticketEmailSentAt };
+  }
+
+  const buyer = registration.buyerData || {};
+  const recipient = buyer.buyer_email;
+  if (!recipient) {
+    await registration.update({
+      ticketEmailLastError: 'Comprador sem email em buyerData (auto-send pulado)',
+    });
+    return { skipped: true, reason: 'no_buyer_email' };
+  }
+
+  if (!emailService.isConfigured()) {
+    await registration.update({
+      ticketEmailLastError: 'SMTP nao configurado',
+    });
+    return { skipped: true, reason: 'smtp_not_configured' };
+  }
+
+  const ctx = {
+    buyerName: buyer.buyer_name,
+    eventName: registration.event?.title || registration.event?.name || 'evento',
+    eventDate: registration.event?.startDate || registration.event?.date,
+    orderCode: registration.orderCode,
+  };
+
+  try {
+    const result = await emailService.sendMail({
+      to: recipient,
+      subject: `🎟️ Seu ingresso — ${ctx.eventName}`,
+      html: buildEmailHtml(ctx),
+      text: buildEmailText(ctx),
+    });
+    await registration.update({
+      ticketEmailSentAt: new Date(),
+      ticketEmailLastError: null,
+    });
+    console.log(`[ticket-auto-email] enviado ${registration.orderCode} -> ${recipient} (messageId=${result.messageId})`);
+    return {
+      delivered: true,
+      recipient,
+      messageId: result.messageId,
+      orderCode: registration.orderCode,
+    };
+  } catch (err) {
+    const msg = err.message || String(err);
+    await registration.update({
+      ticketEmailLastError: msg.slice(0, 2000),
+    });
+    console.error(`[ticket-auto-email] falhou ${registration.orderCode}: ${msg}`);
+    throw err;
+  }
+}
+
+async function autoSendPendingTickets({ limit = 50 } = {}) {
+  const pending = await Registration.findAll({
+    where: {
+      paymentStatus: 'confirmed',
+      ticketEmailSentAt: null,
+    },
+    limit,
+    order: [['updatedAt', 'ASC']],
+    attributes: ['id', 'orderCode', 'updatedAt'],
+  });
+  if (!pending.length) {
+    return {
+      processed: 0, sent: 0, failed: 0, skipped: 0
+    };
+  }
+
+  let sent = 0;
+  let failed = 0;
+  let skipped = 0;
+  for (const r of pending) {
+    try {
+      const result = await autoSendTicketEmailOnConfirmed(r.id);
+      if (result.delivered) sent += 1;
+      else skipped += 1;
+    } catch (_) {
+      failed += 1;
+    }
+  }
+  return {
+    processed: pending.length, sent, failed, skipped,
+  };
+}
+
 module.exports = {
   resend,
   resendByWhatsapp,
   resendByEmail,
+  autoSendTicketEmailOnConfirmed,
+  autoSendPendingTickets,
   buildTicketLink,
   buildWhatsappMessage,
   buildEmailHtml,
