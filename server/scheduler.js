@@ -7,6 +7,7 @@ const ValidacaoMinisterioService = require('./services/validacaoMinisterioServic
 const celulaPresencaService = require('./services/celulaPresencaService');
 const videoTranscriptWorker = require('./services/videoTranscriptWorker');
 const channelSyncService = require('./services/channelSyncService');
+const ticketResendService = require('./services/ticketResendService');
 const { APP_TIMEZONE, todayDateOnly } = require('./utils/dateTime');
 
 const dispatching = new Set();
@@ -17,6 +18,8 @@ let ultimaValidacaoData = null;
 let ultimaAberturaReunioes = null;
 // Controle para sincronização automática dos canais do YouTube (1x na semana)
 let ultimaSincronizacaoYoutubeData = null;
+let ultimaTicketEmailResgateAt = 0;
+const TICKET_EMAIL_RESGATE_INTERVAL_MS = Number(process.env.TICKET_EMAIL_RESGATE_INTERVAL_MS || 300000);
 
 async function tickCampaigns() {
   const now = new Date();
@@ -173,6 +176,20 @@ async function tickYoutubeChannelSync() {
   }
 }
 
+async function tickTicketEmailResgate() {
+  const now = Date.now();
+  if (now - ultimaTicketEmailResgateAt < TICKET_EMAIL_RESGATE_INTERVAL_MS) return;
+  ultimaTicketEmailResgateAt = now;
+  try {
+    const result = await ticketResendService.autoSendPendingTickets({ limit: 50 });
+    if (result.processed > 0) {
+      console.log(`[Scheduler] ticket-email resgate: processados=${result.processed} enviados=${result.sent} falhas=${result.failed} pulados=${result.skipped}`);
+    }
+  } catch (err) {
+    console.error('[Scheduler] Erro no resgate de tickets:', err.message);
+  }
+}
+
 async function tick() {
   try {
     await Promise.all([
@@ -182,6 +199,7 @@ async function tick() {
       tickCelulas(),
       tickVideoTranscription(),
       tickYoutubeChannelSync(),
+      tickTicketEmailResgate(),
     ]);
   } catch (err) {
     console.error('[Scheduler] Erro no tick:', err.message);

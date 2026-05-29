@@ -128,12 +128,38 @@ module.exports = (sequelize) => {
       defaultValue: null,
       comment: 'Registro de webhooks já enviados: { "registration.updated:confirmed": "2026-05-04T..." }'
     },
+    ticketEmailSentAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    ticketEmailLastError: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
   }, {
     sequelize,
     modelName: 'Registration',
     tableName: 'Registrations',
     schema: process.env.DB_SCHEMA || 'dev_iecg',
     timestamps: true,
+    hooks: {
+      afterUpdate: (instance) => {
+        try {
+          const previous = instance._previousDataValues || {};
+          const wasConfirmed = previous.paymentStatus === 'confirmed';
+          const isConfirmed = instance.paymentStatus === 'confirmed';
+          if (!wasConfirmed && isConfirmed && !instance.ticketEmailSentAt) {
+            setImmediate(() => {
+              const ticketResend = require('../services/ticketResendService');
+              ticketResend.autoSendTicketEmailOnConfirmed(instance.id)
+                .catch((err) => console.error(`[ticket-auto-email] erro ao processar ${instance.id}: ${err.message}`));
+            });
+          }
+        } catch (err) {
+          console.error('[Registration.afterUpdate] erro no hook ticket-email:', err.message);
+        }
+      },
+    },
   });
 
   return Registration;
