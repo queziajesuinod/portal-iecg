@@ -124,9 +124,9 @@ export const cancelarInscricao = (id) => fetchWithAuth(`${API_URL}/api/admin/eve
   method: 'POST',
 });
 
-export const reenviarTicket = (id, channel) => fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}/resend-ticket`, {
+export const reenviarTicket = (id, channel, opts = {}) => fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}/resend-ticket`, {
   method: 'POST',
-  body: JSON.stringify({ channel }),
+  body: JSON.stringify({ channel, ...opts }),
 });
 
 export const obterInfoCancelamentoInscricao = (id) => fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}/cancel-info`);
