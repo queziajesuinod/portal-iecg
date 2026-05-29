@@ -58,6 +58,7 @@ router.post('/transcripts/:id/summarize', express.json(), controller.regerarResu
 router.post('/transcripts/:id/webhook/resend', express.json(), controller.reenviarWebhook);
 
 router.post('/videos/:videoId/audio', uploadAudioMiddleware, controller.uploadAudio);
+router.get('/videos/:videoId/audio', controller.baixarAudio);
 router.post('/videos/:videoId/transcribe', express.json(), controller.transcribeUploadedAudio);
 
 router.get('/worker/status', express.json(), controller.statusWorker);
