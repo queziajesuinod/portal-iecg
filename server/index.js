@@ -142,6 +142,8 @@ const requireVideosAdmin = requirePermission(['VIDEOS_ADMIN']);
 app.use('/api/admin/youtube/channels', authMiddleware, requireVideosAdmin, require('./routers/youtubeChannelRoutes'));
 app.use('/api/admin/youtube', authMiddleware, requireVideosAdmin, require('./routers/youtubeVideoRoutes'));
 app.use('/api/admin/youtube', authMiddleware, requireVideosAdmin, require('./routers/videoTranscriptRoutes'));
+// Helper de download (auth via X-Helper-Token, sem JWT admin)
+app.use('/api/helper/youtube', require('./routers/youtubeHelperRoutes'));
 // Webhook Cielo (pública - sem autenticação)
 app.use('/api/webhooks', require('./routers/webhookRoutes'));
 // Webhook Evolution API (pública - sem autenticação)
