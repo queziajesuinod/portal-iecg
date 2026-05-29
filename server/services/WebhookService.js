@@ -38,12 +38,18 @@ class WebhookService {
     const form = new FormData();
     form.append('event', event);
     form.append('source', 'portal-iecg');
-    form.append('payload', JSON.stringify(payload), {
-      filename: 'payload.json',
-      contentType: 'application/json',
-    });
+    // Envia payload em campos de body (texto), nao como arquivo binario.
+    form.append('payload', JSON.stringify(payload));
+    form.append('title', payload?.video?.title || '');
+    form.append('summary', payload?.transcript?.summary || '');
+    form.append('seoMetaTitle', payload?.transcript?.seoMetaTitle || '');
+    form.append('seoMetaDescription', payload?.transcript?.seoMetaDescription || '');
+    form.append('seoSlug', payload?.transcript?.seoSlug || '');
+    form.append('seoKeywords', JSON.stringify(payload?.transcript?.seoKeywords || []));
 
     const { audioPath } = transport;
+    let audioAttached = false;
+    let audioSize = 0;
     if (audioPath) {
       const stat = await fsp.stat(audioPath);
       if (stat.size > 0) {
@@ -52,8 +58,14 @@ class WebhookService {
           contentType: transport.contentType || 'audio/mpeg',
           knownLength: stat.size,
         });
+        audioAttached = true;
+        audioSize = stat.size;
       }
     }
+
+    console.log(
+      `[webhook-multipart] event=${event} hook=${hook.id} audioAttached=${audioAttached} audioSize=${audioSize} path=${audioPath || 'none'}`
+    );
 
     await axios.post(hook.url, form, {
       headers: {

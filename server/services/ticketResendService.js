@@ -4,6 +4,8 @@ const evolutionApiService = require('./evolutionApiService');
 const emailService = require('./emailService');
 
 const TIMEZONE = 'America/Campo_Grande';
+let ticketEmailColumnsCheck = null;
+let ticketEmailColumnsWarned = false;
 
 function getTicketBaseUrl() {
   return (process.env.TICKET_BASE_URL || 'https://start.iecg.com.br/ticket').replace(/\/+$/, '');
@@ -115,6 +117,23 @@ function buildEmailText({
 
 const ALLOWED_RESEND_STATUSES = ['confirmed', 'partial'];
 
+async function hasTicketEmailColumns() {
+  if (ticketEmailColumnsCheck !== null) return ticketEmailColumnsCheck;
+  try {
+    const queryInterface = Registration.sequelize.getQueryInterface();
+    const schema = process.env.DB_SCHEMA || 'dev_iecg';
+    const description = await queryInterface.describeTable({ tableName: 'Registrations', schema });
+    ticketEmailColumnsCheck = Boolean(description.ticketEmailSentAt && description.ticketEmailLastError);
+  } catch (err) {
+    ticketEmailColumnsCheck = false;
+    if (!ticketEmailColumnsWarned) {
+      ticketEmailColumnsWarned = true;
+      console.warn(`[ticket-auto-email] nao foi possivel validar colunas de ticket: ${err.message}`);
+    }
+  }
+  return ticketEmailColumnsCheck;
+}
+
 async function loadRegistration(registrationId) {
   const registration = await Registration.findByPk(registrationId, {
     include: [{ model: Event, as: 'event' }],
@@ -211,6 +230,14 @@ async function resend(registrationId, channel, options = {}) {
 }
 
 async function autoSendTicketEmailOnConfirmed(registrationId, { force = false } = {}) {
+  if (!(await hasTicketEmailColumns())) {
+    if (!ticketEmailColumnsWarned) {
+      ticketEmailColumnsWarned = true;
+      console.warn('[ticket-auto-email] colunas ticketEmailSentAt/ticketEmailLastError ausentes no banco; auto-send desativado ate aplicar migration');
+    }
+    return { skipped: true, reason: 'missing_ticket_email_columns' };
+  }
+
   const registration = await Registration.findByPk(registrationId, {
     include: [{ model: Event, as: 'event' }],
   });
@@ -279,6 +306,16 @@ async function autoSendTicketEmailOnConfirmed(registrationId, { force = false } 
 }
 
 async function autoSendPendingTickets({ limit = 50 } = {}) {
+  if (!(await hasTicketEmailColumns())) {
+    if (!ticketEmailColumnsWarned) {
+      ticketEmailColumnsWarned = true;
+      console.warn('[ticket-auto-email] colunas ticketEmailSentAt/ticketEmailLastError ausentes no banco; resgate pendente desativado ate aplicar migration');
+    }
+    return {
+      processed: 0, sent: 0, failed: 0, skipped: 0
+    };
+  }
+
   const pending = await Registration.findAll({
     where: {
       paymentStatus: 'confirmed',
