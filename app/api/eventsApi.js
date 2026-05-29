@@ -14,6 +14,14 @@ const resolveApiUrl = () => {
 
 const API_URL = resolveApiUrl();
 
+const sanitizeQueryParams = (params = {}) => Object.entries(params).reduce((acc, [key, value]) => {
+  if (value === undefined || value === null || value === '') return acc;
+  const asString = typeof value === 'string' ? value.trim() : value;
+  if (asString === '' || asString === 'undefined' || asString === 'null') return acc;
+  acc[key] = asString;
+  return acc;
+}, {});
+
 // ===== EVENTOS =====
 
 export const listarEventos = (params = {}) => {
@@ -108,12 +116,12 @@ export const deletarCampo = (id) => fetchWithAuth(`${API_URL}/api/admin/events/f
 export const listarInscricoes = () => fetchWithAuth(`${API_URL}/api/admin/events/registrations`);
 
 export const listarInscricoesPorEvento = (eventId, params = {}) => {
-  const query = new URLSearchParams(params).toString();
+  const query = new URLSearchParams(sanitizeQueryParams(params)).toString();
   const url = `${API_URL}/api/admin/events/${eventId}/registrations${query ? `?${query}` : ''}`;
   return fetchWithAuth(url);
 };
 export const listarInscritosConfirmadosPorEvento = (eventId, params = {}) => {
-  const query = new URLSearchParams(params).toString();
+  const query = new URLSearchParams(sanitizeQueryParams(params)).toString();
   const url = `${API_URL}/api/admin/events/${eventId}/registration-attendees/confirmed${query ? `?${query}` : ''}`;
   return fetchWithAuth(url);
 };

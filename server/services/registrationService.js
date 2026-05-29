@@ -1108,6 +1108,7 @@ function normalizeFilterValue(value) {
   if (value == null) return null;
   const normalized = String(value).trim();
   if (!normalized) return null;
+  if (['undefined', 'null', 'nan'].includes(normalized.toLowerCase())) return null;
   if (/^buyerData\.(buyer_name|buyer_document)$/i.test(normalized)) return null;
   return normalized;
 }
