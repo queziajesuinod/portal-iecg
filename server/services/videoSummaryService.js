@@ -36,8 +36,12 @@ const TOOL_DEFINITION = {
         type: 'string',
         description: 'URL-friendly slug do post: lowercase, sem acentos, palavras separadas por hífen, máximo 80 caracteres.',
       },
+      speaker: {
+        type: 'string',
+        description: 'Nome do pregador/orador do video. Extraia preferencialmente do titulo (ex: "Pr. Aldo", "Pra. Mariana", "Bispo Joao"). Se nao aparecer no titulo, infira do conteudo da transcricao se possivel. Se realmente nao for identificavel, deixe vazio. Mantenha o titulo eclesiastico ("Pr.", "Pra.", "Bp.", "Rev.", "Diac.") junto do nome.',
+      },
     },
-    required: ['summary', 'bulletPoints', 'metaTitle', 'metaDescription', 'keywords', 'slug'],
+    required: ['summary', 'bulletPoints', 'metaTitle', 'metaDescription', 'keywords', 'slug', 'speaker'],
   },
 };
 
@@ -96,6 +100,15 @@ SEO
 - "metaDescription": resumo conciso e atrativo para o snippet do Google. Entre 140 e 160 caracteres. Termine com algo que convide o clique sem ser sensacionalista.
 - "keywords": array com 5 a 8 palavras-chave/expressões relevantes em português, todas minúsculas, sem hashtags. Misture termos amplos ("fé cristã", "evangelho") com específicos do conteúdo do vídeo (nome do livro bíblico, tema do sermão, ex: "salmo 23", "bom pastor", "pregação sobre confiança").
 - "slug": versão URL-friendly do título do post (lowercase, sem acentos, palavras separadas por hífen, máximo 80 caracteres). Ex.: "o-bom-pastor-confianca-em-deus".
+
+═══════════════════════════════════════════════════════════════════
+IDENTIFICAÇÃO DO ORADOR (SPEAKER)
+═══════════════════════════════════════════════════════════════════
+- Priorize extrair o nome do orador do TÍTULO do vídeo (geralmente vem como "Pr. Aldo", "Pra. Mariana", "Bp. João").
+- Mantenha o título eclesiástico junto: "Pr. Aldo Giovanni", "Pra. Ana Carolina", "Bp. Edir".
+- Se o título não traz, verifique se a transcrição apresenta a pessoa ("hoje recebemos o Pr. Silas", "vamos ouvir a Pra. Inês").
+- Se ainda não for identificável, retorne string vazia "" — NUNCA invente nome.
+- Use apenas o NOME do orador, sem o tema ou contexto extra. Errado: "Pr. Aldo - Sobre família". Certo: "Pr. Aldo".
 
 ═══════════════════════════════════════════════════════════════════
 FORMATO TÉCNICO DA RESPOSTA
@@ -188,6 +201,7 @@ async function generateSummary(transcript, { title, language = 'pt', model = DEF
       ? parsed.keywords.filter((k) => typeof k === 'string' && k.trim()).map((k) => k.trim().toLowerCase())
       : [],
     slug: typeof parsed.slug === 'string' ? parsed.slug.trim().toLowerCase().slice(0, 200) : null,
+    speaker: typeof parsed.speaker === 'string' ? parsed.speaker.trim().slice(0, 160) || null : null,
     usage: response.usage,
     model: response.model,
   };

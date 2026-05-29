@@ -212,6 +212,11 @@ async function atualizar(req, res) {
     } else if (typeof req.body.category === 'string') {
       allowed.category = req.body.category.trim().slice(0, 80);
     }
+    if (req.body.speaker === null || req.body.speaker === '') {
+      allowed.speaker = null;
+    } else if (typeof req.body.speaker === 'string') {
+      allowed.speaker = req.body.speaker.trim().slice(0, 160);
+    }
 
     const wasPublished = transcript.published;
     await transcript.update(allowed);
@@ -327,6 +332,7 @@ function buildPublishedPayload({
       seoKeywords: transcript.seoKeywords,
       seoSlug: transcript.seoSlug,
       category: transcript.category,
+      speaker: transcript.speaker,
       processedAt: transcript.processedAt,
     },
   };
