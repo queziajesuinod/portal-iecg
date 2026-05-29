@@ -32,6 +32,7 @@ function buildPublicVideoPayload(transcript, { includeFullTranscript = false } =
     source: transcript.source,
     processedAt: transcript.processedAt,
     category: transcript.category || null,
+    speaker: transcript.speaker || null,
     seo: {
       metaTitle: transcript.seoMetaTitle || video?.title || null,
       metaDescription: transcript.seoMetaDescription,
@@ -43,7 +44,7 @@ function buildPublicVideoPayload(transcript, { includeFullTranscript = false } =
 }
 
 async function listPublished({
-  channelId, search, category, limit = 20, offset = 0, all = false
+  channelId, search, category, speaker, limit = 20, offset = 0, all = false
 } = {}) {
   const safeLimit = Math.max(1, Math.min(Number(limit) || 20, 100));
   const safeOffset = Math.max(0, Number(offset) || 0);
@@ -51,6 +52,10 @@ async function listPublished({
   const where = { published: true, status: 'done' };
   if (category) {
     where.category = category;
+  }
+  if (speaker) {
+    const value = String(speaker).trim();
+    if (value) where.speaker = { [Op.iLike]: `%${value}%` };
   }
 
   const videoWhere = {};
@@ -122,6 +127,31 @@ async function listCategories() {
     .filter(Boolean);
 }
 
+async function listSpeakers() {
+  const { fn, col } = require('sequelize');
+  const rows = await VideoTranscript.findAll({
+    where: {
+      published: true,
+      status: 'done',
+      speaker: { [Op.ne]: null },
+    },
+    attributes: [
+      'speaker',
+      [fn('COUNT', col('VideoTranscript.id')), 'count'],
+    ],
+    group: ['speaker'],
+    order: [[fn('COUNT', col('VideoTranscript.id')), 'DESC']],
+    raw: true,
+  });
+
+  return rows
+    .map((r) => ({
+      speaker: String(r.speaker || '').trim(),
+      count: Number(r.count) || 0,
+    }))
+    .filter((r) => r.speaker);
+}
+
 async function getByVideoId(videoId, { includeTranscript = true } = {}) {
   const transcript = await VideoTranscript.findOne({
     where: { published: true, status: 'done' },
@@ -172,5 +202,6 @@ module.exports = {
   getBySlug,
   listChannels,
   listCategories,
+  listSpeakers,
   buildPublicVideoPayload,
 };

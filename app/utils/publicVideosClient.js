@@ -22,11 +22,12 @@ async function parseOrThrow(res, fallbackMessage) {
 }
 
 export const fetchPublicVideos = async ({
-  channelId, category, search, limit = 20, offset = 0, all = false
+  channelId, category, speaker, search, limit = 20, offset = 0, all = false
 } = {}) => {
   const params = new URLSearchParams();
   if (channelId) params.set('channelId', channelId);
   if (category) params.set('category', category);
+  if (speaker) params.set('speaker', speaker);
   if (search) params.set('search', search);
   if (all) {
     params.set('all', 'true');
@@ -51,4 +52,9 @@ export const fetchPublicChannels = async () => {
 export const fetchPublicCategories = async () => {
   const res = await fetch(`${BASE}/categories`);
   return parseOrThrow(res, 'Falha ao carregar categorias');
+};
+
+export const fetchPublicSpeakers = async () => {
+  const res = await fetch(`${BASE}/speakers`);
+  return parseOrThrow(res, 'Falha ao carregar oradores');
 };

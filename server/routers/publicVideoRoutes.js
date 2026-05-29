@@ -5,6 +5,7 @@ const router = Router();
 
 router.get('/channels', controller.listarCanais);
 router.get('/categories', controller.listarCategorias);
+router.get('/speakers', controller.listarSpeakers);
 router.get('/slug/:slug', controller.buscarPorSlug);
 router.get('/', controller.listar);
 router.get('/:videoId', controller.buscarPorVideoId);
