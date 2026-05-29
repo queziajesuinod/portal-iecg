@@ -1,4 +1,4 @@
-const { Op } = require('sequelize');
+const { Op, literal } = require('sequelize');
 const {
   Celula, Campus, Member, User, ApeloDirecionadoCelula, MemberCargo
 } = require('../models');
@@ -451,8 +451,17 @@ const CelulaService = {
     }
     if (telefone) {
       const sanitizedPhone = sanitizeCelular(telefone);
-      clauses.push({ phone: sanitizedPhone });
-      clauses.push({ whatsapp: sanitizedPhone });
+      // Compara dígitos puros (remove ddd/55/parênteses/hífens dos 2 lados)
+      // e usa LIKE com últimos 11 dígitos pra ser tolerante a 55 do código do país.
+      if (sanitizedPhone && /^\d+$/.test(sanitizedPhone)) {
+        const last11 = sanitizedPhone.slice(-11);
+        clauses.push(
+          literal(`regexp_replace(COALESCE("Member"."phone", ''), '\\D', '', 'g') LIKE '%${last11}'`)
+        );
+        clauses.push(
+          literal(`regexp_replace(COALESCE("Member"."whatsapp", ''), '\\D', '', 'g') LIKE '%${last11}'`)
+        );
+      }
     }
 
     const leader = await Member.findOne({
