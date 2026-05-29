@@ -44,8 +44,9 @@ async function generateAndSaveSummary(transcript, video) {
     transcript.seoMetaDescription = result.metaDescription;
     transcript.seoKeywords = result.keywords;
     transcript.seoSlug = slugify(result.slug || video.title || '');
+    if (result.speaker) transcript.speaker = result.speaker;
     await transcript.save();
-    console.log(`[summary] gerado para "${video.title}" (${result.bulletPoints.length} bullets, ${result.keywords.length} keywords, slug="${transcript.seoSlug}")`);
+    console.log(`[summary] gerado para "${video.title}" (speaker="${transcript.speaker || '?'}", ${result.bulletPoints.length} bullets, ${result.keywords.length} keywords, slug="${transcript.seoSlug}")`);
     return result;
   } catch (err) {
     console.error('[summary] erro ao gerar resumo:', err.message);
@@ -198,6 +199,7 @@ async function regenerateSummary(transcriptId) {
   transcript.seoMetaDescription = result.metaDescription;
   transcript.seoKeywords = result.keywords;
   transcript.seoSlug = slugify(result.slug || transcript.video?.title || '');
+  if (result.speaker) transcript.speaker = result.speaker;
   await transcript.save();
   return transcript;
 }

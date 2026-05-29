@@ -43,6 +43,7 @@ function buildJsonPayload({ video, transcript }) {
       seoKeywords: transcript.seoKeywords,
       seoSlug: transcript.seoSlug,
       category: transcript.category,
+      speaker: transcript.speaker,
       processedAt: transcript.processedAt,
     },
   };

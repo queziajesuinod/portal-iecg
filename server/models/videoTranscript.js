@@ -95,6 +95,10 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(80),
         allowNull: true,
       },
+      speaker: {
+        type: DataTypes.STRING(160),
+        allowNull: true,
+      },
     },
     {
       sequelize,
