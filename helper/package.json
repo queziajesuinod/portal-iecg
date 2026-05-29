@@ -1,0 +1,17 @@
+{
+  "name": "iecg-helper",
+  "version": "1.0.0",
+  "description": "Helper local pra baixar audios do YouTube e subir pro Portal IECG",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "once": "node index.js --once"
+  },
+  "dependencies": {
+    "axios": "^1.13.5",
+    "dotenv": "^16.4.7",
+    "form-data": "^4.0.5",
+    "youtube-dl-exec": "^3.0.10"
+  }
+}
