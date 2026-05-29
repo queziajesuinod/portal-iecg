@@ -332,6 +332,70 @@ function buildPublishedPayload({
   };
 }
 
+async function baixarAudio(req, res) {
+  try {
+    const { videoId } = req.params;
+    const video = await YoutubeVideo.findByPk(videoId);
+    if (!video) return res.status(404).json({ message: 'Video nao encontrado' });
+    if (!video.audioPath) {
+      return res.status(404).json({ message: 'Este video nao tem audio anexado' });
+    }
+
+    const fs = require('fs');
+    const path = require('path');
+
+    if (!fs.existsSync(video.audioPath)) {
+      return res.status(410).json({ message: 'Arquivo de audio foi removido do servidor (provavelmente apos publicacao)' });
+    }
+
+    const stat = fs.statSync(video.audioPath);
+    const ext = path.extname(video.audioPath).toLowerCase();
+    const mimeMap = {
+      '.mp3': 'audio/mpeg',
+      '.m4a': 'audio/mp4',
+      '.wav': 'audio/wav',
+      '.ogg': 'audio/ogg',
+      '.opus': 'audio/opus',
+      '.flac': 'audio/flac',
+      '.aac': 'audio/aac',
+    };
+    const contentType = mimeMap[ext] || 'audio/mpeg';
+
+    const filename = `${video.videoId}${ext}`;
+    const isDownload = req.query.download === '1' || req.query.download === 'true';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', String(stat.size));
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader(
+      'Content-Disposition',
+      `${isDownload ? 'attachment' : 'inline'}; filename="${filename}"`
+    );
+
+    const { range } = req.headers;
+    if (range) {
+      const m = /bytes=(\d+)-(\d*)/.exec(range);
+      if (m) {
+        const start = Number(m[1]);
+        const end = m[2] ? Number(m[2]) : stat.size - 1;
+        if (Number.isFinite(start) && start < stat.size && end >= start) {
+          res.status(206);
+          res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`);
+          res.setHeader('Content-Length', String(end - start + 1));
+          fs.createReadStream(video.audioPath, { start, end }).pipe(res);
+          return null;
+        }
+      }
+    }
+
+    fs.createReadStream(video.audioPath).pipe(res);
+    return null;
+  } catch (err) {
+    console.error('[videoTranscript] erro ao servir audio:', err);
+    return res.status(500).json({ message: err.message });
+  }
+}
+
 async function reenviarWebhook(req, res) {
   try {
     const result = await transcriptionService.resendWebhook(req.params.id);
@@ -396,6 +460,7 @@ module.exports = {
   buscarProgresso,
   buscarProgressoBatch,
   uploadAudio,
+  baixarAudio,
   transcribeUploadedAudio,
   atualizar,
   remover,
