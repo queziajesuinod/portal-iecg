@@ -4,7 +4,6 @@ import {
   Alert,
   Box,
   Button,
-  Checkbox,
   Chip,
   CircularProgress,
   IconButton,
@@ -29,7 +28,6 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
-import TextSnippetIcon from '@mui/icons-material/TextSnippet';
 import EditIcon from '@mui/icons-material/Edit';
 import CancelIcon from '@mui/icons-material/Cancel';
 import ReplayIcon from '@mui/icons-material/Replay';
@@ -43,7 +41,6 @@ import { PapperBlock } from 'dan-components';
 import {
   fetchChannelVideos,
   syncChannelVideos,
-  enqueueTranscripts,
   uploadVideoAudio,
   transcribeVideoNow,
   reactivateFailedTranscript,
@@ -137,13 +134,10 @@ const VideosPage = () => {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState(null);
   const [feedback, setFeedback] = useState(null);
-  const [selected, setSelected] = useState(new Set());
   const [transcribingId, setTranscribingId] = useState(null);
-  const [enqueueing, setEnqueueing] = useState(false);
   const [showIgnored, setShowIgnored] = useState(false);
 
   const hasFilledTranscript = (video) => Boolean(video.transcript?.hasText);
-  const isLocked = (video) => Boolean(video.ignored) || hasFilledTranscript(video);
 
   const handleToggleIgnored = async (video) => {
     try {
@@ -341,75 +335,10 @@ const VideosPage = () => {
       await deleteVideo(video.id);
       setFeedback({ severity: 'success', message: 'Vídeo excluído com sucesso.' });
       setVideos((prev) => prev.filter((v) => v.id !== video.id));
-      setSelected((prev) => {
-        const next = new Set(prev);
-        next.delete(video.id);
-        return next;
-      });
       setTotal((prev) => Math.max(0, prev - 1));
     } catch (err) {
       setFeedback({ severity: 'error', message: err.message });
     }
-  };
-
-  const handleEnqueueSelected = async () => {
-    if (selected.size === 0) return;
-    try {
-      setEnqueueing(true);
-      const transcribableIds = videos
-        .filter((video) => selected.has(video.id) && !hasFilledTranscript(video))
-        .map((video) => video.id);
-
-      if (transcribableIds.length === 0) {
-        setFeedback({
-          severity: 'info',
-          message: 'Os videos selecionados ja possuem transcricao. Use revisar/editar.',
-        });
-        setEnqueueing(false);
-        return;
-      }
-
-      const result = await enqueueTranscripts(transcribableIds);
-      const ok = result.enqueued.filter((e) => !e.error).length;
-      const fail = result.enqueued.filter((e) => e.error).length;
-      setFeedback({
-        severity: fail === 0 ? 'success' : 'warning',
-        message: `${ok} vídeo(s) enfileirado(s)${fail ? `, ${fail} com erro` : ''}.`,
-      });
-      setSelected(new Set());
-      loadVideos();
-    } catch (err) {
-      setFeedback({ severity: 'error', message: err.message });
-    } finally {
-      setEnqueueing(false);
-    }
-  };
-
-  const toggleSelected = (id) => {
-    const video = videos.find((item) => item.id === id);
-    if (video && hasFilledTranscript(video)) return;
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const selectableVideos = videos.filter((video) => !isLocked(video));
-  const allSelected = selectableVideos.length > 0 && selectableVideos.every((v) => selected.has(v.id));
-  const toggleAll = () => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (allSelected) {
-        videos.forEach((v) => next.delete(v.id));
-      } else {
-        videos.forEach((v) => {
-          if (!hasFilledTranscript(v)) next.add(v.id);
-        });
-      }
-      return next;
-    });
   };
 
   return (
@@ -464,32 +393,12 @@ const VideosPage = () => {
           </Alert>
         )}
 
-        {selected.size > 0 && (
-          <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
-            <Alert severity="info" sx={{ flexGrow: 1 }}>
-              {selected.size} vídeo(s) selecionado(s).
-            </Alert>
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={enqueueing ? <CircularProgress size={18} color="inherit" /> : <TextSnippetIcon />}
-              onClick={handleEnqueueSelected}
-              disabled={enqueueing}
-            >
-              {enqueueing ? 'Enfileirando...' : 'Enfileirar para transcrever'}
-            </Button>
-          </Stack>
-        )}
-
         {error && <Alert severity="error">{error}</Alert>}
 
         <TableContainer component={Paper} variant="outlined">
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell padding="checkbox">
-                  <Checkbox checked={allSelected} indeterminate={!allSelected && selected.size > 0} onChange={toggleAll} />
-                </TableCell>
                 <TableCell>Vídeo</TableCell>
                 <TableCell>Publicado</TableCell>
                 <TableCell>Duração</TableCell>
@@ -500,14 +409,14 @@ const VideosPage = () => {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                  <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
                     <CircularProgress />
                   </TableCell>
                 </TableRow>
               )}
               {!loading && videos.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                  <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
                     <Typography color="text.secondary">
                       Nenhum vídeo. Clique em &quot;Sincronizar com o YouTube&quot;.
                     </Typography>
@@ -518,16 +427,8 @@ const VideosPage = () => {
                 <TableRow
                   key={video.id}
                   hover
-                  selected={selected.has(video.id)}
                   sx={video.ignored ? { opacity: 0.55, bgcolor: 'grey.50' } : undefined}
                 >
-                  <TableCell padding="checkbox">
-                    <Checkbox
-                      checked={selected.has(video.id)}
-                      onChange={() => toggleSelected(video.id)}
-                      disabled={isLocked(video)}
-                    />
-                  </TableCell>
                   <TableCell>
                     <Stack direction="row" spacing={1} alignItems="center">
                       {video.thumbnailUrl && (

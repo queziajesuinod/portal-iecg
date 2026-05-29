@@ -94,15 +94,6 @@ export const syncChannelVideos = async (channelId, maxPages = 5) => {
   return parseOrThrow(res, 'Falha ao sincronizar vídeos');
 };
 
-export const enqueueTranscripts = async (videoIds) => {
-  const res = await fetch(`${BASE}/transcripts/enqueue`, {
-    method: 'POST',
-    headers: jsonHeaders(),
-    body: JSON.stringify({ videoIds }),
-  });
-  return parseOrThrow(res, 'Falha ao enfileirar vídeos');
-};
-
 export const uploadVideoAudio = async (videoId, file) => {
   const form = new FormData();
   form.append('audio', file);
