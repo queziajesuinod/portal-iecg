@@ -28,7 +28,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { Helmet } from 'react-helmet';
 import { useHistory } from 'react-router-dom';
 import { PapperBlock } from 'dan-components';
-import { fetchTranscripts, fetchChannels } from '../../../utils/youtubeClient';
+import { fetchTranscripts, fetchChannels, fetchTranscriptSpeakers } from '../../../utils/youtubeClient';
 
 function StatusChip({ status }) {
   const map = {
@@ -54,7 +54,9 @@ const TranscriptsListPage = () => {
   const [rowsPerPage, setRowsPerPage] = useState(20);
   const [statusFilter, setStatusFilter] = useState('');
   const [channelFilter, setChannelFilter] = useState('');
+  const [speakerFilter, setSpeakerFilter] = useState('');
   const [channels, setChannels] = useState([]);
+  const [speakers, setSpeakers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -65,6 +67,7 @@ const TranscriptsListPage = () => {
       const data = await fetchTranscripts({
         status: statusFilter || undefined,
         channelId: channelFilter || undefined,
+        speaker: speakerFilter || undefined,
         limit: rowsPerPage,
         offset: page * rowsPerPage,
       });
@@ -79,11 +82,12 @@ const TranscriptsListPage = () => {
 
   useEffect(() => {
     fetchChannels().then(setChannels).catch(() => {});
+    fetchTranscriptSpeakers().then(setSpeakers).catch(() => {});
   }, []);
 
   useEffect(() => {
     load();
-  }, [page, rowsPerPage, statusFilter, channelFilter]);
+  }, [page, rowsPerPage, statusFilter, channelFilter, speakerFilter]);
 
   return (
     <div>
@@ -112,6 +116,21 @@ const TranscriptsListPage = () => {
               ))}
             </Select>
           </FormControl>
+          <FormControl size="small" sx={{ minWidth: 220 }}>
+            <InputLabel>Orador</InputLabel>
+            <Select label="Orador" value={speakerFilter} onChange={(e) => { setSpeakerFilter(e.target.value); setPage(0); }}>
+              <MenuItem value="">Todos</MenuItem>
+              {speakers.map((s) => (
+                <MenuItem key={s.speaker} value={s.speaker}>
+                  {s.speaker}
+                  {' '}
+                  <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                    ({s.count})
+                  </Typography>
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
           <Box sx={{ flexGrow: 1 }} />
           <IconButton onClick={load}><RefreshIcon /></IconButton>
         </Stack>
@@ -124,6 +143,7 @@ const TranscriptsListPage = () => {
               <TableRow>
                 <TableCell>Video</TableCell>
                 <TableCell>Canal</TableCell>
+                <TableCell>Orador</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Fonte</TableCell>
                 <TableCell>Publicado</TableCell>
@@ -134,14 +154,14 @@ const TranscriptsListPage = () => {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                  <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
                     <CircularProgress />
                   </TableCell>
                 </TableRow>
               )}
               {!loading && items.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                  <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
                     <Typography color="text.secondary">Nenhuma transcrição encontrada.</Typography>
                   </TableCell>
                 </TableRow>
@@ -162,6 +182,9 @@ const TranscriptsListPage = () => {
                   </TableCell>
                   <TableCell>
                     <Typography variant="caption">{t.video?.channel?.channelName || t.video?.channel?.ownerName || '-'}</Typography>
+                  </TableCell>
+                  <TableCell>
+                    {t.speaker ? <Chip size="small" variant="outlined" label={t.speaker} /> : <Typography variant="caption" color="text.disabled">-</Typography>}
                   </TableCell>
                   <TableCell><StatusChip status={t.status} /></TableCell>
                   <TableCell>

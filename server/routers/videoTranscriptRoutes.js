@@ -47,6 +47,7 @@ function uploadAudioMiddleware(req, res, next) {
 }
 
 router.get('/transcripts', express.json(), controller.listar);
+router.get('/transcripts/speakers', express.json(), controller.listarSpeakers);
 router.get('/transcripts/progress', express.json(), controller.buscarProgressoBatch);
 router.get('/transcripts/:id/progress', express.json(), controller.buscarProgresso);
 router.get('/transcripts/:id', express.json(), controller.buscarPorId);
