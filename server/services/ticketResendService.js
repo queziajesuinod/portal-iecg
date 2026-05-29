@@ -85,7 +85,7 @@ function buildEmailHtml({
       </p>
     </td></tr>
     <tr><td style="padding:16px 28px;background:#f9fafb;color:#888;font-size:12px;text-align:center;">
-      Portal IECG — Igreja Evangélica Cristo Glória
+      Portal IECG — Igreja Evangélica Comunidade Global
     </td></tr>
   </table>
 </body></html>`.trim();
@@ -133,7 +133,7 @@ async function resendByWhatsapp(registrationId, { instanceName } = {}) {
 
   const message = buildWhatsappMessage({
     buyerName: buyer.buyer_name,
-    eventName: registration.event?.name || 'evento',
+    eventName: registration.event?.title || registration.event?.name || 'evento',
     eventDate: registration.event?.startDate || registration.event?.date,
     orderCode: registration.orderCode,
   });
@@ -172,7 +172,7 @@ async function resendByEmail(registrationId) {
 
   const ctx = {
     buyerName: buyer.buyer_name,
-    eventName: registration.event?.name || 'evento',
+    eventName: registration.event?.title || registration.event?.name || 'evento',
     eventDate: registration.event?.startDate || registration.event?.date,
     orderCode: registration.orderCode,
   };
