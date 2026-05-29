@@ -1562,15 +1562,17 @@ function EventDetails() {
                                 <VisibilityIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
-                            <Tooltip title="Reenviar ticket por email ou WhatsApp">
-                              <IconButton
-                                size="small"
-                                color="success"
-                                onClick={() => abrirDialogReenvio(inscricao)}
-                              >
-                                <SendIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
+                            {['confirmed', 'partial'].includes(inscricao.paymentStatus) && (
+                              <Tooltip title="Reenviar ticket por email ou WhatsApp">
+                                <IconButton
+                                  size="small"
+                                  color="success"
+                                  onClick={() => abrirDialogReenvio(inscricao)}
+                                >
+                                  <SendIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
                             {!bannableStatuses.has(inscricao.paymentStatus) && (
                               <Tooltip title="Cancelar inscrição">
                                 <IconButton

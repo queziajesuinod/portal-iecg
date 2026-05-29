@@ -113,12 +113,20 @@ function buildEmailText({
   ].join('\n');
 }
 
+const ALLOWED_RESEND_STATUSES = ['confirmed', 'partial'];
+
 async function loadRegistration(registrationId) {
   const registration = await Registration.findByPk(registrationId, {
     include: [{ model: Event, as: 'event' }],
   });
   if (!registration) throw new Error('Inscrição não encontrada');
   if (!registration.orderCode) throw new Error('Inscrição sem orderCode (não há link de ticket)');
+  if (!ALLOWED_RESEND_STATUSES.includes(registration.paymentStatus)) {
+    throw new Error(
+      `Reenvio de ticket bloqueado: pagamento "${registration.paymentStatus}". `
+      + 'Só inscrições com status "confirmed" ou "partial" podem reenviar.'
+    );
+  }
   return registration;
 }
 
