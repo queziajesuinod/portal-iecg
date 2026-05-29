@@ -28,6 +28,7 @@ import {
   fetchPublicVideos,
   fetchPublicChannels,
   fetchPublicCategories,
+  fetchPublicSpeakers,
 } from '../../../utils/publicVideosClient';
 
 function formatDuration(seconds) {
@@ -46,8 +47,10 @@ const VideoLibraryPage = () => {
   const [searchDebounced, setSearchDebounced] = useState('');
   const [channelId, setChannelId] = useState('');
   const [category, setCategory] = useState('');
+  const [speaker, setSpeaker] = useState('');
   const [channels, setChannels] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [speakers, setSpeakers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -59,6 +62,7 @@ const VideoLibraryPage = () => {
   useEffect(() => {
     fetchPublicChannels().then(setChannels).catch(() => {});
     fetchPublicCategories().then(setCategories).catch(() => {});
+    fetchPublicSpeakers().then(setSpeakers).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -69,6 +73,7 @@ const VideoLibraryPage = () => {
         const data = await fetchPublicVideos({
           channelId: channelId || undefined,
           category: category || undefined,
+          speaker: speaker || undefined,
           search: searchDebounced || undefined,
           all: true,
         });
@@ -81,7 +86,7 @@ const VideoLibraryPage = () => {
       }
     };
     load();
-  }, [searchDebounced, channelId, category]);
+  }, [searchDebounced, channelId, category, speaker]);
 
   return (
     <div>
@@ -132,6 +137,25 @@ const VideoLibraryPage = () => {
               <MenuItem value="">Todas as categorias</MenuItem>
               {categories.map((c) => (
                 <MenuItem key={c} value={c}>{c}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 220 }}>
+            <InputLabel>Orador</InputLabel>
+            <Select
+              label="Orador"
+              value={speaker}
+              onChange={(e) => { setSpeaker(e.target.value); }}
+            >
+              <MenuItem value="">Todos os oradores</MenuItem>
+              {speakers.map((s) => (
+                <MenuItem key={s.speaker} value={s.speaker}>
+                  {s.speaker}
+                  {' '}
+                  <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                    ({s.count})
+                  </Typography>
+                </MenuItem>
               ))}
             </Select>
           </FormControl>
@@ -215,13 +239,23 @@ const VideoLibraryPage = () => {
                         >
                           {video.title}
                         </Typography>
-                        {video.category && (
-                          <Chip
-                            size="small"
-                            label={video.category}
-                            sx={{ height: 18, '& .MuiChip-label': { px: 0.75, fontSize: 10 } }}
-                          />
-                        )}
+                        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                          {video.speaker && (
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              label={video.speaker}
+                              sx={{ height: 18, '& .MuiChip-label': { px: 0.75, fontSize: 10 } }}
+                            />
+                          )}
+                          {video.category && (
+                            <Chip
+                              size="small"
+                              label={video.category}
+                              sx={{ height: 18, '& .MuiChip-label': { px: 0.75, fontSize: 10 } }}
+                            />
+                          )}
+                        </Stack>
                       </CardContent>
                     </CardActionArea>
                   </Card>

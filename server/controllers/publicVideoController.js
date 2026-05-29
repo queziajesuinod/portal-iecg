@@ -3,12 +3,13 @@ const publicVideoService = require('../services/publicVideoService');
 async function listar(req, res) {
   try {
     const {
-      channelId, search, category, limit, offset, all
+      channelId, search, category, speaker, limit, offset, all
     } = req.query;
     const result = await publicVideoService.listPublished({
       channelId,
       search,
       category,
+      speaker,
       limit,
       offset,
       all: all === 'true'
@@ -24,6 +25,15 @@ async function listarCategorias(req, res) {
   try {
     const categories = await publicVideoService.listCategories();
     res.status(200).json(categories);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+}
+
+async function listarSpeakers(req, res) {
+  try {
+    const speakers = await publicVideoService.listSpeakers();
+    res.status(200).json(speakers);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -70,4 +80,5 @@ module.exports = {
   buscarPorSlug,
   listarCanais,
   listarCategorias,
+  listarSpeakers,
 };
