@@ -44,6 +44,7 @@ HELPER_TOKENS=abcd1234...,outro-token-se-quiser
 ```
 
 Pode ser qualquer string longa, gerada com:
+
 ```bash
 node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
 ```
@@ -53,17 +54,71 @@ ter helpers em maquinas diferentes (uma por liderança, ex).
 
 ## Como rodar
 
-**Loop continuo** (mais comum):
+**Modo interativo** (default — vai perguntar canal e limite):
+
 ```powershell
 npm start
 ```
 
-A cada 60s verifica se tem video pendente. Quando acha, baixa e sobe.
+```text
+🤝 IECG Helper — download de audio do YouTube → portal
+   portal: https://portal.iecg.com.br
+   polling: 60s | max por ciclo: 1 | bitrate: 96kbps
+
+Canais disponíveis:
+  [1] IECG (12 pendentes)
+  [2] Juventude Relevante (8 pendentes)
+  [3] (sem pendentes) Outro Canal
+  [0] Todos os canais
+
+Escolha (1-3 ou 0 pra todos) [0]: 1
+Máximo de vídeos a baixar nesta sessão (Enter = ilimitado): 5
+
+   canal: IECG (12 pendentes)
+   max total: 5
+   modo: loop (Ctrl+C pra sair)
+
+[01:34:01] 12 pendente(s), processando 1...
+▶ [1/5] p9YFXRVicaw | O Fundamento Da Comunidade
+  ↓ baixado: 41.32 MB em 28.4s
+  ↑ enviado pro portal em 35.2s total ✅
+```
+
+**Modo automatico** (pra cron/service — sem perguntas):
+
+Configura no `.env`:
+
+```env
+CHANNEL_ID=uuid-do-canal-aqui
+MAX_VIDEOS_TOTAL=0
+```
+
+Ai roda:
+
+```powershell
+npm start
+```
 
 **Rodar 1 vez e sair** (util pra teste ou agendar via Task Scheduler):
+
 ```powershell
 npm run once
 ```
+
+> Modo `--once` ignora o seletor interativo — usa CHANNEL_ID do .env
+> ou roda em todos os canais.
+
+## Como descobrir o CHANNEL_ID
+
+Roda o helper em modo interativo uma vez. Os canais aparecem na lista
+com nome + contagem. Pega o ID via API:
+
+```powershell
+curl -H "X-Helper-Token: SEU_TOKEN" https://portal.iecg.com.br/api/helper/youtube/channels
+```
+
+Retorna JSON com `id` (UUID interno, esse e o CHANNEL_ID), `channelId`
+(do YouTube), `channelName`, `pendingCount`.
 
 ## Rodar automaticamente no Windows
 
@@ -92,6 +147,7 @@ PM2 sobe sozinho no boot e reinicia se cair.
 ### Opcao C — Linux/macOS (systemd)
 
 Cria `/etc/systemd/system/iecg-helper.service`:
+
 ```ini
 [Unit]
 Description=IECG Helper - download de audio do YouTube
@@ -116,7 +172,7 @@ journalctl -u iecg-helper -f
 
 ## O que aparece no terminal
 
-```
+```text
 🤝 IECG Helper — download de audio do YouTube → portal
    portal: https://portal.iecg.com.br
    polling: 60s | max por ciclo: 1 | bitrate: 96kbps
@@ -137,7 +193,7 @@ journalctl -u iecg-helper -f
 
 ## Como funciona
 
-```
+```text
 [seu PC com helper rodando]
    ↓ poll a cada 60s
 [Portal] GET /api/helper/youtube/pending-audios

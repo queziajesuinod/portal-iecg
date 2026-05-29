@@ -24,6 +24,7 @@ const upload = multer({
 
 router.use(helperAuth);
 
+router.get('/channels', express.json(), controller.listarChannelsComPendencias);
 router.get('/pending-audios', express.json(), controller.listarVideosPendentes);
 router.post('/videos/:videoId/audio', upload.single('audio'), controller.uploadAudioHelper);
 

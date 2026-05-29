@@ -6,11 +6,13 @@ const transcriptionService = require('../services/transcriptionService');
 async function listarVideosPendentes(req, res) {
   try {
     const limit = Math.min(Number(req.query.limit) || 20, 100);
+    const where = { ignored: false, audioPath: null };
+    if (req.query.channelId) {
+      where.youtubeChannelId = req.query.channelId;
+    }
+
     const videos = await YoutubeVideo.findAll({
-      where: {
-        ignored: false,
-        audioPath: null,
-      },
+      where,
       include: [
         { model: YoutubeChannel, as: 'channel' },
         {
@@ -24,25 +26,59 @@ async function listarVideosPendentes(req, res) {
       limit,
     });
 
-    const items = videos
-      .filter((v) => v.transcript || true)
-      .map((v) => ({
-        id: v.id,
-        videoId: v.videoId,
-        title: v.title,
-        publishedAt: v.publishedAt,
-        durationSeconds: v.durationSeconds,
-        youtubeUrl: `https://www.youtube.com/watch?v=${v.videoId}`,
-        channel: v.channel ? {
-          channelId: v.channel.channelId,
-          channelName: v.channel.channelName,
-        } : null,
-        transcriptStatus: v.transcript?.status || null,
-      }));
+    const items = videos.map((v) => ({
+      id: v.id,
+      videoId: v.videoId,
+      title: v.title,
+      publishedAt: v.publishedAt,
+      durationSeconds: v.durationSeconds,
+      youtubeUrl: `https://www.youtube.com/watch?v=${v.videoId}`,
+      channel: v.channel ? {
+        id: v.channel.id,
+        channelId: v.channel.channelId,
+        channelName: v.channel.channelName,
+      } : null,
+      transcriptStatus: v.transcript?.status || null,
+    }));
 
     res.status(200).json({ items, count: items.length });
   } catch (err) {
     console.error('[helper] erro ao listar pendentes:', err);
+    res.status(500).json({ message: err.message });
+  }
+}
+
+async function listarChannelsComPendencias(req, res) {
+  try {
+    const { sequelize } = require('../models');
+    const channels = await YoutubeChannel.findAll({
+      attributes: [
+        'id',
+        'channelId',
+        'channelName',
+        'ownerName',
+        [
+          sequelize.literal(`(
+            SELECT COUNT(*)::int FROM "${process.env.DB_SCHEMA || 'dev_iecg'}"."youtube_videos" v
+            WHERE v."youtubeChannelId" = "YoutubeChannel"."id"
+              AND v."ignored" = false
+              AND v."audioPath" IS NULL
+          )`),
+          'pendingCount',
+        ],
+      ],
+      order: [['channelName', 'ASC']],
+    });
+
+    res.status(200).json(channels.map((c) => ({
+      id: c.id,
+      channelId: c.channelId,
+      channelName: c.channelName,
+      ownerName: c.ownerName,
+      pendingCount: Number(c.get('pendingCount')) || 0,
+    })));
+  } catch (err) {
+    console.error('[helper] erro ao listar channels:', err);
     res.status(500).json({ message: err.message });
   }
 }
@@ -105,5 +141,6 @@ async function uploadAudioHelper(req, res) {
 
 module.exports = {
   listarVideosPendentes,
+  listarChannelsComPendencias,
   uploadAudioHelper,
 };
