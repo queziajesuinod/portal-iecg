@@ -244,6 +244,58 @@ async function obterInfoCancelamento(req, res) {
   }
 }
 
+async function editarInscricao(req, res) {
+  try {
+    const { id } = req.params;
+    const { Registration } = require('../models');
+    const registration = await Registration.findByPk(id);
+    if (!registration) return res.status(404).json({ message: 'Inscrição não encontrada' });
+
+    const allowed = {};
+    if (req.body.buyerData && typeof req.body.buyerData === 'object') {
+      allowed.buyerData = { ...(registration.buyerData || {}), ...req.body.buyerData };
+    }
+    if (Number.isInteger(req.body.quantity) && req.body.quantity > 0) {
+      allowed.quantity = req.body.quantity;
+    }
+    if (typeof req.body.paymentMethod === 'string') {
+      allowed.paymentMethod = req.body.paymentMethod.trim() || null;
+    }
+
+    if (Object.keys(allowed).length === 0) {
+      return res.status(400).json({ message: 'Nenhum campo válido pra atualizar' });
+    }
+
+    await registration.update(allowed);
+    return res.status(200).json(registration);
+  } catch (err) {
+    console.error('[registration] Erro ao editar inscricao:', err.message);
+    return res.status(400).json({ message: err.message });
+  }
+}
+
+async function editarParticipante(req, res) {
+  try {
+    const { id, attendeeId } = req.params;
+    const { RegistrationAttendee } = require('../models');
+    const attendee = await RegistrationAttendee.findOne({
+      where: { id: attendeeId, registrationId: id },
+    });
+    if (!attendee) return res.status(404).json({ message: 'Participante não encontrado nesta inscrição' });
+
+    if (!req.body.attendeeData || typeof req.body.attendeeData !== 'object') {
+      return res.status(400).json({ message: 'Campo "attendeeData" obrigatório (object)' });
+    }
+
+    const merged = { ...(attendee.attendeeData || {}), ...req.body.attendeeData };
+    await attendee.update({ attendeeData: merged });
+    return res.status(200).json(attendee);
+  } catch (err) {
+    console.error('[registration] Erro ao editar participante:', err.message);
+    return res.status(400).json({ message: err.message });
+  }
+}
+
 async function reenviarTicket(req, res) {
   try {
     const { id } = req.params;
@@ -279,5 +331,7 @@ module.exports = {
   criarPagamentoOffline,
   atualizarPagamentoOffline,
   removerPagamento,
-  reenviarTicket
+  reenviarTicket,
+  editarInscricao,
+  editarParticipante
 };
