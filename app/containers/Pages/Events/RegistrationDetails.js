@@ -52,7 +52,9 @@ import {
   atualizarPagamentoOfflineInscricao,
   deletarPagamentoInscricao,
   recalcularStatusInscricao,
-  obterInfoCancelamentoInscricao
+  obterInfoCancelamentoInscricao,
+  atualizarInscricao,
+  atualizarParticipante
 } from '../../../api/eventsApi';
 import { getPaymentStatusChipSx, getPaymentStatusLabel } from '../../../constants/paymentStatus';
 import { getStoredPermissions } from '../../../utils/permissions';
@@ -90,6 +92,15 @@ function RegistrationDetails() {
   const [dialogPagamentoOffline, setDialogPagamentoOffline] = useState(false);
   const [pagamentoOfflineEdicao, setPagamentoOfflineEdicao] = useState(null);
   const [recalculatingPayment, setRecalculatingPayment] = useState(false);
+
+  const [editBuyerDialogOpen, setEditBuyerDialogOpen] = useState(false);
+  const [editBuyerForm, setEditBuyerForm] = useState({});
+  const [editBuyerSaving, setEditBuyerSaving] = useState(false);
+
+  const [editAttendeeDialogOpen, setEditAttendeeDialogOpen] = useState(false);
+  const [editAttendeeTarget, setEditAttendeeTarget] = useState(null);
+  const [editAttendeeForm, setEditAttendeeForm] = useState({});
+  const [editAttendeeSaving, setEditAttendeeSaving] = useState(false);
   const [formPagamento, setFormPagamento] = useState({
     amount: '',
     paymentOptionId: '',
@@ -148,6 +159,68 @@ function RegistrationDetails() {
         </TableBody>
       </Table>
     );
+  };
+
+  const abrirEdicaoComprador = () => {
+    const fields = getFieldRows(inscricao?.buyerData, inscricao?.buyerLabeledFields);
+    const seed = {};
+    fields.forEach((f) => { seed[f.fieldName] = f.value ?? ''; });
+    if (inscricao?.buyerData) {
+      Object.keys(inscricao.buyerData).forEach((k) => {
+        if (!(k in seed)) seed[k] = inscricao.buyerData[k] ?? '';
+      });
+    }
+    setEditBuyerForm(seed);
+    setEditBuyerDialogOpen(true);
+  };
+
+  const salvarEdicaoComprador = async () => {
+    try {
+      setEditBuyerSaving(true);
+      await atualizarInscricao(id, { buyerData: editBuyerForm });
+      setNotification({ type: 'success', message: 'Dados do comprador atualizados.' });
+      setEditBuyerDialogOpen(false);
+      await carregarInscricao();
+    } catch (err) {
+      setNotification({ type: 'error', message: err.message || 'Erro ao atualizar comprador.' });
+    } finally {
+      setEditBuyerSaving(false);
+    }
+  };
+
+  const abrirEdicaoParticipante = (attendee) => {
+    const fields = getFieldRows(attendee.attendeeData, attendee.labeledData);
+    const seed = {};
+    fields.forEach((f) => { seed[f.fieldName] = f.value ?? ''; });
+    if (attendee.attendeeData) {
+      Object.keys(attendee.attendeeData).forEach((k) => {
+        if (!(k in seed)) seed[k] = attendee.attendeeData[k] ?? '';
+      });
+    }
+    setEditAttendeeTarget(attendee);
+    setEditAttendeeForm(seed);
+    setEditAttendeeDialogOpen(true);
+  };
+
+  const salvarEdicaoParticipante = async () => {
+    if (!editAttendeeTarget?.id) return;
+    try {
+      setEditAttendeeSaving(true);
+      await atualizarParticipante(id, editAttendeeTarget.id, { attendeeData: editAttendeeForm });
+      setNotification({ type: 'success', message: `Inscrito #${editAttendeeTarget.attendeeNumber} atualizado.` });
+      setEditAttendeeDialogOpen(false);
+      setEditAttendeeTarget(null);
+      await carregarInscricao();
+    } catch (err) {
+      setNotification({ type: 'error', message: err.message || 'Erro ao atualizar participante.' });
+    } finally {
+      setEditAttendeeSaving(false);
+    }
+  };
+
+  const fieldLabel = (key, labeledFields) => {
+    const labelled = (labeledFields || []).find((f) => f.fieldName === key);
+    return labelled?.label || key;
   };
 
   const carregarInscricao = useCallback(async () => {
@@ -559,9 +632,16 @@ function RegistrationDetails() {
           <Grid item xs={12} md={6}>
             <Card>
               <CardContent>
-                <Typography variant="h6" component="h2" gutterBottom>
-                  Dados do Comprador
-                </Typography>
+                <Box display="flex" alignItems="center" justifyContent="space-between">
+                  <Typography variant="h6" component="h2" gutterBottom>
+                    Dados do Comprador
+                  </Typography>
+                  <Tooltip title="Editar dados do comprador">
+                    <IconButton size="small" color="primary" onClick={abrirEdicaoComprador}>
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
                 <Divider style={{ marginBottom: 16 }} />
                 {renderFieldTable(buyerFields)}
               </CardContent>
@@ -778,9 +858,16 @@ function RegistrationDetails() {
                       <Grid item xs={12} md={6} key={attendee.id}>
                         <Card variant="outlined">
                           <CardContent>
-                            <Typography variant="subtitle1" component="h3" gutterBottom>
-                              Inscrito #{attendee.attendeeNumber}
-                            </Typography>
+                            <Box display="flex" alignItems="center" justifyContent="space-between">
+                              <Typography variant="subtitle1" component="h3" gutterBottom>
+                                Inscrito #{attendee.attendeeNumber}
+                              </Typography>
+                              <Tooltip title="Editar dados deste inscrito">
+                                <IconButton size="small" color="primary" onClick={() => abrirEdicaoParticipante(attendee)}>
+                                  <EditIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            </Box>
                             <Divider style={{ marginBottom: 8 }} />
                             {renderFieldTable(getFieldRows(attendee.attendeeData, attendee.labeledData))}
                           </CardContent>
@@ -1027,6 +1114,97 @@ function RegistrationDetails() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Dialog
+        open={editBuyerDialogOpen}
+        onClose={() => !editBuyerSaving && setEditBuyerDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Editar dados do comprador</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ pt: 1 }}>
+            {Object.keys(editBuyerForm).map((key) => (
+              <Grid item xs={12} sm={6} key={key}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label={fieldLabel(key, inscricao?.buyerLabeledFields)}
+                  value={editBuyerForm[key] ?? ''}
+                  onChange={(e) => setEditBuyerForm((prev) => ({ ...prev, [key]: e.target.value }))}
+                  disabled={editBuyerSaving}
+                />
+              </Grid>
+            ))}
+            {Object.keys(editBuyerForm).length === 0 && (
+              <Grid item xs={12}>
+                <Typography variant="body2" color="textSecondary">
+                  Sem campos para editar.
+                </Typography>
+              </Grid>
+            )}
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditBuyerDialogOpen(false)} disabled={editBuyerSaving}>
+            Cancelar
+          </Button>
+          <Button
+            variant="contained"
+            onClick={salvarEdicaoComprador}
+            disabled={editBuyerSaving || Object.keys(editBuyerForm).length === 0}
+          >
+            {editBuyerSaving ? 'Salvando...' : 'Salvar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={editAttendeeDialogOpen}
+        onClose={() => !editAttendeeSaving && setEditAttendeeDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Editar inscrito {editAttendeeTarget?.attendeeNumber ? `#${editAttendeeTarget.attendeeNumber}` : ''}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ pt: 1 }}>
+            {Object.keys(editAttendeeForm).map((key) => (
+              <Grid item xs={12} sm={6} key={key}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label={fieldLabel(key, editAttendeeTarget?.labeledData)}
+                  value={editAttendeeForm[key] ?? ''}
+                  onChange={(e) => setEditAttendeeForm((prev) => ({ ...prev, [key]: e.target.value }))}
+                  disabled={editAttendeeSaving}
+                />
+              </Grid>
+            ))}
+            {Object.keys(editAttendeeForm).length === 0 && (
+              <Grid item xs={12}>
+                <Typography variant="body2" color="textSecondary">
+                  Sem campos para editar.
+                </Typography>
+              </Grid>
+            )}
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditAttendeeDialogOpen(false)} disabled={editAttendeeSaving}>
+            Cancelar
+          </Button>
+          <Button
+            variant="contained"
+            onClick={salvarEdicaoParticipante}
+            disabled={editAttendeeSaving || Object.keys(editAttendeeForm).length === 0}
+          >
+            {editAttendeeSaving ? 'Salvando...' : 'Salvar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Notification
         message={notification.message}
         type={notification.type}

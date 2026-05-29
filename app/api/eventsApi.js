@@ -129,6 +129,16 @@ export const reenviarTicket = (id, channel, opts = {}) => fetchWithAuth(`${API_U
   body: JSON.stringify({ channel, ...opts }),
 });
 
+export const atualizarInscricao = (id, payload) => fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}`, {
+  method: 'PUT',
+  body: JSON.stringify(payload),
+});
+
+export const atualizarParticipante = (registrationId, attendeeId, payload) => fetchWithAuth(`${API_URL}/api/admin/events/registrations/${registrationId}/attendees/${attendeeId}`, {
+  method: 'PUT',
+  body: JSON.stringify(payload),
+});
+
 export const obterInfoCancelamentoInscricao = (id) => fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}/cancel-info`);
 
 export const criarPagamentoInscricao = (id, dados) => fetchWithAuth(`${API_URL}/api/public/events/registrations/${id}/payments`, {

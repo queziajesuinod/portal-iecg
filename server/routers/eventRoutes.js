@@ -53,6 +53,8 @@ router.get('/registrations/:id/cancel-info', registrationController.obterInfoCan
 router.post('/registrations/:id/recalculate-status', registrationController.recalcularStatus);
 router.post('/registrations/:id/cancel', registrationController.cancelar);
 router.post('/registrations/:id/resend-ticket', registrationController.reenviarTicket);
+router.put('/registrations/:id', registrationController.editarInscricao);
+router.put('/registrations/:id/attendees/:attendeeId', registrationController.editarParticipante);
 router.post('/registrations/:id/payments', registrationController.criarPagamento);
 router.post('/registrations/:id/payments/offline', registrationController.criarPagamentoOffline);
 router.put('/registrations/:id/payments/:paymentId/offline', registrationController.atualizarPagamentoOffline);
