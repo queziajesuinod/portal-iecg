@@ -930,9 +930,11 @@ function EventDetails() {
     cancelarInscricaoMutation.mutate(cancelTarget.id);
   };
 
+  const WHATSAPP_INSTANCES = ['IECG', 'IECG_2'];
   const [resendDialogOpen, setResendDialogOpen] = useState(false);
   const [resendTarget, setResendTarget] = useState(null);
   const [resendLoading, setResendLoading] = useState(false);
+  const [resendInstance, setResendInstance] = useState(WHATSAPP_INSTANCES[0]);
 
   const abrirDialogReenvio = (inscricao) => {
     setResendTarget({
@@ -942,6 +944,7 @@ function EventDetails() {
       whatsapp: inscricao.buyerData?.buyer_whatsapp || inscricao.buyerData?.buyer_phone || '',
       buyerName: inscricao.buyerData?.buyer_name || '',
     });
+    setResendInstance(WHATSAPP_INSTANCES[0]);
     setResendDialogOpen(true);
   };
 
@@ -955,8 +958,12 @@ function EventDetails() {
     if (!resendTarget?.id) return;
     try {
       setResendLoading(true);
-      await reenviarTicket(resendTarget.id, channel);
-      setNotification(`Ticket reenviado por ${channel === 'email' ? 'email' : 'WhatsApp'}.`);
+      const opts = channel === 'whatsapp' ? { instanceName: resendInstance } : undefined;
+      await reenviarTicket(resendTarget.id, channel, opts);
+      const canalLabel = channel === 'email'
+        ? 'email'
+        : `WhatsApp (instância ${resendInstance})`;
+      setNotification(`Ticket reenviado por ${canalLabel}.`);
       setResendDialogOpen(false);
       setResendTarget(null);
     } catch (err) {
@@ -1832,6 +1839,22 @@ function EventDetails() {
               <Typography variant="body2" color="text.secondary">
                 Por qual canal deseja enviar o link do ticket?
               </Typography>
+              {resendTarget.whatsapp && (
+                <FormControl size="small" fullWidth>
+                  <InputLabel id="resend-instance-label">Instância WhatsApp</InputLabel>
+                  <Select
+                    labelId="resend-instance-label"
+                    label="Instância WhatsApp"
+                    value={resendInstance}
+                    onChange={(e) => setResendInstance(e.target.value)}
+                    disabled={resendLoading}
+                  >
+                    {WHATSAPP_INSTANCES.map((inst) => (
+                      <MenuItem key={inst} value={inst}>{inst}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
               <Stack direction="row" spacing={2} justifyContent="center" sx={{ pt: 1 }}>
                 <Button
                   variant="contained"
