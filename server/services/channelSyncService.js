@@ -1,4 +1,4 @@
-const { YoutubeChannel, YoutubeVideo, VideoTranscript } = require('../models');
+const { YoutubeChannel, YoutubeVideo } = require('../models');
 const youtubeApi = require('./youtubeApiService');
 
 async function syncSingleChannel(channel, { maxPages = 5 } = {}) {
@@ -12,14 +12,10 @@ async function syncSingleChannel(channel, { maxPages = 5 } = {}) {
   let updated = 0;
 
   for (const video of result.items) {
-    const existing = await YoutubeVideo.findOne({
-      where: { videoId: video.videoId },
-      include: [{ model: VideoTranscript, as: 'transcript', attributes: ['id', 'transcript'] }],
-    });
+    const existing = await YoutubeVideo.findOne({ where: { videoId: video.videoId } });
     if (existing) {
-      const hasTranscriptText = Boolean(existing.transcript?.transcript?.trim());
       const updatePayload = { ...video };
-      if (hasTranscriptText) {
+      if (existing.ignored) {
         delete updatePayload.ignored;
         delete updatePayload.ignoreReason;
       }

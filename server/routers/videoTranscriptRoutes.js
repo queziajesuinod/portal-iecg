@@ -61,6 +61,8 @@ router.post('/transcripts/:id/webhook/resend', express.json(), controller.reenvi
 router.post('/videos/:videoId/audio', uploadAudioMiddleware, controller.uploadAudio);
 router.get('/videos/:videoId/audio', controller.baixarAudio);
 router.post('/videos/:videoId/transcribe', express.json(), controller.transcribeUploadedAudio);
+router.post('/videos/:videoId/transcript/reactivate', express.json(), controller.reativarTranscricao);
+router.post('/videos/:videoId/transcript/queue', express.json(), controller.enfileirarParaHelper);
 
 router.get('/worker/status', express.json(), controller.statusWorker);
 router.post('/worker/run-once', express.json(), controller.rodarWorkerAgora);

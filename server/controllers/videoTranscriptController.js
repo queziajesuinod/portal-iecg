@@ -472,6 +472,26 @@ async function cancelar(req, res) {
   }
 }
 
+async function reativarTranscricao(req, res) {
+  try {
+    const result = await transcriptionService.reactivateFailedTranscriptByVideoId(req.params.videoId);
+    res.status(200).json(result);
+  } catch (err) {
+    console.error('[videoTranscript] Erro ao reativar:', err.message);
+    res.status(400).json({ message: err.message });
+  }
+}
+
+async function enfileirarParaHelper(req, res) {
+  try {
+    const result = await transcriptionService.markTranscriptPending(req.params.videoId);
+    res.status(200).json(result);
+  } catch (err) {
+    console.error('[videoTranscript] Erro ao enfileirar:', err.message);
+    res.status(400).json({ message: err.message });
+  }
+}
+
 async function regerarResumo(req, res) {
   try {
     const transcript = await transcriptionService.regenerateSummary(req.params.id);
@@ -511,6 +531,8 @@ module.exports = {
   atualizar,
   remover,
   cancelar,
+  reativarTranscricao,
+  enfileirarParaHelper,
   regerarResumo,
   reenviarWebhook,
   statusWorker,

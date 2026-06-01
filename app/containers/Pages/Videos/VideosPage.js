@@ -31,6 +31,7 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import EditIcon from '@mui/icons-material/Edit';
 import CancelIcon from '@mui/icons-material/Cancel';
 import ReplayIcon from '@mui/icons-material/Replay';
+import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
 import DeleteIcon from '@mui/icons-material/Delete';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -44,6 +45,7 @@ import {
   uploadVideoAudio,
   transcribeVideoNow,
   reactivateFailedTranscript,
+  queueVideoForHelper,
   deleteVideo,
   cancelTranscript,
   fetchTranscriptProgressBatch,
@@ -336,6 +338,19 @@ const VideosPage = () => {
     }
   };
 
+  const handleQueueForHelper = async (video) => {
+    if (video.transcript?.status === 'done') {
+      if (!window.confirm(`"${video.title}" já tem transcrição completa. Deseja re-enfileirar para o helper mesmo assim?`)) return;
+    }
+    try {
+      const transcript = await queueVideoForHelper(video.id);
+      setVideos((prev) => prev.map((v) => (v.id === video.id ? { ...v, transcript } : v)));
+      setFeedback({ severity: 'success', message: 'Vídeo enfileirado. O helper vai baixar o áudio na próxima rodada.' });
+    } catch (err) {
+      setFeedback({ severity: 'error', message: err.message });
+    }
+  };
+
   const handleDeleteVideo = async (video) => {
     if (!window.confirm('Excluir este vídeo da base? Esta ação também remove a transcrição vinculada.')) return;
     try {
@@ -476,6 +491,13 @@ const VideosPage = () => {
                     <TranscriptBadge transcript={video.transcript} />
                   </TableCell>
                   <TableCell align="right">
+                    {!video.ignored && !video.audioPath && video.transcript?.status !== 'pending' && video.transcript?.status !== 'processing' && (
+                      <Tooltip title="Enfileirar para o helper (helper baixa o áudio do YouTube automaticamente)">
+                        <IconButton size="small" color="secondary" onClick={() => handleQueueForHelper(video)}>
+                          <PlaylistAddIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
                     {!video.ignored && !hasFilledTranscript(video) && !video.audioPath && (
                       <Tooltip title="Anexar arquivo de audio (MP3, M4A, WAV) — Whisper local transcreve em seguida">
                         <span>

@@ -113,6 +113,14 @@ export const transcribeVideoNow = async (videoId) => {
   return parseOrThrow(res, 'Falha ao transcrever audio anexado');
 };
 
+export const queueVideoForHelper = async (videoId) => {
+  const res = await fetch(`${BASE}/videos/${videoId}/transcript/queue`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+  });
+  return parseOrThrow(res, 'Falha ao enfileirar vídeo');
+};
+
 export const reactivateFailedTranscript = async (videoId) => {
   const res = await fetch(`${BASE}/videos/${videoId}/transcript/reactivate`, {
     method: 'POST',

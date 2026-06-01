@@ -62,6 +62,24 @@ async function getOrCreateTranscript(youtubeVideoId) {
   return transcript;
 }
 
+async function markTranscriptPending(youtubeVideoId) {
+  let transcript = await VideoTranscript.findOne({ where: { youtubeVideoId } });
+  if (!transcript) {
+    transcript = await VideoTranscript.create({ youtubeVideoId, status: 'pending' });
+  } else {
+    if (transcript.status === 'processing') {
+      throw new Error('Transcrição em processamento não pode ser alterada');
+    }
+    transcript.status = 'pending';
+    transcript.errorMessage = null;
+    transcript.progressPercent = 0;
+    transcript.progressStage = null;
+    transcript.processedAt = null;
+    await transcript.save();
+  }
+  return transcript;
+}
+
 async function emitTranscriptCompletedWebhook({ video, transcript, audioPath }) {
   const payload = transcriptWebhook.buildJsonPayload({ video, transcript });
   const ext = audioPath ? (path.extname(audioPath) || '.mp3') : '.mp3';
@@ -228,6 +246,7 @@ async function reactivateFailedTranscriptByVideoId(youtubeVideoId) {
 
 module.exports = {
   getOrCreateTranscript,
+  markTranscriptPending,
   processUploadedAudio,
   resendWebhook,
   regenerateSummary,
