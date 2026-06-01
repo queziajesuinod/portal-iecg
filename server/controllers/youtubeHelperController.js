@@ -1,4 +1,3 @@
-const { Op } = require('sequelize');
 const { YoutubeVideo, YoutubeChannel, VideoTranscript } = require('../models');
 const audioStorage = require('../services/audioStorageService');
 const transcriptionService = require('../services/transcriptionService');
@@ -18,8 +17,8 @@ async function listarVideosPendentes(req, res) {
         {
           model: VideoTranscript,
           as: 'transcript',
-          required: false,
-          where: { status: { [Op.in]: ['pending', 'processing', 'failed'] } },
+          required: true,
+          where: { status: 'pending' },
         },
       ],
       order: [['publishedAt', 'DESC']],
@@ -60,9 +59,11 @@ async function listarChannelsComPendencias(req, res) {
         [
           sequelize.literal(`(
             SELECT COUNT(*)::int FROM "${process.env.DB_SCHEMA || 'dev_iecg'}"."youtube_videos" v
+            JOIN "${process.env.DB_SCHEMA || 'dev_iecg'}"."video_transcripts" t ON t."youtubeVideoId" = v."id"
             WHERE v."youtubeChannelId" = "YoutubeChannel"."id"
               AND v."ignored" = false
               AND v."audioPath" IS NULL
+              AND t."status" = 'pending'
           )`),
           'pendingCount',
         ],

@@ -9,6 +9,7 @@ import {
   MenuItem,
   Paper,
   Select,
+  Snackbar,
   Stack,
   Table,
   TableBody,
@@ -25,10 +26,13 @@ import {
 import RefreshIcon from '@mui/icons-material/Refresh';
 import EditIcon from '@mui/icons-material/Edit';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import CancelIcon from '@mui/icons-material/Cancel';
 import { Helmet } from 'react-helmet';
 import { useHistory } from 'react-router-dom';
 import { PapperBlock } from 'dan-components';
-import { fetchTranscripts, fetchChannels, fetchTranscriptSpeakers } from '../../../utils/youtubeClient';
+import {
+  fetchTranscripts, fetchChannels, fetchTranscriptSpeakers, cancelTranscript
+} from '../../../utils/youtubeClient';
 
 function StatusChip({ status }) {
   const map = {
@@ -59,6 +63,18 @@ const TranscriptsListPage = () => {
   const [speakers, setSpeakers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [feedback, setFeedback] = useState(null);
+
+  const handleCancel = async (t) => {
+    if (!window.confirm(`Cancelar transcrição de "${t.video?.title}"? Será marcada como "Falhou".`)) return;
+    try {
+      const updated = await cancelTranscript(t.id);
+      setItems((prev) => prev.map((item) => (item.id === t.id ? { ...item, status: updated.transcript.status } : item)));
+      setFeedback({ severity: 'success', message: 'Transcrição cancelada.' });
+    } catch (err) {
+      setFeedback({ severity: 'error', message: err.message });
+    }
+  };
 
   const load = async () => {
     try {
@@ -197,6 +213,13 @@ const TranscriptsListPage = () => {
                     {t.processedAt ? new Date(t.processedAt).toLocaleString('pt-BR') : '-'}
                   </TableCell>
                   <TableCell align="right">
+                    {['pending', 'processing'].includes(t.status) && (
+                      <Tooltip title="Cancelar (voltar para Falhou)">
+                        <IconButton size="small" color="warning" onClick={() => handleCancel(t)}>
+                          <CancelIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
                     <Tooltip title="Revisar/editar">
                       <IconButton size="small" color="primary" onClick={() => history.push(`/app/admin/videos/transcricoes/${t.id}`)}>
                         <EditIcon fontSize="small" />
@@ -218,6 +241,15 @@ const TranscriptsListPage = () => {
             </TableBody>
           </Table>
         </TableContainer>
+
+        <Snackbar
+          open={Boolean(feedback)}
+          autoHideDuration={4000}
+          onClose={() => setFeedback(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        >
+          {feedback && <Alert severity={feedback.severity} onClose={() => setFeedback(null)}>{feedback.message}</Alert>}
+        </Snackbar>
 
         <TablePagination
           component="div"
