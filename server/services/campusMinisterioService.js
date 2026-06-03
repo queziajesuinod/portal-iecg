@@ -12,6 +12,15 @@ const CampusMinisterioService = {
     return vinculos.map((v) => v.ministerio);
   },
 
+  async listarCampusPorMinisterio(ministerioId) {
+    const vinculos = await CampusMinisterio.findAll({
+      where: { ministerioId },
+      include: [{ model: Campus, as: 'campus' }],
+      order: [[{ model: Campus, as: 'campus' }, 'nome', 'ASC']],
+    });
+    return vinculos.map((v) => v.campus).filter(Boolean);
+  },
+
   async listarVinculosPorCampus(campusId) {
     const [campus, todosMinisterios, vinculos] = await Promise.all([
       Campus.findByPk(campusId),

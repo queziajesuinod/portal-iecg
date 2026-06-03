@@ -31,6 +31,7 @@ router.patch('/tipos-evento/:id/ativo', tipoEventoController.alternarAtivo);
 
 // ===== Vínculos Campus × Ministério =====
 router.get('/campus/:campusId/ministerios', campusMinisterioController.listarMinisteriosPorCampus);
+router.get('/ministerios/:ministerioId/campus', campusMinisterioController.listarCampusPorMinisterio);
 router.get('/campus/:campusId/vinculos', campusMinisterioController.listarVinculosPorCampus);
 router.put('/campus/:campusId/vinculos', campusMinisterioController.salvarVinculos);
 router.get('/campus/:campusId/ministerios/:ministerioId/config', campusMinisterioController.buscarVinculo);
@@ -46,6 +47,7 @@ router.delete('/validacao/justificar', validacaoMinisterioController.removerJust
 // ===== Registros de Culto =====
 router.get('/registros', registroCultoController.listar);
 router.get('/registros/dashboard', registroCultoController.dashboard);
+router.get('/registros/relatorio-mensal', registroCultoController.relatorioMensal);
 router.get('/registros/:id', registroCultoController.buscarPorId);
 router.post('/registros', registroCultoController.criar);
 router.put('/registros/:id', registroCultoController.atualizar);

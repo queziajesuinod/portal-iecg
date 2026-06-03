@@ -53,6 +53,8 @@ export const alternarAtivoTipoEvento = (id) => fetchWithAuth(`${BASE}/tipos-even
 // ===== Vínculos Campus × Ministério =====
 export const listarMinisteriosPorCampus = (campusId) => fetchWithAuth(`${BASE}/campus/${campusId}/ministerios`);
 
+export const listarCampusPorMinisterio = (ministerioId) => fetchWithAuth(`${BASE}/ministerios/${ministerioId}/campus`);
+
 export const listarVinculosPorCampus = (campusId) => fetchWithAuth(`${BASE}/campus/${campusId}/vinculos`);
 
 export const salvarVinculos = (campusId, ministerioIds) => fetchWithAuth(`${BASE}/campus/${campusId}/vinculos`, {
@@ -79,6 +81,12 @@ export const buscarDashboard = (filtros = {}) => {
   const params = new URLSearchParams();
   appendFiltros(params, filtros);
   return fetchWithAuth(`${BASE}/registros/dashboard?${params}`);
+};
+
+export const buscarRelatorioMensal = (filtros = {}) => {
+  const params = new URLSearchParams();
+  appendFiltros(params, filtros);
+  return fetchWithAuth(`${BASE}/registros/relatorio-mensal?${params}`);
 };
 
 // ===== Configuração de vínculo Campus × Ministério =====

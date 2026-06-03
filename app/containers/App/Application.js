@@ -58,6 +58,7 @@ import CampanhaMonitorPage from '../Pages/Notificacoes/CampanhaMonitorPage';
 import RegistroCultoList from '../Pages/Cultos/RegistroCultoList';
 import RegistroCultoForm from '../Pages/Cultos/RegistroCultoForm';
 import CultosDashboard from '../Pages/Cultos/CultosDashboard';
+import RelatorioFluxoMensalPage from '../Pages/Cultos/RelatorioFluxoMensalPage';
 import MinisteriosPage from '../Pages/Cultos/admin/MinisteriosPage';
 import TiposEventoPage from '../Pages/Cultos/admin/TiposEventoPage';
 import CampusMinisteriosPage from '../Pages/Cultos/admin/CampusMinisteriosPage';
@@ -149,6 +150,7 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/events/:id/teams" component={EventTeams} isAuthenticated={isAuthenticated} />
             {/* ===== Módulo: Saúde e Fluxo de Cultos ===== */}
             <ProtectedRoute exact path="/app/cultos/dashboard" component={CultosDashboard} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/cultos/relatorio-fluxo" component={RelatorioFluxoMensalPage} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/cultos/registros" component={RegistroCultoList} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/cultos/registros/novo" component={RegistroCultoForm} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/cultos/registros/:id/editar" component={RegistroCultoForm} isAuthenticated={isAuthenticated} />

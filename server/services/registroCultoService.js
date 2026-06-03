@@ -1,6 +1,7 @@
-'use strict';
 const { Op } = require('sequelize');
-const { RegistroCulto, Campus, Ministerio, TipoEvento, Ministro, User } = require('../models');
+const {
+  RegistroCulto, Campus, Ministerio, TipoEvento, Ministro, User, CampusMinisterio
+} = require('../models');
 
 const includeBase = [
   { model: Campus, as: 'campus', attributes: ['id', 'nome', 'transmiteOnline'] },
@@ -11,8 +12,12 @@ const includeBase = [
 
 const buildInclude = (ministroId) => {
   const ministroInclude = ministroId
-    ? { model: Ministro, as: 'ministros', where: { id: ministroId }, required: true, through: { attributes: [] }, attributes: ['id', 'nome'] }
-    : { model: Ministro, as: 'ministros', attributes: ['id', 'nome'], through: { attributes: [] } };
+    ? {
+      model: Ministro, as: 'ministros', where: { id: ministroId }, required: true, through: { attributes: [] }, attributes: ['id', 'nome']
+    }
+    : {
+      model: Ministro, as: 'ministros', attributes: ['id', 'nome'], through: { attributes: [] }
+    };
   return [...includeBase, ministroInclude];
 };
 
@@ -22,6 +27,103 @@ const normalizarTextoSerie = (valor) => String(valor || '')
   .replace(/\s+/g, ' ')
   .trim()
   .toLowerCase();
+
+const MESES_PT = [
+  'Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+
+const pad2 = (valor) => String(valor).padStart(2, '0');
+
+const ultimoDiaMes = (ano, mes) => new Date(ano, mes, 0).getDate();
+
+const periodoMes = (ano, mes) => ({
+  dataInicio: `${ano}-${pad2(mes)}-01`,
+  dataFim: `${ano}-${pad2(mes)}-${pad2(ultimoDiaMes(ano, mes))}`,
+});
+
+const mesAnterior = (ano, mes) => {
+  if (mes === 1) return { ano: ano - 1, mes: 12 };
+  return { ano, mes: mes - 1 };
+};
+
+const presencaRegistro = (registro) => (
+  (registro.qtdHomens || 0)
+  + (registro.qtdMulheres || 0)
+  + (registro.qtdCriancas || 0)
+  + (registro.qtdBebes || 0)
+);
+
+const arredondar = (valor, casas = 2) => Number(Number(valor || 0).toFixed(casas));
+
+const calcularVariacao = (mediaAtual, mediaAnterior) => {
+  if (!mediaAnterior) return mediaAtual > 0 ? 100 : 0;
+  return ((mediaAtual - mediaAnterior) / mediaAnterior) * 100;
+};
+
+const tendenciaPorVariacao = (variacao) => {
+  if (variacao > 0) return { label: 'AUMENTO', icone: '🔺' };
+  if (variacao < 0) return { label: 'QUEDA', icone: '🔻' };
+  return { label: 'ESTAVEL', icone: '➡️' };
+};
+
+const formatarDecimalTexto = (valor) => Number(valor || 0).toFixed(2);
+
+const formatarVariacaoTexto = (valor) => `${Number(valor || 0).toFixed(2)}%`;
+
+const montarRegistroDestaque = (registro, mediaGeralAtual) => {
+  if (!registro) return null;
+  const dados = registro.toJSON ? registro.toJSON() : registro;
+  const presenca = presencaRegistro(dados);
+  return {
+    id: dados.id,
+    data: dados.data,
+    horario: dados.horario,
+    campus: dados.campus ? { id: dados.campus.id, nome: dados.campus.nome } : null,
+    tituloMensagem: dados.tituloMensagem || 'Sem titulo',
+    eSerie: !!dados.eSerie,
+    nomeSerie: dados.eSerie && dados.nomeSerie ? String(dados.nomeSerie).trim() : '',
+    presenca,
+    diferencaMedia: arredondar(presenca - mediaGeralAtual),
+  };
+};
+
+const montarTextoRelatorio = (relatorio) => {
+  const linhas = [
+    `RELATORIO DE FLUXO - *${relatorio.referencia.nomeMes.toUpperCase()}*`,
+    `🔼🔽 ${String(relatorio.ministerio.nome || '').toUpperCase()} 🔼🔽`,
+    '',
+    '#########################',
+    '',
+  ];
+
+  relatorio.campus.forEach((item) => {
+    linhas.push(
+      `🏫 *${item.campus.nome}*`,
+      `🔘 *Total de Cultos:* ${item.totalCultos}`,
+      `🔘 *Fluxo Geral:* ${item.fluxoGeral}`,
+      `🔘 *Media por Culto:* ${formatarDecimalTexto(item.mediaPorCulto)}`,
+      `🔘 *Media do Mes Anterior:* ${formatarDecimalTexto(item.mediaMesAnterior)}`,
+      `🔘 *Variacao:* ${formatarVariacaoTexto(item.variacao)}`,
+      `🔘 *Tendencia:* ${item.tendencia.label} ${item.tendencia.icone}`,
+      ''
+    );
+  });
+
+  linhas.push(
+    '#########################',
+    '',
+    '📊 *RESUMO GERAL*',
+    `🔘 *Total de Cultos:* ${relatorio.resumo.totalCultos}`,
+    `🔘 *Fluxo Geral:* ${relatorio.resumo.fluxoGeral}`,
+    `🔘 *Media Geral Atual:* ${formatarDecimalTexto(relatorio.resumo.mediaGeralAtual)}`,
+    `🔘 *Media Geral Anterior:* ${formatarDecimalTexto(relatorio.resumo.mediaGeralAnterior)}`,
+    `🔘 *Variacao:* ${formatarVariacaoTexto(relatorio.resumo.variacao)}`,
+    `🔘 *Tendencia:* ${relatorio.resumo.tendencia.label} ${relatorio.resumo.tendencia.icone}`
+  );
+
+  return linhas.join('\n');
+};
 
 const RegistroCultoService = {
   async listar(filtros = {}, page = 1, limit = 15) {
@@ -110,6 +212,171 @@ const RegistroCultoService = {
     const registro = await RegistroCulto.findByPk(id);
     if (!registro) throw new Error('Registro não encontrado');
     await registro.destroy();
+  },
+
+  async relatorioMensal(filtros = {}) {
+    const ano = parseInt(filtros.ano, 10);
+    const mes = parseInt(filtros.mes, 10);
+
+    if (!ano || !mes || mes < 1 || mes > 12) {
+      throw new Error('Informe ano e mes validos para gerar o relatorio');
+    }
+    if (!filtros.ministerioId) {
+      throw new Error('ministerioId e obrigatorio para gerar o relatorio');
+    }
+
+    const [ministerio, campusSelecionado] = await Promise.all([
+      Ministerio.findByPk(filtros.ministerioId, { attributes: ['id', 'nome'] }),
+      filtros.campusId ? Campus.findByPk(filtros.campusId, { attributes: ['id', 'nome'] }) : null,
+    ]);
+
+    if (!ministerio) throw new Error('Ministerio nao encontrado');
+    if (filtros.campusId && !campusSelecionado) throw new Error('Campus nao encontrado');
+
+    const periodoAtual = periodoMes(ano, mes);
+    const refAnterior = mesAnterior(ano, mes);
+    const periodoAnterior = periodoMes(refAnterior.ano, refAnterior.mes);
+
+    const whereBase = {
+      ministerioId: filtros.ministerioId,
+    };
+    if (filtros.campusId) whereBase.campusId = filtros.campusId;
+
+    const [vinculos, registrosAtual, registrosAnterior] = await Promise.all([
+      CampusMinisterio.findAll({
+        where: { ministerioId: filtros.ministerioId },
+        include: [{ model: Campus, as: 'campus', attributes: ['id', 'nome'] }],
+        order: [[{ model: Campus, as: 'campus' }, 'nome', 'ASC']],
+      }),
+      RegistroCulto.findAll({
+        where: {
+          ...whereBase,
+          data: { [Op.between]: [periodoAtual.dataInicio, periodoAtual.dataFim] },
+        },
+        include: [{ model: Campus, as: 'campus', attributes: ['id', 'nome'] }],
+        order: [[{ model: Campus, as: 'campus' }, 'nome', 'ASC'], ['data', 'ASC'], ['horario', 'ASC']],
+      }),
+      RegistroCulto.findAll({
+        where: {
+          ...whereBase,
+          data: { [Op.between]: [periodoAnterior.dataInicio, periodoAnterior.dataFim] },
+        },
+        include: [{ model: Campus, as: 'campus', attributes: ['id', 'nome'] }],
+        order: [[{ model: Campus, as: 'campus' }, 'nome', 'ASC'], ['data', 'ASC'], ['horario', 'ASC']],
+      }),
+    ]);
+
+    const campusMap = new Map();
+    const adicionarCampus = (campus) => {
+      if (!campus?.id) return;
+      if (filtros.campusId && campus.id !== filtros.campusId) return;
+      if (!campusMap.has(campus.id)) {
+        campusMap.set(campus.id, { id: campus.id, nome: campus.nome || 'Campus sem nome' });
+      }
+    };
+
+    if (campusSelecionado) adicionarCampus(campusSelecionado);
+    vinculos.forEach((vinculo) => adicionarCampus(vinculo.campus));
+    registrosAtual.forEach((registro) => adicionarCampus(registro.campus));
+    registrosAnterior.forEach((registro) => adicionarCampus(registro.campus));
+
+    const baseMetricas = () => ({ totalCultos: 0, fluxoGeral: 0 });
+    const atuaisPorCampus = new Map();
+    const anterioresPorCampus = new Map();
+
+    const agregar = (mapa, registro) => {
+      const { campusId } = registro;
+      if (!mapa.has(campusId)) mapa.set(campusId, baseMetricas());
+      const item = mapa.get(campusId);
+      item.totalCultos += 1;
+      item.fluxoGeral += presencaRegistro(registro);
+    };
+
+    registrosAtual.forEach((registro) => agregar(atuaisPorCampus, registro));
+    registrosAnterior.forEach((registro) => agregar(anterioresPorCampus, registro));
+
+    const linhasCampus = Array.from(campusMap.values())
+      .sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'))
+      .map((campus) => {
+        const atual = atuaisPorCampus.get(campus.id) || baseMetricas();
+        const anterior = anterioresPorCampus.get(campus.id) || baseMetricas();
+        const mediaPorCulto = atual.totalCultos ? atual.fluxoGeral / atual.totalCultos : 0;
+        const mediaMesAnterior = anterior.totalCultos ? anterior.fluxoGeral / anterior.totalCultos : 0;
+        const variacao = calcularVariacao(mediaPorCulto, mediaMesAnterior);
+
+        return {
+          campus,
+          totalCultos: atual.totalCultos,
+          fluxoGeral: atual.fluxoGeral,
+          mediaPorCulto: arredondar(mediaPorCulto),
+          mediaMesAnterior: arredondar(mediaMesAnterior),
+          variacao: arredondar(variacao),
+          tendencia: tendenciaPorVariacao(variacao),
+        };
+      });
+
+    const totalAtual = registrosAtual.reduce((acc, registro) => {
+      acc.totalCultos += 1;
+      acc.fluxoGeral += presencaRegistro(registro);
+      return acc;
+    }, baseMetricas());
+
+    const totalAnterior = registrosAnterior.reduce((acc, registro) => {
+      acc.totalCultos += 1;
+      acc.fluxoGeral += presencaRegistro(registro);
+      return acc;
+    }, baseMetricas());
+
+    const mediaGeralAtual = totalAtual.totalCultos ? totalAtual.fluxoGeral / totalAtual.totalCultos : 0;
+    const mediaGeralAnterior = totalAnterior.totalCultos ? totalAnterior.fluxoGeral / totalAnterior.totalCultos : 0;
+    const variacaoResumo = calcularVariacao(mediaGeralAtual, mediaGeralAnterior);
+    const registrosOrdenadosPorPresenca = [...registrosAtual]
+      .sort((a, b) => presencaRegistro(b) - presencaRegistro(a));
+    const cultoAcimaMedia = registrosOrdenadosPorPresenca
+      .find((registro) => presencaRegistro(registro) > mediaGeralAtual);
+    const cultoAbaixoMedia = [...registrosAtual]
+      .sort((a, b) => presencaRegistro(a) - presencaRegistro(b))
+      .find((registro) => presencaRegistro(registro) < mediaGeralAtual);
+
+    const relatorio = {
+      referencia: {
+        ano,
+        mes,
+        nomeMes: MESES_PT[mes - 1],
+        dataInicio: periodoAtual.dataInicio,
+        dataFim: periodoAtual.dataFim,
+      },
+      comparativo: {
+        ano: refAnterior.ano,
+        mes: refAnterior.mes,
+        nomeMes: MESES_PT[refAnterior.mes - 1],
+        dataInicio: periodoAnterior.dataInicio,
+        dataFim: periodoAnterior.dataFim,
+      },
+      filtros: {
+        ministerioId: filtros.ministerioId,
+        campusId: filtros.campusId || null,
+      },
+      ministerio: ministerio.toJSON ? ministerio.toJSON() : ministerio,
+      campus: linhasCampus,
+      resumo: {
+        totalCultos: totalAtual.totalCultos,
+        fluxoGeral: totalAtual.fluxoGeral,
+        mediaGeralAtual: arredondar(mediaGeralAtual),
+        mediaGeralAnterior: arredondar(mediaGeralAnterior),
+        variacao: arredondar(variacaoResumo),
+        tendencia: tendenciaPorVariacao(variacaoResumo),
+      },
+      destaquesCultos: {
+        acimaMedia: montarRegistroDestaque(cultoAcimaMedia, mediaGeralAtual),
+        abaixoMedia: montarRegistroDestaque(cultoAbaixoMedia, mediaGeralAtual),
+      },
+    };
+
+    return {
+      ...relatorio,
+      textoMensagem: montarTextoRelatorio(relatorio),
+    };
   },
 
   async dashboard(filtros = {}) {
