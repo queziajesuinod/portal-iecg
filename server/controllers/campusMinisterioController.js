@@ -10,6 +10,15 @@ class CampusMinisterioController {
     }
   }
 
+  async listarCampusPorMinisterio(req, res) {
+    try {
+      const data = await CampusMinisterioService.listarCampusPorMinisterio(req.params.ministerioId);
+      return res.status(200).json(data);
+    } catch (error) {
+      return res.status(500).json({ erro: error.message });
+    }
+  }
+
   async listarVinculosPorCampus(req, res) {
     try {
       const data = await CampusMinisterioService.listarVinculosPorCampus(req.params.campusId);

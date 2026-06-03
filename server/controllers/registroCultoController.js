@@ -1,4 +1,3 @@
-'use strict';
 const RegistroCultoService = require('../services/registroCultoService');
 
 const parseMultiParam = (valor) => {
@@ -11,11 +10,27 @@ const parseMultiParam = (valor) => {
 class RegistroCultoController {
   async listar(req, res) {
     try {
-      const { campusId, ministerioId, tipoEventoId, ministroId, dataInicio, dataFim, page = 1, limit = 15 } = req.query;
+      const {
+        campusId,
+        ministerioId,
+        tipoEventoId,
+        ministroId,
+        dataInicio,
+        dataFim,
+        page = 1,
+        limit = 15,
+      } = req.query;
       const result = await RegistroCultoService.listar(
-        { campusId, ministerioId, tipoEventoId, ministroId, dataInicio, dataFim },
-        parseInt(page),
-        parseInt(limit)
+        {
+          campusId,
+          ministerioId,
+          tipoEventoId,
+          ministroId,
+          dataInicio,
+          dataFim,
+        },
+        parseInt(page, 10),
+        parseInt(limit, 10)
       );
       return res.status(200).json(result);
     } catch (error) {
@@ -94,7 +109,30 @@ class RegistroCultoController {
       return res.status(500).json({ erro: error.message });
     }
   }
+
+  async relatorioMensal(req, res) {
+    try {
+      const {
+        ano,
+        mes,
+        ministerioId,
+        campusId,
+      } = req.query;
+      const data = await RegistroCultoService.relatorioMensal({
+        ano,
+        mes,
+        ministerioId,
+        campusId,
+      });
+      return res.status(200).json(data);
+    } catch (error) {
+      const mensagem = error.message || '';
+      const status = mensagem.includes('obrigatorio') || mensagem.includes('validos')
+        ? 400
+        : (mensagem.includes('nao encontrado') ? 404 : 500);
+      return res.status(status).json({ erro: error.message });
+    }
+  }
 }
 
 module.exports = new RegistroCultoController();
-

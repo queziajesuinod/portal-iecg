@@ -116,6 +116,13 @@ module.exports = [
         permission: 'SAUDE_CULTOS'
       },
       {
+        key: 'cultosRelatorioFluxo',
+        name: 'Relatorio de Fluxo',
+        link: '/app/cultos/relatorio-fluxo',
+        icon: 'ion-ios-paper-outline',
+        permission: 'SAUDE_CULTOS'
+      },
+      {
         key: 'cultosRegistros',
         name: 'Registros de Culto',
         link: '/app/cultos/registros',
