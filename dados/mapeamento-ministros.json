@@ -1,0 +1,49 @@
+[
+  {
+    "manter": "Ap. Edmilson",
+    "manterId": "1b24d2ad-db34-4f42-9fda-9b9220bee4f9",
+    "mesclar": [
+      "39a0742d-f84e-4f47-b732-f912a0b3b8b4",
+      "9f009b53-d5bc-4f61-8735-eb56799f6dae",
+      "1c2a5c41-2399-42fc-abf7-1fe30409b6aa"
+    ],
+    "mesclarNomes": [
+      "Ao. Edmilson",
+      "Ap Edimilson",
+      "ApóStolo Edmilson. Dr. PaláCio Meneza"
+    ]
+  },
+  {
+    "manter": "Pastor Aldo",
+    "manterId": "5a89612e-450c-4c25-b97b-bc7da81e98f9",
+    "mesclar": ["c70222e8-b4e0-438f-ba60-892f1c0fb381"],
+    "mesclarNomes": ["Pastor Aldo Giovanni"]
+  },
+  {
+    "manter": "Bispo Frank",
+    "manterId": "672ec8af-143f-4015-9284-6fd53a3f0563",
+    "mesclar": [
+      "cc902488-2e3e-4c96-8eae-68bf8c8669ff",
+      "ddc85e38-1db3-4924-8f08-c70e8eaef740"
+    ],
+    "mesclarNomes": ["Bispo Frank ( MoçAmbique)", "Bp Frank"]
+  },
+  {
+    "manter": "Pr. Hélio Nespoli",
+    "manterId": "16bcafe1-1d75-4ae6-be29-6777fa21e0ad",
+    "mesclar": ["e93ad6ca-2ecb-4b96-bc97-9b3fd6e73d82"],
+    "mesclarNomes": ["Pr. HéLio"]
+  },
+  {
+    "manter": "Pr. Breno",
+    "manterId": "c04619a1-417a-4668-ba95-429bd062f7ca",
+    "mesclar": ["9596cb71-6d57-450c-b004-5f39d623fa23"],
+    "mesclarNomes": ["Pastor Breno. Bispo Frank. Ap. Edmilson."]
+  },
+  {
+    "manter": "Pastora Marli Chaia.",
+    "manterId": "3bdd1048-6762-4812-a2e5-5436c378d711",
+    "mesclar": ["6ca63606-91ad-4527-8d24-4ab7b49c80da"],
+    "mesclarNomes": ["Pr Marli"]
+  }
+]

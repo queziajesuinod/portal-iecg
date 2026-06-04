@@ -134,6 +134,8 @@ app.use('/api/admin/notificacoes', authMiddleware, require('./routers/notificaco
 app.use('/api/admin/financial', authMiddleware, require('./routers/financialRoutes'));
 app.use('/api/admin/diario-bordo', authMiddleware, require('./routers/boardJournalRoutes'));
 app.use('/api/admin/cultos', authMiddleware, require('./routers/cultosRoutes'));
+// Módulo de Relatórios (hub central — agregações read-only)
+app.use('/api/admin/reports', authMiddleware, require('./routers/reportsRoutes'));
 app.use('/api/admin/voluntariado', authMiddleware, require('./routers/voluntariadoRoutes'));
 app.use('/api/admin/celulas-presenca', authMiddleware, require('./routes/celulaPresencaRoutes'));
 // Rotas administrativas de canais do YouTube (modulo de transcricao de videos)

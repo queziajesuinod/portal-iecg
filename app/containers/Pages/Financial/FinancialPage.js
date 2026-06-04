@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
   Chip,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
@@ -20,6 +21,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TablePagination,
   TableRow,
@@ -40,6 +42,9 @@ import CreditCardIcon from '@mui/icons-material/CreditCard';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import LinkIcon from '@mui/icons-material/Link';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import brand from 'dan-api/dummy/brand';
 import * as XLSX from 'xlsx';
 import { TableSkeleton } from '../../../components/Skeleton';
@@ -48,6 +53,7 @@ import {
   atualizarSaidaFinanceira,
   atualizarConfiguracaoTaxasFinanceiras,
   buscarConfiguracaoTaxasFinanceiras,
+  buscarHistoricoConfiguracaoTaxas,
   criarSaidaFinanceira,
   deletarSaidaFinanceira,
   exportarSaidasFinanceiras,
@@ -178,6 +184,8 @@ function FinancialPage() {
   });
   const [savingFeeConfig, setSavingFeeConfig] = useState(false);
   const [feeConfigModalOpen, setFeeConfigModalOpen] = useState(false);
+  const [historicoFeeConfig, setHistoricoFeeConfig] = useState([]);
+  const [historicoExpandido, setHistoricoExpandido] = useState(null);
   const [summary, setSummary] = useState({
     ticketGross: 0,
     totalFees: 0,
@@ -263,7 +271,10 @@ function FinancialPage() {
 
   const loadFeeConfig = async () => {
     try {
-      const response = await buscarConfiguracaoTaxasFinanceiras();
+      const [response, historico] = await Promise.all([
+        buscarConfiguracaoTaxasFinanceiras(),
+        buscarHistoricoConfiguracaoTaxas(),
+      ]);
       setFeeConfig({
         pixPercent: Number(response?.pixPercent || 0),
         pixFixedFee: Number(response?.pixFixedFee || 0),
@@ -272,6 +283,7 @@ function FinancialPage() {
         creditCardInstallmentPercent: response?.creditCardInstallmentPercent || {},
         creditCardBrandRates: response?.creditCardBrandRates || {}
       });
+      setHistoricoFeeConfig(Array.isArray(historico) ? historico : []);
     } catch (error) {
       console.error('Erro ao carregar configuracao de taxas:', error);
       setNotification(error.message || 'Erro ao carregar configuracao de taxas');
@@ -695,8 +707,9 @@ function FinancialPage() {
         creditCardBrandRates: feeConfig.creditCardBrandRates || {}
       };
       await atualizarConfiguracaoTaxasFinanceiras(payload);
-      setNotification('Configuracao de taxas salva com sucesso');
+      setNotification('Nova vigência de taxas criada com sucesso');
       setFeeConfigModalOpen(false);
+      await loadFeeConfig();
       loadData(filters, entriesPage, entriesRowsPerPage, expensesPage, expensesRowsPerPage, expenseFilters, manualEntriesPage, manualEntriesRowsPerPage, manualEntryFilters);
     } catch (error) {
       console.error('Erro ao salvar configuracao de taxas:', error);
@@ -1771,11 +1784,154 @@ function FinancialPage() {
               );
             })}
           </Grid>
+          {/* Aviso de vigência */}
+          <Grid item xs={12}>
+            <Box sx={{
+              mt: 2, p: 1.5, bgcolor: 'warning.50', border: '1px solid', borderColor: 'warning.main', borderRadius: 1
+            }}>
+              <Typography variant="body2" color="warning.dark">
+                <strong>Atenção:</strong> ao salvar, será criada uma <strong>nova vigência</strong> a partir de hoje.
+                As taxas anteriores ficam preservadas no histórico e continuam sendo usadas nos cálculos de pagamentos antigos.
+              </Typography>
+            </Box>
+          </Grid>
+
+          {/* Histórico de vigências */}
+          {historicoFeeConfig.length > 0 && (
+            <Grid item xs={12}>
+              <Typography variant="subtitle2" sx={{ mt: 1, mb: 0.5, fontWeight: 700 }}>
+                Histórico de vigências
+              </Typography>
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ width: 36 }} />
+                      <TableCell>Vigente de</TableCell>
+                      <TableCell>Vigente até</TableCell>
+                      <TableCell align="right">PIX %</TableCell>
+                      <TableCell align="right">Taxa fixa PIX (R$)</TableCell>
+                      <TableCell align="right">Cartão padrão %</TableCell>
+                      <TableCell align="right">Taxa fixa cartão (R$)</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {historicoFeeConfig.map((h) => {
+                      const expandido = historicoExpandido === h.id;
+                      const brandRates = h.creditCardBrandRates || {};
+                      const installmentPercent = h.creditCardInstallmentPercent || {};
+                      const temBandeiras = Object.keys(brandRates).length > 0;
+                      const temParcelas = Object.keys(installmentPercent).length > 0;
+                      return (
+                        <React.Fragment key={h.id}>
+                          <TableRow sx={{ '& > *': { borderBottom: expandido ? 'none' : undefined } }}>
+                            <TableCell>
+                              <Tooltip title={expandido ? 'Ocultar detalhes' : 'Ver taxas por bandeira e parcela'}>
+                                <IconButton
+                                  size="small"
+                                  onClick={() => setHistoricoExpandido(expandido ? null : h.id)}
+                                >
+                                  {expandido ? <KeyboardArrowUpIcon fontSize="small" /> : <KeyboardArrowDownIcon fontSize="small" />}
+                                </IconButton>
+                              </Tooltip>
+                            </TableCell>
+                            <TableCell>{h.vigenteDe || '—'}</TableCell>
+                            <TableCell>
+                              {h.vigenteAte
+                                ? h.vigenteAte
+                                : <Chip label="Atual" size="small" color="success" />}
+                            </TableCell>
+                            <TableCell align="right">{Number(h.pixPercent || 0).toFixed(4)}%</TableCell>
+                            <TableCell align="right">R$ {Number(h.pixFixedFee || 0).toFixed(2)}</TableCell>
+                            <TableCell align="right">{Number(h.creditCardDefaultPercent || 0).toFixed(4)}%</TableCell>
+                            <TableCell align="right">R$ {Number(h.creditCardFixedFee || 0).toFixed(2)}</TableCell>
+                          </TableRow>
+
+                          {/* Linha expansível: taxas por parcela geral e por bandeira */}
+                          <TableRow>
+                            <TableCell colSpan={7} sx={{ py: 0, bgcolor: 'grey.50' }}>
+                              <Collapse in={expandido} timeout="auto" unmountOnExit>
+                                <Box sx={{ py: 1.5, px: 2 }}>
+
+                                  {/* Juros por parcela (global) */}
+                                  {temParcelas && (
+                                    <Box mb={1.5}>
+                                      <Typography variant="caption" fontWeight={700} color="text.secondary">
+                                        Juros por número de parcelas (geral)
+                                      </Typography>
+                                      <Box display="flex" flexWrap="wrap" gap={1} mt={0.5}>
+                                        {Object.entries(installmentPercent)
+                                          .sort((a, b) => Number(a[0]) - Number(b[0]))
+                                          .map(([parc, taxa]) => (
+                                            <Chip
+                                              key={parc}
+                                              label={`${parc}x → ${Number(taxa).toFixed(2)}%`}
+                                              size="small"
+                                              variant="outlined"
+                                            />
+                                          ))}
+                                      </Box>
+                                    </Box>
+                                  )}
+
+                                  {/* Taxas por bandeira */}
+                                  {temBandeiras && (
+                                    <Box>
+                                      <Typography variant="caption" fontWeight={700} color="text.secondary">
+                                        Taxas por bandeira
+                                      </Typography>
+                                      {Object.entries(brandRates).map(([bandeira, config]) => {
+                                        const bInstallments = config.installmentPercent || {};
+                                        return (
+                                          <Box key={bandeira} mt={0.5} mb={1}>
+                                            <Typography variant="caption" fontWeight={600}>
+                                              {bandeira.toUpperCase()} — padrão: {Number(config.defaultPercent || 0).toFixed(4)}%
+                                              {config.minimumFee > 0 && ` | taxa mín: R$ ${Number(config.minimumFee).toFixed(2)}`}
+                                            </Typography>
+                                            {Object.keys(bInstallments).length > 0 && (
+                                              <Box display="flex" flexWrap="wrap" gap={0.5} mt={0.5}>
+                                                {Object.entries(bInstallments)
+                                                  .sort((a, b) => Number(a[0]) - Number(b[0]))
+                                                  .map(([parc, taxa]) => (
+                                                    <Chip
+                                                      key={parc}
+                                                      label={`${parc}x → ${Number(taxa).toFixed(2)}%`}
+                                                      size="small"
+                                                      variant="outlined"
+                                                      color="primary"
+                                                    />
+                                                  ))}
+                                              </Box>
+                                            )}
+                                          </Box>
+                                        );
+                                      })}
+                                    </Box>
+                                  )}
+
+                                  {!temBandeiras && !temParcelas && (
+                                    <Typography variant="caption" color="text.secondary">
+                                      <InfoOutlinedIcon sx={{ fontSize: 14, mr: 0.5, verticalAlign: 'middle' }} />
+                                      Nenhuma taxa específica por bandeira ou parcela configurada nesta vigência.
+                                    </Typography>
+                                  )}
+                                </Box>
+                              </Collapse>
+                            </TableCell>
+                          </TableRow>
+                        </React.Fragment>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Grid>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setFeeConfigModalOpen(false)} disabled={savingFeeConfig}>Cancelar</Button>
           <Button onClick={saveFeeConfig} variant="contained" color="primary" disabled={savingFeeConfig}>
-            Salvar Taxas
+            Criar nova vigência
           </Button>
         </DialogActions>
       </Dialog>

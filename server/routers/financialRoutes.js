@@ -10,6 +10,7 @@ router.use(requireFinancialAccess);
 router.get('/records', financialController.listRecords);
 router.get('/entries/export', financialController.exportEntries);
 router.get('/fee-config', financialController.getFeeConfig);
+router.get('/fee-config/historico', financialController.getHistoricoFeeConfig);
 router.put('/fee-config', financialController.updateFeeConfig);
 router.get('/expenses/export', financialController.exportExpenses);
 router.post('/expenses', financialController.createExpense);

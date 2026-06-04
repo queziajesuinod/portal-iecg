@@ -50,6 +50,16 @@ module.exports = (sequelize) => {
       allowNull: false,
       defaultValue: true
     },
+    vigenteDe: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+      comment: 'Data de início da vigência desta configuração de taxas'
+    },
+    vigenteAte: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+      comment: 'Data de término da vigência (null = configuração ainda ativa)'
+    },
     createdBy: {
       type: DataTypes.UUID,
       allowNull: true

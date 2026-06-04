@@ -40,6 +40,11 @@ function DialogConfigurarVinculo({
   aberto, ministerio, campusId, onFechar, onSalvo
 }) {
   const [diasPadrao, setDiasPadrao] = useState([]);
+  const [horariosPadrao, setHorariosPadrao] = useState({});
+  const [horariosPadraoHistorico, setHorariosPadraoHistorico] = useState([]);
+  const [vigenteDe, setVigenteDe] = useState('');
+  const [novaVigencia, setNovaVigencia] = useState(false);
+  const [novoHorario, setNovoHorario] = useState({});
   const [responsavelMemberId, setResponsavelMemberId] = useState(null);
   const [validacaoAtiva, setValidacaoAtiva] = useState(false);
   const [membros, setMembros] = useState([]);
@@ -50,6 +55,11 @@ function DialogConfigurarVinculo({
   useEffect(() => {
     if (!aberto || !ministerio) return;
     setDiasPadrao(ministerio.diasPadrao || []);
+    setHorariosPadrao(ministerio.horariosPadrao || {});
+    setHorariosPadraoHistorico(ministerio.horariosPadraoHistorico || []);
+    setVigenteDe(new Date().toISOString().slice(0, 10));
+    setNovaVigencia(false);
+    setNovoHorario({});
     setResponsavelMemberId(ministerio.responsavelMemberId || null);
     setValidacaoAtiva(ministerio.validacaoAtiva || false);
     setBuscaMembro('');
@@ -88,6 +98,10 @@ function DialogConfigurarVinculo({
     try {
       await atualizarConfiguracaoVinculo(campusId, ministerio.id, {
         diasPadrao,
+        horariosPadrao,
+        horariosPadraoHistorico,
+        vigenteDe: novaVigencia ? vigenteDe : null,
+        novaVigencia,
         responsavelMemberId,
         validacaoAtiva,
       });
@@ -131,6 +145,128 @@ function DialogConfigurarVinculo({
               Selecione os dias em que o culto ocorre regularmente neste ministério
             </Typography>
           </Box>
+
+          {/* Horários esperados por dia */}
+          {diasPadrao.length > 0 && (
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Horários esperados por dia
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                Configure os horários esperados por dia. Ao salvar, uma nova vigência é criada — registros anteriores à data de início não são cobrados pelos novos horários.
+              </Typography>
+              <Box display="flex" alignItems="center" gap={1} mb={1.5} flexWrap="wrap">
+                <FormControlLabel
+                  control={<Switch checked={novaVigencia} onChange={(e) => setNovaVigencia(e.target.checked)} size="small" />}
+                  label={<Typography variant="body2">Nova vigência</Typography>}
+                />
+                {novaVigencia && (
+                  <TextField
+                    size="small"
+                    type="date"
+                    label="Válido a partir de"
+                    InputLabelProps={{ shrink: true }}
+                    value={vigenteDe}
+                    onChange={(e) => setVigenteDe(e.target.value)}
+                    sx={{ width: 190 }}
+                  />
+                )}
+                {!novaVigencia && (
+                  <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                    Edita a vigência atual sem criar histórico
+                  </Typography>
+                )}
+                <Tooltip title="Remove todos os horários e apaga o histórico">
+                  <Button
+                    size="small"
+                    color="error"
+                    variant="outlined"
+                    onClick={() => {
+                      setHorariosPadrao({});
+                      setHorariosPadraoHistorico([]);
+                      setNovoHorario({});
+                      setNovaVigencia(false);
+                    }}
+                  >
+                    Limpar tudo
+                  </Button>
+                </Tooltip>
+              </Box>
+              {diasPadrao.slice().sort((a, b) => a - b).map((dia) => {
+                const key = String(dia);
+                const horariosNoDia = horariosPadrao[key] || [];
+                const nomeDia = DIAS_SEMANA.find((d) => d.valor === dia)?.label || dia;
+                return (
+                  <Box key={dia} sx={{
+                    mb: 1.5, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1
+                  }}>
+                    <Typography variant="caption" fontWeight={700} color="primary">{nomeDia}</Typography>
+                    <Box display="flex" flexWrap="wrap" gap={0.5} mt={0.5} mb={1}>
+                      {horariosNoDia.length === 0 && (
+                        <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                          Sem horários configurados — só verifica presença do dia
+                        </Typography>
+                      )}
+                      {horariosNoDia.map((h) => (
+                        <Chip
+                          key={h}
+                          label={h}
+                          size="small"
+                          onDelete={() => {
+                            const novos = horariosNoDia.filter((x) => x !== h);
+                            setHorariosPadrao((prev) => ({ ...prev, [key]: novos }));
+                          }}
+                        />
+                      ))}
+                    </Box>
+                    <Box display="flex" gap={1} alignItems="center">
+                      <TextField
+                        size="small"
+                        type="time"
+                        value={novoHorario[key] || ''}
+                        onChange={(e) => setNovoHorario((prev) => ({ ...prev, [key]: e.target.value }))}
+                        inputProps={{ step: 1800 }}
+                        sx={{ width: 130 }}
+                      />
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        disabled={!novoHorario[key]}
+                        onClick={() => {
+                          const h = novoHorario[key];
+                          if (!h || horariosNoDia.includes(h)) return;
+                          const sorted = [...horariosNoDia, h].sort();
+                          setHorariosPadrao((prev) => ({ ...prev, [key]: sorted }));
+                          setNovoHorario((prev) => ({ ...prev, [key]: '' }));
+                        }}
+                      >
+                        Adicionar
+                      </Button>
+                    </Box>
+                  </Box>
+                );
+              })}
+
+              {/* Histórico de vigências */}
+              {horariosPadraoHistorico.filter((v) => v.vigenteAte != null).length > 0 && (
+                <Box mt={1.5}>
+                  <Typography variant="caption" fontWeight={700} color="text.secondary">Vigências anteriores</Typography>
+                  {horariosPadraoHistorico
+                    .filter((v) => v.vigenteAte != null)
+                    .sort((a, b) => b.vigenteDe.localeCompare(a.vigenteDe))
+                    .map((v) => (
+                      <Box key={v.vigenteDe} sx={{
+                        mt: 0.5, p: 1, bgcolor: 'grey.50', borderRadius: 1
+                      }}>
+                        <Typography variant="caption" color="text.secondary">
+                          {v.vigenteDe} → {v.vigenteAte} — {Object.entries(v.config || {}).map(([dia, hrs]) => `${DIAS_SEMANA.find((d) => String(d.valor) === dia)?.label}: ${hrs.join(', ')}`).join(' | ')}
+                        </Typography>
+                      </Box>
+                    ))}
+                </Box>
+              )}
+            </Box>
+          )}
 
           <Box>
             <Typography variant="subtitle2" gutterBottom>
@@ -215,6 +351,8 @@ DialogConfigurarVinculo.propTypes = {
     id: PropTypes.string,
     nome: PropTypes.string,
     diasPadrao: PropTypes.arrayOf(PropTypes.number),
+    horariosPadrao: PropTypes.object,
+    horariosPadraoHistorico: PropTypes.arrayOf(PropTypes.object),
     responsavelMemberId: PropTypes.string,
     validacaoAtiva: PropTypes.bool,
   }),

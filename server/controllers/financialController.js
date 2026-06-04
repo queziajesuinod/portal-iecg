@@ -1,4 +1,5 @@
 const financialService = require('../services/financialService');
+const { listarHistoricoFeeConfig } = financialService;
 
 function normalizeQueryValue(value) {
   if (value === undefined || value === null) return null;
@@ -44,6 +45,15 @@ async function listRecords(req, res) {
   } catch (error) {
     console.error('Erro ao listar registros financeiros:', error);
     res.status(500).json({ message: error.message || 'Erro ao listar registros financeiros' });
+  }
+}
+
+async function getHistoricoFeeConfig(req, res) {
+  try {
+    const historico = await listarHistoricoFeeConfig();
+    res.status(200).json(historico);
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Erro ao carregar histórico de configurações de taxas' });
   }
 }
 
@@ -166,6 +176,7 @@ module.exports = {
   exportEntries,
   exportExpenses,
   getFeeConfig,
+  getHistoricoFeeConfig,
   updateFeeConfig,
   createExpense,
   updateExpense,
