@@ -20,6 +20,7 @@ const PERMISSOES = [
   { nome: 'NOTIFICACOES_VIEW', descricao: 'Acessar o módulo de Notificações' },
   { nome: 'VIDEOS_VIEW', descricao: 'Visualizar a biblioteca de vídeos publicados' },
   { nome: 'VIDEOS_ADMIN', descricao: 'Gerenciar canais do YouTube, transcrições e publicação de vídeos' },
+  { nome: 'RELATORIOS', descricao: 'Acessar o módulo de Relatórios (hub central)' },
 ];
 
 const ADMIN_PERFIL_DESCRICAO = 'Administrador';

@@ -143,6 +143,8 @@ function serializeFeeConfig(config) {
     creditCardFixedFee: toMoney(config.creditCardFixedFee || 0),
     creditCardInstallmentPercent: normalizeInstallmentPercent(config.creditCardInstallmentPercent),
     creditCardBrandRates: normalizeCreditCardBrandRates(config.creditCardBrandRates),
+    vigenteDe: config.vigenteDe || null,
+    vigenteAte: config.vigenteAte || null,
     updatedAt: config.updatedAt
   };
 }
@@ -161,12 +163,43 @@ function buildFallbackFeeConfig() {
   };
 }
 
-async function getActiveFeeConfig() {
+/**
+ * Retorna a configuração de taxas vigente.
+ * - Sem argumento: retorna a config ativa hoje (vigenteAte IS NULL).
+ * - Com date (string YYYY-MM-DD ou Date): retorna a config vigente naquela data.
+ */
+async function getActiveFeeConfig(date) {
   try {
+    let whereClause;
+
+    if (date) {
+      // Busca config cuja vigência cobre a data informada:
+      // vigenteDe <= date AND (vigenteAte IS NULL OR vigenteAte >= date)
+      const iso = typeof date === 'string' ? date : date.toISOString().slice(0, 10);
+      whereClause = {
+        isActive: true,
+        vigenteDe: { [Op.lte]: iso },
+        [Op.or]: [
+          { vigenteAte: null },
+          { vigenteAte: { [Op.gte]: iso } },
+        ],
+      };
+    } else {
+      whereClause = { isActive: true, vigenteAte: null };
+    }
+
     let config = await FinancialFeeConfig.findOne({
-      where: { isActive: true },
-      order: [['updatedAt', 'DESC']]
+      where: whereClause,
+      order: [['vigenteDe', 'DESC']],
     });
+
+    // Fallback: config mais recente ativa (compatibilidade com registros sem vigenteDe)
+    if (!config) {
+      config = await FinancialFeeConfig.findOne({
+        where: { isActive: true },
+        order: [['updatedAt', 'DESC']],
+      });
+    }
 
     if (!config) {
       config = await FinancialFeeConfig.create({
@@ -175,7 +208,8 @@ async function getActiveFeeConfig() {
         creditCardDefaultPercent: Number(process.env.FINANCIAL_CREDIT_CARD_DEFAULT_PERCENT || 0),
         creditCardFixedFee: Number(process.env.FINANCIAL_CREDIT_CARD_FIXED_FEE || 0),
         creditCardInstallmentPercent: {},
-        creditCardBrandRates: {}
+        creditCardBrandRates: {},
+        vigenteDe: '2000-01-01',
       });
     }
 
@@ -186,6 +220,58 @@ async function getActiveFeeConfig() {
     }
     throw error;
   }
+}
+
+/**
+ * Cria uma nova configuração de taxas encerrando a vigência da atual.
+ * Garante que não haja sobreposição de períodos.
+ */
+async function criarNovaVigencia(payload, userId) {
+  const normalized = normalizeFeeConfigPayload(payload);
+  const hoje = parseDateOnly(todayDateOnly()).format('YYYY-MM-DD');
+
+  const transaction = await FinancialFeeConfig.sequelize.transaction();
+  try {
+    // Encerra a config ativa atual com vigenteAte = ontem
+    const ontem = parseDateOnly(todayDateOnly()).subtract(1, 'day').format('YYYY-MM-DD');
+    await FinancialFeeConfig.update(
+      { vigenteAte: ontem, updatedBy: userId },
+      { where: { isActive: true, vigenteAte: null }, transaction }
+    );
+
+    // Cria nova config vigente a partir de hoje
+    const nova = await FinancialFeeConfig.create({
+      ...normalized,
+      isActive: true,
+      vigenteDe: hoje,
+      vigenteAte: null,
+      createdBy: userId,
+      updatedBy: userId,
+    }, { transaction });
+
+    await transaction.commit();
+    return serializeFeeConfig(nova);
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
+}
+
+/**
+ * Lista o histórico de configurações de taxas (mais recente primeiro).
+ */
+async function listarHistoricoFeeConfig() {
+  const configs = await FinancialFeeConfig.findAll({
+    where: { isActive: true },
+    order: [['vigenteDe', 'DESC']],
+    attributes: [
+      'id', 'pixPercent', 'pixFixedFee',
+      'creditCardDefaultPercent', 'creditCardFixedFee',
+      'creditCardInstallmentPercent', 'creditCardBrandRates',
+      'vigenteDe', 'vigenteAte', 'createdAt',
+    ],
+  });
+  return configs.map(serializeFeeConfig);
 }
 
 function calculateConfiguredFee(payment, feeConfig) {
@@ -810,12 +896,8 @@ async function updateFeeConfig(payload = {}, userId = null) {
   if (config?._isFallback) {
     throw new Error('Tabela de configuração de taxas não encontrada. Execute as migrations pendentes.');
   }
-  const normalizedPayload = normalizeFeeConfigPayload(payload);
-  await config.update({
-    ...normalizedPayload,
-    updatedBy: userId
-  });
-  return serializeFeeConfig(config);
+  // Cria nova vigência em vez de sobrescrever — preserva o histórico
+  return criarNovaVigencia(payload, userId);
 }
 
 async function createExpense(payload = {}, userId = null) {
@@ -1078,5 +1160,12 @@ module.exports = {
   deleteExpense,
   createManualEntry,
   updateManualEntry,
-  deleteManualEntry
+  deleteManualEntry,
+  // Utilitários de cálculo de taxa e vigência expostos para reuso
+  getActiveFeeConfig,
+  serializeFeeConfig,
+  calculateConfiguredFee,
+  calculateCustomerFeeAmount,
+  criarNovaVigencia,
+  listarHistoricoFeeConfig,
 };

@@ -45,26 +45,40 @@ function CardMinisterio({
   item, onNotificar, notificando, onJustificar, onRemoverJustificativa,
 }) {
   const [expandido, setExpandido] = useState(false);
-  const temAusentes = item.datasAusentes.length > 0;
-  const totalEsperado = item.datasEsperadas.length;
-  const totalRegistrado = item.datasRegistradas.length;
-  const totalJustificado = Object.keys(item.datasJustificadas || {}).length;
+
+  // Usa detalhesPorData se disponível (nova lógica), senão retrocompatibilidade
+  const detalhes = item.detalhesPorData || item.datasEsperadas.map((data) => {
+    const justificada = data in (item.datasJustificadas || {});
+    const registrada = (item.datasRegistradas || []).includes(data);
+    return {
+      data,
+      status: justificada ? 'justificado' : registrada ? 'ok' : 'ausente',
+      motivo: item.datasJustificadas?.[data],
+      horariosAusentes: [],
+      horariosRegistrados: [],
+    };
+  });
+
+  const temProblema = detalhes.some((d) => d.status === 'ausente' || d.status === 'parcial');
+  const totalEsperado = detalhes.length;
+  const totalOk = detalhes.filter((d) => d.status === 'ok').length;
+  const totalParcial = detalhes.filter((d) => d.status === 'parcial').length;
+  const totalAusente = detalhes.filter((d) => d.status === 'ausente').length;
+  const totalJustificado = detalhes.filter((d) => d.status === 'justificado').length;
+
+  const corBorda = totalAusente > 0 ? 'error.main' : totalParcial > 0 ? 'warning.main' : 'success.main';
 
   return (
-    <Paper
-      variant="outlined"
-      sx={{
-        mb: 2,
-        borderLeft: 4,
-        borderColor: temAusentes ? 'error.main' : 'success.main',
-        p: 2,
-      }}
-    >
+    <Paper variant="outlined" sx={{
+      mb: 2, borderLeft: 4, borderColor: corBorda, p: 2
+    }}>
       <Box display="flex" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1}>
         <Box display="flex" alignItems="center" gap={1.5}>
-          {temAusentes
+          {totalAusente > 0
             ? <ErrorIcon color="error" />
-            : <CheckCircleIcon color="success" />}
+            : totalParcial > 0
+              ? <ErrorIcon color="warning" />
+              : <CheckCircleIcon color="success" />}
           <Box>
             <Typography fontWeight={600}>{item.ministerio?.nome}</Typography>
             {item.diasPadrao?.length > 0 && (
@@ -78,20 +92,11 @@ function CardMinisterio({
         <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
           {totalEsperado > 0 ? (
             <>
-              <Chip
-                size="small"
-                label={`${totalRegistrado}/${totalEsperado} registrados`}
-                color={temAusentes ? 'error' : 'success'}
-                variant="outlined"
-              />
+              <Chip size="small" label={`${totalOk}/${totalEsperado} dias ok`} color={temProblema ? 'default' : 'success'} variant="outlined" />
+              {totalParcial > 0 && <Chip size="small" label={`${totalParcial} parcial`} color="warning" variant="outlined" />}
+              {totalAusente > 0 && <Chip size="small" label={`${totalAusente} ausente`} color="error" variant="outlined" />}
               {totalJustificado > 0 && (
-                <Chip
-                  size="small"
-                  icon={<BlockIcon fontSize="small" />}
-                  label={`${totalJustificado} sem culto`}
-                  color="default"
-                  variant="outlined"
-                />
+                <Chip size="small" icon={<BlockIcon fontSize="small" />} label={`${totalJustificado} sem culto`} color="default" variant="outlined" />
               )}
             </>
           ) : (
@@ -99,19 +104,13 @@ function CardMinisterio({
           )}
 
           {item.responsavel ? (
-            <Chip
-              size="small"
-              icon={<WhatsAppIcon fontSize="small" />}
-              label={item.responsavel.preferredName || item.responsavel.fullName}
-              color="default"
-              variant="outlined"
-            />
+            <Chip size="small" icon={<WhatsAppIcon fontSize="small" />} label={item.responsavel.preferredName || item.responsavel.fullName} color="default" variant="outlined" />
           ) : (
             <Chip size="small" label="Sem responsável" color="warning" variant="outlined" />
           )}
 
-          {temAusentes && item.responsavel && (
-            <Tooltip title="Notificar responsável via WhatsApp">
+          {temProblema && item.responsavel && (
+            <Tooltip title="Notificar responsável via WhatsApp sobre horários pendentes">
               <span>
                 <Button
                   size="small"
@@ -138,36 +137,28 @@ function CardMinisterio({
       <Collapse in={expandido}>
         <Divider sx={{ my: 1.5 }} />
         <Grid container spacing={1}>
-          {item.datasEsperadas.map((data) => {
-            const registrada = item.datasRegistradas.includes(data);
-            const justificada = data in (item.datasJustificadas || {});
-            const motivo = item.datasJustificadas?.[data];
-
-            if (registrada) {
+          {detalhes.map((d) => {
+            if (d.status === 'ok') {
               return (
-                <Grid item key={data}>
-                  <Chip
-                    size="small"
-                    label={formatarData(data)}
-                    color="success"
-                    variant="filled"
-                    icon={<CheckCircleIcon />}
-                  />
+                <Grid item key={d.data}>
+                  <Tooltip title={d.horariosRegistrados?.length > 0 ? `Registrados: ${d.horariosRegistrados.join(', ')}` : 'Registrado'}>
+                    <Chip size="small" label={formatarData(d.data)} color="success" variant="filled" icon={<CheckCircleIcon />} />
+                  </Tooltip>
                 </Grid>
               );
             }
 
-            if (justificada) {
+            if (d.status === 'justificado') {
               return (
-                <Grid item key={data}>
-                  <Tooltip title={motivo ? `Motivo: ${motivo}` : 'Sem culto (justificado)'}>
+                <Grid item key={d.data}>
+                  <Tooltip title={d.motivo ? `Motivo: ${d.motivo}` : 'Sem culto (justificado)'}>
                     <Chip
                       size="small"
-                      label={formatarData(data)}
+                      label={formatarData(d.data)}
                       color="default"
                       variant="outlined"
                       icon={<BlockIcon />}
-                      onDelete={() => onRemoverJustificativa(item.ministerio.id, data)}
+                      onDelete={() => onRemoverJustificativa(item.ministerio.id, d.data)}
                       deleteIcon={<Tooltip title="Desfazer"><UndoIcon /></Tooltip>}
                     />
                   </Tooltip>
@@ -175,25 +166,47 @@ function CardMinisterio({
               );
             }
 
+            if (d.status === 'parcial') {
+              return (
+                <Grid item key={d.data}>
+                  <Tooltip title={`Faltam: ${d.horariosAusentes?.join(', ')} | Registrados: ${d.horariosRegistrados?.join(', ')}`}>
+                    <Chip
+                      size="small"
+                      label={`${formatarData(d.data)} ⚠ ${d.horariosAusentes?.join(', ')}`}
+                      color="warning"
+                      variant="outlined"
+                      icon={<ErrorIcon />}
+                      onClick={() => onJustificar(item.ministerio.id, d.data)}
+                    />
+                  </Tooltip>
+                </Grid>
+              );
+            }
+
+            // ausente
             return (
-              <Grid item key={data}>
-                <Tooltip title="Clique para marcar que não teve culto nesta data">
+              <Grid item key={d.data}>
+                <Tooltip title={
+                  d.horariosAusentes?.length > 0
+                    ? `Faltam: ${d.horariosAusentes.join(', ')} — clique para justificar`
+                    : 'Sem registro — clique para justificar'
+                }>
                   <Chip
                     size="small"
-                    label={formatarData(data)}
+                    label={formatarData(d.data)}
                     color="error"
                     variant="outlined"
                     icon={<ErrorIcon />}
-                    onClick={() => onJustificar(item.ministerio.id, data)}
+                    onClick={() => onJustificar(item.ministerio.id, d.data)}
                   />
                 </Tooltip>
               </Grid>
             );
           })}
         </Grid>
-        {item.datasAusentes.length > 0 && (
+        {temProblema && (
           <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-            Clique numa data vermelha para marcar como &quot;não teve culto&quot;
+            🟡 Parcial = dia com cultos, mas faltam horários configurados. 🔴 Ausente = nenhum registro no dia. Clique para justificar.
           </Typography>
         )}
       </Collapse>
@@ -208,6 +221,7 @@ CardMinisterio.propTypes = {
     datasEsperadas: PropTypes.arrayOf(PropTypes.string),
     datasRegistradas: PropTypes.arrayOf(PropTypes.string),
     datasAusentes: PropTypes.arrayOf(PropTypes.string),
+    detalhesPorData: PropTypes.arrayOf(PropTypes.object),
     datasJustificadas: PropTypes.objectOf(PropTypes.string),
     responsavel: PropTypes.shape({
       preferredName: PropTypes.string,

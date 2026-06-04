@@ -28,6 +28,8 @@ export const listarRegistrosFinanceiros = (params = {}) => {
 
 export const buscarConfiguracaoTaxasFinanceiras = () => fetchWithAuth(`${API_URL}/api/admin/financial/fee-config`);
 
+export const buscarHistoricoConfiguracaoTaxas = () => fetchWithAuth(`${API_URL}/api/admin/financial/fee-config/historico`);
+
 export const atualizarConfiguracaoTaxasFinanceiras = (dados) => fetchWithAuth(`${API_URL}/api/admin/financial/fee-config`, {
   method: 'PUT',
   body: JSON.stringify(dados)

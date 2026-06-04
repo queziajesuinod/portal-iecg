@@ -26,6 +26,79 @@ function calcularDatasEsperadas(diasPadrao, mes, ano) {
   return datas;
 }
 
+/** Converte "HH:MM" ou "HH:MM:SS" em minutos totais para comparação */
+function toMinutos(horario) {
+  if (!horario) return -1;
+  const partes = String(horario).split(':');
+  return Number(partes[0]) * 60 + Number(partes[1] || 0);
+}
+
+/** Verifica se dois horários são próximos (tolerância em minutos) */
+function horariosProximos(h1, h2, toleranciaMin = 20) {
+  return Math.abs(toMinutos(h1) - toMinutos(h2)) <= toleranciaMin;
+}
+
+/**
+ * Resolve qual config de horários estava vigente em uma data específica.
+ * Suporta dois formatos de horariosPadrao:
+ *   - Legado (objeto simples): { "0": ["08:30","10:30"] }
+ *   - Versionado (array): [{ vigenteDe, vigenteAte, config: { "0": [...] } }]
+ * Retorna o config (objeto) correspondente à data, ou {} se não houver vigência.
+ */
+function resolverConfigParaData(horariosPadrao, data) {
+  if (!horariosPadrao) return {};
+
+  // Formato legado: objeto simples com chaves de dia da semana
+  if (!Array.isArray(horariosPadrao)) return horariosPadrao;
+
+  // Formato versionado: encontra a versão vigente na data
+  const versao = horariosPadrao
+    .filter((v) => v.vigenteDe && v.vigenteDe <= data && (v.vigenteAte == null || v.vigenteAte >= data))
+    .sort((a, b) => b.vigenteDe.localeCompare(a.vigenteDe))[0]; // mais recente que cobre a data
+
+  return versao?.config || {};
+}
+
+/**
+ * Para cada data esperada, retorna quais horários estão faltando,
+ * usando a versão de horários vigente naquela data específica.
+ */
+function calcularFaltasPorData(datasEsperadas, horariosRegistradosPorData, horariosPadrao, datasJustificadas) {
+  return datasEsperadas.map((data) => {
+    if (datasJustificadas.has(data)) {
+      return {
+        data, status: 'justificado', motivo: datasJustificadas.get(data), horariosAusentes: [], horariosRegistrados: []
+      };
+    }
+
+    const configNaData = resolverConfigParaData(horariosPadrao, data);
+    const diaSemana = String(new Date(`${data}T12:00:00`).getDay());
+    const horariosEsperados = (configNaData || {})[diaSemana] || [];
+    const registradosNoDia = horariosRegistradosPorData[data] || [];
+
+    if (horariosEsperados.length === 0) {
+      if (registradosNoDia.length > 0) {
+        return {
+          data, status: 'ok', horariosAusentes: [], horariosRegistrados: registradosNoDia
+        };
+      }
+      return {
+        data, status: 'ausente', horariosAusentes: [], horariosRegistrados: []
+      };
+    }
+
+    const ausentes = horariosEsperados.filter(
+      (esperado) => !registradosNoDia.some((registrado) => horariosProximos(esperado, registrado))
+    );
+
+    const status = ausentes.length === 0 ? 'ok' : (ausentes.length === horariosEsperados.length ? 'ausente' : 'parcial');
+
+    return {
+      data, status, horariosAusentes: ausentes, horariosRegistrados: registradosNoDia, horariosEsperados,
+    };
+  });
+}
+
 function formatarData(dataStr) {
   const [ano, mes, dia] = dataStr.split('-');
   return `${dia}/${mes}/${ano}`;
@@ -50,11 +123,27 @@ const ValidacaoMinisterioService = {
     if (!vinculo) throw new Error('Vínculo campus × ministério não encontrado');
 
     const datasEsperadas = calcularDatasEsperadas(vinculo.diasPadrao, mes, ano);
+    if (datasEsperadas.length === 0) {
+      return {
+        campus: vinculo.campus,
+        ministerio: vinculo.ministerio,
+        responsavel: vinculo.responsavel,
+        validacaoAtiva: vinculo.validacaoAtiva,
+        diasPadrao: vinculo.diasPadrao,
+        horariosPadrao: vinculo.horariosPadrao || {},
+        mes,
+        ano,
+        datasEsperadas: [],
+        detalhesPorData: [],
+        datasAusentes: [],
+        datasParciais: [],
+      };
+    }
 
     const [registros, justificativas] = await Promise.all([
       RegistroCulto.findAll({
         where: { campusId, ministerioId, data: { [Op.in]: datasEsperadas } },
-        attributes: ['data'],
+        attributes: ['data', 'horario'],
       }),
       CultoAusenciaJustificada.findAll({
         where: { campusId, ministerioId, data: { [Op.in]: datasEsperadas } },
@@ -62,12 +151,32 @@ const ValidacaoMinisterioService = {
       }),
     ]);
 
-    const datasRegistradas = new Set(registros.map((r) => r.data));
+    // Agrupa horários registrados por data
+    const horariosRegistradosPorData = {};
+    registros.forEach((r) => {
+      const hora = String(r.horario || '').slice(0, 5); // HH:MM
+      if (!horariosRegistradosPorData[r.data]) horariosRegistradosPorData[r.data] = [];
+      horariosRegistradosPorData[r.data].push(hora);
+    });
+
     const datasJustificadas = new Map(justificativas.map((j) => [j.data, j.motivo || '']));
 
-    const datasAusentes = datasEsperadas.filter(
-      (d) => !datasRegistradas.has(d) && !datasJustificadas.has(d)
+    const detalhesPorData = calcularFaltasPorData(
+      datasEsperadas,
+      horariosRegistradosPorData,
+      vinculo.horariosPadrao || {},
+      datasJustificadas
     );
+
+    const datasAusentes = detalhesPorData
+      .filter((d) => d.status === 'ausente')
+      .map((d) => d.data)
+      .sort();
+
+    const datasPartciais = detalhesPorData
+      .filter((d) => d.status === 'parcial')
+      .map((d) => d.data)
+      .sort();
 
     return {
       campus: vinculo.campus,
@@ -75,12 +184,15 @@ const ValidacaoMinisterioService = {
       responsavel: vinculo.responsavel,
       validacaoAtiva: vinculo.validacaoAtiva,
       diasPadrao: vinculo.diasPadrao,
+      horariosPadrao: vinculo.horariosPadrao || {},
       mes,
       ano,
       datasEsperadas,
-      datasRegistradas: [...datasRegistradas].filter((d) => datasEsperadas.includes(d)).sort(),
-      datasJustificadas: Object.fromEntries(datasJustificadas),
-      datasAusentes: datasAusentes.sort(),
+      detalhesPorData,
+      datasAusentes,
+      datasPartciais,
+      // Retrocompat: datas com qualquer problema (ausente ou parcial)
+      datasComProblema: [...new Set([...datasAusentes, ...datasPartciais])].sort(),
     };
   },
 
@@ -127,7 +239,7 @@ const ValidacaoMinisterioService = {
       vinculos.map((v) => this.verificarPorCampusMinisterio(v.campusId, v.ministerioId, mes, ano))
     );
 
-    return resultados.filter((r) => r.datasAusentes.length > 0);
+    return resultados.filter((r) => (r.datasComProblema || r.datasAusentes || []).length > 0);
   },
 
   async justificarAusencia(campusId, ministerioId, data, motivo, userId) {
@@ -158,13 +270,33 @@ const ValidacaoMinisterioService = {
       throw new Error('O responsável não possui número de WhatsApp cadastrado');
     }
 
-    if (resultado.datasAusentes.length === 0) {
-      return { enviado: false, motivo: 'Nenhuma data ausente para notificar' };
+    const problemasTotal = (resultado.datasComProblema || resultado.datasAusentes || []).length;
+    if (problemasTotal === 0) {
+      return { enviado: false, motivo: 'Nenhuma data com problema para notificar' };
     }
 
     const nomeResponsavel = resultado.responsavel.preferredName || resultado.responsavel.fullName;
     const nomeMes = new Date(ano, mes - 1, 1).toLocaleString('pt-BR', { month: 'long' });
-    const listaDatas = resultado.datasAusentes.map(formatarData).join(', ');
+
+    // Monta lista detalhada: data + horários faltando
+    const detalhesPendentes = (resultado.detalhesPorData || [])
+      .filter((d) => d.status === 'ausente' || d.status === 'parcial')
+      .sort((a, b) => a.data.localeCompare(b.data));
+
+    let listaDatas;
+    if (detalhesPendentes.length > 0 && detalhesPendentes.some((d) => d.horariosAusentes && d.horariosAusentes.length > 0)) {
+      listaDatas = detalhesPendentes.map((d) => {
+        const dataFmt = formatarData(d.data);
+        if (d.horariosAusentes && d.horariosAusentes.length > 0) {
+          return `📅 ${dataFmt} — faltam: ${d.horariosAusentes.join(', ')}`;
+        }
+        return `📅 ${dataFmt} — sem registro`;
+      }).join('\n');
+    } else {
+      listaDatas = detalhesPendentes.map((d) => `📅 ${formatarData(d.data)}`).join(', ');
+    }
+
+    const temParciais = (resultado.datasPartciais || []).length > 0;
 
     const mensagem = `Olá, ${nomeResponsavel}! 👋\n\n`
       + 'Este é um aviso do sistema da Igreja IECG.\n\n'
@@ -172,8 +304,10 @@ const ValidacaoMinisterioService = {
       + `Ministério: *${resultado.ministerio.nome}*\n`
       + `Campus: *${resultado.campus.nome}*\n`
       + `Mês: *${nomeMes}/${ano}*\n\n`
-      + 'As seguintes datas não possuem registro de culto:\n'
-      + `📅 ${listaDatas}\n\n`
+      + (temParciais
+        ? 'As seguintes datas possuem cultos não registrados:\n'
+        : 'As seguintes datas não possuem registro de culto:\n')
+      + `${listaDatas}\n\n`
       + 'Por favor, acesse o sistema e registre os cultos realizados ou informe caso não tenham ocorrido.\n\n'
       + '_Mensagem automática — Portal IECG_';
 
@@ -185,6 +319,7 @@ const ValidacaoMinisterioService = {
       responsavel: nomeResponsavel,
       whatsapp,
       datasAusentes: resultado.datasAusentes,
+      datasPartciais: resultado.datasPartciais,
     };
   },
 

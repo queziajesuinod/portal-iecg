@@ -62,7 +62,7 @@ function sanitizeInt(val) {
   const s = String(val).trim();
   if (s === '' || s === '*' || s === '-' || s === '.' || s === '--') return null;
   const n = parseInt(s, 10);
-  return isNaN(n) ? null : Math.max(0, n);
+  return Number.isNaN(n) ? null : Math.max(0, n);
 }
 
 function parseData(str) {
@@ -82,8 +82,8 @@ function parseData(str) {
   const parts = s.split('/');
   if (parts.length !== 3) return null;
 
-  let p0 = parseInt(parts[0], 10);
-  let p1 = parseInt(parts[1], 10);
+  const p0 = parseInt(parts[0], 10);
+  const p1 = parseInt(parts[1], 10);
   let year = parseInt(parts[2], 10);
 
   if (year < 100) {
@@ -137,6 +137,26 @@ function normalizarNome(str) {
   return str.trim().replace(/\s+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/** Normaliza para busca: remove títulos, acentos e pontuação — usado para evitar duplicatas */
+const TITULOS_BUSCA = ['apostolo', 'apóstolo', 'ap', 'pastor', 'pastora', 'pr', 'pra', 'bispo', 'bispa', 'ao'];
+function chaveNormalizada(nome) {
+  let s = String(nome || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // remove acentos
+    .toLowerCase()
+    .replace(/[.,\-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  let alterou = true;
+  while (alterou) {
+    alterou = false;
+    for (const t of TITULOS_BUSCA) {
+      const re = new RegExp(`^${t}\\b\\s*`);
+      if (re.test(s)) { s = s.replace(re, '').trim(); alterou = true; }
+    }
+  }
+  return s;
+}
+
 function extrairNomes(texto) {
   if (!texto || !texto.trim()) return [];
   return texto
@@ -145,7 +165,9 @@ function extrairNomes(texto) {
     .filter((n) => n.length > 0);
 }
 
-function montarChaveRegistro({ campusId, data, horario, ministerioId, tipoEventoId }) {
+function montarChaveRegistro({
+  campusId, data, horario, ministerioId, tipoEventoId
+}) {
   return [
     campusId,
     data,
@@ -157,19 +179,36 @@ function montarChaveRegistro({ campusId, data, horario, ministerioId, tipoEvento
 
 // ─── Processamento por registro ───────────────────────────────────────────────
 
-async function resolverMinistros(nomesMinistros, ministroByNome, linha, avisos) {
+async function resolverMinistros(nomesMinistros, ministroByNome, ministroByChaveNorm, linha, avisos) {
   const resultado = await nomesMinistros.reduce(async (chain, nome) => {
     const acc = await chain;
+
+    // 1. Busca exata (lowercase)
     const chave = nome.toLowerCase();
-    const existente = ministroByNome[chave];
-    if (existente) {
+    if (ministroByNome[chave]) {
+      acc.push(ministroByNome[chave]);
+      return acc;
+    }
+
+    // 2. Busca normalizada (sem título, sem acento) — evita duplicatas de variações
+    const chaveNorm = chaveNormalizada(nome);
+    if (chaveNorm && ministroByChaveNorm[chaveNorm]) {
+      const existente = ministroByChaveNorm[chaveNorm];
+      // Registra o alias para próximas ocorrências
+      // eslint-disable-next-line no-param-reassign
+      ministroByNome[chave] = existente;
+      avisos.push(`[linha ${linha}] Ministro "${nome}" → vinculado ao existente "${existente.nome}"`);
       acc.push(existente);
       return acc;
     }
+
+    // 3. Não encontrado — cria novo
     if (!isDryRun) {
       const criado = await Ministro.create({ nome, ativo: true });
       // eslint-disable-next-line no-param-reassign
       ministroByNome[chave] = criado;
+      // eslint-disable-next-line no-param-reassign
+      if (chaveNorm) ministroByChaveNorm[chaveNorm] = criado;
       acc.push(criado);
     }
     avisos.push(`[linha ${linha}] Ministro "${nome}" criado automaticamente`);
@@ -233,9 +272,9 @@ async function processarRegistro(r, linha, ctx) {
     if (!ministerio) {
       ministerio = ministerioByNome.geral;
       if (tipoCulto) {
-      avisos.push(`[linha ${linha}] Tipo de Culto "${tipoCulto}" sem mapeamento → usando Geral`);
+        avisos.push(`[linha ${linha}] Tipo de Culto "${tipoCulto}" sem mapeamento → usando Geral`);
+      }
     }
-  }
   }
 
   // ── Tipo de Evento ──
@@ -244,7 +283,7 @@ async function processarRegistro(r, linha, ctx) {
     if (!isDryRun) {
       const te = await TipoEvento.create({ nome: tipoEventoNome, ativo: true });
       tipoEventoByNome[tipoEventoNome.toLowerCase()] = te;
-      }
+    }
     avisos.push(`[linha ${linha}] Tipo de Evento "${tipoEventoNome}" criado automaticamente`);
   }
   const tipoEvento = tipoEventoByNome[tipoEventoNome.toLowerCase()] || null;
@@ -353,12 +392,17 @@ async function run() {
   const ministerioByNome = {};
   const tipoEventoByNome = {};
   const ministroByNome = {};
+  const ministroByChaveNorm = {}; // busca tolerante: sem título/acento
   const chavesExistentes = new Set();
   const avisos = [];
 
   (await Ministerio.findAll()).forEach((m) => { ministerioByNome[m.nome.toLowerCase()] = m; });
   (await TipoEvento.findAll()).forEach((t) => { tipoEventoByNome[t.nome.toLowerCase()] = t; });
-  (await Ministro.findAll()).forEach((m) => { ministroByNome[m.nome.toLowerCase()] = m; });
+  (await Ministro.findAll()).forEach((m) => {
+    ministroByNome[m.nome.toLowerCase()] = m;
+    const norm = chaveNormalizada(m.nome);
+    if (norm && !ministroByChaveNorm[norm]) ministroByChaveNorm[norm] = m;
+  });
 
   const ministerioForcado = ministerioOverride
     ? ministerioByNome[String(ministerioOverride).trim().toLowerCase()]
@@ -371,6 +415,7 @@ async function run() {
   const ctx = {
     campusCache,
     ministerioByNome,
+    ministroByChaveNorm,
     tipoEventoByNome,
     ministroByNome,
     ministerioForcado,

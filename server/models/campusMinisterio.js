@@ -41,6 +41,12 @@ module.exports = (sequelize) => {
         allowNull: false,
         defaultValue: false,
       },
+      horariosPadrao: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: {},
+        comment: 'Horários esperados por dia da semana. Ex: {"0":["08:30","10:30","17:00","19:00"],"3":["19:00"]}'
+      },
     },
     {
       sequelize,

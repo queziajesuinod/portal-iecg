@@ -1,5 +1,40 @@
 module.exports = [
   {
+    key: 'reports',
+    name: 'Relatórios',
+    icon: 'ion-ios-stats-outline',
+    child: [
+      {
+        key: 'reportsHome',
+        name: 'Visão Geral',
+        link: '/app/relatorios',
+        icon: 'ion-ios-grid-outline',
+        permission: 'RELATORIOS'
+      },
+      {
+        key: 'reportsMembros',
+        name: 'Membros',
+        link: '/app/relatorios/membros',
+        icon: 'ion-ios-people-outline',
+        permission: 'RELATORIOS'
+      },
+      {
+        key: 'reportsEventosFinanceiro',
+        name: 'Eventos e Finanças',
+        link: '/app/relatorios/eventos-financeiro',
+        icon: 'ion-ios-cash-outline',
+        permission: 'RELATORIOS'
+      },
+      {
+        key: 'reportsCultos',
+        name: 'Saúde dos Cultos',
+        link: '/app/relatorios/cultos',
+        icon: 'ion-ios-analytics-outline',
+        permission: 'RELATORIOS'
+      }
+    ]
+  },
+  {
     key: 'mia',
     name: 'Ministério Mia',
     icon: 'ion-ios-contacts-outline',
