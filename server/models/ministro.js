@@ -1,4 +1,3 @@
-'use strict';
 const { Model, DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
@@ -11,6 +10,9 @@ module.exports = (sequelize) => {
           otherKey: 'registroCultoId',
           as: 'registros',
         });
+      }
+      if (models.MinistroCampusMinisterio) {
+        Ministro.hasMany(models.MinistroCampusMinisterio, { foreignKey: 'ministroId', as: 'vinculos' });
       }
     }
   }
