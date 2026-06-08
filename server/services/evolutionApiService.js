@@ -1,4 +1,5 @@
 const axios = require('axios');
+const instanceBalancer = require('./instanceBalancer');
 
 class EvolutionApiService {
   constructor() {
@@ -56,7 +57,8 @@ class EvolutionApiService {
   }
 
   resolveInstance(instanceName) {
-    return instanceName || this.instanceName;
+    const base = instanceName || this.instanceName;
+    return instanceBalancer.next(base);
   }
 
   async validarNumeroWhatsapp(phone, instanceName) {

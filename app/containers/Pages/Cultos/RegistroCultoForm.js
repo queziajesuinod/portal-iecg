@@ -12,7 +12,7 @@ import Notification from 'dan-components/Notification/Notification';
 import {
   listarMinisteriosPorCampus, listarTiposEvento,
   criarRegistro, buscarRegistro, atualizarRegistro,
-  listarMinistros, criarMinistro,
+  listarMinistros, criarMinistro, salvarVinculosMinistro, listarVinculosMinistro,
 } from '../../../api/cultosApi';
 import { listarVoluntariados } from '../../../api/voluntariadoApi';
 
@@ -81,22 +81,41 @@ const RegistroCultoForm = () => {
     const token = localStorage.getItem('token');
     const init = async () => {
       try {
-        const [campiRes, tipos, ministros] = await Promise.all([
+        const [campiRes, tipos] = await Promise.all([
           fetch(`${API_URL}/start/campus`, {
             headers: { Authorization: `Bearer ${token}` },
           }).then((r) => r.json()),
           listarTiposEvento(true),
-          listarMinistros(true),
         ]);
         setCampi(Array.isArray(campiRes) ? campiRes : []);
         setTiposEvento(tipos);
-        setMinistrosOptions(ministros);
       } catch {
         notificar('Erro ao carregar dados iniciais');
       }
     };
     init();
   }, []);
+
+  // Recarrega ministros quando campus+ministério mudam.
+  // Carrega vinculados (grupo prioritário) + todos os ativos (para convidados),
+  // marcando cada um com _grupo para o Autocomplete agrupar.
+  useEffect(() => {
+    if (!form.campusId || !form.ministerioId) {
+      setMinistrosOptions([]);
+      return;
+    }
+    Promise.all([
+      listarMinistros(true, form.campusId, form.ministerioId),
+      listarMinistros(true),
+    ]).then(([vinculados, todos]) => {
+      const idsVinculados = new Set(vinculados.map((m) => m.id));
+      const vinculadosComGrupo = vinculados.map((m) => ({ ...m, _grupo: 'Vinculados' }));
+      const outrosComGrupo = todos
+        .filter((m) => !idsVinculados.has(m.id))
+        .map((m) => ({ ...m, _grupo: 'Outros / Convidados' }));
+      setMinistrosOptions([...vinculadosComGrupo, ...outrosComGrupo]);
+    }).catch(() => setMinistrosOptions([]));
+  }, [form.campusId, form.ministerioId]);
 
   useEffect(() => {
     if (!isEditing) { setLoadingInit(false); return; }
@@ -137,7 +156,9 @@ const RegistroCultoForm = () => {
   }, [id]);
 
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
+    const {
+      name, value, type, checked
+    } = e.target;
     setForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
@@ -145,8 +166,11 @@ const RegistroCultoForm = () => {
     const campusId = e.target.value;
     const campus = campi.find((c) => c.id === campusId) || null;
     setCampusSelecionado(campus);
-    setForm((prev) => ({ ...prev, campusId, ministerioId: '', qtdOnline: 0 }));
+    setForm((prev) => ({
+      ...prev, campusId, ministerioId: '', qtdOnline: 0
+    }));
     setMinisterioSelecionado(null);
+    setMinistrosSelecionados([]);
     if (!campusId) { setMinisters([]); return; }
     try {
       const mins = await listarMinisteriosPorCampus(campusId);
@@ -161,6 +185,7 @@ const RegistroCultoForm = () => {
     const ministerioId = e.target.value;
     const min = ministerios.find((m) => m.id === ministerioId) || null;
     setMinisterioSelecionado(min);
+    setMinistrosSelecionados([]);
     setForm((prev) => ({
       ...prev,
       ministerioId,
@@ -179,7 +204,7 @@ const RegistroCultoForm = () => {
     }));
   };
 
-  // Cria um novo ministro na API e o adiciona à seleção
+  // Cria um novo ministro na API, vincula ao campus+ministério atual e o adiciona à seleção
   const handleMinistrosChange = async (event, newValue) => {
     const novoItem = newValue.find((v) => v._novo);
     if (!novoItem) {
@@ -190,11 +215,21 @@ const RegistroCultoForm = () => {
     setLoadingMinistro(true);
     try {
       const criado = await criarMinistro({ nome: novoItem.nome.trim(), ativo: true });
+      // Vincula automaticamente ao campus+ministério do registro atual
+      if (form.campusId && form.ministerioId) {
+        const vinculosAtuais = await listarVinculosMinistro(criado.id);
+        const jaExiste = vinculosAtuais.some(
+          (v) => v.campusId === form.campusId && v.ministerioId === form.ministerioId
+        );
+        if (!jaExiste) {
+          await salvarVinculosMinistro(criado.id, [
+            ...vinculosAtuais.map((v) => ({ campusId: v.campusId, ministerioId: v.ministerioId })),
+            { campusId: form.campusId, ministerioId: form.ministerioId },
+          ]);
+        }
+      }
       setMinistrosOptions((prev) => [...prev, criado]);
-      setMinistrosSelecionados([
-        ...newValue.filter((v) => !v._novo),
-        criado,
-      ]);
+      setMinistrosSelecionados([...newValue.filter((v) => !v._novo), criado]);
     } catch (err) {
       notificar(err.message || 'Erro ao criar ministro');
       setMinistrosSelecionados(newValue.filter((v) => !v._novo));
@@ -327,9 +362,11 @@ const RegistroCultoForm = () => {
             <Grid item xs={12} md={8}>
               <Autocomplete
                 multiple
+                disabled={!form.campusId || !form.ministerioId}
                 options={ministrosOptions}
                 value={ministrosSelecionados}
                 loading={loadingMinistro}
+                groupBy={(option) => option._grupo || ''}
                 getOptionLabel={(option) => (typeof option === 'string' ? option : option.nome)}
                 isOptionEqualToValue={(option, value) => option.id === value.id}
                 filterSelectedOptions
@@ -340,15 +377,16 @@ const RegistroCultoForm = () => {
                     (o) => o.nome.toLowerCase() === inputValue.trim().toLowerCase()
                   );
                   if (inputValue.trim() !== '' && !jaExiste) {
-                    filtered.push({ id: null, nome: inputValue.trim(), _novo: true });
+                    filtered.push({
+                      id: null, nome: inputValue.trim(), _novo: true, _grupo: 'Vinculados'
+                    });
                   }
                   return filtered;
                 }}
                 onChange={handleMinistrosChange}
-                renderTags={(value, getTagProps) =>
-                  value.map((option, index) => (
-                    <Chip key={option.id || option.nome} label={option.nome} size="small" {...getTagProps({ index })} />
-                  ))
+                renderTags={(value, getTagProps) => value.map((option, index) => (
+                  <Chip key={option.id || option.nome} label={option.nome} size="small" {...getTagProps({ index })} />
+                ))
                 }
                 renderOption={(props, option) => (
                   <li {...props} key={option.id || `_novo_${option.nome}`}>
@@ -360,7 +398,11 @@ const RegistroCultoForm = () => {
                     {...params}
                     label="Quem ministrou"
                     required={ministrosSelecionados.length === 0}
-                    helperText="Selecione um ou mais ministros. Digite para buscar ou criar novo."
+                    helperText={
+                      !form.campusId || !form.ministerioId
+                        ? 'Selecione o campus e o ministério primeiro'
+                        : 'Digite para buscar. Vinculados aparecem primeiro; convidados estão em "Outros".'
+                    }
                     InputProps={{
                       ...params.InputProps,
                       endAdornment: (

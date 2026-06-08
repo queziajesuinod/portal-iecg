@@ -24,13 +24,28 @@ const appendFiltros = (params, filtros = {}) => {
 };
 
 // ===== Ministros (pregadores) =====
-export const listarMinistros = (apenasAtivos = false) => fetchWithAuth(`${BASE}/ministros${apenasAtivos ? '?ativo=true' : ''}`);
+export const listarMinistros = (apenasAtivos = false, campusId = null, ministerioId = null) => {
+  const params = new URLSearchParams();
+  if (apenasAtivos) params.set('ativo', 'true');
+  if (campusId) params.set('campusId', campusId);
+  if (ministerioId) params.set('ministerioId', ministerioId);
+  const qs = params.toString();
+  return fetchWithAuth(`${BASE}/ministros${qs ? `?${qs}` : ''}`);
+};
 
 export const criarMinistro = (dados) => fetchWithAuth(`${BASE}/ministros`, { method: 'POST', body: JSON.stringify(dados) });
 
 export const atualizarMinistro = (id, dados) => fetchWithAuth(`${BASE}/ministros/${id}`, { method: 'PUT', body: JSON.stringify(dados) });
 
 export const alternarAtivoMinistro = (id) => fetchWithAuth(`${BASE}/ministros/${id}/ativo`, { method: 'PATCH' });
+
+export const listarDuplicatasMinistros = () => fetchWithAuth(`${BASE}/ministros/duplicatas`);
+
+export const fundirMinistros = (manterId, fundirIds) => fetchWithAuth(`${BASE}/ministros/fundir`, { method: 'POST', body: JSON.stringify({ manterId, fundirIds }) });
+
+export const listarVinculosMinistro = (id) => fetchWithAuth(`${BASE}/ministros/${id}/vinculos`);
+
+export const salvarVinculosMinistro = (id, vinculos) => fetchWithAuth(`${BASE}/ministros/${id}/vinculos`, { method: 'PUT', body: JSON.stringify({ vinculos }) });
 
 // ===== Ministérios =====
 export const listarMinisterios = (apenasAtivos = false) => fetchWithAuth(`${BASE}/ministerios${apenasAtivos ? '?ativo=true' : ''}`);

@@ -10,7 +10,11 @@ const router = Router();
 
 // ===== Ministros (pregadores) =====
 router.get('/ministros', ministroController.listar);
+router.get('/ministros/duplicatas', ministroController.listarDuplicatas);
+router.post('/ministros/fundir', ministroController.fundir);
 router.get('/ministros/:id', ministroController.buscarPorId);
+router.get('/ministros/:id/vinculos', ministroController.listarVinculos);
+router.put('/ministros/:id/vinculos', ministroController.salvarVinculos);
 router.post('/ministros', ministroController.criar);
 router.put('/ministros/:id', ministroController.atualizar);
 router.patch('/ministros/:id/ativo', ministroController.alternarAtivo);
