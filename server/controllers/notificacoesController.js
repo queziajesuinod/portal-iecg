@@ -77,7 +77,8 @@ async function previewFiltroLivre(req, res) {
 
 async function listarTemplates(req, res) {
   try {
-    return res.json(await NotificationTemplateService.listar());
+    const { channel, context } = req.query;
+    return res.json(await NotificationTemplateService.listar({ channel, context }));
   } catch (err) {
     return res.status(500).json({ erro: err.message });
   }

@@ -24,6 +24,7 @@ router.get('/direcionamentos/por-celula/:celulaId', ApeloDirecionadoCelulaContro
 router.get('/direcionamentos/resumo-por-celula', ApeloDirecionadoCelulaController.resumoPorCelula);
 router.get('/direcionamentos/:id/historico', ApeloDirecionadoCelulaController.historico);
 router.post('/direcionamentos/:id/mover', ApeloDirecionadoCelulaController.mover);
+router.get('/direcionamentos/templates-whatsapp', (req, res) => ApeloDirecionadoCelulaController.listarTemplatesWhatsapp(req, res));
 router.post('/direcionamentos/:id/notificar-lider', (req, res) => ApeloDirecionadoCelulaController.notificarLider(req, res));
 router.get('/direcionamentos/:id', ApeloDirecionadoCelulaController.buscarPorId);
 router.put('/direcionamentos/:id', ApeloDirecionadoCelulaController.atualizar);

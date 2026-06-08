@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const moment = require('moment-timezone');
 const { Op } = require('sequelize');
 const { NotificationCampaign, NotificationSequenceStep, NotificationSequence } = require('./models');
@@ -12,12 +14,30 @@ const { APP_TIMEZONE, todayDateOnly } = require('./utils/dateTime');
 
 const dispatching = new Set();
 
+// Estado persistido em disco para sobreviver a reinicializações do servidor
+const SCHEDULER_STATE_FILE = path.join(__dirname, '.scheduler-state.json');
+
+function loadSchedulerState() {
+  try {
+    return JSON.parse(fs.readFileSync(SCHEDULER_STATE_FILE, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+function saveSchedulerState(updates) {
+  const current = loadSchedulerState();
+  fs.writeFileSync(SCHEDULER_STATE_FILE, JSON.stringify({ ...current, ...updates }, null, 2));
+}
+
+const _state = loadSchedulerState();
+
 // Controle para não disparar o job de validação mais de uma vez por dia
-let ultimaValidacaoData = null;
+let ultimaValidacaoData = _state.ultimaValidacaoData || null;
 // Controle para abertura de reuniões (roda 1x por dia)
 let ultimaAberturaReunioes = null;
 // Controle para sincronização automática dos canais do YouTube (1x na semana)
-let ultimaSincronizacaoYoutubeData = null;
+let ultimaSincronizacaoYoutubeData = _state.ultimaSincronizacaoYoutubeData || null;
 let ultimaTicketEmailResgateAt = 0;
 const TICKET_EMAIL_RESGATE_INTERVAL_MS = Number(process.env.TICKET_EMAIL_RESGATE_INTERVAL_MS || 300000);
 
@@ -93,6 +113,7 @@ async function tickValidacaoCultos() {
   if (agora.hour() < 8) return;
 
   ultimaValidacaoData = hoje;
+  saveSchedulerState({ ultimaValidacaoData: hoje });
 
   console.log('[Scheduler] Verificando cultos ausentes com validação automática ativa...');
 
@@ -151,6 +172,7 @@ async function tickYoutubeChannelSync() {
   if (agora.hour() < targetHour) return;
 
   ultimaSincronizacaoYoutubeData = hoje;
+  saveSchedulerState({ ultimaSincronizacaoYoutubeData: hoje });
 
   console.log('[Scheduler] Iniciando sincronização automática dos canais do YouTube...');
   try {
@@ -190,16 +212,18 @@ async function tickTicketEmailResgate() {
   }
 }
 
+const safe = (fn) => fn().catch((err) => console.error(`[Scheduler] Erro no tick (${fn.name}):`, err.message));
+
 async function tick() {
   try {
     await Promise.all([
-      tickCampaigns(),
-      tickSequences(),
-      tickValidacaoCultos(),
-      tickCelulas(),
-      tickVideoTranscription(),
-      tickYoutubeChannelSync(),
-      tickTicketEmailResgate(),
+      safe(tickCampaigns),
+      safe(tickSequences),
+      safe(tickValidacaoCultos),
+      safe(tickCelulas),
+      safe(tickVideoTranscription),
+      safe(tickYoutubeChannelSync),
+      safe(tickTicketEmailResgate),
     ]);
   } catch (err) {
     console.error('[Scheduler] Erro no tick:', err.message);

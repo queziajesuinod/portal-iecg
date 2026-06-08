@@ -17,10 +17,14 @@ function resolveMessage(body = '', variables = {}) {
 }
 
 const NotificationTemplateService = {
-  async listar() {
+  async listar({ channel, context } = {}) {
+    const where = {};
+    if (channel) where.channel = channel;
+    if (context) where.context = context;
     return NotificationTemplate.findAll({
+      where,
       include: defaultIncludes,
-      order: [['createdAt', 'DESC']]
+      order: [['name', 'ASC']]
     });
   },
 
@@ -31,7 +35,9 @@ const NotificationTemplateService = {
   },
 
   async criar(dados, userId = null) {
-    const { name, channel, body } = dados;
+    const {
+      name, channel, body, context
+    } = dados;
     if (!name?.trim()) throw new Error('Nome é obrigatório');
     if (!body?.trim()) throw new Error('Corpo da mensagem é obrigatório');
     const variables = extractVariables(body);
@@ -40,6 +46,7 @@ const NotificationTemplateService = {
       channel: channel || 'whatsapp',
       body: body.trim(),
       variables,
+      context: context || null,
       createdBy: userId,
       updatedBy: userId
     });
@@ -47,10 +54,13 @@ const NotificationTemplateService = {
 
   async atualizar(id, dados, userId = null) {
     const template = await NotificationTemplateService.buscarPorId(id);
-    const { name, channel, body } = dados;
+    const {
+      name, channel, body, context
+    } = dados;
     const updates = { updatedBy: userId };
     if (name !== undefined) updates.name = name.trim();
     if (channel !== undefined) updates.channel = channel;
+    if (context !== undefined) updates.context = context || null;
     if (body !== undefined) {
       updates.body = body.trim();
       updates.variables = extractVariables(body);
