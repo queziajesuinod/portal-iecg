@@ -15,6 +15,7 @@ module.exports = (sequelize) => {
     channel: { type: DataTypes.STRING(30), allowNull: false, defaultValue: 'whatsapp' },
     body: { type: DataTypes.TEXT, allowNull: false },
     variables: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
+    context: { type: DataTypes.STRING(50), allowNull: true },
     createdBy: { type: DataTypes.UUID, allowNull: true },
     updatedBy: { type: DataTypes.UUID, allowNull: true }
   }, {

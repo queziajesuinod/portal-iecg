@@ -118,6 +118,10 @@ const ApelosDirecionadosPage = () => {
   const [detailGeoLoading, setDetailGeoLoading] = useState(false);
   const [rowMenuAnchor, setRowMenuAnchor] = useState(null);
   const [apeloCoords, setApeloCoords] = useState(null);
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [apeloParaNotificar, setApeloParaNotificar] = useState(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [templatePreview, setTemplatePreview] = useState('');
   const detailGeoTimerRef = useRef(null);
   const detailGeoRequestRef = useRef(0);
 
@@ -383,12 +387,45 @@ const ApelosDirecionadosPage = () => {
     setHistoricoDialogOpen(true);
   };
 
+  const templatesQuery = useQuery({
+    queryKey: ['templates-whatsapp'],
+    queryFn: async () => {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/start/direcionamentos/templates-whatsapp`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 60000,
+  });
+  const templatesWhatsapp = templatesQuery.data || [];
+
+  const resolvePreview = (template, apelo) => {
+    if (!template || !apelo) return '';
+    const whatsappApelo = String(apelo.whatsapp || '').replace(/\D/g, '');
+    const linkStatus = whatsappApelo
+      ? `https://start.iecg.com.br/direcionamentos/pendentes?whatsapp=${whatsappApelo}`
+      : 'https://start.iecg.com.br/direcionamentos/pendentes';
+    return template.body.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+      const vars = {
+        nome_apelo: apelo.nome || 'Desconhecido',
+        nome_lider: apelo.celulaAtual?.lider || 'Líder',
+        link_status: linkStatus,
+        status: statusLabel(apelo.status),
+        motivo: apelo.motivo_status || ''
+      };
+      return vars[key] ?? `{{${key}}}`;
+    });
+  };
+
   const notificarLiderMutation = useMutation({
-    mutationFn: async (apeloId) => {
+    mutationFn: async ({ apeloId, templateId }) => {
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/start/direcionamentos/${apeloId}/notificar-lider`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(templateId ? { templateId } : {})
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.erro || 'Falha ao enviar mensagem');
@@ -396,13 +433,37 @@ const ApelosDirecionadosPage = () => {
     },
     onSuccess: () => setNotification('Mensagem enviada ao líder com sucesso.'),
     onError: (err) => setNotification(err.message || 'Erro ao enviar mensagem ao líder.'),
-    onSettled: (_data, _err, apeloId) => setNotificandoLider((prev) => ({ ...prev, [apeloId]: false })),
+    onSettled: (_data, _err, vars) => setNotificandoLider((prev) => ({ ...prev, [vars?.apeloId]: false })),
   });
 
-  const notificarLider = (apelo) => {
-    setNotificandoLider((prev) => ({ ...prev, [apelo.id]: true }));
-    notificarLiderMutation.mutate(apelo.id);
+  const abrirTemplateDialog = (apelo) => {
+    setApeloParaNotificar(apelo);
+    setSelectedTemplateId('');
+    setTemplatePreview('');
+    setTemplateDialogOpen(true);
   };
+
+  const handleTemplateSelect = (templateId) => {
+    setSelectedTemplateId(templateId);
+    if (!templateId) {
+      setTemplatePreview('');
+      return;
+    }
+    const tpl = templatesWhatsapp.find((t) => String(t.id) === String(templateId));
+    setTemplatePreview(tpl ? resolvePreview(tpl, apeloParaNotificar) : '');
+  };
+
+  const confirmarEnvioTemplate = () => {
+    if (!apeloParaNotificar) return;
+    setNotificandoLider((prev) => ({ ...prev, [apeloParaNotificar.id]: true }));
+    setTemplateDialogOpen(false);
+    notificarLiderMutation.mutate({
+      apeloId: apeloParaNotificar.id,
+      templateId: selectedTemplateId || null
+    });
+  };
+
+  const notificarLider = (apelo) => abrirTemplateDialog(apelo);
 
   const celulaAtualTexto = (apelo) => apelo?.celulaAtual?.celula || 'Sem célula';
   const abrirDetalheCelula = (celula) => {
@@ -1518,6 +1579,77 @@ const ApelosDirecionadosPage = () => {
             disabled={!celulaDetalhe || celulaSaving}
           >
             {celulaSaving ? 'Salvando...' : 'Salvar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={templateDialogOpen} onClose={() => setTemplateDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Notificar líder via WhatsApp</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" gutterBottom>
+            Apelo: <strong>{apeloParaNotificar?.nome || '-'}</strong>
+          </Typography>
+          <Typography variant="body2" gutterBottom>
+            Líder: <strong>{apeloParaNotificar?.celulaAtual?.lider || '-'}</strong>
+          </Typography>
+          <Typography variant="body2" gutterBottom sx={{ mb: 2 }}>
+            Status atual: <strong>{apeloParaNotificar?.status || '-'}</strong>
+          </Typography>
+          <TextField
+            select
+            fullWidth
+            label="Template de mensagem"
+            value={selectedTemplateId}
+            onChange={(e) => handleTemplateSelect(e.target.value)}
+            helperText={
+              templatesWhatsapp.length === 0
+                ? 'Nenhum template de WhatsApp cadastrado. Será usada a mensagem padrão.'
+                : 'Selecione um template ou deixe em branco para usar a mensagem padrão.'
+            }
+          >
+            <MenuItem value="">Mensagem padrão</MenuItem>
+            {templatesWhatsapp.map((tpl) => (
+              <MenuItem key={tpl.id} value={String(tpl.id)}>{tpl.name}</MenuItem>
+            ))}
+          </TextField>
+          {(selectedTemplateId || apeloParaNotificar) && (
+            <Box mt={2} p={2} sx={{
+              bgcolor: 'action.hover', borderRadius: 1, whiteSpace: 'pre-wrap', wordBreak: 'break-word'
+            }}>
+              <Typography variant="caption" color="textSecondary" display="block" gutterBottom>
+                Pré-visualização da mensagem:
+              </Typography>
+              <Typography variant="body2">
+                {selectedTemplateId
+                  ? templatePreview
+                  : (() => {
+                    const wa = String(apeloParaNotificar?.whatsapp || '').replace(/\D/g, '');
+                    const link = wa
+                      ? `https://start.iecg.com.br/direcionamentos/pendentes?whatsapp=${wa}`
+                      : 'https://start.iecg.com.br/direcionamentos/pendentes';
+                    return `Atualize o feedback do(a) ${apeloParaNotificar?.nome || 'Desconhecido'} e o link é ${link}`;
+                  })()}
+              </Typography>
+            </Box>
+          )}
+          {selectedTemplateId && (
+            <Box mt={1}>
+              <Typography variant="caption" color="textSecondary">
+                Campos dinâmicos disponíveis: {'{{nome_apelo}}'}, {'{{nome_lider}}'}, {'{{link_status}}'}, {'{{status}}'}
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTemplateDialogOpen(false)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            color="success"
+            startIcon={<WhatsAppIcon />}
+            onClick={confirmarEnvioTemplate}
+            disabled={notificarLiderMutation.isPending}
+          >
+            Enviar
           </Button>
         </DialogActions>
       </Dialog>

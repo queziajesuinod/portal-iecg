@@ -15,4 +15,4 @@ homologacao-153895-portaliecghomo.p12
 # Audios uploadados (Whisper local). DEFAULT: cwd/uploads/audios/
 # Em prod, configure AUDIO_STORAGE_PATH apontando pra fora do projeto.
 uploads/
-../dados
+../dados.scheduler-state.json

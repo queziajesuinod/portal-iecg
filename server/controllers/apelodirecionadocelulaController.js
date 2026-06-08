@@ -1,8 +1,24 @@
+const STATUS_LABELS = {
+  APELO_CADASTRADO: 'Novo',
+  NAO_HAVERAR_DIRECIONAMENTO: 'Não direcionar para uma célula',
+  DIRECIONADO_COM_SUCESSO: 'Direcionado',
+  PRIMEIRO_CONTATO: 'Primeiro Contato',
+  ENVIO_LIDER_PENDENTE_WHATS_ERRADO: 'Pendência de Envio para Líder',
+  CONSOLIDADO_CELULA: 'Consolidado na célula',
+  DIRECIONAMENTO_INCORRETO_REENVIO_PENDENTE: 'Direcionamento incorreto',
+  ENVIO_LIDER_PENDENTE: 'Líder ainda não fez contato',
+  CONTATO_LIDER_SEM_RETORNO: 'Líder enviou mensagem, sem retorno',
+  CONSOLIDACAO_INTERROMPIDA: 'Não Consolidado',
+  MOVIMENTACAO_CELULA: 'Em movimentação de célula',
+  EM_CONSOLIDACAO: 'Em Consolidação'
+};
+
 const ApeloDirecionadoCelulaService = require('../services/ApeloDirecionadoCelulaService');
 const WebhookService = require('../services/WebhookService');
 const ApeloFilaService = require('../services/ApeloFilaService');
 const evolutionApiService = require('../services/evolutionApiService');
-const { ApeloDirecionadoCelula, Celula } = require('../models');
+const NotificationTemplateService = require('../services/notificationTemplateService');
+const { ApeloDirecionadoCelula, Celula, NotificationTemplate } = require('../models');
 
 class ApeloDirecionadoCelulaController {
   async criar(req, res) {
@@ -195,9 +211,29 @@ class ApeloDirecionadoCelulaController {
     }
   }
 
+  async listarTemplatesWhatsapp(req, res) {
+    try {
+      const { Op } = require('sequelize');
+      const templates = await NotificationTemplate.findAll({
+        where: {
+          channel: 'whatsapp',
+          context: { [Op.in]: ['direcionamentos', null] }
+        },
+        attributes: ['id', 'name', 'body', 'variables', 'context'],
+        order: [['name', 'ASC']]
+      });
+      return res.status(200).json(templates);
+    } catch (error) {
+      return res.status(500).json({ erro: error.message });
+    }
+  }
+
   async notificarLider(req, res) {
     try {
       const { id } = req.params;
+      const { templateId } = req.body;
+
+      const { ApeloDirecionadoHistorico } = require('../models');
       const apelo = await ApeloDirecionadoCelula.findByPk(id, {
         include: [{ model: Celula, as: 'celulaAtual', attributes: ['id', 'celula', 'lider', 'cel_lider'] }]
       });
@@ -206,13 +242,34 @@ class ApeloDirecionadoCelulaController {
       const telefoneLider = apelo.celulaAtual?.cel_lider;
       if (!telefoneLider) return res.status(400).json({ erro: 'Telefone do líder não cadastrado na célula' });
 
+      const ultimoHistorico = await ApeloDirecionadoHistorico.findOne({
+        where: { apelo_id: id },
+        order: [['data_movimento', 'DESC']],
+        attributes: ['motivo']
+      });
+
       const whatsappApelo = String(apelo.whatsapp || '').replace(/\D/g, '');
+      const nomeLider = apelo.celulaAtual?.lider || 'Líder';
       const nomeApelo = apelo.nome || 'Desconhecido';
-      const link = whatsappApelo
+      const statusApelo = STATUS_LABELS[apelo.status] || apelo.status || 'pendente';
+      const motivoApelo = ultimoHistorico?.motivo || '';
+      const linkStatus = whatsappApelo
         ? `https://start.iecg.com.br/direcionamentos/pendentes?whatsapp=${whatsappApelo}`
         : 'https://start.iecg.com.br/direcionamentos/pendentes';
 
-      const mensagem = `Atualize o feedback do(a) ${nomeApelo} e o link é ${link}`;
+      let mensagem;
+      if (templateId) {
+        const template = await NotificationTemplateService.buscarPorId(templateId);
+        mensagem = NotificationTemplateService.resolveMessage(template.body, {
+          nome_apelo: nomeApelo,
+          nome_lider: nomeLider,
+          link_status: linkStatus,
+          status: statusApelo,
+          motivo: motivoApelo
+        });
+      } else {
+        mensagem = `Atualize o feedback do(a) ${nomeApelo} e o link é ${linkStatus}`;
+      }
 
       const resultado = await evolutionApiService.enviarMensagemTexto(telefoneLider, mensagem, 'START_IECG');
       if (!resultado.sucesso) {
