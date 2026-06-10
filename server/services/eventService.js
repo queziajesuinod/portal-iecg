@@ -335,10 +335,21 @@ async function buscarEventoPorId(id) {
 }
 
 async function listarEventosPublicos() {
+  const todayStart = toStartOfDay(todayDateOnly());
   return cache.getOrSet(cache.CACHE_KEYS.eventsPublicList(), async () => Event.findAll({
     where: {
-      isActive: true,
-      ...buildUnfinishedEventWhere()
+      [Op.or]: [
+        // Ativos e não finalizados
+        {
+          isActive: true,
+          ...buildUnfinishedEventWhere()
+        },
+        // Inativos que já terminaram (finalizados)
+        {
+          isActive: false,
+          endDate: { [Op.lt]: todayStart }
+        }
+      ]
     },
     include: [
       {

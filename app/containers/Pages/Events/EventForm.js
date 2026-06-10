@@ -18,6 +18,11 @@ import {
   Chip,
   Divider
 } from '@mui/material';
+import { Editor } from 'react-draft-wysiwyg';
+import { EditorState, ContentState, convertToRaw } from 'draft-js';
+import draftToHtml from 'draftjs-to-html';
+import htmlToDraft from 'html-to-draftjs';
+import 'react-draft-wysiwyg/dist/react-draft-wysiwyg.css';
 import SaveIcon from '@mui/icons-material/Save';
 import BackIcon from '@mui/icons-material/ArrowBack';
 import useTheme from '@mui/material/styles/useTheme';
@@ -44,6 +49,14 @@ function EventForm() {
   const [notification, setNotification] = useState('');
   const [geoLoading, setGeoLoading] = useState(false);
   const [coverPreview, setCoverPreview] = useState('');
+  const [editorState, setEditorState] = useState(EditorState.createEmpty());
+
+  const htmlToEditorState = (html) => {
+    if (!html) return EditorState.createEmpty();
+    const { contentBlocks, entityMap } = htmlToDraft(html);
+    const contentState = ContentState.createFromBlockArray(contentBlocks, entityMap);
+    return EditorState.createWithContent(contentState);
+  };
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -102,6 +115,7 @@ function EventForm() {
         minDepositAmount: evento.minDepositAmount != null ? evento.minDepositAmount.toString() : '',
         maxPaymentCount: evento.maxPaymentCount != null ? evento.maxPaymentCount.toString() : ''
       });
+      setEditorState(htmlToEditorState(evento.description || ''));
     } catch (error) {
       console.error('Erro ao carregar evento:', error);
       setNotification('Erro ao carregar evento');
@@ -206,8 +220,11 @@ function EventForm() {
     try {
       setLoading(true);
 
+      const descriptionHtml = draftToHtml(convertToRaw(editorState.getCurrentContent()));
+
       const dados = {
         ...formData,
+        description: descriptionHtml,
         maxRegistrations: formData.maxRegistrations ? parseInt(formData.maxRegistrations, 10) : null,
         maxPerBuyer: formData.maxPerBuyer ? parseInt(formData.maxPerBuyer, 10) : null,
         latitude: formData.latitude ? parseFloat(formData.latitude) : null,
@@ -284,16 +301,30 @@ function EventForm() {
                           />
                         </Grid>
                         <Grid item xs={12}>
-                          <TextField
-                            fullWidth
-                            multiline
-                            minRows={3}
-                            label="Descrição"
-                            name="description"
-                            value={formData.description}
-                            onChange={handleChange}
-                            disabled={loading}
-                          />
+                          <Typography variant="body2" color="textSecondary" sx={{ mb: 0.5 }}>
+                            Descrição
+                          </Typography>
+                          <Box
+                            sx={{
+                              border: '1px solid',
+                              borderColor: 'divider',
+                              borderRadius: 1,
+                              '& .rdw-editor-wrapper': { fontFamily: 'inherit' },
+                              '& .rdw-editor-main': { minHeight: '120px', padding: '8px 12px' },
+                              opacity: loading ? 0.5 : 1,
+                              pointerEvents: loading ? 'none' : 'auto',
+                            }}
+                          >
+                            <Editor
+                              editorState={editorState}
+                              onEditorStateChange={setEditorState}
+                              toolbar={{
+                                options: ['inline', 'list', 'link', 'history'],
+                                inline: { options: ['bold', 'italic', 'underline'] },
+                                list: { options: ['unordered', 'ordered'] },
+                              }}
+                            />
+                          </Box>
                         </Grid>
                         <Grid item xs={12} md={6}>
                           <TextField
@@ -618,7 +649,12 @@ function EventForm() {
                   top: theme.spacing(3),
                 }}
               >
-                <PaperPreview formData={formData} coverPreview={coverPreview} loading={loading} />
+                <PaperPreview
+                  formData={formData}
+                  coverPreview={coverPreview}
+                  loading={loading}
+                  descriptionHtml={draftToHtml(convertToRaw(editorState.getCurrentContent()))}
+                />
               </Box>
             </Grid>
           </Grid>
@@ -629,7 +665,9 @@ function EventForm() {
   );
 }
 
-function PaperPreview({ formData, coverPreview, loading }) {
+function PaperPreview({
+  formData, coverPreview, loading, descriptionHtml
+}) {
   const theme = useTheme();
 
   const formattedDate = (value) => {
@@ -699,9 +737,17 @@ function PaperPreview({ formData, coverPreview, loading }) {
         <Typography variant="h6" component="p">
           {formData.title || 'Título do evento'}
         </Typography>
-        <Typography variant="body2" color="textSecondary">
-          {formData.description || 'Descrição aparecerá aqui.'}
-        </Typography>
+        {descriptionHtml && descriptionHtml.trim() !== '<p></p>' ? (
+          <Box
+            component="div"
+            sx={{ fontSize: '0.875rem', color: 'text.secondary' }}
+            dangerouslySetInnerHTML={{ __html: descriptionHtml }}
+          />
+        ) : (
+          <Typography variant="body2" color="textSecondary">
+            Descrição aparecerá aqui.
+          </Typography>
+        )}
       </Box>
       <Box
         sx={{
@@ -749,6 +795,7 @@ PaperPreview.propTypes = {
   formData: PropTypes.object.isRequired,
   coverPreview: PropTypes.string.isRequired,
   loading: PropTypes.bool.isRequired,
+  descriptionHtml: PropTypes.string,
 };
 
 export default EventForm;
