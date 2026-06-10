@@ -1088,7 +1088,7 @@ function EventDetails() {
       <PapperBlock
         title={evento?.title || 'Evento'}
         icon="ion-ios-calendar-outline"
-        desc={evento?.description || ''}
+        desc=""
       >
         <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
