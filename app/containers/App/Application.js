@@ -17,6 +17,8 @@ import MembrosPage from '../Pages/StartPage/membrosPage';
 import MembroDetailsPage from '../Pages/StartPage/MembroDetailsPage';
 import MinhaJornadaPage from '../Pages/StartPage/MinhaJornadaPage';
 import ApeloPublicPage from '../Pages/Public/ApeloPublicPage';
+import LiveQaSessionsPage from '../Pages/LiveQa/LiveQaSessionsPage';
+import LiveQaModerationPage from '../Pages/LiveQa/LiveQaModerationPage';
 import ProfilePage from '../Pages/Users/Profile';
 import WebhooksPage from '../Pages/Webhooks/WebhooksPage';
 import VideosChannelsPage from '../Pages/Videos/ChannelsPage';
@@ -171,6 +173,9 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/relatorios/membros" component={MembersReport} isAuthenticated={isAuthenticated} requiredPermission="RELATORIOS" />
             <ProtectedRoute exact path="/app/relatorios/eventos-financeiro" component={EventsFinanceReport} isAuthenticated={isAuthenticated} requiredPermission="RELATORIOS" />
             <ProtectedRoute exact path="/app/relatorios/cultos" component={CultosReport} isAuthenticated={isAuthenticated} requiredPermission="RELATORIOS" />
+            {/* ===== Módulo: Perguntas ao Vivo ===== */}
+            <ProtectedRoute exact path="/app/perguntas-ao-vivo" component={LiveQaSessionsPage} isAuthenticated={isAuthenticated} requiredPermission={['PERGUNTAS_AO_VIVO_GERENCIAR', 'PERGUNTAS_AO_VIVO_MODERAR']} />
+            <ProtectedRoute exact path="/app/perguntas-ao-vivo/:id" component={LiveQaModerationPage} isAuthenticated={isAuthenticated} requiredPermission={['PERGUNTAS_AO_VIVO_GERENCIAR', 'PERGUNTAS_AO_VIVO_MODERAR']} />
             {/* ===== Módulo: Presença em Células ===== */}
             <ProtectedRoute exact path="/app/minha-celula" component={MinhaCelulaPage} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/celulas/:celulaId/presenca" component={CelulaPresencaPage} isAuthenticated={isAuthenticated} />

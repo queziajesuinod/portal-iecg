@@ -1,5 +1,12 @@
 module.exports = [
   {
+    key: 'perguntasAoVivo',
+    name: 'Perguntas ao Vivo',
+    link: '/app/perguntas-ao-vivo',
+    icon: 'ion-ios-chatbubbles-outline',
+    permission: ['PERGUNTAS_AO_VIVO_GERENCIAR', 'PERGUNTAS_AO_VIVO_MODERAR']
+  },
+  {
     key: 'reports',
     name: 'Relatórios',
     icon: 'ion-ios-stats-outline',
