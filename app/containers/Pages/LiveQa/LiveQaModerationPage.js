@@ -189,6 +189,24 @@ const LiveQaModerationPage = () => {
     );
   };
 
+  // Área com rolagem própria: só limita a altura quando passa do limite de itens
+  const scrollAreaSx = (count, limite) => (count > limite
+    ? {
+      maxHeight: { xs: 320, md: 380 },
+      overflowY: 'auto',
+      pr: 1,
+      // espaço pra barra não cobrir a borda colorida dos cards
+      pl: 0.5,
+      py: 0.5,
+      borderRadius: 2,
+      // barra de rolagem discreta
+      '&::-webkit-scrollbar': { width: 8 },
+      '&::-webkit-scrollbar-thumb': { bgcolor: 'rgba(0,0,0,0.18)', borderRadius: 8 },
+      '&::-webkit-scrollbar-thumb:hover': { bgcolor: 'rgba(0,0,0,0.28)' },
+      scrollbarWidth: 'thin',
+    }
+    : {});
+
   const sectionHeader = (icon, title, count, color) => (
     <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 3, mb: 1 }}>
       {icon}
@@ -275,9 +293,11 @@ const LiveQaModerationPage = () => {
             {grupos.fila.length > 0 && (
               <>
                 {sectionHeader(<ThumbUpIcon color="primary" />, 'Fila de perguntas (mais curtidas no topo)', grupos.fila.length)}
-                <Stack spacing={1.2}>
-                  {grupos.fila.map((q, i) => renderCard(q, { rank: i + 1 }))}
-                </Stack>
+                <Box sx={scrollAreaSx(grupos.fila.length, 4)}>
+                  <Stack spacing={1.2}>
+                    {grupos.fila.map((q, i) => renderCard(q, { rank: i + 1 }))}
+                  </Stack>
+                </Box>
               </>
             )}
 
@@ -285,9 +305,11 @@ const LiveQaModerationPage = () => {
             {grupos.respondidas.length > 0 && (
               <>
                 {sectionHeader(<CheckCircleIcon color="success" />, 'Respondidas', grupos.respondidas.length, 'success.main')}
-                <Stack spacing={1.2}>
-                  {grupos.respondidas.map((q) => renderCard(q, { variant: 'answered' }))}
-                </Stack>
+                <Box sx={scrollAreaSx(grupos.respondidas.length, 3)}>
+                  <Stack spacing={1.2}>
+                    {grupos.respondidas.map((q) => renderCard(q, { variant: 'answered' }))}
+                  </Stack>
+                </Box>
               </>
             )}
 

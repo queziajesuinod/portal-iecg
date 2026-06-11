@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel,
-  Grid, IconButton, MenuItem, Slider, Stack, Switch, TextField, Typography,
+  Grid, IconButton, MenuItem, Stack, Switch, TextField, Typography,
 } from '@mui/material';
 import LiveTvIcon from '@mui/icons-material/LiveTv';
 import UploadIcon from '@mui/icons-material/Upload';
@@ -121,7 +121,7 @@ const LiveThemeDialog = ({
                   error={!!uploadErro}
                 />
 
-                {/* Ajustes da imagem de fundo */}
+                {/* Ajuste da imagem de fundo */}
                 {theme.bgImageUrl && (
                   <Stack spacing={1.5} sx={{ mt: 1.5 }}>
                     <TextField
@@ -135,19 +135,6 @@ const LiveThemeDialog = ({
                       <MenuItem value="contain">Conter (imagem inteira)</MenuItem>
                       <MenuItem value="repeat">Repetir (mosaico)</MenuItem>
                     </TextField>
-                    <Box>
-                      <Typography variant="caption" color="text.secondary">
-                        Escurecimento do fundo ({Math.round(theme.overlayOpacity * 100)}%)
-                      </Typography>
-                      <Slider
-                        value={theme.overlayOpacity}
-                        onChange={(e, v) => set('overlayOpacity', v)}
-                        min={0}
-                        max={0.85}
-                        step={0.05}
-                        size="small"
-                      />
-                    </Box>
                   </Stack>
                 )}
               </Box>
