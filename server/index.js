@@ -109,6 +109,8 @@ app.use('/webhooks', authMiddleware, require('./routers/webhooks'));
 app.use('/api/public/events', require('./routers/publicEventRoutes'));
 // Rotas públicas de check-in
 app.use('/api/public/checkin', require('./routers/publicCheckInRoutes'));
+// Rotas públicas de Q&A ao vivo (perguntas do público)
+app.use('/api/public/qa', require('./routers/publicLiveQaRoutes'));
 // Rota pública para apelos direcionados
 app.use('/public', require('./routers/publicStartRoutes'));
 // Rotas públicas de voluntariado (sem autenticação)
@@ -126,6 +128,8 @@ app.use('/api/admin/event-import', authMiddleware, require('./routers/eventImpor
 app.use('/api/admin/members', authMiddleware, require('./routers/memberRoutes'));
 // Rotas administrativas de check-in (protegidas)
 app.use('/api/admin/checkin', authMiddleware, require('./routers/checkInRoutes'));
+// Rotas administrativas de Q&A ao vivo (protegidas)
+app.use('/api/admin/qa', authMiddleware, require('./routers/liveQaRoutes'));
 // Rotas administrativas de notificações de eventos (protegidas)
 app.use('/api/admin/notifications', authMiddleware, require('./routers/notificationRoutes'));
 // Módulo de notificações global (grupos, templates, campanhas)

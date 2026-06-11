@@ -35,6 +35,7 @@
     "cleanup:ignored-videos": "node ./server/scripts/markIgnoredVideos.js",
     "seed:campus": "node ./server/scripts/seedCampus.js",
     "seed:permissao-relatorios": "node ./server/scripts/addPermissaoRelatorios.js",
+    "seed:permissao-perguntas": "node ./server/scripts/addPermissaoPerguntas.js",
     "backfill:taxa-parcelamento": "node ./server/scripts/backfillTaxaParcelamentoCartao.js",
     "converter:csv-cultos": "node ./server/scripts/converterCsvCultosParaJson.js",
     "dedup:ministros": "node ./server/scripts/dedupMinistros.js",
