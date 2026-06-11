@@ -5,7 +5,6 @@ export const DEFAULT_LIVE_THEME = {
   useGradient: true,
   bgImageUrl: '',
   bgFit: 'cover', // cover | contain | repeat
-  overlayOpacity: 0.45, // escurecimento sobre a imagem (0 a 0.8)
   textColor: '#ffffff',
   accentColor: '#f50057',
   logoUrl: '',
@@ -47,11 +46,10 @@ export const resolveLiveTheme = (theme) => ({ ...DEFAULT_LIVE_THEME, ...(theme |
 export const buildLiveBackground = (theme) => {
   const t = resolveLiveTheme(theme);
   if (t.bgImageUrl) {
-    const op = Math.min(Math.max(Number(t.overlayOpacity) || 0, 0), 0.85);
-    const overlay = `linear-gradient(rgba(0,0,0,${op}), rgba(0,0,0,${op}))`;
+    // Imagem real, sem escurecimento por cima
     const repeat = t.bgFit === 'repeat';
     return {
-      backgroundImage: `${overlay}, url(${t.bgImageUrl})`,
+      backgroundImage: `url(${t.bgImageUrl})`,
       backgroundSize: repeat ? 'auto' : t.bgFit, // cover | contain | auto
       backgroundRepeat: repeat ? 'repeat' : 'no-repeat',
       backgroundPosition: 'center',

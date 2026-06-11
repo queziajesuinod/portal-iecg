@@ -112,9 +112,21 @@ const QaLivePage = () => {
           </Box>
         </Box>
       ) : (
-        <Typography sx={{ fontSize: { xs: '1.5rem', md: '2.5rem' }, opacity: 0.6 }}>
-          Aguardando a próxima pergunta...
-        </Typography>
+        <Box
+          sx={{
+            borderRadius: 6,
+            px: { xs: 5, md: 10 },
+            py: { xs: 5, md: 8 },
+            bgcolor: 'rgba(255,255,255,0.12)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            backdropFilter: 'blur(6px)',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+          }}
+        >
+          <Typography sx={{ fontSize: { xs: '1.5rem', md: '2.5rem' }, opacity: 0.85 }}>
+            Aguardando a próxima pergunta...
+          </Typography>
+        </Box>
       )}
 
       {/* Fila "A seguir" no canto inferior */}
