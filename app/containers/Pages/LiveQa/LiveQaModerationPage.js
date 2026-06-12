@@ -16,6 +16,8 @@ import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import PaletteIcon from '@mui/icons-material/Palette';
+import LockIcon from '@mui/icons-material/Lock';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { Helmet } from 'react-helmet';
@@ -60,6 +62,10 @@ const LiveQaModerationPage = () => {
   });
   const toggleSala = useMutation({
     mutationFn: (status) => atualizarSala(id, { status }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['qa-admin-sessions'] }),
+  });
+  const toggleBloqueio = useMutation({
+    mutationFn: (questionsLocked) => atualizarSala(id, { questionsLocked }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['qa-admin-sessions'] }),
   });
   const salvarTema = useMutation({
@@ -254,6 +260,16 @@ const LiveQaModerationPage = () => {
               Tela ao vivo
             </Button>
             <Box sx={{ flex: 1 }} />
+            {canManage && sala.status === 'open' && (
+              <Button
+                variant="outlined"
+                color={sala.questionsLocked ? 'success' : 'warning'}
+                startIcon={sala.questionsLocked ? <LockOpenIcon /> : <LockIcon />}
+                onClick={() => toggleBloqueio.mutate(!sala.questionsLocked)}
+              >
+                {sala.questionsLocked ? 'Permitir perguntas' : 'Bloquear perguntas'}
+              </Button>
+            )}
             {canManage && (
               <Button
                 variant="contained"

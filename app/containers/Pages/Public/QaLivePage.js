@@ -17,8 +17,9 @@ const QaLivePage = () => {
   });
 
   const session = data?.session;
-  const question = data?.question;
-  const upNext = data?.upNext || [];
+  const fechada = !!session && session.status !== 'open';
+  const question = fechada ? null : data?.question;
+  const upNext = fechada ? [] : (data?.upNext || []);
   const theme = resolveLiveTheme(session?.liveTheme);
 
   return (
@@ -124,8 +125,13 @@ const QaLivePage = () => {
           }}
         >
           <Typography sx={{ fontSize: { xs: '1.5rem', md: '2.5rem' }, opacity: 0.85 }}>
-            Aguardando a próxima pergunta...
+            {fechada ? 'Esta sala está fechada' : 'Aguardando a próxima pergunta...'}
           </Typography>
+          {fechada && (
+            <Typography sx={{ fontSize: { xs: '1rem', md: '1.4rem' }, opacity: 0.7, mt: 1 }}>
+              As perguntas não estão disponíveis no momento.
+            </Typography>
+          )}
         </Box>
       )}
 

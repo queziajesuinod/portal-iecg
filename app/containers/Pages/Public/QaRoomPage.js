@@ -10,6 +10,7 @@ import ThumbUpOffAltIcon from '@mui/icons-material/ThumbUpOffAlt';
 import AddIcon from '@mui/icons-material/Add';
 import LiveTvIcon from '@mui/icons-material/LiveTv';
 import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import {
   listarPerguntas, enviarPergunta, curtirPergunta,
 } from '../../../api/liveQaPublicClient';
@@ -112,6 +113,7 @@ const QaRoomPage = () => {
 
   const { session } = data;
   const fechada = session.status !== 'open';
+  const bloqueada = !fechada && !!session.questionsLocked; // sala aberta, mas sem novas perguntas
   // Esconde as perguntas já respondidas; a API já vem ordenada por curtidas
   const questions = (data.questions || []).filter((q) => !q.answered);
 
@@ -220,17 +222,55 @@ const QaRoomPage = () => {
           {session.description && (
             <Typography variant="body2" sx={{ opacity: 0.9, mt: 0.5 }}>{session.description}</Typography>
           )}
-          <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: 1.5, opacity: 0.9 }}>
-            <ForumOutlinedIcon sx={{ fontSize: 18 }} />
-            <Typography variant="body2" fontWeight={600}>
-              {questions.length} {questions.length === 1 ? 'pergunta' : 'perguntas'}
-            </Typography>
-          </Stack>
+          {!fechada && (
+            <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: 1.5, opacity: 0.9 }}>
+              <ForumOutlinedIcon sx={{ fontSize: 18 }} />
+              <Typography variant="body2" fontWeight={600}>
+                {questions.length} {questions.length === 1 ? 'pergunta' : 'perguntas'}
+              </Typography>
+            </Stack>
+          )}
         </Container>
       </Box>
 
       <Container maxWidth="sm" sx={{ mt: 3 }}>
-        {questions.length === 0 && (
+        {bloqueada && (
+          <Paper
+            elevation={0}
+            sx={{
+              p: 1.5,
+              mb: 2,
+              borderRadius: 3,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              bgcolor: 'warning.light',
+              color: 'warning.contrastText',
+            }}
+          >
+            <LockOutlinedIcon fontSize="small" />
+            <Typography variant="body2" fontWeight={600}>
+              Envio de novas perguntas bloqueado. Você ainda pode curtir as perguntas.
+            </Typography>
+          </Paper>
+        )}
+
+        {fechada && (
+          <Paper
+            elevation={0}
+            sx={{
+              p: 5, textAlign: 'center', borderRadius: 4, border: '1.5px dashed', borderColor: 'divider',
+            }}
+          >
+            <LockOutlinedIcon sx={{ fontSize: 52, color: 'warning.main', mb: 1 }} />
+            <Typography variant="h6" fontWeight={700}>Esta sala está fechada</Typography>
+            <Typography variant="body2" color="text.secondary">
+              As perguntas não estão disponíveis no momento.
+            </Typography>
+          </Paper>
+        )}
+
+        {!fechada && questions.length === 0 && (
           <Paper
             elevation={0}
             sx={{
@@ -246,7 +286,7 @@ const QaRoomPage = () => {
         )}
 
         <Stack spacing={1.5}>
-          {questions.map((q, idx) => {
+          {!fechada && questions.map((q, idx) => {
             const medal = MEDALS[idx];
             return (
               <Paper
@@ -323,7 +363,7 @@ const QaRoomPage = () => {
       </Container>
 
       {/* Botão flutuante para perguntar */}
-      {!fechada && (
+      {!fechada && !bloqueada && (
         <Fab
           variant="extended"
           onClick={() => setOpen(true)}

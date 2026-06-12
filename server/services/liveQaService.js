@@ -48,7 +48,7 @@ class LiveQaService {
   }
 
   async atualizarSala(id, {
-    title, description, status, liveTheme,
+    title, description, status, liveTheme, questionsLocked,
   }) {
     const sala = await LiveQaSession.findByPk(id);
     if (!sala) throw new Error('Sala não encontrada');
@@ -56,6 +56,7 @@ class LiveQaService {
     if (description !== undefined) sala.description = description ? String(description).trim() : null;
     if (status !== undefined) sala.status = status === 'closed' ? 'closed' : 'open';
     if (liveTheme !== undefined) sala.liveTheme = liveTheme || null;
+    if (questionsLocked !== undefined) sala.questionsLocked = !!questionsLocked;
     await sala.save();
     return sala;
   }
@@ -157,7 +158,12 @@ class LiveQaService {
 
     return {
       session: {
-        id: sala.id, code: sala.code, title: sala.title, description: sala.description, status: sala.status
+        id: sala.id,
+        code: sala.code,
+        title: sala.title,
+        description: sala.description,
+        status: sala.status,
+        questionsLocked: sala.questionsLocked,
       },
       questions: perguntas.map((p) => ({
         id: p.id,
@@ -176,6 +182,7 @@ class LiveQaService {
   async criarPergunta(code, { text, authorName, authorToken }) {
     const sala = await this.buscarSalaPorCodigo(code);
     if (sala.status !== 'open') throw new Error('Esta sala está fechada para novas perguntas');
+    if (sala.questionsLocked) throw new Error('O envio de novas perguntas está bloqueado no momento');
     if (!text || !text.trim()) throw new Error('Digite sua pergunta');
     if (text.trim().length > 500) throw new Error('Pergunta muito longa (máx. 500 caracteres)');
 
