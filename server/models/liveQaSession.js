@@ -43,6 +43,12 @@ module.exports = (sequelize) => {
       allowNull: true,
       comment: 'Aparência da tela ao vivo: cores, fundo, imagem',
     },
+    questionsLocked: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: 'Bloqueia o envio de novas perguntas mesmo com a sala aberta',
+    },
   }, {
     sequelize,
     modelName: 'LiveQaSession',

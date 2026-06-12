@@ -15,6 +15,7 @@ class LiveQaPublicController {
         title: sala.title,
         description: sala.description,
         status: sala.status,
+        questionsLocked: sala.questionsLocked,
       });
     } catch (error) {
       return res.status(statusErro(error)).json({ erro: error.message });
@@ -38,7 +39,9 @@ class LiveQaPublicController {
       const pergunta = await liveQaService.perguntaAoVivo(sala.id);
       const proximas = await liveQaService.proximasDaFila(sala.id, pergunta ? pergunta.id : null, 3);
       return res.status(200).json({
-        session: { code: sala.code, title: sala.title, liveTheme: sala.liveTheme || null },
+        session: {
+          code: sala.code, title: sala.title, status: sala.status, liveTheme: sala.liveTheme || null,
+        },
         question: pergunta
           ? {
             id: pergunta.id, text: pergunta.text, authorName: pergunta.authorName, likesCount: pergunta.likesCount
