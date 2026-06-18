@@ -80,6 +80,10 @@ const LiveQaModerationPage = () => {
   const liveId = data?.liveQuestionId;
   const canManage = canManageSessions();
 
+  const responderAgora = (questionId) => {
+    moderar.mutate({ questionId, dados: { isLive: true } });
+  };
+
   // Separa em grupos respeitando o ranking de curtidas (a API já vem ordenada)
   const grupos = useMemo(() => {
     const liveQuestion = questions.find((q) => q.id === liveId && q.status !== 'archived');
@@ -158,8 +162,8 @@ const LiveQaModerationPage = () => {
               </IconButton>
             </Tooltip>
           ) : (
-            <Tooltip title="Responder agora (destacar no ao vivo)">
-              <IconButton color="primary" onClick={() => moderar.mutate({ questionId: q.id, dados: { isLive: true } })}>
+            <Tooltip title="Responder agora (marca a anterior como respondida)">
+              <IconButton color="primary" onClick={() => responderAgora(q.id)}>
                 <LiveTvIcon />
               </IconButton>
             </Tooltip>

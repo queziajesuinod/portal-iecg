@@ -80,28 +80,38 @@ class LiveQaService {
   }
 
   async moderarPergunta(questionId, { status, isLive, answered }) {
-    const pergunta = await LiveQaQuestion.findByPk(questionId);
-    if (!pergunta) throw new Error('Pergunta não encontrada');
+    return sequelize.transaction(async (transaction) => {
+      const pergunta = await LiveQaQuestion.findByPk(questionId, { transaction });
+      if (!pergunta) throw new Error('Pergunta não encontrada');
 
-    if (isLive === true) {
-      // Apenas uma pergunta por vez fica "ao vivo" na sala
-      await LiveQaQuestion.update(
-        { isLive: false },
-        { where: { sessionId: pergunta.sessionId, isLive: true } }
-      );
-      pergunta.isLive = true;
-    } else if (isLive === false) {
-      pergunta.isLive = false;
-    }
+      if (isLive === true) {
+        // Ao trocar a pergunta ao vivo, a anterior passa para respondida.
+        await LiveQaQuestion.update(
+          { isLive: false, answered: true },
+          {
+            where: {
+              sessionId: pergunta.sessionId,
+              isLive: true,
+              id: { [Op.ne]: pergunta.id },
+            },
+            transaction,
+          }
+        );
+        pergunta.isLive = true;
+        pergunta.answered = false;
+      } else if (isLive === false) {
+        pergunta.isLive = false;
+      }
 
-    if (status !== undefined) pergunta.status = status === 'archived' ? 'archived' : 'active';
-    if (answered !== undefined) {
-      pergunta.answered = !!answered;
-      if (pergunta.answered) pergunta.isLive = false;
-    }
+      if (status !== undefined) pergunta.status = status === 'archived' ? 'archived' : 'active';
+      if (answered !== undefined) {
+        pergunta.answered = !!answered;
+        if (pergunta.answered) pergunta.isLive = false;
+      }
 
-    await pergunta.save();
-    return pergunta;
+      await pergunta.save({ transaction });
+      return pergunta;
+    });
   }
 
   async excluirPergunta(questionId) {
