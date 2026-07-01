@@ -107,6 +107,8 @@ app.use('/webhooks', authMiddleware, require('./routers/webhooks'));
 // ============= MÓDULO DE EVENTOS =============
 // Rotas públicas de eventos e inscrições (DEVE VIR ANTES DE /public genérico)
 app.use('/api/public/events', require('./routers/publicEventRoutes'));
+// Rotas públicas de inscrição CFM
+app.use('/api/public/cfm', require('./routers/publicCfmRoutes'));
 // Rotas públicas de check-in
 app.use('/api/public/checkin', require('./routers/publicCheckInRoutes'));
 // Rotas públicas de Q&A ao vivo (perguntas do público)
@@ -130,6 +132,10 @@ app.use('/api/admin/members', authMiddleware, require('./routers/memberRoutes'))
 app.use('/api/admin/checkin', authMiddleware, require('./routers/checkInRoutes'));
 // Rotas administrativas de Q&A ao vivo (protegidas)
 app.use('/api/admin/qa', authMiddleware, require('./routers/liveQaRoutes'));
+const requirePermission = require('./middlewares/requirePermission');
+const requireVideosAdmin = requirePermission(['VIDEOS_ADMIN']);
+// Módulo Bíblia — busca de versículos por instrução (protegido, requer permissão BIBLE)
+app.use('/api/admin/bible', authMiddleware, requirePermission(['BIBLE']), require('./routers/bibleRoutes'));
 // Rotas administrativas de notificações de eventos (protegidas)
 app.use('/api/admin/notifications', authMiddleware, require('./routers/notificationRoutes'));
 // Módulo de notificações global (grupos, templates, campanhas)
@@ -141,10 +147,10 @@ app.use('/api/admin/cultos', authMiddleware, require('./routers/cultosRoutes'));
 // Módulo de Relatórios (hub central — agregações read-only)
 app.use('/api/admin/reports', authMiddleware, require('./routers/reportsRoutes'));
 app.use('/api/admin/voluntariado', authMiddleware, require('./routers/voluntariadoRoutes'));
+// Módulo CFM — Centro de Formação (escolas, turmas, alunos)
+app.use('/api/admin/cfm', authMiddleware, requirePermission(['CFM_ADMIN']), require('./routers/cfmRoutes'));
 app.use('/api/admin/celulas-presenca', authMiddleware, require('./routes/celulaPresencaRoutes'));
 // Rotas administrativas de canais do YouTube (modulo de transcricao de videos)
-const requirePermission = require('./middlewares/requirePermission');
-const requireVideosAdmin = requirePermission(['VIDEOS_ADMIN']);
 app.use('/api/admin/youtube/channels', authMiddleware, requireVideosAdmin, require('./routers/youtubeChannelRoutes'));
 app.use('/api/admin/youtube', authMiddleware, requireVideosAdmin, require('./routers/youtubeVideoRoutes'));
 app.use('/api/admin/youtube', authMiddleware, requireVideosAdmin, require('./routers/videoTranscriptRoutes'));
@@ -231,4 +237,9 @@ app.listen(port, host, async (err) => {
   }
 
   console.log(`Servidor rodando em: ${process.env.REACT_APP_API_URL}`);
+
+  // Pré-carrega o modelo de embeddings para a busca bíblica (evita latência na primeira busca)
+  require('./services/embeddingService').startServer().catch((errMsg) => {
+    console.warn('[embedding] Aviso: servidor de embeddings não iniciou:', errMsg.message);
+  });
 });

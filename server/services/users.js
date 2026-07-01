@@ -249,33 +249,25 @@ async function findMemberCandidateByUser(user) {
 }
 
 async function getTodosUsers() {
+  // Lista leve: sem árvore de permissões (só necessária na autenticação) e sem dados de cônjuge.
+  // Reduz drasticamente o payload em memória quando há muitos usuários.
   const users = await User.findAll({
+    attributes: [
+      'id', 'name', 'email', 'username', 'active', 'image',
+      'telefone', 'cpf', 'perfilId', 'createdAt', 'updatedAt'
+    ],
     include: [
-      ...buildPermissionInclude(),
+      {
+        model: Perfil,
+        attributes: ['id', 'descricao'],
+        required: false
+      },
       {
         model: Perfil,
         as: 'perfis',
-        through: { attributes: [] }
-      },
-      {
-        model: User,
-        as: 'conjuge',
-        attributes: [
-          'id',
-          'name',
-          'email',
-          'telefone',
-          'image',
-          'username',
-          'cpf',
-          'estado_civil',
-          'profissao',
-          'endereco',
-          'bairro',
-          'numero',
-          'cep',
-          'escolaridade'
-        ]
+        attributes: ['id', 'descricao'],
+        through: { attributes: [] },
+        required: false
       }
     ]
   });

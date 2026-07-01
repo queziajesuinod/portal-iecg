@@ -228,7 +228,9 @@ const MinhaJornadaPage = () => {
     id: a.id,
     type: 'activity',
     date: formatDateTime(a.activityDate),
-    title: a.displayLabel || a.activityTypeRef?.name || a.activityType,
+    title: (a.activityType === 'EVENTO_INSCRICAO' && a.metadata?.eventName)
+      ? a.metadata.eventName
+      : a.displayLabel || a.activityTypeRef?.name || a.activityType,
     description: getActivityObservation(a) || null
   })), [activities]);
 

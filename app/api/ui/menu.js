@@ -1,5 +1,12 @@
 module.exports = [
   {
+    key: 'biblia',
+    name: 'Bíblia',
+    link: '/app/biblia',
+    icon: 'ion-ios-book-outline',
+    permission: 'BIBLE',
+  },
+  {
     key: 'perguntasAoVivo',
     name: 'Perguntas ao Vivo',
     link: '/app/perguntas-ao-vivo',
@@ -228,6 +235,28 @@ module.exports = [
         permission: ['DIARIO_BORDO_ADMIN', 'DIARIO_BORDO_MANAGER']
       }
     ]
+  },
+  {
+    key: 'cfm',
+    name: 'CFM',
+    icon: 'ion-ios-school-outline',
+    permission: 'CFM_ADMIN',
+    child: [
+      {
+        key: 'cfmTurmas',
+        name: 'Turmas',
+        link: '/app/cfm/turmas',
+        icon: 'ion-ios-list-box-outline',
+        permission: 'CFM_ADMIN',
+      },
+      {
+        key: 'cfmConfig',
+        name: 'Escolas & Matérias',
+        link: '/app/cfm/configuracao',
+        icon: 'ion-ios-settings-outline',
+        permission: 'CFM_ADMIN',
+      },
+    ],
   },
   {
     key: 'voluntariado',

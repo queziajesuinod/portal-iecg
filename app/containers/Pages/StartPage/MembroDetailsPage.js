@@ -409,7 +409,9 @@ const MembroDetailsPage = () => {
   const handleDeleteActivity = async (activity) => {
     if (!member?.id || !activity?.id) return;
 
-    const activityName = activityTypeNameByCode[activity.activityType] || ACTIVITY_CODE_LABELS[activity.activityType] || activity.activityType;
+    const activityName = (activity.activityType === 'EVENTO_INSCRICAO' && activity.metadata?.eventName)
+      ? activity.metadata.eventName
+      : activityTypeNameByCode[activity.activityType] || ACTIVITY_CODE_LABELS[activity.activityType] || activity.activityType;
     const confirmed = await confirm({
       title: 'Excluir atividade', message: `Deseja excluir a atividade "${activityName}"?`, confirmText: 'Excluir', confirmColor: 'error', severity: 'error'
     });
@@ -995,7 +997,9 @@ const MembroDetailsPage = () => {
                     id: activity.id,
                     type: 'activity',
                     date: `${formatDateTime(activity.activityDate)} • ${activity.points || 0} pontos`,
-                    title: activityTypeNameByCode[activity.activityType] || ACTIVITY_CODE_LABELS[activity.activityType] || activity.activityType,
+                    title: (activity.activityType === 'EVENTO_INSCRICAO' && activity.metadata?.eventName)
+                      ? activity.metadata.eventName
+                      : activityTypeNameByCode[activity.activityType] || ACTIVITY_CODE_LABELS[activity.activityType] || activity.activityType,
                     description: getActivityObservation(activity) || null,
                     action: (
                       <Tooltip title="Excluir atividade">

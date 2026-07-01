@@ -1,7 +1,6 @@
 import React, { useContext, useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { Switch, Route, Redirect } from 'react-router-dom';
-import dummyContents from 'dan-api/dummy/dummyContents';
 import Dashboard from '../Templates/Dashboard';
 import { ThemeContext } from './ThemeWrapper';
 import MiaPage from '../Pages/MiaPage';
@@ -19,6 +18,7 @@ import MinhaJornadaPage from '../Pages/StartPage/MinhaJornadaPage';
 import ApeloPublicPage from '../Pages/Public/ApeloPublicPage';
 import LiveQaSessionsPage from '../Pages/LiveQa/LiveQaSessionsPage';
 import LiveQaModerationPage from '../Pages/LiveQa/LiveQaModerationPage';
+import BibleSearchPage from '../Pages/Bible/BibleSearchPage';
 import ProfilePage from '../Pages/Users/Profile';
 import WebhooksPage from '../Pages/Webhooks/WebhooksPage';
 import VideosChannelsPage from '../Pages/Videos/ChannelsPage';
@@ -68,6 +68,12 @@ import MinistrosPage from '../Pages/Cultos/admin/MinistrosPage';
 import ValidacaoMinisterioPage from '../Pages/Cultos/ValidacaoMinisterioPage';
 import AreaVoluntariadoPage from '../Pages/Voluntariado/AreaVoluntariadoPage';
 import VoluntariadoPage from '../Pages/Voluntariado/VoluntariadoPage';
+import CfmTurmasPage from '../Pages/Cfm/CfmTurmasPage';
+import CfmTurmaDetailPage from '../Pages/Cfm/CfmTurmaDetailPage';
+import CfmAulaDetailPage from '../Pages/Cfm/CfmAulaDetailPage';
+import CfmInscricaoPublicaPage from '../Pages/Cfm/CfmInscricaoPublicaPage';
+import CfmMatriculaPublicaPage from '../Pages/Cfm/CfmMatriculaPublicaPage';
+import CfmConfigPage from '../Pages/Cfm/CfmConfigPage';
 import CelulaPresencaPage from '../Pages/Celulas/CelulaPresencaPage';
 import MinhaCelulaPage from '../Pages/Celulas/MinhaCelulaPage';
 import ReportsHome from '../Pages/Reports/ReportsHome';
@@ -84,11 +90,6 @@ function Application({ history }) {
     return storedAuth || isStoredTokenValid();
   });
 
-  const storedUser = localStorage.getItem('user');
-  if (storedUser) {
-    dummyContents.user = JSON.parse(storedUser);
-  }
-
   useEffect(() => {
     const tokenIsValid = isStoredTokenValid();
     localStorage.setItem('isAuthenticated', (isAuthenticated || tokenIsValid).toString());
@@ -100,6 +101,9 @@ function Application({ history }) {
       <Route exact path="/login" render={(routeProps) => <Login {...routeProps} setIsAuthenticated={setIsAuthenticated} />} />
       <Route exact path="/apelo" component={ApeloPublicPage} />
       <Route exact path="/public/apelo" component={ApeloPublicPage} />
+      <Route exact path="/cfm/inscricao/:turmaId" component={CfmInscricaoPublicaPage} />
+      <Route exact path="/cfm/matricula" component={CfmMatriculaPublicaPage} />
+      <Route exact path="/cfm/matricula/:turmaId" component={CfmMatriculaPublicaPage} />
 
       {/* Rotas privadas com dashboard */}
       <Route path="/app">
@@ -176,6 +180,12 @@ function Application({ history }) {
             {/* ===== Módulo: Perguntas ao Vivo ===== */}
             <ProtectedRoute exact path="/app/perguntas-ao-vivo" component={LiveQaSessionsPage} isAuthenticated={isAuthenticated} requiredPermission={['PERGUNTAS_AO_VIVO_GERENCIAR', 'PERGUNTAS_AO_VIVO_MODERAR']} />
             <ProtectedRoute exact path="/app/perguntas-ao-vivo/:id" component={LiveQaModerationPage} isAuthenticated={isAuthenticated} requiredPermission={['PERGUNTAS_AO_VIVO_GERENCIAR', 'PERGUNTAS_AO_VIVO_MODERAR']} />
+            <ProtectedRoute exact path="/app/biblia" component={BibleSearchPage} isAuthenticated={isAuthenticated} requiredPermission="BIBLE" />
+            {/* ===== Módulo: CFM ===== */}
+            <ProtectedRoute exact path="/app/cfm/turmas" component={CfmTurmasPage} isAuthenticated={isAuthenticated} requiredPermission="CFM_ADMIN" />
+            <ProtectedRoute exact path="/app/cfm/turmas/:id" component={CfmTurmaDetailPage} isAuthenticated={isAuthenticated} requiredPermission="CFM_ADMIN" />
+            <ProtectedRoute exact path="/app/cfm/aulas/:aulaId" component={CfmAulaDetailPage} isAuthenticated={isAuthenticated} requiredPermission="CFM_ADMIN" />
+            <ProtectedRoute exact path="/app/cfm/configuracao" component={CfmConfigPage} isAuthenticated={isAuthenticated} requiredPermission="CFM_ADMIN" />
             {/* ===== Módulo: Presença em Células ===== */}
             <ProtectedRoute exact path="/app/minha-celula" component={MinhaCelulaPage} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/celulas/:celulaId/presenca" component={CelulaPresencaPage} isAuthenticated={isAuthenticated} />

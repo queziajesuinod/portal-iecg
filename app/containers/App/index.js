@@ -11,6 +11,7 @@ import QaJoinPage from '../Pages/Public/QaJoinPage';
 import QaRoomPage from '../Pages/Public/QaRoomPage';
 import QaLivePage from '../Pages/Public/QaLivePage';
 import ThemeWrapper from './ThemeWrapper';
+import CfmMatriculaPublicaPage from '../Pages/Cfm/CfmMatriculaPublicaPage';
 window.__MUI_USE_NEXT_TYPOGRAPHY_VARIANTS__ = true;
 
 function App(props) {
@@ -24,6 +25,9 @@ function App(props) {
           <Route path="/qa/:code/ao-vivo" exact component={QaLivePage} />
           <Route path="/qa/:code" exact component={QaRoomPage} />
           <Route path="/qa" exact component={QaJoinPage} />
+          {/* Matrícula pública CFM (sem login) */}
+          <Route path="/cfm/matricula/:turmaId" exact component={CfmMatriculaPublicaPage} />
+          <Route path="/cfm/matricula" exact component={CfmMatriculaPublicaPage} />
           <Route path="/app" component={Application} />
           <Route component={Auth} />
           <Route component={NotFound} />
