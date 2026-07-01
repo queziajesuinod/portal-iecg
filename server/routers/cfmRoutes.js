@@ -29,6 +29,10 @@ router.get('/turmas/:id/preview-delete', c.previewDeleteTurma);
 router.delete('/turmas/:id', c.deleteTurma);
 router.get('/turmas/:id/preview-conclusao', c.previewConclusaoTurma);
 router.put('/turmas/:id/conclusao', c.concluirTurma);
+router.post('/turmas/:id/enviar-boletim', c.enviarBoletimTurma);
+
+// Lista de presença para impressão
+router.get('/turmas/:id/lista-presenca', c.listaPresencaImpressao);
 
 // Matérias da turma (com mestres e períodos)
 router.get('/turmas/:id/materias', c.getTurmaMaterias);
@@ -44,6 +48,9 @@ router.get('/inscricoes/:inscricaoId/preview-conclusao', c.previewConclusao);
 router.put('/inscricoes/:inscricaoId/conclusao', c.concluirInscricao);
 router.put('/inscricoes/:inscricaoId/reabrir', c.reabrirInscricao);
 router.put('/inscricoes/:inscricaoId/dados-formulario', c.atualizarDadosFormulario);
+router.post('/inscricoes/:inscricaoId/enviar-cartao', c.enviarCartaoAluno);
+router.post('/inscricoes/:inscricaoId/enviar-boletim', c.enviarBoletimInscricao);
+router.post('/turmas/:id/enviar-cartoes', c.enviarCartoesTurma);
 
 // Presença
 router.get('/turmas/:id/presenca', c.getPresencas);

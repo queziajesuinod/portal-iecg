@@ -484,6 +484,18 @@ async function confirmarPagamento(inscricaoId, { valorMatricula, dataPagamento }
   }
 
   await inscricao.save();
+
+  // Gerar tokenQr se ainda não tem e disparar envio do cartão (sem bloquear resposta)
+  if (!inscricao.tokenQr) {
+    inscricao.tokenQr = require('crypto').randomUUID();
+    await inscricao.save();
+  }
+  setImmediate(() => {
+    require('./cfmCartaoService').enviarCartaoAluno(inscricao.id)
+      .then(r => console.log(`[CFM] Cartão enviado para ${r.nome}: email=${r.email.ok} wapp=${r.whatsapp.ok}`))
+      .catch(e => console.error('[CFM] Erro envio cartão:', e.message));
+  });
+
   return inscricao;
 }
 
@@ -1093,12 +1105,14 @@ async function salvarPresencasAula(aulaId, presencas = []) {
   const aula = await CfmAula.findByPk(aulaId);
   if (!aula) throw new Error('Aula não encontrada');
   for (const p of presencas) {
-    await CfmAulaPresenca.upsert({
-      aulaId,
-      inscricaoId: p.inscricaoId,
-      presente: !!p.presente,
-      observacao: p.observacao || null,
-    });
+    const existing = await CfmAulaPresenca.findOne({ where: { aulaId, inscricaoId: p.inscricaoId } });
+    if (existing) {
+      await existing.update({ presente: !!p.presente, observacao: p.observacao || null });
+    } else {
+      await CfmAulaPresenca.create({
+        aulaId, inscricaoId: p.inscricaoId, presente: !!p.presente, observacao: p.observacao || null
+      });
+    }
   }
   return getAulaDetalhes(aulaId);
 }
@@ -1194,6 +1208,110 @@ async function registrarPagamentoMensalidade(mensalidadeId, { pago, dataPagament
     observacao: observacao || null,
   });
   return m;
+}
+
+// ─── LISTA DE PRESENÇA PARA IMPRESSÃO ────────────────────────────────────────
+
+async function getListaPresencaImpressao(turmaId) {
+  const turma = await CfmTurma.findByPk(turmaId, {
+    include: [
+      { model: CfmEscola, as: 'escola' },
+      { model: CfmModulo, as: 'modulo', required: false },
+      { model: Campus, as: 'campus', required: false },
+      {
+        model: CfmTurmaMateria,
+        as: 'turmaMaterias',
+        include: [
+          { model: CfmMateria, as: 'materia' },
+          {
+            model: Member, as: 'mestre', attributes: ['id', 'fullName', 'preferredName'], required: false
+          },
+        ],
+      },
+      {
+        model: CfmInscricao,
+        as: 'inscricoes',
+        where: { status: { [Op.in]: ['ATIVO', 'CONCLUIDO', 'PENDENTE'] } },
+        required: false,
+        include: [
+          {
+            model: Member, as: 'membro', attributes: ['id', 'fullName', 'preferredName'], required: false
+          },
+        ],
+      },
+    ],
+  });
+  if (!turma) throw Object.assign(new Error('Turma não encontrada'), { status: 404 });
+
+  const aulas = await CfmAula.findAll({
+    where: { turmaId, cancelada: false },
+    order: [['dataAula', 'ASC']],
+    raw: true,
+  });
+
+  const aulaIds = aulas.map(a => a.id);
+  const presencas = aulaIds.length
+    ? await CfmAulaPresenca.findAll({ where: { aulaId: { [Op.in]: aulaIds } }, raw: true })
+    : [];
+
+  const pMap = {};
+  for (const p of presencas) {
+    if (!pMap[p.aulaId]) pMap[p.aulaId] = {};
+    pMap[p.aulaId][p.inscricaoId] = p.presente;
+  }
+
+  const inscricoes = (turma.inscricoes || []).sort((a, b) => {
+    const nA = a.membro ? (a.membro.fullName || '') : (a.nomeNaoMembro || '');
+    const nB = b.membro ? (b.membro.fullName || '') : (b.nomeNaoMembro || '');
+    return nA.localeCompare(nB, 'pt-BR');
+  });
+
+  const materias = (turma.turmaMaterias || [])
+    .sort((a, b) => a.ordem - b.ordem)
+    .map(tm => {
+      const aulasMateria = aulas
+        .filter(a => a.turmaMateriaId === tm.id)
+        .sort((a, b) => a.dataAula.localeCompare(b.dataAula));
+
+      const alunos = inscricoes.map((insc, idx) => {
+        const nome = insc.membro
+          ? (insc.membro.preferredName || insc.membro.fullName)
+          : (insc.nomeNaoMembro || 'Aluno');
+        const marcas = aulasMateria.map(aula => {
+          const aulaMap = pMap[aula.id] || {};
+          if (insc.id in aulaMap) return aulaMap[insc.id] === true ? 'P' : 'F';
+          return null;
+        });
+        const totalFaltas = marcas.filter(m => m === 'F').length;
+        return {
+          numero: idx + 1, nome, marcas, totalFaltas
+        };
+      });
+
+      const mestre = tm.mestre ? (tm.mestre.preferredName || tm.mestre.fullName) : '';
+
+      return {
+        turmaMateriaId: tm.id,
+        materiaNome: tm.materia?.nome || '',
+        mestre,
+        periodoInicio: tm.periodoInicio,
+        periodoFim: tm.periodoFim,
+        aulas: aulasMateria.map((a, idx) => ({ id: a.id, dataAula: a.dataAula, numero: idx + 1 })),
+        alunos,
+      };
+    });
+
+  return {
+    turma: {
+      numeracao: turma.numeracao,
+      periodoInicio: turma.periodoInicio,
+      periodoFim: turma.periodoFim,
+      escola: turma.escola?.nome || '',
+      modulo: turma.modulo?.nome || '',
+      campus: turma.campus?.nome || '',
+    },
+    materias,
+  };
 }
 
 // ─── INSCRIÇÃO PÚBLICA ───────────────────────────────────────────────────────
@@ -1709,6 +1827,163 @@ async function listarRedesCfm() {
   return rows.map(r => r.rede).filter(Boolean);
 }
 
+// ─── CFM CHECK-IN ─────────────────────────────────────────────────────────
+
+function _extractToken(raw) {
+  const m = (raw || '').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  return m ? m[0] : null;
+}
+
+async function scanCfmCheckin(rawToken) {
+  const token = _extractToken(rawToken);
+  if (!token) throw Object.assign(new Error('QR inválido'), { status: 400 });
+
+  const inscricao = await CfmInscricao.findOne({
+    where: { tokenQr: token },
+    include: [
+      {
+        model: CfmTurma,
+        as: 'turma',
+        include: [
+          { model: CfmEscola, as: 'escola' },
+          {
+            model: CfmTurmaMateria,
+            as: 'turmaMaterias',
+            include: [{ model: CfmMateria, as: 'materia' }],
+            order: [['ordem', 'ASC']],
+          },
+        ],
+      },
+      { model: Member, as: 'membro', attributes: ['id', 'fullName', 'preferredName'] },
+    ],
+  });
+
+  if (!inscricao) throw Object.assign(new Error('Matrícula não encontrada'), { status: 404 });
+  if (!['PENDENTE', 'ATIVO'].includes(inscricao.status)) {
+    throw Object.assign(new Error(`Matrícula ${inscricao.status.toLowerCase()}`), { status: 422 });
+  }
+
+  const nome = inscricao.membro
+    ? (inscricao.membro.preferredName || inscricao.membro.fullName)
+    : inscricao.nomeNaoMembro;
+
+  const hoje = new Date().toISOString().slice(0, 10);
+  const hojeFormatado = hoje.split('-').reverse().join('/');
+
+  const turmaMaterias = (inscricao.turma?.turmaMaterias || []).filter(tm => {
+    if (tm.periodoInicio && hoje < tm.periodoInicio) return false;
+    if (tm.periodoFim && hoje > tm.periodoFim) return false;
+    return true;
+  });
+
+  const tmIds = turmaMaterias.map(tm => tm.id);
+
+  const aulasHoje = tmIds.length > 0
+    ? await CfmAula.findAll({
+      where: {
+        turmaId: inscricao.turmaId, turmaMateriaId: tmIds, dataAula: hoje, cancelada: false
+      },
+      attributes: ['turmaMateriaId'],
+      raw: true,
+    })
+    : [];
+
+  const tmIdsComAula = new Set(aulasHoje.map(a => a.turmaMateriaId));
+  const materias = turmaMaterias
+    .filter(tm => tmIdsComAula.has(tm.id))
+    .map(tm => ({ turmaMateriaId: tm.id, nome: tm.materia?.nome || `Matéria ${tm.id}` }));
+
+  if (materias.length === 0) {
+    throw Object.assign(
+      new Error(`Sem aula ativa em ${hojeFormatado}`),
+      { status: 422 }
+    );
+  }
+
+  return {
+    inscricaoId: inscricao.id,
+    nome,
+    turma: `${inscricao.turma?.escola?.nome || ''} · ${inscricao.turma?.numeracao || ''}`.trim(),
+    materias,
+    requiresSelection: materias.length > 1,
+  };
+}
+
+async function marcarCfmCheckin(rawToken, turmaMateriaId) {
+  const token = _extractToken(rawToken);
+  if (!token) throw Object.assign(new Error('QR inválido'), { status: 400 });
+
+  const inscricao = await CfmInscricao.findOne({ where: { tokenQr: token } });
+  if (!inscricao) throw Object.assign(new Error('Matrícula não encontrada'), { status: 404 });
+  if (!['PENDENTE', 'ATIVO'].includes(inscricao.status)) {
+    throw Object.assign(new Error(`Matrícula ${inscricao.status.toLowerCase()}`), { status: 422 });
+  }
+
+  const hoje = new Date().toISOString().slice(0, 10);
+  const hojeFormatado = hoje.split('-').reverse().join('/');
+
+  const aula = await CfmAula.findOne({
+    where: {
+      turmaId: inscricao.turmaId, turmaMateriaId, dataAula: hoje, cancelada: false
+    },
+  });
+
+  if (!aula) {
+    throw Object.assign(
+      new Error(`Sem aula ativa em ${hojeFormatado}`),
+      { status: 422 }
+    );
+  }
+
+  const [presenca, created] = await CfmAulaPresenca.findOrCreate({
+    where: { aulaId: aula.id, inscricaoId: inscricao.id },
+    defaults: { presente: true },
+  });
+
+  if (!created && !presenca.presente) {
+    await presenca.update({ presente: true });
+  }
+
+  return {
+    jaRegistrado: !created && presenca.presente === true && !(!created && presenca.presente === false),
+    presente: presenca.presente,
+  };
+}
+
+async function enviarCartaoInscricao(inscricaoId) {
+  const inscricao = await CfmInscricao.findByPk(inscricaoId);
+  if (!inscricao) throw new Error('Inscrição não encontrada');
+  if (!['PENDENTE', 'ATIVO', 'CONCLUIDO'].includes(inscricao.status)) {
+    throw new Error('Status de inscrição não permite envio de cartão');
+  }
+  if (!inscricao.tokenQr) {
+    inscricao.tokenQr = require('crypto').randomUUID();
+    await inscricao.save();
+  }
+  return require('./cfmCartaoService').enviarCartaoAluno(inscricaoId);
+}
+
+async function enviarCartoesTurma(turmaId) {
+  const inscricoes = await CfmInscricao.findAll({
+    where: { turmaId, status: ['PENDENTE', 'ATIVO'] },
+    attributes: ['id', 'tokenQr', 'status'],
+  });
+  const resultados = [];
+  for (const insc of inscricoes) {
+    if (!insc.tokenQr) {
+      insc.tokenQr = require('crypto').randomUUID();
+      await insc.save();
+    }
+    try {
+      const r = await require('./cfmCartaoService').enviarCartaoAluno(insc.id);
+      resultados.push({ inscricaoId: insc.id, ...r });
+    } catch (e) {
+      resultados.push({ inscricaoId: insc.id, erro: e.message });
+    }
+  }
+  return { total: inscricoes.length, resultados };
+}
+
 module.exports = {
   listEscolas,
   createEscola,
@@ -1767,4 +2042,9 @@ module.exports = {
   atualizarDadosFormulario,
   listarEscolasPublicas,
   listarCampiPublicos,
+  scanCfmCheckin,
+  marcarCfmCheckin,
+  enviarCartaoInscricao,
+  enviarCartoesTurma,
+  getListaPresencaImpressao,
 };
