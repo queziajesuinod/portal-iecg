@@ -150,6 +150,7 @@ async function tickCelulas() {
 }
 
 async function tickVideoTranscription() {
+  if (process.env.NODE_ENV !== 'production') return;
   try {
     await videoTranscriptWorker.tick();
   } catch (err) {

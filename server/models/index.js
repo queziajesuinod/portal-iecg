@@ -1,4 +1,3 @@
-'use strict';
 /* eslint-disable import/no-dynamic-require */
 
 const fs = require('fs'); // Declarado uma única vez
@@ -41,11 +40,8 @@ const sequelize = new Sequelize(
   }
 );
 
-
 fs.readdirSync(__dirname)
-  .filter(file => {
-    return (file.indexOf('.') !== 0) && (file !== basename) && (file.slice(-3) === '.js');
-  })
+  .filter(file => (file.indexOf('.') !== 0) && (file !== basename) && (file.slice(-3) === '.js'))
   .forEach(file => {
     // Cada arquivo de modelo exporta uma função que recebe (sequelize, DataTypes)
     const model = require(path.join(__dirname, file))(sequelize, Sequelize.DataTypes);
@@ -60,5 +56,8 @@ Object.keys(db).forEach(modelName => {
 
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;
+
+// Garante que a extensão unaccent está disponível para buscas sem acento
+sequelize.query('CREATE EXTENSION IF NOT EXISTS unaccent').catch(() => {});
 
 module.exports = db;
