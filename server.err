@@ -1,0 +1,17 @@
+(node:28712) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+❌ Redis Error: connect ECONNREFUSED ::1:6379
+❌ Redis Error: connect ECONNREFUSED ::1:6379
+❌ Redis Error: connect ECONNREFUSED ::1:6379
+❌ Redis Error: connect ECONNREFUSED ::1:6379
+❌ Redis Error: connect ECONNREFUSED ::1:6379
+❌ Redis Error: connect ECONNREFUSED ::1:6379
+❌ Redis Error: connect ECONNREFUSED ::1:6379
+❌ Redis Error: connect ECONNREFUSED ::1:6379
+❌ Redis Error: connect ECONNREFUSED ::1:6379
+❌ Redis Error: connect ECONNREFUSED ::1:6379
+❌ Redis Error: connect ECONNREFUSED ::1:6379
+❌ Redis: Máximo de tentativas de reconexão atingido
+❌ Redis Error: connect ECONNREFUSED ::1:6379
+❌ Erro ao conectar ao Redis: Redis: Falha ao reconectar
+⚠️  Sistema continuará funcionando sem cache
