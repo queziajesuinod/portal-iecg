@@ -149,6 +149,7 @@ app.use('/api/admin/reports', authMiddleware, require('./routers/reportsRoutes')
 app.use('/api/admin/voluntariado', authMiddleware, require('./routers/voluntariadoRoutes'));
 // Módulo CFM — Centro de Formação (escolas, turmas, alunos)
 app.use('/api/admin/cfm', authMiddleware, requirePermission(['CFM_ADMIN']), require('./routers/cfmRoutes'));
+app.use('/api/cfm/checkin', authMiddleware, require('./routers/cfmCheckinRoutes'));
 app.use('/api/admin/celulas-presenca', authMiddleware, require('./routes/celulaPresencaRoutes'));
 // Rotas administrativas de canais do YouTube (modulo de transcricao de videos)
 app.use('/api/admin/youtube/channels', authMiddleware, requireVideosAdmin, require('./routers/youtubeChannelRoutes'));

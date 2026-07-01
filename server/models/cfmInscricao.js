@@ -41,6 +41,7 @@ module.exports = (sequelize) => {
     marcoMilestoneId: { type: DataTypes.UUID, allowNull: true },
     observacoes: { type: DataTypes.TEXT, allowNull: true },
     dadosFormulario: { type: DataTypes.JSONB, allowNull: true },
+    tokenQr: { type: DataTypes.UUID, allowNull: true, unique: true },
   }, {
     sequelize,
     modelName: 'CfmInscricao',

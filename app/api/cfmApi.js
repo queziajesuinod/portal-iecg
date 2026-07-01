@@ -34,6 +34,7 @@ export const createTurma = (data) => axios.post(`${ADMIN}/turmas`, data, { heade
 export const updateTurma = (id, data) => axios.put(`${ADMIN}/turmas/${id}`, data, { headers: getAuthHeader() }).then(r => r.data);
 export const previewDeleteTurma = (id) => axios.get(`${ADMIN}/turmas/${id}/preview-delete`, { headers: getAuthHeader() }).then(r => r.data);
 export const deleteTurma = (id) => axios.delete(`${ADMIN}/turmas/${id}`, { headers: getAuthHeader() }).then(r => r.data);
+export const getListaPresencaImpressao = (id) => axios.get(`${ADMIN}/turmas/${id}/lista-presenca`, { headers: getAuthHeader() }).then(r => r.data);
 
 // ─── TURMA MATÉRIAS ────────────────────────────────────────────────────────
 export const getTurmaMaterias = (turmaId) => axios.get(`${ADMIN}/turmas/${turmaId}/materias`, { headers: getAuthHeader() }).then(r => r.data);
@@ -50,6 +51,8 @@ export const concluirInscricao = (inscricaoId) => axios.put(`${ADMIN}/inscricoes
 export const reabrirInscricao = (inscricaoId) => axios.put(`${ADMIN}/inscricoes/${inscricaoId}/reabrir`, {}, { headers: getAuthHeader() }).then(r => r.data);
 export const previewConclusaoTurma = (turmaId) => axios.get(`${ADMIN}/turmas/${turmaId}/preview-conclusao`, { headers: getAuthHeader() }).then(r => r.data);
 export const concluirTurma = (turmaId) => axios.put(`${ADMIN}/turmas/${turmaId}/conclusao`, {}, { headers: getAuthHeader() }).then(r => r.data);
+export const enviarBoletimTurma = (turmaId) => axios.post(`${ADMIN}/turmas/${turmaId}/enviar-boletim`, {}, { headers: getAuthHeader() }).then(r => r.data);
+export const enviarBoletimInscricao = (inscricaoId) => axios.post(`${ADMIN}/inscricoes/${inscricaoId}/enviar-boletim`, {}, { headers: getAuthHeader() }).then(r => r.data);
 
 // ─── PRESENÇA ──────────────────────────────────────────────────────────────
 export const getPresencas = (turmaId, params) => axios.get(`${ADMIN}/turmas/${turmaId}/presenca`, { params, headers: getAuthHeader() }).then(r => r.data);
@@ -79,6 +82,8 @@ export const registrarPagamentoMensalidade = (mensalidadeId, data) => axios.put(
 
 // ─── DADOS DE FORMULÁRIO (inscrição) ──────────────────────────────────────
 export const atualizarDadosFormulario = (inscricaoId, dados) => axios.put(`${ADMIN}/inscricoes/${inscricaoId}/dados-formulario`, dados, { headers: getAuthHeader() }).then(r => r.data);
+export const enviarCartaoAluno = (inscricaoId) => axios.post(`${ADMIN}/inscricoes/${inscricaoId}/enviar-cartao`, {}, { headers: getAuthHeader() }).then(r => r.data);
+export const enviarCartoesTurma = (turmaId) => axios.post(`${ADMIN}/turmas/${turmaId}/enviar-cartoes`, {}, { headers: getAuthHeader() }).then(r => r.data);
 
 // ─── DADOS DE APOIO (reutilizados no admin) ───────────────────────────────
 const PUBLIC_CFM = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/public/cfm`;

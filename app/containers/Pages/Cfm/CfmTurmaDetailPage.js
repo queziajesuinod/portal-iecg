@@ -19,10 +19,15 @@ import EventIcon from '@mui/icons-material/Event';
 import DeleteIcon from '@mui/icons-material/Delete';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import SendIcon from '@mui/icons-material/Send';
+import PrintIcon from '@mui/icons-material/Print';
+import DescriptionIcon from '@mui/icons-material/Description';
 import { useParams, useHistory } from 'react-router-dom';
 import { PapperBlock } from 'dan-components';
 import * as api from '../../../api/cfmApi';
 import { searchMembers } from '../../../api/cfmApi';
+import generateListaPresencaHtml from '../../../utils/cfmListaPresencaHtml';
+import generateBoletimHtml from '../../../utils/cfmBoletimHtml';
 
 const DIAS_SEMANA_NOMES = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
@@ -81,9 +86,32 @@ export default function CfmTurmaDetailPage() {
 
   useEffect(() => { loadTurma(); }, [loadTurma]);
 
+  useEffect(() => {
+    if (error) window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [error]);
+
   const escolaNome = turma?.escola?.nome;
   const moduloNome = turma?.modulo?.nome;
   const campusNome = turma?.campus?.nome;
+
+  const [imprimindo, setImprimindo] = useState(false);
+
+  const printListaPresenca = async () => {
+    setImprimindo(true);
+    try {
+      const data = await api.getListaPresencaImpressao(id);
+      const html = generateListaPresencaHtml(data);
+      const w = window.open('', '_blank');
+      w.document.write(html);
+      w.document.close();
+      w.focus();
+      setTimeout(() => w.print(), 400);
+    } catch (e) {
+      setError(e.response?.data?.erro || e.message || 'Erro ao gerar lista');
+    } finally {
+      setImprimindo(false);
+    }
+  };
 
   return (
     <PapperBlock title="Detalhes da Turma" desc="Alunos, matérias, presenças e notas" icon="ion-ios-school-outline">
@@ -113,6 +141,17 @@ export default function CfmTurmaDetailPage() {
               </Typography>
             </Box>
             <Chip label={STATUS_CHIP[turma.status]?.label || turma.status} color={STATUS_CHIP[turma.status]?.color || 'default'} />
+            <Tooltip title="Gerar lista de presença para impressão">
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={imprimindo ? <CircularProgress size={14} /> : <PrintIcon />}
+                onClick={printListaPresenca}
+                disabled={imprimindo}
+              >
+                Imprimir Lista de Presença
+              </Button>
+            </Tooltip>
           </Box>
 
           <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider', mb: 1 }}>
@@ -150,6 +189,20 @@ export default function CfmTurmaDetailPage() {
 
 // ─── ABA: ALUNOS ───────────────────────────────────────────────────────────
 
+async function abrirPdfBoletim(turmaId, onError) {
+  try {
+    const data = await api.getPainel(turmaId);
+    const html = generateBoletimHtml(data);
+    const w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 400);
+  } catch (e) {
+    onError(e.response?.data?.erro || e.message || 'Erro ao gerar PDF');
+  }
+}
+
 function AlunosTab({ turmaId, turma, onError }) {
   const [inscricoes, setInscricoes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -173,6 +226,35 @@ function AlunosTab({ turmaId, turma, onError }) {
   const [memberOptions, setMemberOptions] = useState([]);
   const [memberSearch, setMemberSearch] = useState('');
   const [saving, setSaving] = useState(false);
+  const [enviandoCartao, setEnviandoCartao] = useState(null);
+  const [enviandoBoletim, setEnviandoBoletim] = useState(null);
+  const [enviandoTodos, setEnviandoTodos] = useState(false);
+
+  const enviarCartao = async (inscricaoId) => {
+    setEnviandoCartao(inscricaoId);
+    try {
+      const r = await api.enviarCartaoAluno(inscricaoId);
+      const msg = `Cartão enviado para ${r.nome}: e-mail ${r.email.ok ? '✓' : '✗'} | WhatsApp ${r.whatsapp.ok ? '✓' : '✗'}`;
+      onError(msg);
+    } catch (e) { onError(e.response?.data?.erro || e.message); } finally { setEnviandoCartao(null); }
+  };
+
+  const enviarBoletim = async (inscricaoId) => {
+    setEnviandoBoletim(inscricaoId);
+    try {
+      const r = await api.enviarBoletimInscricao(inscricaoId);
+      onError(r.ok ? `Boletim enviado para ${r.nome}.` : `Sem e-mail cadastrado para ${r.nome}.`);
+    } catch (e) { onError(e.response?.data?.erro || e.message); } finally { setEnviandoBoletim(null); }
+  };
+
+  const enviarCartoesTodos = async () => {
+    if (!window.confirm('Enviar cartão por e-mail e WhatsApp para todos os alunos PENDENTE e ATIVO desta turma?')) return;
+    setEnviandoTodos(true);
+    try {
+      const r = await api.enviarCartoesTurma(turmaId);
+      onError(`Cartões enviados: ${r.total} aluno(s) processado(s).`);
+    } catch (e) { onError(e.response?.data?.erro || e.message); } finally { setEnviandoTodos(false); }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -229,6 +311,7 @@ function AlunosTab({ turmaId, turma, onError }) {
       setConclusaoTurmaDialog({ open: false });
       setPreviewTurma(null);
       await load();
+      abrirPdfBoletim(turmaId, onError);
     } catch (e) { onError(e.response?.data?.erro || e.message); } finally { setSaving(false); }
   };
 
@@ -288,7 +371,7 @@ function AlunosTab({ turmaId, turma, onError }) {
   };
 
   useEffect(() => {
-    if (!dadosLiderInput || dadosLiderInput.length < 2) { setDadosLiderOptions([]); return () => {}; }
+    if (!dadosLiderInput || dadosLiderInput.length < 2) { setDadosLiderOptions([]); return () => { }; }
     const t = setTimeout(async () => {
       setDadosLiderLoading(true);
       try { setDadosLiderOptions(await api.buscarLideresCelulaSearch(dadosLiderInput)); } catch (_ignored) { /* silent */ } finally { setDadosLiderLoading(false); }
@@ -310,6 +393,19 @@ function AlunosTab({ turmaId, turma, onError }) {
           <Button variant="outlined" size="small" startIcon={<CheckCircleIcon />} onClick={abrirConclusaoTurma} color="primary">
             Concluir Turma
           </Button>
+          <Tooltip title="Enviar cartão CFM (e-mail + WhatsApp) para todos os alunos ativos e pendentes">
+            <span>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={enviandoTodos ? <CircularProgress size={14} /> : <SendIcon />}
+                onClick={enviarCartoesTodos}
+                disabled={enviandoTodos}
+              >
+                Enviar Cartões
+              </Button>
+            </span>
+          </Tooltip>
           <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => setDialog(d => ({ ...d, open: true }))}>
             Inscrever Aluno
           </Button>
@@ -325,22 +421,37 @@ function AlunosTab({ turmaId, turma, onError }) {
             <TableHead>
               <TableRow>
                 <TableCell>Aluno</TableCell>
+                <TableCell>Telefone</TableCell>
+                <TableCell>Líder de Célula</TableCell>
+                <TableCell>Pastor</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Matrícula</TableCell>
                 <TableCell align="right">Ações</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {inscricoesFiltradas.length === 0 && <TableRow><TableCell colSpan={4} align="center"><Typography color="text.secondary" py={1}>{busca ? 'Nenhum aluno encontrado' : 'Nenhum aluno inscrito'}</Typography></TableCell></TableRow>}
+              {inscricoesFiltradas.length === 0 && <TableRow><TableCell colSpan={7} align="center"><Typography color="text.secondary" py={1}>{busca ? 'Nenhum aluno encontrado' : 'Nenhum aluno inscrito'}</Typography></TableCell></TableRow>}
               {inscricoesFiltradas.map((insc) => {
                 const nome = insc.membro ? (insc.membro.preferredName || insc.membro.fullName) : insc.nomeNaoMembro;
                 const st = STATUS_CHIP[insc.status] || { label: insc.status, color: 'default' };
                 const ativo = ['PENDENTE', 'LISTA_ESPERA', 'ATIVO'].includes(insc.status);
+                const df = insc.dadosFormulario || {};
                 return (
                   <TableRow key={insc.id}>
                     <TableCell>
                       {nome}
                       {!insc.memberId && <Chip size="small" label="Não-membro" sx={{ ml: 1 }} />}
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>
+                        {insc.membro?.phone || <Typography component="span" color="text.disabled" variant="body2">—</Typography>}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2">{df.liderNome || <Typography component="span" color="text.disabled" variant="body2">—</Typography>}</Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2">{df.pastorNome || <Typography component="span" color="text.disabled" variant="body2">—</Typography>}</Typography>
                     </TableCell>
                     <TableCell><Chip size="small" label={st.label} color={st.color} /></TableCell>
                     <TableCell>
@@ -371,6 +482,38 @@ function AlunosTab({ turmaId, turma, onError }) {
                       {insc.memberId && (
                         <Tooltip title="Ver / editar dados de matrícula">
                           <IconButton size="small" color="info" onClick={() => abrirDadosDialog(insc)}><InfoOutlinedIcon fontSize="small" /></IconButton>
+                        </Tooltip>
+                      )}
+                      {insc.pagamentoMatricula && (
+                        <Tooltip title="Enviar cartão por e-mail e WhatsApp">
+                          <span>
+                            <IconButton
+                              size="small"
+                              color="primary"
+                              onClick={() => enviarCartao(insc.id)}
+                              disabled={enviandoCartao === insc.id}
+                            >
+                              {enviandoCartao === insc.id
+                                ? <CircularProgress size={14} />
+                                : <SendIcon fontSize="small" />}
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      )}
+                      {insc.memberId && (
+                        <Tooltip title="Enviar boletim por e-mail">
+                          <span>
+                            <IconButton
+                              size="small"
+                              color="secondary"
+                              onClick={() => enviarBoletim(insc.id)}
+                              disabled={enviandoBoletim === insc.id}
+                            >
+                              {enviandoBoletim === insc.id
+                                ? <CircularProgress size={14} />
+                                : <DescriptionIcon fontSize="small" />}
+                            </IconButton>
+                          </span>
                         </Tooltip>
                       )}
                     </TableCell>

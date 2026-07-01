@@ -180,6 +180,38 @@ class EvolutionApiService {
   }
 
   /**
+   * Enviar imagem via base64 (sem prefixo data URI)
+   * Evolution API v2 exige base64 puro + mimetype explícito
+   */
+  async enviarImagemBase64(phone, base64, caption, instanceName = null) {
+    try {
+      const client = this.getClient();
+      const formattedPhone = this.formatPhoneNumber(phone);
+      const instance = this.resolveInstance(instanceName);
+
+      const response = await client.post(`/message/sendMedia/${instance}`, {
+        number: formattedPhone,
+        mediatype: 'image',
+        mimetype: 'image/png',
+        caption,
+        media: base64,
+      });
+
+      return {
+        sucesso: true,
+        externalId: response.data?.key?.id || null,
+        dados: response.data,
+      };
+    } catch (error) {
+      console.error('Erro ao enviar imagem base64 via Evolution API:', error.response?.data || error.message);
+      return {
+        sucesso: false,
+        erro: error.response?.data?.message || error.message,
+      };
+    }
+  }
+
+  /**
    * Verificar status da instância
    * @returns {Promise<Object>}
    */

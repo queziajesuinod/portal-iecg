@@ -78,6 +78,9 @@ exports.deleteTurma = async (req, res) => {
 exports.getTurmaMaterias = async (req, res) => {
   try { ok(res, await cfm.getTurmaMaterias(req.params.id)); } catch (e) { err(res, e); }
 };
+exports.listaPresencaImpressao = async (req, res) => {
+  try { ok(res, await cfm.getListaPresencaImpressao(req.params.id)); } catch (e) { err(res, e, e.status || 500); }
+};
 exports.syncTurmaMaterias = async (req, res) => {
   try { ok(res, await cfm.syncTurmaMaterias(req.params.id, req.body.materias)); } catch (e) { err(res, e); }
 };
@@ -115,6 +118,18 @@ exports.previewConclusaoTurma = async (req, res) => {
 };
 exports.concluirTurma = async (req, res) => {
   try { ok(res, await cfm.concluirTurma(req.params.id)); } catch (e) { err(res, e, 400); }
+};
+exports.enviarBoletimTurma = async (req, res) => {
+  try {
+    const boletimSvc = require('../services/cfmBoletimEmailService');
+    ok(res, await boletimSvc.enviarBoletimTurma(req.params.id));
+  } catch (e) { err(res, e, 500); }
+};
+exports.enviarBoletimInscricao = async (req, res) => {
+  try {
+    const boletimSvc = require('../services/cfmBoletimEmailService');
+    ok(res, await boletimSvc.enviarBoletimInscricao(req.params.inscricaoId));
+  } catch (e) { err(res, e, 500); }
 };
 
 // ─── PRESENÇA ──────────────────────────────────────────────────────────────
@@ -228,4 +243,33 @@ exports.listarCampiPublicos = async (req, res) => {
 };
 exports.atualizarDadosFormulario = async (req, res) => {
   try { ok(res, await cfm.atualizarDadosFormulario(req.params.inscricaoId, req.body)); } catch (e) { err(res, e, 400); }
+};
+
+// ─── CFM CHECK-IN ──────────────────────────────────────────────────────────
+
+exports.cfmCheckinScan = async (req, res) => {
+  try {
+    const resultado = await cfm.scanCfmCheckin(req.body.tokenQr);
+    ok(res, resultado);
+  } catch (e) {
+    err(res, e, e.status || 500);
+  }
+};
+
+exports.cfmCheckinMarcar = async (req, res) => {
+  try {
+    const { tokenQr, turmaMateriaId } = req.body;
+    if (!turmaMateriaId) { res.status(400).json({ erro: 'turmaMateriaId obrigatório' }); return; }
+    const resultado = await cfm.marcarCfmCheckin(tokenQr, turmaMateriaId);
+    ok(res, resultado);
+  } catch (e) {
+    err(res, e, e.status || 500);
+  }
+};
+
+exports.enviarCartaoAluno = async (req, res) => {
+  try { ok(res, await cfm.enviarCartaoInscricao(req.params.inscricaoId)); } catch (e) { err(res, e, e.status || 500); }
+};
+exports.enviarCartoesTurma = async (req, res) => {
+  try { ok(res, await cfm.enviarCartoesTurma(req.params.id)); } catch (e) { err(res, e, 500); }
 };
