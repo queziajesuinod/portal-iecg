@@ -749,6 +749,9 @@ async function concluirTurma(turmaId) {
     concluidos += 1;
   }
 
+  turma.status = 'ENCERRADA';
+  await turma.save();
+
   return { concluidos, pulados };
 }
 
