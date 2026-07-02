@@ -1585,6 +1585,7 @@ async function inscricaoPublicaCompleta(turmaId, body) {
     nome, email, telefone, cpf, dataNascimento, cidade,
     rua, numero, bairro, cep, deficiencia, geracao,
     liderCelulaId, celulaId, pastorId, pastorCargo,
+    liderNomeManual, pastorNomeManual,
     encontroComDeus, dataEncontroComDeus, anoConversaoMinisterio,
     observacoes,
   } = body;
@@ -1605,7 +1606,7 @@ async function inscricaoPublicaCompleta(turmaId, body) {
 
   // Resolver nomes para dadosFormulario (snapshot no momento do cadastro)
   const geracaoNome = geracao || null; // geracao é a própria string da rede
-  let liderNome = null;
+  let liderNome = liderNomeManual || null;
   let liderCelulaNome = null;
   if (liderCelulaId) {
     const lider = await Member.findByPk(liderCelulaId, { attributes: ['fullName', 'preferredName'] });
@@ -1615,7 +1616,7 @@ async function inscricaoPublicaCompleta(turmaId, body) {
     const cel = await Celula.findByPk(celulaId, { attributes: ['celula'] });
     if (cel) liderCelulaNome = cel.celula;
   }
-  let pastorNome = null;
+  let pastorNome = pastorNomeManual || null;
   if (pastorId) {
     const past = await Member.findByPk(pastorId, { attributes: ['fullName', 'preferredName'] });
     if (past) pastorNome = past.preferredName || past.fullName;
