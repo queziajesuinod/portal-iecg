@@ -49,10 +49,12 @@ async function remover(req, res) {
 // Rota pública para validar cupom
 async function validar(req, res) {
   try {
-    const { code, eventId, preco } = req.body;
+    const {
+      code, eventId, preco, paymentType
+    } = req.body;
     const quantityRaw = Number(req.body.quantity ?? req.body.attendees?.length ?? req.body.attendeesData?.length ?? 0);
     const quantity = Number.isFinite(quantityRaw) ? quantityRaw : 0;
-    const resultado = await couponService.validarCupom(code, eventId, parseFloat(preco), quantity);
+    const resultado = await couponService.validarCupom(code, eventId, parseFloat(preco), quantity, paymentType || null);
     res.status(200).json(resultado);
   } catch (err) {
     res.status(400).json({ message: err.message });

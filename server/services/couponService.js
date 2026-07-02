@@ -44,9 +44,12 @@ async function buscarCuponPorId(id) {
   return coupon;
 }
 
+const VALID_PAYMENT_TYPES = ['pix', 'credit_card', 'boleto', 'offline'];
+
 async function criarCupom(body) {
   const {
-    eventId, code, discountType, discountValue, maxUses, validFrom, validUntil, description, minimumQuantity
+    eventId, code, discountType, discountValue, maxUses, validFrom, validUntil, description, minimumQuantity,
+    allowedPaymentTypes,
   } = body;
 
   if (!code) {
@@ -79,6 +82,10 @@ async function criarCupom(body) {
     }
   }
 
+  const tiposPermitidos = Array.isArray(allowedPaymentTypes) && allowedPaymentTypes.length > 0
+    ? allowedPaymentTypes.filter(t => VALID_PAYMENT_TYPES.includes(t))
+    : null;
+
   return Coupon.create({
     id: uuid.v4(),
     eventId: eventId || null,
@@ -91,6 +98,7 @@ async function criarCupom(body) {
     validFrom,
     validUntil,
     isActive: true,
+    allowedPaymentTypes: tiposPermitidos,
     description
   });
 }
@@ -118,6 +126,12 @@ async function atualizarCupom(id, body) {
   if (Object.prototype.hasOwnProperty.call(body, 'minimumQuantity')) {
     coupon.minimumQuantity = normalizeMinimumQuantity(body.minimumQuantity);
   }
+  if (Object.prototype.hasOwnProperty.call(body, 'allowedPaymentTypes')) {
+    const tipos = body.allowedPaymentTypes;
+    coupon.allowedPaymentTypes = Array.isArray(tipos) && tipos.length > 0
+      ? tipos.filter(t => VALID_PAYMENT_TYPES.includes(t))
+      : null;
+  }
 
   await coupon.save();
   return coupon;
@@ -138,8 +152,12 @@ async function deletarCupom(id) {
   await coupon.destroy();
 }
 
+const PAYMENT_TYPE_LABELS = {
+  pix: 'PIX', credit_card: 'Cartão de Crédito', boleto: 'Boleto', offline: 'Pagamento Presencial'
+};
+
 // Validar e aplicar cupom
-async function validarCupom(code, eventId, preco, quantity) {
+async function validarCupom(code, eventId, preco, quantity, paymentType = null) {
   const normalizedCode = String(code || '').toUpperCase().trim();
   const coupon = await Coupon.findOne({
     where: {
@@ -156,7 +174,7 @@ async function validarCupom(code, eventId, preco, quantity) {
     if (existingCoupon && !existingCoupon.isActive) {
       throw new Error('Cupom inativo');
     }
-    throw new Error('Cupom n�o encontrado');
+    throw new Error('Cupom n�o encontrado');
   }
 
   // Verificar se cupom é específico para um evento
@@ -185,6 +203,16 @@ async function validarCupom(code, eventId, preco, quantity) {
     throw new Error(`Cupom válido apenas para compras com no mínimo ${coupon.minimumQuantity} ingressos`);
   }
 
+  // Verificar restrição de forma de pagamento
+  if (coupon.allowedPaymentTypes && coupon.allowedPaymentTypes.length > 0 && paymentType) {
+    if (!coupon.allowedPaymentTypes.includes(paymentType)) {
+      const permitidos = coupon.allowedPaymentTypes
+        .map(t => PAYMENT_TYPE_LABELS[t] || t)
+        .join(' ou ');
+      throw new Error(`Este cupom é válido apenas para pagamento via ${permitidos}`);
+    }
+  }
+
   // Calcular desconto
   let desconto = 0;
   if (coupon.discountType === 'percentage') {
@@ -202,7 +230,8 @@ async function validarCupom(code, eventId, preco, quantity) {
     valido: true,
     coupon,
     desconto: parseFloat(desconto.toFixed(2)),
-    precoFinal: parseFloat((preco - desconto).toFixed(2))
+    precoFinal: parseFloat((preco - desconto).toFixed(2)),
+    allowedPaymentTypes: coupon.allowedPaymentTypes || null,
   };
 }
 
@@ -229,4 +258,3 @@ module.exports = {
   validarCupom,
   incrementarUso
 };
-
