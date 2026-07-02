@@ -421,6 +421,10 @@ function CfmMatriculaForm({ turmaId }) {
   const [liderLoading, setLiderLoading] = useState(false);
   const [liderInput, setLiderInput] = useState('');
   const [liderSelecionado, setLiderSelecionado] = useState(null);
+  const [liderManual, setLiderManual] = useState(false);
+  const [liderNomeManual, setLiderNomeManual] = useState('');
+  const [pastorManual, setPastorManual] = useState(false);
+  const [pastorNomeManual, setPastorNomeManual] = useState('');
 
   const [cpfLoading, setCpfLoading] = useState(false);
   const [cpfEncontrado, setCpfEncontrado] = useState(null);
@@ -563,14 +567,21 @@ function CfmMatriculaForm({ turmaId }) {
     setError('');
     setSubmitting(true);
     try {
-      const resp = await axios.post(`${API}/turmas/${turmaId}/matricula`, {
+      const submitData = {
         ...form,
         cpf: form.cpf.replace(/\D/g, ''),
         telefone: form.telefone.replace(/\D/g, ''),
         cep: form.cep.replace(/\D/g, ''),
-        liderCelulaId: liderSelecionado?.id || null,
-        celulaId: liderSelecionado?.celulaId || null,
-      });
+        liderCelulaId: liderManual ? null : (liderSelecionado?.id || null),
+        celulaId: liderManual ? null : (liderSelecionado?.celulaId || null),
+        liderNomeManual: liderManual ? liderNomeManual : undefined,
+      };
+      if (pastorManual) {
+        submitData.pastorId = null;
+        submitData.pastorCargo = null;
+        submitData.pastorNomeManual = pastorNomeManual;
+      }
+      const resp = await axios.post(`${API}/turmas/${turmaId}/matricula`, submitData);
       setEmListaEspera(resp.data?.status === 'LISTA_ESPERA');
       setSuccess(true);
     } catch (submitErr) {
@@ -774,57 +785,115 @@ function CfmMatriculaForm({ turmaId }) {
               </Grid>
 
               <Grid item xs={12}>
-                <Autocomplete
-                  options={liderOptions}
-                  filterOptions={x => x}
-                  loading={liderLoading}
-                  inputValue={liderInput}
-                  value={liderSelecionado}
-                  getOptionLabel={o => `${o.nome}${o.celulaNome ? ` — ${o.celulaNome}` : ''}`}
-                  isOptionEqualToValue={(o, v) => o.id === v.id}
-                  onInputChange={(_, v) => setLiderInput(v)}
-                  onChange={(_, v) => handleLiderSelect(v)}
-                  noOptionsText={liderInput.length < 2 ? 'Digite ao menos 2 letras para buscar' : 'Nenhum líder encontrado'}
-                  renderInput={(params) => (
+                {liderManual ? (
+                  <Box>
                     <TextField
-                      {...params}
                       label="Nome do líder de célula"
-                      placeholder="Digite o nome do seu líder..."
-                      InputProps={{
-                        ...params.InputProps,
-                        endAdornment: (
-                          <>
-                            {liderLoading ? <CircularProgress size={16} /> : null}
-                            {params.InputProps.endAdornment}
-                          </>
-                        ),
-                      }}
-                      helperText={liderSelecionado ? `Célula: ${liderSelecionado.celulaNome || '—'}` : 'Busque pelo nome do seu líder de célula'}
+                      value={liderNomeManual}
+                      onChange={e => setLiderNomeManual(e.target.value)}
+                      fullWidth
+                      placeholder="Digite o nome do seu líder de célula..."
+                      helperText="Nome salvo apenas na matrícula, sem vínculo no sistema"
                     />
-                  )}
-                />
+                    <Box mt={0.5}>
+                      <Button size="small" variant="text" color="primary" sx={{ fontSize: 12, p: 0, minWidth: 0 }}
+                        onClick={() => { setLiderManual(false); setLiderNomeManual(''); setLiderInput(''); setLiderOptions([]); }}>
+                        Buscar pelo sistema
+                      </Button>
+                    </Box>
+                  </Box>
+                ) : (
+                  <Box>
+                    <Autocomplete
+                      options={liderOptions}
+                      filterOptions={x => x}
+                      loading={liderLoading}
+                      inputValue={liderInput}
+                      value={liderSelecionado}
+                      getOptionLabel={o => `${o.nome}${o.celulaNome ? ` — ${o.celulaNome}` : ''}`}
+                      isOptionEqualToValue={(o, v) => o.id === v.id}
+                      onInputChange={(_, v) => setLiderInput(v)}
+                      onChange={(_, v) => handleLiderSelect(v)}
+                      noOptionsText={liderInput.length < 2 ? 'Digite ao menos 2 letras para buscar' : 'Nenhum líder encontrado'}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          label="Nome do líder de célula"
+                          placeholder="Digite o nome do seu líder..."
+                          InputProps={{
+                            ...params.InputProps,
+                            endAdornment: (
+                              <>
+                                {liderLoading ? <CircularProgress size={16} /> : null}
+                                {params.InputProps.endAdornment}
+                              </>
+                            ),
+                          }}
+                          helperText={liderSelecionado ? `Célula: ${liderSelecionado.celulaNome || '—'}` : 'Busque pelo nome do seu líder de célula'}
+                        />
+                      )}
+                    />
+                    <Box mt={0.5}>
+                      <Button size="small" variant="text" color="inherit" sx={{
+                        color: 'text.secondary', fontSize: 12, p: 0, minWidth: 0
+                      }}
+                      onClick={() => { setLiderManual(true); setLiderSelecionado(null); setLiderInput(''); setLiderOptions([]); setForm(f => ({ ...f, pastorId: '', pastorCargo: '' })); }}>
+                        Não encontrei meu líder de célula
+                      </Button>
+                    </Box>
+                  </Box>
+                )}
               </Grid>
 
               <Grid item xs={12}>
-                <Autocomplete
-                  options={pastores}
-                  groupBy={p => (p.cargo === 'pastor_geracao' ? 'Pastores de Geração' : 'Pastores de Campus')}
-                  getOptionLabel={p => p.nome || ''}
-                  value={pastores.find(p => p.id === form.pastorId) || null}
-                  onChange={(_, v) => handlePastorChange({ target: { value: v ? v.id : '' } })}
-                  filterOptions={(opts, { inputValue }) => {
-                    const norm = s => (s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
-                    return opts.filter(p => norm(p.nome).includes(norm(inputValue)));
-                  }}
-                  isOptionEqualToValue={(o, v) => o.id === v.id}
-                  noOptionsText="Nenhum pastor encontrado"
-                  renderInput={params => (
-                    <TextField {...params} label="Pastor de geração apostólica ou pastor do campus" fullWidth
-                      helperText={liderSelecionado && form.pastorId ? '✓ Pastor preenchido automaticamente a partir do líder' : undefined}
-                      FormHelperTextProps={{ sx: { color: 'success.main' } }}
+                {pastorManual ? (
+                  <Box>
+                    <TextField
+                      label="Nome do pastor"
+                      value={pastorNomeManual}
+                      onChange={e => setPastorNomeManual(e.target.value)}
+                      fullWidth
+                      placeholder="Digite o nome do seu pastor..."
+                      helperText="Nome salvo apenas na matrícula, sem vínculo no sistema"
                     />
-                  )}
-                />
+                    <Box mt={0.5}>
+                      <Button size="small" variant="text" color="primary" sx={{ fontSize: 12, p: 0, minWidth: 0 }}
+                        onClick={() => { setPastorManual(false); setPastorNomeManual(''); }}>
+                        Buscar pelo sistema
+                      </Button>
+                    </Box>
+                  </Box>
+                ) : (
+                  <Box>
+                    <Autocomplete
+                      options={pastores}
+                      groupBy={p => (p.cargo === 'pastor_geracao' ? 'Pastores de Geração' : 'Pastores de Campus')}
+                      getOptionLabel={p => p.nome || ''}
+                      value={pastores.find(p => p.id === form.pastorId) || null}
+                      onChange={(_, v) => handlePastorChange({ target: { value: v ? v.id : '' } })}
+                      filterOptions={(opts, { inputValue }) => {
+                        const norm = s => (s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+                        return opts.filter(p => norm(p.nome).includes(norm(inputValue)));
+                      }}
+                      isOptionEqualToValue={(o, v) => o.id === v.id}
+                      noOptionsText="Nenhum pastor encontrado"
+                      renderInput={params => (
+                        <TextField {...params} label="Pastor de geração apostólica ou pastor do campus" fullWidth
+                          helperText={liderSelecionado && form.pastorId ? '✓ Pastor preenchido automaticamente a partir do líder' : undefined}
+                          FormHelperTextProps={{ sx: { color: 'success.main' } }}
+                        />
+                      )}
+                    />
+                    <Box mt={0.5}>
+                      <Button size="small" variant="text" color="inherit" sx={{
+                        color: 'text.secondary', fontSize: 12, p: 0, minWidth: 0
+                      }}
+                      onClick={() => { setPastorManual(true); setForm(f => ({ ...f, pastorId: '', pastorCargo: '' })); }}>
+                        Não encontrei meu pastor
+                      </Button>
+                    </Box>
+                  </Box>
+                )}
               </Grid>
             </Grid>
           </Paper>
