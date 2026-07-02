@@ -18,9 +18,12 @@ import {
   TextField,
   Grid,
   FormControl,
+  FormHelperText,
   InputLabel,
   Select,
+  OutlinedInput,
   MenuItem,
+  Box,
   Typography
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
@@ -40,6 +43,9 @@ import {
   listarEventos
 } from '../../../api/eventsApi';
 
+const METODOS_LABEL = { pix: 'PIX', credit_card: 'Cartão de Crédito', boleto: 'Boleto' };
+const METODOS_OPTIONS = Object.entries(METODOS_LABEL);
+
 function CouponsPage() {
   const { confirm, ConfirmDialog } = useConfirm();
   const [cupons, setCupons] = useState([]);
@@ -56,6 +62,7 @@ function CouponsPage() {
     maxUses: '',
     minimumQuantity: '',
     validUntil: '',
+    allowedPaymentTypes: [],
     isActive: true
   });
 
@@ -91,6 +98,7 @@ function CouponsPage() {
         maxUses: cupom.maxUses || '',
         minimumQuantity: cupom.minimumQuantity ? cupom.minimumQuantity.toString() : '',
         validUntil: cupom.validUntil ? cupom.validUntil.substring(0, 16) : '',
+        allowedPaymentTypes: Array.isArray(cupom.allowedPaymentTypes) ? cupom.allowedPaymentTypes : [],
         isActive: cupom.isActive
       });
     } else {
@@ -103,6 +111,7 @@ function CouponsPage() {
         maxUses: '',
         minimumQuantity: '',
         validUntil: '',
+        allowedPaymentTypes: [],
         isActive: true
       });
     }
@@ -131,7 +140,8 @@ function CouponsPage() {
         discountValue: parseFloat(formData.discountValue),
         maxUses: formData.maxUses ? parseInt(formData.maxUses, 10) : null,
         minimumQuantity: formData.minimumQuantity ? parseInt(formData.minimumQuantity, 10) : null,
-        eventId: formData.eventId || null
+        eventId: formData.eventId || null,
+        allowedPaymentTypes: formData.allowedPaymentTypes.length > 0 ? formData.allowedPaymentTypes : null,
       };
 
       if (cupomEdicao) {
@@ -234,6 +244,7 @@ function CouponsPage() {
                 <TableCell>Desconto</TableCell>
                 <TableCell align="center">Mínimo ingressos</TableCell>
                 <TableCell>Evento</TableCell>
+                <TableCell>Pagamento</TableCell>
                 <TableCell align="center">Usos</TableCell>
                 <TableCell>Validade</TableCell>
                 <TableCell align="center">Status</TableCell>
@@ -251,6 +262,13 @@ function CouponsPage() {
                     {cupom.minimumQuantity ? cupom.minimumQuantity : '-'}
                   </TableCell>
                   <TableCell>{getNomeEvento(cupom.eventId)}</TableCell>
+                  <TableCell>
+                    {Array.isArray(cupom.allowedPaymentTypes) && cupom.allowedPaymentTypes.length > 0
+                      ? cupom.allowedPaymentTypes.map(t => (
+                        <Chip key={t} size="small" label={METODOS_LABEL[t] || t} sx={{ mr: 0.5 }} />
+                      ))
+                      : <Typography variant="caption" color="text.secondary">Todas</Typography>}
+                  </TableCell>
                   <TableCell align="center">
                     {cupom.currentUses || 0}
                     {cupom.maxUses && ` / ${cupom.maxUses}`}
@@ -397,6 +415,31 @@ function CouponsPage() {
                 onChange={handleChange}
                 InputLabelProps={{ shrink: true }}
               />
+            </Grid>
+
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>Formas de pagamento permitidas</InputLabel>
+                <Select
+                  multiple
+                  name="allowedPaymentTypes"
+                  value={formData.allowedPaymentTypes}
+                  onChange={handleChange}
+                  input={<OutlinedInput label="Formas de pagamento permitidas" />}
+                  renderValue={(selected) => (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {selected.map(v => (
+                        <Chip key={v} size="small" label={METODOS_LABEL[v] || v} />
+                      ))}
+                    </Box>
+                  )}
+                >
+                  {METODOS_OPTIONS.map(([value, label]) => (
+                    <MenuItem key={value} value={value}>{label}</MenuItem>
+                  ))}
+                </Select>
+                <FormHelperText>Deixe vazio para aceitar todas as formas de pagamento</FormHelperText>
+              </FormControl>
             </Grid>
           </Grid>
         </DialogContent>

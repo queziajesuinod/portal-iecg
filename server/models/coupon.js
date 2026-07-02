@@ -63,6 +63,12 @@ module.exports = (sequelize) => {
       type: DataTypes.BOOLEAN,
       defaultValue: true,
     },
+    allowedPaymentTypes: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'null = todas as formas; ex: ["pix"], ["credit_card"], ["pix","credit_card"]'
+    },
     description: {
       type: DataTypes.TEXT,
       allowNull: true,
