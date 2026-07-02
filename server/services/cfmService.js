@@ -464,7 +464,7 @@ async function confirmarPagamento(inscricaoId, { valorMatricula, dataPagamento }
   if (inscricao.pagamentoMatricula) throw new Error('Pagamento já confirmado');
 
   inscricao.pagamentoMatricula = true;
-  inscricao.dataPagamento = dataPagamento || new Date().toISOString().slice(0, 10);
+  inscricao.dataPagamento = dataPagamento || hojeLocal();
   if (valorMatricula !== undefined) inscricao.valorMatricula = valorMatricula;
   inscricao.status = 'ATIVO';
 
@@ -639,7 +639,7 @@ async function concluirInscricao(inscricaoId) {
     const marco = await MemberMilestone.create({
       memberId: inscricao.memberId,
       milestoneType: inscricao.turma.marcoConclussaoCode,
-      achievedDate: new Date().toISOString().slice(0, 10),
+      achievedDate: hojeLocal(),
       description: `Conclusão CFM — Turma ${inscricao.turma.numeracao || ''}`.trim(),
     });
     inscricao.marcoMilestoneId = marco.id;
@@ -738,7 +738,7 @@ async function concluirTurma(turmaId) {
         const marco = await MemberMilestone.create({
           memberId: insc.memberId,
           milestoneType: turma.marcoConclussaoCode,
-          achievedDate: new Date().toISOString().slice(0, 10),
+          achievedDate: hojeLocal(),
           description: `Conclusão CFM — Turma ${turma.numeracao || ''}`.trim(),
         });
         insc.marcoMilestoneId = marco.id;
@@ -1827,6 +1827,13 @@ async function listarRedesCfm() {
   return rows.map(r => r.rede).filter(Boolean);
 }
 
+// ─── TIMEZONE HELPER ───────────────────────────────────────────────────────
+// Servidor roda em UTC; Campo Grande é UTC-4. Usar sempre esta função
+// para obter a data local correta ao invés de new Date().toISOString().slice(0,10).
+function hojeLocal() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Campo_Grande' });
+}
+
 // ─── CFM CHECK-IN ─────────────────────────────────────────────────────────
 
 function _extractToken(raw) {
@@ -1867,7 +1874,7 @@ async function scanCfmCheckin(rawToken) {
     ? (inscricao.membro.preferredName || inscricao.membro.fullName)
     : inscricao.nomeNaoMembro;
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeLocal();
   const hojeFormatado = hoje.split('-').reverse().join('/');
 
   const turmaMaterias = (inscricao.turma?.turmaMaterias || []).filter(tm => {
@@ -1919,7 +1926,7 @@ async function marcarCfmCheckin(rawToken, turmaMateriaId) {
     throw Object.assign(new Error(`Matrícula ${inscricao.status.toLowerCase()}`), { status: 422 });
   }
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeLocal();
   const hojeFormatado = hoje.split('-').reverse().join('/');
 
   const aula = await CfmAula.findOne({
