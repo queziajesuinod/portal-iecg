@@ -48,6 +48,9 @@ router.post('/validacao/notificar-todos', validacaoMinisterioController.notifica
 router.post('/validacao/justificar', validacaoMinisterioController.justificar);
 router.delete('/validacao/justificar', validacaoMinisterioController.removerJustificativa);
 
+// ===== Voluntariado do usuário logado =====
+router.get('/meu-voluntariado', registroCultoController.buscarMeuVoluntariado);
+
 // ===== Registros de Culto =====
 router.get('/registros', registroCultoController.listar);
 router.get('/registros/dashboard', registroCultoController.dashboard);

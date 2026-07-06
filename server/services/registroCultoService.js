@@ -1,6 +1,6 @@
 const { Op } = require('sequelize');
 const {
-  RegistroCulto, Campus, Ministerio, TipoEvento, Ministro, User, CampusMinisterio
+  RegistroCulto, Campus, Ministerio, TipoEvento, Ministro, User, CampusMinisterio, Member, Voluntariado
 } = require('../models');
 
 const includeBase = [
@@ -652,6 +652,32 @@ const RegistroCultoService = {
       alertas,
     };
   },
+};
+
+RegistroCultoService.buscarVoluntariadoDoUsuario = async function buscarVoluntariadoDoUsuario(email) {
+  if (!email) return [];
+  const membro = await Member.findOne({ where: { email: email.toLowerCase().trim() }, attributes: ['id'] });
+  if (!membro) return [];
+  const registros = await Voluntariado.findAll({
+    where: { memberId: membro.id, status: 'APROVADO' },
+    include: [
+      {
+        model: Campus, as: 'campus', attributes: ['id', 'nome', 'transmiteOnline'], required: false
+      },
+      {
+        model: Ministerio, as: 'ministerio', attributes: ['id', 'nome', 'apeloDefault', 'exibeCriancas', 'exibeBebes', 'exibeOnline'], required: false
+      },
+    ],
+    attributes: ['id', 'campusId', 'ministerioId'],
+  });
+  return registros.map(v => ({
+    campusId: v.campusId || null,
+    campusNome: v.campus?.nome || null,
+    transmiteOnline: v.campus?.transmiteOnline || false,
+    ministerioId: v.ministerioId || null,
+    ministerioNome: v.ministerio?.nome || null,
+    ministerio: v.ministerio || null,
+  }));
 };
 
 module.exports = RegistroCultoService;
