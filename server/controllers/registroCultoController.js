@@ -133,6 +133,16 @@ class RegistroCultoController {
       return res.status(status).json({ erro: error.message });
     }
   }
+
+  async buscarMeuVoluntariado(req, res) {
+    try {
+      const email = req.user?.email;
+      const result = await RegistroCultoService.buscarVoluntariadoDoUsuario(email);
+      return res.json(result);
+    } catch (error) {
+      return res.status(500).json({ erro: error.message });
+    }
+  }
 }
 
 module.exports = new RegistroCultoController();
