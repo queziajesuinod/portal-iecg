@@ -1,6 +1,7 @@
 import React, { useContext, useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { Switch, Route, Redirect } from 'react-router-dom';
+import dummyContents from 'dan-api/dummy/dummyContents';
 import Dashboard from '../Templates/Dashboard';
 import { ThemeContext } from './ThemeWrapper';
 import MiaPage from '../Pages/MiaPage';
@@ -81,7 +82,16 @@ import ReportsHome from '../Pages/Reports/ReportsHome';
 import MembersReport from '../Pages/Reports/MembersReport';
 import EventsFinanceReport from '../Pages/Reports/EventsFinanceReport';
 import CultosReport from '../Pages/Reports/CultosReport';
-import { isStoredTokenValid } from '../../utils/authSession';
+import { isStoredTokenValid, handleUnauthorized } from '../../utils/authSession';
+
+// Restaura dados do usuário no objeto dummy ao recarregar a página
+const storedUserRaw = localStorage.getItem('user');
+if (storedUserRaw) {
+  try {
+    const storedUser = JSON.parse(storedUserRaw);
+    if (storedUser) dummyContents.user = storedUser;
+  } catch (e) { /* ignora JSON inválido */ }
+}
 
 function Application({ history }) {
   const changeMode = useContext(ThemeContext);
@@ -95,6 +105,16 @@ function Application({ history }) {
     const tokenIsValid = isStoredTokenValid();
     localStorage.setItem('isAuthenticated', (isAuthenticated || tokenIsValid).toString());
   }, [isAuthenticated]);
+
+  // Verifica token a cada 30s e força logout se expirar
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!isStoredTokenValid()) {
+        handleUnauthorized();
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <Switch>
