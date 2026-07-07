@@ -132,7 +132,11 @@ const RegistroCultoService = {
 
     if (filtros.campusId) where.campusId = filtros.campusId;
     if (filtros.ministerioId) where.ministerioId = filtros.ministerioId;
-    if (filtros.tipoEventoId) where.tipoEventoId = filtros.tipoEventoId;
+    if (Array.isArray(filtros.tipoEventoIds) && filtros.tipoEventoIds.length > 0) {
+      where.tipoEventoId = { [Op.in]: filtros.tipoEventoIds };
+    } else if (filtros.tipoEventoId) {
+      where.tipoEventoId = filtros.tipoEventoId;
+    }
     if (filtros.dataInicio || filtros.dataFim) {
       where.data = {};
       if (filtros.dataInicio) where.data[Op.gte] = filtros.dataInicio;
@@ -392,7 +396,11 @@ const RegistroCultoService = {
     } else if (filtros.ministerioId) {
       where.ministerioId = filtros.ministerioId;
     }
-    if (filtros.tipoEventoId) where.tipoEventoId = filtros.tipoEventoId;
+    if (Array.isArray(filtros.tipoEventoIds) && filtros.tipoEventoIds.length > 0) {
+      where.tipoEventoId = { [Op.in]: filtros.tipoEventoIds };
+    } else if (filtros.tipoEventoId) {
+      where.tipoEventoId = filtros.tipoEventoId;
+    }
     if (filtros.dataInicio || filtros.dataFim) {
       where.data = {};
       if (filtros.dataInicio) where.data[Op.gte] = filtros.dataInicio;

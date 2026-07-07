@@ -223,6 +223,7 @@ async function processarRegistro(r, linha, ctx) {
     ministerioByNome,
     tipoEventoByNome,
     ministroByNome,
+    ministroByChaveNorm,
     ministerioForcado,
     chavesExistentes,
     avisos,
@@ -320,7 +321,7 @@ async function processarRegistro(r, linha, ctx) {
   // ── Ministros (pregadores) ──
   const quemMinistrou = trim(r['QUEM MINISTROU?']) || trim(r['QUEM MINISTROU:']);
   const nomesMinistros = extrairNomes(quemMinistrou || '');
-  const ministrosDoRegistro = await resolverMinistros(nomesMinistros, ministroByNome, linha, avisos);
+  const ministrosDoRegistro = await resolverMinistros(nomesMinistros, ministroByNome, ministroByChaveNorm, linha, avisos);
 
   // ── Campos condicionais ──
   const eSerie = parseBool(r['O CULTO FOI DE UMA SÉRIE?']);

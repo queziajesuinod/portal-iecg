@@ -475,7 +475,7 @@ async function cultos(filtros = {}) {
     filtros: {
       campusId: normalizeOptional(filtros.campusId),
       ministerioId: normalizeOptional(filtros.ministerioId),
-      tipoEventoId: normalizeOptional(filtros.tipoEventoId),
+      tipoEventoIds: Array.isArray(filtros.tipoEventoIds) && filtros.tipoEventoIds.length > 0 ? filtros.tipoEventoIds : null,
       dataInicio: normalizeOptional(filtros.dataInicio),
       dataFim: normalizeOptional(filtros.dataFim),
     },
