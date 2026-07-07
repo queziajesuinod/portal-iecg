@@ -13,6 +13,7 @@ const ticketResendService = require('./services/ticketResendService');
 const { APP_TIMEZONE, todayDateOnly } = require('./utils/dateTime');
 
 const dispatching = new Set();
+let schedulerTickRunning = false;
 
 // Estado persistido em disco para sobreviver a reinicializações do servidor
 const SCHEDULER_STATE_FILE = path.join(__dirname, '.scheduler-state.json');
@@ -216,18 +217,27 @@ async function tickTicketEmailResgate() {
 const safe = (fn) => fn().catch((err) => console.error(`[Scheduler] Erro no tick (${fn.name}):`, err.message));
 
 async function tick() {
+  if (schedulerTickRunning) {
+    console.warn('[Scheduler] Tick anterior ainda em andamento, pulando este ciclo.');
+    return;
+  }
+
+  schedulerTickRunning = true;
+
   try {
-    await Promise.all([
-      safe(tickCampaigns),
-      safe(tickSequences),
-      safe(tickValidacaoCultos),
-      safe(tickCelulas),
-      safe(tickVideoTranscription),
-      safe(tickYoutubeChannelSync),
-      safe(tickTicketEmailResgate),
-    ]);
+    await [
+      tickCampaigns,
+      tickSequences,
+      tickValidacaoCultos,
+      tickCelulas,
+      tickVideoTranscription,
+      tickYoutubeChannelSync,
+      tickTicketEmailResgate,
+    ].reduce((promise, fn) => promise.then(() => safe(fn)), Promise.resolve());
   } catch (err) {
     console.error('[Scheduler] Erro no tick:', err.message);
+  } finally {
+    schedulerTickRunning = false;
   }
 }
 
