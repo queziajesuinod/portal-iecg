@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 const {
   NotificationSequence,
   NotificationSequenceStep,
@@ -193,7 +194,14 @@ const NotificationSequenceService = {
     if (step.status !== 'pending') throw new Error('Step já foi enviado ou está em andamento');
 
     const { sequence } = step;
-    await step.update({ status: 'sending' });
+    const [claimed] = await NotificationSequenceStep.update(
+      { status: 'sending' },
+      { where: { id: stepId, status: { [Op.eq]: 'pending' } } }
+    );
+    if (!claimed) {
+      throw new Error('Step ja foi capturado por outro processo');
+    }
+    step.status = 'sending';
 
     try {
       await NotificationSequenceStepRecipient.destroy({ where: { stepId } });

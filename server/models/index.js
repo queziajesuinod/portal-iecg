@@ -17,6 +17,14 @@ const parsedPoolIdle = Number(process.env.DB_POOL_IDLE_MS);
 const parsedPoolEvict = Number(process.env.DB_POOL_EVICT_MS);
 
 const enableSequelizeLogging = process.env.SEQUELIZE_LOGGING === 'true';
+const poolConfig = {
+  max: Number.isFinite(parsedPoolMax) && parsedPoolMax > 0 ? parsedPoolMax : 10,
+  min: Number.isFinite(parsedPoolMin) && parsedPoolMin >= 0 ? parsedPoolMin : 0,
+  acquire: Number.isFinite(parsedPoolAcquire) && parsedPoolAcquire > 0 ? parsedPoolAcquire : 60000,
+  idle: Number.isFinite(parsedPoolIdle) && parsedPoolIdle > 0 ? parsedPoolIdle : 10000,
+  evict: Number.isFinite(parsedPoolEvict) && parsedPoolEvict > 0 ? parsedPoolEvict : 1000
+};
+
 const sequelize = new Sequelize(
   config.database,
   config.username,
@@ -26,18 +34,17 @@ const sequelize = new Sequelize(
     port: config.port,
     dialect: config.dialect,
     dialectOptions: config.dialectOptions,
-    pool: {
-      max: Number.isFinite(parsedPoolMax) && parsedPoolMax > 0 ? parsedPoolMax : 10,
-      min: Number.isFinite(parsedPoolMin) && parsedPoolMin >= 0 ? parsedPoolMin : 0,
-      acquire: Number.isFinite(parsedPoolAcquire) && parsedPoolAcquire > 0 ? parsedPoolAcquire : 60000,
-      idle: Number.isFinite(parsedPoolIdle) && parsedPoolIdle > 0 ? parsedPoolIdle : 10000,
-      evict: Number.isFinite(parsedPoolEvict) && parsedPoolEvict > 0 ? parsedPoolEvict : 1000
-    },
+    pool: poolConfig,
     logging: enableSequelizeLogging ? (msg) => console.debug(`[Sequelize] ${msg}`) : false,
     define: {
       schema: process.env.DB_SCHEMA || 'dev_iecg' // 👈 Isso aplica o schema para todos os models por padrão
     }
   }
+);
+
+console.info(
+  `[Sequelize] Pool configurado: max=${poolConfig.max}, min=${poolConfig.min}, `
+  + `acquire=${poolConfig.acquire}ms, idle=${poolConfig.idle}ms, evict=${poolConfig.evict}ms`
 );
 
 fs.readdirSync(__dirname)

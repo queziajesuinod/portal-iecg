@@ -11,7 +11,7 @@ const PIX_PENDING_TIMEOUT_MINUTES = Number.isFinite(parsedThreshold) && parsedTh
 const parsedInterval = Number(process.env.PIX_PENDING_CHECK_INTERVAL_MS);
 const PIX_PENDING_CHECK_INTERVAL_MS = Number.isFinite(parsedInterval) && parsedInterval > 0
   ? parsedInterval
-  : 60 * 1000;
+  : 2 * 60 * 1000;
 
 const parsedInitialDelay = Number(process.env.PIX_PENDING_INITIAL_DELAY_MS);
 const PIX_PENDING_INITIAL_DELAY_MS = Number.isFinite(parsedInitialDelay) && parsedInitialDelay >= 0
@@ -26,7 +26,7 @@ const PIX_PENDING_JOB_CONCURRENCY = Number.isFinite(parsedConcurrency) && parsed
 const parsedBatchSize = Number(process.env.PIX_PENDING_JOB_BATCH_SIZE);
 const PIX_PENDING_JOB_BATCH_SIZE = Number.isFinite(parsedBatchSize) && parsedBatchSize > 0
   ? parsedBatchSize
-  : 25;
+  : 10;
 
 let running = false;
 
@@ -79,11 +79,21 @@ async function checkPixPendingRegistrations() {
         paymentStatus: 'pending',
         createdAt: { [Op.lt]: cutoff }
       },
-      include: [
-        {
-          model: RegistrationPayment,
-          as: 'payments'
-        }
+      attributes: [
+        'id',
+        'orderCode',
+        'eventId',
+        'quantity',
+        'finalPrice',
+        'paymentId',
+        'paymentStatus',
+        'paymentMethod',
+        'pixQrCode',
+        'pixQrCodeBase64',
+        'pixTransactionId',
+        'pixEndToEndId',
+        'cieloResponse',
+        'createdAt',
       ],
       order: [['createdAt', 'ASC']],
       limit: PIX_PENDING_JOB_BATCH_SIZE
@@ -100,31 +110,27 @@ async function checkPixPendingRegistrations() {
         console.error(`[pixPendingJob] Falha ao validar pagamento PIX para ${registration.orderCode}`, error);
       }
 
-      await registration.reload({ include: [{ model: RegistrationPayment, as: 'payments' }] });
       if (registration.paymentStatus !== 'pending') {
         console.info(`[pixPendingJob] Inscricao ${registration.orderCode} ja atualizada para ${registration.paymentStatus}`);
         return;
       }
 
-      const pendingPayments = registration.payments.filter((payment) => payment.status === 'pending');
-      if (pendingPayments.length) {
-        await RegistrationPayment.update(
-          {
-            status: 'expired',
-            notes: `Expirado automaticamente apos ${PIX_PENDING_TIMEOUT_MINUTES} minutos pendente`
-          },
-          {
-            where: {
-              registrationId: registration.id,
-              status: 'pending'
-            }
+      const [expiredPayments] = await RegistrationPayment.update(
+        {
+          status: 'expired',
+          notes: `Expirado automaticamente apos ${PIX_PENDING_TIMEOUT_MINUTES} minutos pendente`
+        },
+        {
+          where: {
+            registrationId: registration.id,
+            status: 'pending'
           }
-        );
-      }
+        }
+      );
 
-      await registration.reload({ include: [{ model: RegistrationPayment, as: 'payments' }] });
-      await registrationService.atualizarStatusPagamentoPorPagamentos(registration);
-      await registration.reload({ include: [{ model: RegistrationPayment, as: 'payments' }] });
+      if (expiredPayments > 0) {
+        await registrationService.atualizarStatusPagamentoPorPagamentos(registration);
+      }
 
       console.info(`[pixPendingJob] Inscricao ${registration.orderCode} recalculada para ${registration.paymentStatus} apos expiracao de PIX pendente`);
     }, PIX_PENDING_JOB_CONCURRENCY);

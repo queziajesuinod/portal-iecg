@@ -15,6 +15,11 @@ const { APP_TIMEZONE, todayDateOnly } = require('./utils/dateTime');
 const dispatching = new Set();
 let schedulerTickRunning = false;
 
+function parsePositiveInt(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 // Estado persistido em disco para sobreviver a reinicializações do servidor
 const SCHEDULER_STATE_FILE = path.join(__dirname, '.scheduler-state.json');
 
@@ -40,7 +45,10 @@ let ultimaAberturaReunioes = null;
 // Controle para sincronização automática dos canais do YouTube (1x na semana)
 let ultimaSincronizacaoYoutubeData = _state.ultimaSincronizacaoYoutubeData || null;
 let ultimaTicketEmailResgateAt = 0;
-const TICKET_EMAIL_RESGATE_INTERVAL_MS = Number(process.env.TICKET_EMAIL_RESGATE_INTERVAL_MS || 300000);
+const TICKET_EMAIL_RESGATE_INTERVAL_MS = parsePositiveInt(process.env.TICKET_EMAIL_RESGATE_INTERVAL_MS, 300000);
+const TICKET_EMAIL_RESGATE_BATCH_SIZE = parsePositiveInt(process.env.TICKET_EMAIL_RESGATE_BATCH_SIZE, 10);
+const SCHEDULER_CAMPAIGN_LIMIT_PER_TICK = parsePositiveInt(process.env.SCHEDULER_CAMPAIGN_LIMIT_PER_TICK, 1);
+const SCHEDULER_SEQUENCE_LIMIT_PER_TICK = parsePositiveInt(process.env.SCHEDULER_SEQUENCE_LIMIT_PER_TICK, 1);
 
 async function tickCampaigns() {
   const now = new Date();
@@ -52,21 +60,23 @@ async function tickCampaigns() {
         { nextRunAt: { [Op.lte]: now } }
       ]
     },
-    attributes: ['id', 'name']
+    attributes: ['id', 'name'],
+    order: [['scheduledAt', 'ASC'], ['createdAt', 'ASC']],
+    limit: SCHEDULER_CAMPAIGN_LIMIT_PER_TICK
   });
 
   for (const { id, name } of due) {
     if (dispatching.has(id)) continue;
     dispatching.add(id);
     console.log(`[Scheduler] Disparando campanha "${name}" (${id})`);
-    NotificationCampaignService.disparar(id)
-      .then(({ totalSent, totalFailed }) => {
-        console.log(`[Scheduler] Campanha "${name}" concluída — enviados: ${totalSent}, falhas: ${totalFailed}`);
-      })
-      .catch((err) => {
-        console.error(`[Scheduler] Erro na campanha "${name}" (${id}):`, err.message);
-      })
-      .finally(() => dispatching.delete(id));
+    try {
+      const { totalSent, totalFailed } = await NotificationCampaignService.disparar(id);
+      console.log(`[Scheduler] Campanha "${name}" concluída — enviados: ${totalSent}, falhas: ${totalFailed}`);
+    } catch (err) {
+      console.error(`[Scheduler] Erro na campanha "${name}" (${id}):`, err.message);
+    } finally {
+      dispatching.delete(id);
+    }
   }
 }
 
@@ -84,7 +94,8 @@ async function tickSequences() {
       attributes: ['id', 'name']
     }],
     attributes: ['id', 'name', 'stepOrder'],
-    order: [['stepOrder', 'ASC']]
+    order: [['scheduledAt', 'ASC'], ['stepOrder', 'ASC']],
+    limit: SCHEDULER_SEQUENCE_LIMIT_PER_TICK
   });
 
   for (const step of dueSteps) {
@@ -93,14 +104,14 @@ async function tickSequences() {
     dispatching.add(key);
     const label = `${step.sequence.name} > Step ${step.stepOrder}${step.name ? ` (${step.name})` : ''}`;
     console.log(`[Scheduler] Disparando sequência step: "${label}"`);
-    NotificationSequenceService.dispararStep(step.id)
-      .then(({ totalSent, totalFailed }) => {
-        console.log(`[Scheduler] Step "${label}" concluído — enviados: ${totalSent}, falhas: ${totalFailed}`);
-      })
-      .catch((err) => {
-        console.error(`[Scheduler] Erro no step "${label}":`, err.message);
-      })
-      .finally(() => dispatching.delete(key));
+    try {
+      const { totalSent, totalFailed } = await NotificationSequenceService.dispararStep(step.id);
+      console.log(`[Scheduler] Step "${label}" concluído — enviados: ${totalSent}, falhas: ${totalFailed}`);
+    } catch (err) {
+      console.error(`[Scheduler] Erro no step "${label}":`, err.message);
+    } finally {
+      dispatching.delete(key);
+    }
   }
 }
 
@@ -205,7 +216,7 @@ async function tickTicketEmailResgate() {
   if (now - ultimaTicketEmailResgateAt < TICKET_EMAIL_RESGATE_INTERVAL_MS) return;
   ultimaTicketEmailResgateAt = now;
   try {
-    const result = await ticketResendService.autoSendPendingTickets({ limit: 50 });
+    const result = await ticketResendService.autoSendPendingTickets({ limit: TICKET_EMAIL_RESGATE_BATCH_SIZE });
     if (result.processed > 0) {
       console.log(`[Scheduler] ticket-email resgate: processados=${result.processed} enviados=${result.sent} falhas=${result.failed} pulados=${result.skipped}`);
     }

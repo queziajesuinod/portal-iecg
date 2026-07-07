@@ -21,7 +21,7 @@ const SINGLE_PAYMENT_STATUS_JOB_CONCURRENCY = Number.isFinite(parsedConcurrency)
 const parsedBatchSize = Number(process.env.SINGLE_PAYMENT_STATUS_JOB_BATCH_SIZE);
 const SINGLE_PAYMENT_STATUS_JOB_BATCH_SIZE = Number.isFinite(parsedBatchSize) && parsedBatchSize > 0
   ? parsedBatchSize
-  : 25;
+  : 10;
 
 const TARGET_PAYMENT_STATUSES = ['expired'];
 const FINAL_REGISTRATION_STATUSES = new Set(['cancelled', 'refunded']);
