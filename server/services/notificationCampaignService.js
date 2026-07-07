@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 const {
   NotificationCampaign,
   NotificationCampaignRecipient,
@@ -162,7 +163,15 @@ const NotificationCampaignService = {
       throw new Error('Campanha já foi enviada ou está em andamento');
     }
 
-    await campaign.update({ status: 'sending', sentAt: null });
+    const [claimed] = await NotificationCampaign.update(
+      { status: 'sending', sentAt: null },
+      { where: { id, status: { [Op.in]: ['draft', 'scheduled'] } } }
+    );
+    if (!claimed) {
+      throw new Error('Campanha ja foi capturada por outro processo');
+    }
+    campaign.status = 'sending';
+    campaign.sentAt = null;
 
     try {
       // Remove destinatários do run anterior (para campanhas recorrentes)

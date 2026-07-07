@@ -26,6 +26,8 @@ const customHost = argv.host || process.env.HOST;
 const host = customHost || null; // Permite IPv6/IPv4
 const prettyHost = customHost || 'localhost';
 const enablePixJobsInDevelopment = process.env.ENABLE_PIX_JOBS_IN_DEVELOPMENT === 'true';
+const disableScheduler = process.env.DISABLE_SCHEDULER === 'true';
+const disablePaymentJobs = process.env.DISABLE_PAYMENT_JOBS === 'true';
 
 // Evita respostas 304 em endpoints de API (alguns browsers tratam como erro de rede em cenários com cache inconsistente)
 app.set('etag', false);
@@ -200,7 +202,11 @@ app.get('*.js', (req, res, next) => {
 });
 
 // Scheduler de campanhas agendadas
-require('./scheduler').startScheduler();
+if (disableScheduler) {
+  console.info('[Scheduler] Desativado via DISABLE_SCHEDULER=true');
+} else {
+  require('./scheduler').startScheduler();
+}
 
 // Hooks de sincronização automática de audiência
 const db = require('./models');
@@ -230,7 +236,9 @@ app.listen(port, host, async (err) => {
     console.warn('⚠️  Redis não disponível, sistema continuará sem cache:', cacheError.message);
   });
 
-  if (isDev && !enablePixJobsInDevelopment) {
+  if (disablePaymentJobs) {
+    console.info('[payments] Jobs de pagamento desativados via DISABLE_PAYMENT_JOBS=true');
+  } else if (isDev && !enablePixJobsInDevelopment) {
     console.info('[payments] Jobs de validacao PIX desativados em development');
   } else {
     pixPendingJob.startPixPendingJob();
