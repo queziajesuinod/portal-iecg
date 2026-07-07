@@ -215,27 +215,16 @@ module.exports = [
       }
     ]
   },
-  {
-    key: 'diarioBordo',
-    name: 'Diário de Bordo',
-    icon: 'ion-ios-book-outline',
-    child: [
-      {
-        key: 'meuDiarioBordo',
-        name: 'Meu Diário',
-        link: '/app/diario-bordo',
-        icon: 'ion-ios-compose-outline',
-
-      },
-      {
-        key: 'gestaoDiarioBordo',
-        name: 'Gestão de Diários',
-        link: '/app/admin/diario-bordo',
-        icon: 'ion-ios-settings',
-        permission: ['DIARIO_BORDO_ADMIN', 'DIARIO_BORDO_MANAGER']
-      }
-    ]
-  },
+  // MÓDULO INATIVO: Diário de Bordo
+  // {
+  //   key: 'diarioBordo',
+  //   name: 'Diário de Bordo',
+  //   icon: 'ion-ios-book-outline',
+  //   child: [
+  //     { key: 'meuDiarioBordo', name: 'Meu Diário', link: '/app/diario-bordo', icon: 'ion-ios-compose-outline' },
+  //     { key: 'gestaoDiarioBordo', name: 'Gestão de Diários', link: '/app/admin/diario-bordo', icon: 'ion-ios-settings', permission: ['DIARIO_BORDO_ADMIN', 'DIARIO_BORDO_MANAGER'] }
+  //   ]
+  // },
   {
     key: 'cfm',
     name: 'CFM',

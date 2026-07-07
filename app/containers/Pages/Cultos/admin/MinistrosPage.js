@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
-  Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions,
-  DialogContent, DialogTitle, Divider, FormControlLabel, IconButton, Paper, Radio,
+  Alert, Autocomplete, Avatar, Box, Button, Checkbox, Chip, CircularProgress,
+  Dialog, DialogActions, DialogContent, DialogTitle, Divider,
+  FormControl, FormControlLabel, InputAdornment, InputLabel, IconButton,
+  MenuItem, Paper, Radio, Select, Skeleton,
   Switch, Table, TableBody, TableCell, TableContainer, TableHead,
   TableRow, TextField, Tooltip, Typography,
 } from '@mui/material';
@@ -11,6 +13,8 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import LinkIcon from '@mui/icons-material/Link';
 import MergeIcon from '@mui/icons-material/CallMerge';
+import MicOffIcon from '@mui/icons-material/MicOff';
+import SearchIcon from '@mui/icons-material/Search';
 import PapperBlock from 'dan-components/PapperBlock/PapperBlock';
 import Notification from 'dan-components/Notification/Notification';
 import { fetchWithAuth } from 'utils/authSession';
@@ -475,33 +479,84 @@ PainelDuplicidades.propTypes = {
   })).isRequired,
 };
 
+// ─── Helpers de avatar ────────────────────────────────────────────────────────
+const AVATAR_COLORS = ['#1565c0', '#2e7d32', '#c62828', '#6a1b9a', '#e65100', '#00695c', '#4527a0', '#283593', '#ad1457', '#00838f'];
+const getAvatarColor = (name) => {
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) hash = name.charCodeAt(i) + ((hash << 5) - hash); // eslint-disable-line no-bitwise
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+};
+const getInitials = (name) => {
+  const parts = String(name || '').trim().split(' ').filter(Boolean);
+  if (!parts.length) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
 // ─── Página principal ──────────────────────────────────────────────────────────
 
 const MinistrosPage = () => {
   const [ministros, setMinistros] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState('');
   const [dialog, setDialog] = useState({ open: false, editando: null });
   const [nome, setNome] = useState('');
-  const [ministroVinculos, setMinistroVinculos] = useState(null); // ministro aberto no dialog de vínculos
+  const [ministroVinculos, setMinistroVinculos] = useState(null);
+
+  // ── Filtros ──
+  const [filtroNome, setFiltroNome] = useState('');
+  const [filtroCampusId, setFiltroCampusId] = useState('');
+  const [filtroMinisterioId, setFiltroMinisterioId] = useState('');
+  const [mostrarInativos, setMostrarInativos] = useState(true);
 
   const loadData = () => {
+    setLoading(true);
     listarMinistros()
       .then(setMinistros)
-      .catch(() => setNotification('Erro ao carregar ministros'));
+      .catch(() => setNotification('Erro ao carregar ministros'))
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => { loadData(); }, []);
 
-  const abrirNovo = () => {
-    setNome('');
-    setDialog({ open: true, editando: null });
-  };
+  // Opções de campus extraídas dos vínculos de todos os ministros
+  const campiDisponiveis = useMemo(() => {
+    const map = new Map();
+    ministros.forEach((m) => (m.vinculos || []).forEach((v) => {
+      if (v.campusId && v.campus?.nome) map.set(v.campusId, v.campus.nome);
+    }));
+    return [...map.entries()].map(([id, nomeCampus]) => ({ id, nome: nomeCampus }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }, [ministros]);
 
-  const abrirEditar = (m) => {
-    setNome(m.nome);
-    setDialog({ open: true, editando: m });
-  };
+  // Opções de ministério filtradas pelo campus selecionado
+  const ministeriosDisponiveis = useMemo(() => {
+    const map = new Map();
+    ministros.forEach((m) => (m.vinculos || []).forEach((v) => {
+      if (v.ministerioId && v.ministerio?.nome) {
+        if (!filtroCampusId || v.campusId === filtroCampusId) {
+          map.set(v.ministerioId, v.ministerio.nome);
+        }
+      }
+    }));
+    return [...map.entries()].map(([id, nomeMin]) => ({ id, nome: nomeMin }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }, [ministros, filtroCampusId]);
 
+  const ministrosFiltrados = useMemo(() => ministros.filter((m) => {
+    if (!mostrarInativos && !m.ativo) return false;
+    if (filtroNome && !m.nome.toLowerCase().includes(filtroNome.toLowerCase())) return false;
+    if (filtroCampusId && !(m.vinculos || []).some((v) => v.campusId === filtroCampusId)) return false;
+    if (filtroMinisterioId && !(m.vinculos || []).some((v) => v.ministerioId === filtroMinisterioId)) return false;
+    return true;
+  }), [ministros, filtroNome, filtroCampusId, filtroMinisterioId, mostrarInativos]);
+
+  const temFiltro = Boolean(filtroNome || filtroCampusId || filtroMinisterioId);
+
+  const limparFiltros = () => { setFiltroNome(''); setFiltroCampusId(''); setFiltroMinisterioId(''); };
+
+  const abrirNovo = () => { setNome(''); setDialog({ open: true, editando: null }); };
+  const abrirEditar = (m) => { setNome(m.nome); setDialog({ open: true, editando: m }); };
   const fecharDialog = () => setDialog({ open: false, editando: null });
 
   const handleSalvar = async () => {
@@ -534,64 +589,187 @@ const MinistrosPage = () => {
     <div>
       <Helmet><title>Ministros</title></Helmet>
       <PapperBlock title="Ministros" icon="ion-ios-mic-outline" desc="Cadastre os pastores, pregadores e ministros">
-        <Box display="flex" justifyContent="flex-end" mb={2}>
+
+        {/* ── Toolbar de filtros ── */}
+        <Box display="flex" gap={1.5} flexWrap="wrap" alignItems="center" mb={2}>
+          <TextField
+            size="small"
+            placeholder="Buscar por nome..."
+            value={filtroNome}
+            onChange={(e) => setFiltroNome(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" color="action" />
+                </InputAdornment>
+              )
+            }}
+            sx={{ minWidth: 220 }}
+          />
+          <FormControl size="small" sx={{ minWidth: 200 }}>
+            <InputLabel>Campus</InputLabel>
+            <Select
+              value={filtroCampusId}
+              label="Campus"
+              onChange={(e) => { setFiltroCampusId(e.target.value); setFiltroMinisterioId(''); }}
+            >
+              <MenuItem value="">Todos os campus</MenuItem>
+              {campiDisponiveis.map((c) => <MenuItem key={c.id} value={c.id}>{c.nome}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 190 }}>
+            <InputLabel>Ministério</InputLabel>
+            <Select
+              value={filtroMinisterioId}
+              label="Ministério"
+              onChange={(e) => setFiltroMinisterioId(e.target.value)}
+            >
+              <MenuItem value="">Todos os ministérios</MenuItem>
+              {ministeriosDisponiveis.map((m) => <MenuItem key={m.id} value={m.id}>{m.nome}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <FormControlLabel
+            control={<Switch size="small" checked={mostrarInativos} onChange={(e) => setMostrarInativos(e.target.checked)} />}
+            label={<Typography variant="caption" color="text.secondary">Inativos</Typography>}
+            sx={{ ml: 0 }}
+          />
+          {temFiltro && (
+            <Button size="small" color="inherit" onClick={limparFiltros}>Limpar</Button>
+          )}
+          <Box flex={1} />
           <Button variant="contained" startIcon={<AddIcon />} onClick={abrirNovo}>Novo Ministro</Button>
         </Box>
 
-        <TableContainer component={Paper}>
+        {/* Contagem */}
+        {!loading && (
+          <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+            {temFiltro
+              ? `${ministrosFiltrados.length} de ${ministros.length} ministro(s)`
+              : `${ministros.length} ministro(s)`}
+          </Typography>
+        )}
+
+        {/* ── Tabela ── */}
+        <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
           <Table size="small">
             <TableHead>
-              <TableRow>
-                <TableCell>Nome</TableCell>
-                <TableCell>Vínculos (campus / ministério)</TableCell>
-                <TableCell align="center">Status</TableCell>
-                <TableCell align="center">Ações</TableCell>
+              <TableRow sx={{ bgcolor: 'grey.50' }}>
+                <TableCell sx={{ width: 56, pl: 2 }} />
+                <TableCell sx={{ fontWeight: 600 }}>Nome</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Campus / Ministério</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 600, width: 90 }}>Status</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 600, width: 120 }}>Ações</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {ministros.map((m) => {
-                const vinculos = m.vinculos || [];
-                return (
-                  <TableRow key={m.id} hover>
-                    <TableCell>{m.nome}</TableCell>
+              {loading ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell sx={{ pl: 2 }}><Skeleton variant="circular" width={36} height={36} /></TableCell>
                     <TableCell>
-                      {vinculos.length === 0 ? (
-                        <Typography variant="caption" color="text.disabled">Nenhum vínculo</Typography>
-                      ) : (
-                        <Box display="flex" flexWrap="wrap" gap={0.5}>
-                          {vinculos.map((v) => (
-                            <Chip
-                              key={`${v.campusId}-${v.ministerioId}`}
-                              label={`${v.campus?.nome} · ${v.ministerio?.nome}`}
-                              size="small"
-                              variant="outlined"
-                            />
-                          ))}
-                        </Box>
-                      )}
+                      <Skeleton width={160} height={18} />
+                      <Skeleton width={70} height={14} sx={{ mt: 0.5 }} />
                     </TableCell>
-                    <TableCell align="center">
-                      <Chip label={m.ativo ? 'Ativo' : 'Inativo'} size="small"
-                        color={m.ativo ? 'success' : 'error'} />
-                    </TableCell>
-                    <TableCell align="center">
-                      <Tooltip title="Vincular a campus/ministério">
-                        <IconButton size="small" onClick={() => setMinistroVinculos(m)}><LinkIcon fontSize="small" /></IconButton>
-                      </Tooltip>
-                      <Tooltip title="Editar">
-                        <IconButton size="small" onClick={() => abrirEditar(m)}><EditIcon fontSize="small" /></IconButton>
-                      </Tooltip>
-                      <Tooltip title={m.ativo ? 'Desativar' : 'Ativar'}>
-                        <Switch size="small" checked={m.ativo} onChange={() => handleAlternarAtivo(m)} />
-                      </Tooltip>
+                    <TableCell><Skeleton width={240} /></TableCell>
+                    <TableCell align="center"><Skeleton variant="rounded" width={58} height={22} sx={{ mx: 'auto' }} /></TableCell>
+                    <TableCell>
+                      <Box display="flex" justifyContent="center" gap={0.5}>
+                        <Skeleton variant="circular" width={28} height={28} />
+                        <Skeleton variant="circular" width={28} height={28} />
+                        <Skeleton variant="rounded" width={34} height={22} />
+                      </Box>
                     </TableCell>
                   </TableRow>
-                );
-              })}
-              {ministros.length === 0 && (
+                ))
+              ) : ministrosFiltrados.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} align="center">Nenhum ministro cadastrado</TableCell>
+                  <TableCell colSpan={5}>
+                    <Box display="flex" flexDirection="column" alignItems="center" py={6} gap={1.5}>
+                      <MicOffIcon sx={{ fontSize: 44, color: 'text.disabled' }} />
+                      <Typography variant="body2" color="text.secondary" fontWeight={500}>
+                        {temFiltro ? 'Nenhum ministro encontrado com esses filtros' : 'Nenhum ministro cadastrado'}
+                      </Typography>
+                      {temFiltro ? (
+                        <Button size="small" onClick={limparFiltros}>Limpar filtros</Button>
+                      ) : (
+                        <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={abrirNovo}>
+                          Cadastrar ministro
+                        </Button>
+                      )}
+                    </Box>
+                  </TableCell>
                 </TableRow>
+              ) : (
+                ministrosFiltrados.map((m) => {
+                  const vinculos = m.vinculos || [];
+                  const initials = getInitials(m.nome);
+                  const avatarColor = m.ativo ? getAvatarColor(m.nome) : '#9e9e9e';
+                  const MAX_VISIBLE = 4;
+                  const visiveis = vinculos.slice(0, MAX_VISIBLE);
+                  const restantes = vinculos.length - MAX_VISIBLE;
+
+                  return (
+                    <TableRow key={m.id} hover sx={{ opacity: m.ativo ? 1 : 0.55 }}>
+                      <TableCell sx={{ pl: 2, width: 56 }}>
+                        <Avatar sx={{
+                          bgcolor: avatarColor, width: 36, height: 36, fontSize: 13, fontWeight: 700
+                        }}>
+                          {initials}
+                        </Avatar>
+                      </TableCell>
+                      <TableCell sx={{ minWidth: 140 }}>
+                        <Typography variant="body2" fontWeight={600}>{m.nome}</Typography>
+                        {m.usos > 0 && (
+                          <Typography variant="caption" color="text.secondary">
+                            {m.usos} culto{m.usos !== 1 ? 's' : ''}
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {vinculos.length === 0 ? (
+                          <Typography variant="caption" color="text.disabled">Sem vínculo</Typography>
+                        ) : (
+                          <Box display="flex" flexWrap="wrap" gap={0.5} alignItems="center">
+                            {visiveis.map((v) => (
+                              <Chip
+                                key={`${v.campusId}-${v.ministerioId}`}
+                                label={[v.campus?.nome, v.ministerio?.nome].filter(Boolean).join(' › ')}
+                                size="small"
+                                variant="outlined"
+                                sx={{ fontSize: 11, maxWidth: 280 }}
+                              />
+                            ))}
+                            {restantes > 0 && (
+                              <Chip label={`+${restantes}`} size="small" sx={{ fontSize: 11 }} />
+                            )}
+                          </Box>
+                        )}
+                      </TableCell>
+                      <TableCell align="center">
+                        <Chip
+                          label={m.ativo ? 'Ativo' : 'Inativo'}
+                          size="small"
+                          color={m.ativo ? 'success' : 'default'}
+                        />
+                      </TableCell>
+                      <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}>
+                        <Tooltip title="Vincular a campus/ministério">
+                          <IconButton size="small" onClick={() => setMinistroVinculos(m)}>
+                            <LinkIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Editar">
+                          <IconButton size="small" onClick={() => abrirEditar(m)}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title={m.ativo ? 'Desativar' : 'Ativar'}>
+                          <Switch size="small" checked={m.ativo} onChange={() => handleAlternarAtivo(m)} />
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
@@ -619,7 +797,7 @@ const MinistrosPage = () => {
           ministro={ministroVinculos}
           onClose={(salvou) => {
             setMinistroVinculos(null);
-            if (salvou) setNotification('Vínculos salvos com sucesso');
+            if (salvou) { setNotification('Vínculos salvos com sucesso'); loadData(); }
           }}
         />
 

@@ -34,7 +34,7 @@ async function cultos(req, res) {
     const data = await reportsService.cultos({
       campusId: req.query.campusId,
       ministerioId: req.query.ministerioId,
-      tipoEventoId: req.query.tipoEventoId,
+      tipoEventoIds: req.query.tipoEventoIds ? req.query.tipoEventoIds.split(',').filter(Boolean) : [],
       dataInicio: req.query.dataInicio,
       dataFim: req.query.dataFim,
     });

@@ -5,7 +5,7 @@ import {
   Grid, Box, Button, FormControl, InputLabel, Select, MenuItem,
   TextField, CircularProgress, Alert, Typography, Chip, Divider,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-  LinearProgress, Tooltip,
+  LinearProgress, Tooltip, OutlinedInput,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
@@ -20,7 +20,7 @@ import {
 import PapperBlock from 'dan-components/PapperBlock/PapperBlock';
 import Notification from 'dan-components/Notification/Notification';
 import { buscarRelatorioCultos } from '../../../api/reportsApi';
-import { listarMinisterios, listarCampusPorMinisterio } from '../../../api/cultosApi';
+import { listarMinisterios, listarCampusPorMinisterio, listarTiposEvento } from '../../../api/cultosApi';
 import { listarCampus } from '../../../api/campusApi';
 import KpiCard from './components/KpiCard';
 import {
@@ -112,8 +112,10 @@ const Secao = ({ titulo, children }) => ( // eslint-disable-line react/prop-type
 const CultosReport = () => {
   const [ministerios, setMinisterios] = useState([]);
   const [campusOptions, setCampusOptions] = useState([]);
+  const [tiposEvento, setTiposEvento] = useState([]);
   const [ministerioId, setMinisterioId] = useState('');
   const [campusId, setCampusId] = useState('');
+  const [tipoEventoIds, setTipoEventoIds] = useState([]);
   const [dataInicio, setDataInicio] = useState(primeiroDiaMes());
   const [dataFim, setDataFim] = useState(hojeISO());
   const [data, setData] = useState(null);
@@ -126,10 +128,12 @@ const CultosReport = () => {
     listarMinisterios(true)
       .then((res) => setMinisterios(Array.isArray(res) ? res : []))
       .catch(() => setNotification('Erro ao carregar ministérios'));
-    // Carrega todos os campus independente do ministério
     listarCampus()
       .then((res) => setCampusOptions(Array.isArray(res) ? res : []))
       .catch(() => setNotification('Erro ao carregar campus'));
+    listarTiposEvento(true)
+      .then((res) => setTiposEvento(Array.isArray(res) ? res : []))
+      .catch(() => {});
   }, []);
 
   // Quando um ministério é selecionado, filtra os campus vinculados a ele
@@ -149,14 +153,16 @@ const CultosReport = () => {
   const gerar = useCallback(async () => {
     setLoading(true);
     try {
+      const tipoEventoIdsParam = tipoEventoIds.length > 0 ? tipoEventoIds.join(',') : undefined;
       const [atual, anterior] = await Promise.all([
         buscarRelatorioCultos({
-          ministerioId, campusId, dataInicio, dataFim
+          ministerioId, campusId, tipoEventoIds: tipoEventoIdsParam, dataInicio, dataFim
         }),
         comparar
           ? buscarRelatorioCultos({
             ministerioId,
             campusId,
+            tipoEventoIds: tipoEventoIdsParam,
             ...calcularPeriodoAnterior(dataInicio, dataFim),
           })
           : Promise.resolve(null),
@@ -168,7 +174,7 @@ const CultosReport = () => {
     } finally {
       setLoading(false);
     }
-  }, [ministerioId, campusId, dataInicio, dataFim, comparar]);
+  }, [ministerioId, campusId, tipoEventoIds, dataInicio, dataFim, comparar]);
 
   useEffect(() => { gerar(); }, []); // eslint-disable-line
 
@@ -405,6 +411,29 @@ const CultosReport = () => {
               <Select value={campusId} label="Campus" onChange={(e) => setCampusId(e.target.value)}>
                 <MenuItem value="">Todos</MenuItem>
                 {campusOptions.map((c) => <MenuItem key={c.id} value={c.id}>{c.nome}</MenuItem>)}
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12} sm={6} md={4}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Tipo de Evento</InputLabel>
+              <Select
+                multiple
+                value={tipoEventoIds}
+                onChange={(e) => setTipoEventoIds(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
+                input={<OutlinedInput label="Tipo de Evento" />}
+                renderValue={(selected) => (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    {selected.map((id) => {
+                      const te = tiposEvento.find((t) => t.id === id);
+                      return <Chip key={id} label={te ? te.nome : id} size="small" />;
+                    })}
+                  </Box>
+                )}
+              >
+                {tiposEvento.map((t) => (
+                  <MenuItem key={t.id} value={t.id}>{t.nome}</MenuItem>
+                ))}
               </Select>
             </FormControl>
           </Grid>
