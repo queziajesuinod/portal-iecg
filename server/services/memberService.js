@@ -1074,7 +1074,9 @@ class MemberService {
           ];
         }
       }
-      const { count, rows } = await Member.findAndCountAll({
+      const count = await Member.count({ where });
+
+      const rows = await Member.findAll({
         where,
         attributes: {
           include: [
@@ -1089,13 +1091,18 @@ class MemberService {
           { model: Celula, as: 'celula', attributes: ['id', 'celula'] },
           { model: MemberJourney, as: 'journey', attributes: ['currentStage', 'engagementScore', 'healthStatus'] },
           {
-            model: MemberCargo, as: 'cargos', attributes: ['id', 'cargo'], where: { ativo: true }, required: false
+            model: MemberCargo,
+            as: 'cargos',
+            attributes: ['id', 'cargo'],
+            where: { ativo: true },
+            required: false,
+            separate: true,
+            order: [['cargo', 'ASC']]
           }
         ],
         limit,
         offset,
-        order: [['fullName', 'ASC']],
-        distinct: true
+        order: [['fullName', 'ASC']]
       });
 
       return {

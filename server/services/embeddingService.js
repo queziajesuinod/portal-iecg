@@ -23,8 +23,7 @@ function startServer() {
   if (startPromise) return startPromise;
 
   startPromise = new Promise((resolve, reject) => {
-    const python = process.env.PYTHON_BIN
-      || 'C:\\Users\\Quezia\\AppData\\Local\\Programs\\Python\\Python313\\python.exe';
+    const python = process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3');
     serverProcess = spawn(python, [SCRIPT, String(EMBED_PORT)], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
