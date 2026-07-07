@@ -17,10 +17,12 @@ const parsedPoolIdle = Number(process.env.DB_POOL_IDLE_MS);
 const parsedPoolEvict = Number(process.env.DB_POOL_EVICT_MS);
 
 const enableSequelizeLogging = process.env.SEQUELIZE_LOGGING === 'true';
+const defaultPoolMax = env === 'production' ? 20 : 10;
+const defaultPoolAcquire = env === 'production' ? 120000 : 60000;
 const poolConfig = {
-  max: Number.isFinite(parsedPoolMax) && parsedPoolMax > 0 ? parsedPoolMax : 10,
+  max: Number.isFinite(parsedPoolMax) && parsedPoolMax > 0 ? parsedPoolMax : defaultPoolMax,
   min: Number.isFinite(parsedPoolMin) && parsedPoolMin >= 0 ? parsedPoolMin : 0,
-  acquire: Number.isFinite(parsedPoolAcquire) && parsedPoolAcquire > 0 ? parsedPoolAcquire : 60000,
+  acquire: Number.isFinite(parsedPoolAcquire) && parsedPoolAcquire > 0 ? parsedPoolAcquire : defaultPoolAcquire,
   idle: Number.isFinite(parsedPoolIdle) && parsedPoolIdle > 0 ? parsedPoolIdle : 10000,
   evict: Number.isFinite(parsedPoolEvict) && parsedPoolEvict > 0 ? parsedPoolEvict : 1000
 };

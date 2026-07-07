@@ -247,8 +247,11 @@ app.listen(port, host, async (err) => {
 
   console.log(`Servidor rodando em: ${process.env.REACT_APP_API_URL}`);
 
-  // Pré-carrega o modelo de embeddings para a busca bíblica (evita latência na primeira busca)
-  require('./services/embeddingService').startServer().catch((errMsg) => {
-    console.warn('[embedding] Aviso: servidor de embeddings não iniciou:', errMsg.message);
-  });
+  if (process.env.EMBEDDING_ENABLED === 'true') {
+    require('./services/embeddingService').startServer().catch((errMsg) => {
+      console.warn('[embedding] Aviso: servidor de embeddings nao iniciou:', errMsg.message);
+    });
+  } else {
+    console.info('[embedding] Desativado. Defina EMBEDDING_ENABLED=true para iniciar o servidor Python.');
+  }
 });
