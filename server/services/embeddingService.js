@@ -5,7 +5,7 @@ const axios = require('axios');
 const EMBED_PORT = process.env.EMBEDDING_PORT || 7432;
 const EMBED_URL = `http://127.0.0.1:${EMBED_PORT}`;
 const SCRIPT = path.join(__dirname, 'embedding_server.py');
-const ENABLED = process.env.EMBEDDING_ENABLED !== 'false';
+const ENABLED = process.env.EMBEDDING_ENABLED === 'true';
 
 // Limiar mínimo de similaridade para considerar um versículo relevante.
 // 0.40 é conservador: rejeita associações superficiais e mantém relevância semântica real.
@@ -17,7 +17,7 @@ let ready = false;
 
 function startServer() {
   if (!ENABLED) {
-    console.log('[embedding] Desativado via EMBEDDING_ENABLED=false — servidor Python não será iniciado.');
+    console.log('[embedding] Desativado. Defina EMBEDDING_ENABLED=true para iniciar o servidor Python.');
     return Promise.resolve();
   }
   if (startPromise) return startPromise;
@@ -99,7 +99,12 @@ async function filterBySimilarity(contexts, verses, threshold = SIMILARITY_THRES
     return verses.map((v) => ({ ...v, score: 1 }));
   }
 
-  await ensureReady();
+  try {
+    await ensureReady();
+  } catch (err) {
+    console.warn(`[embedding] Busca sem filtro semantico: ${err.message}`);
+    return verses.map((v) => ({ ...v, score: 1 }));
+  }
 
   const texts = verses.map((v) => v.text);
 

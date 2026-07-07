@@ -1,5 +1,9 @@
 const uuid = require('uuid');
 const { Campus, Member } = require('../models');
+const cache = require('../utils/cache');
+
+const CAMPUS_LIST_CACHE_KEY = 'campus:list';
+const CAMPUS_LIST_CACHE_TTL_SECONDS = Number(process.env.CAMPUS_LIST_CACHE_TTL_SECONDS || 300);
 
 const PASTOR_INCLUDE = {
   model: Member,
@@ -9,10 +13,10 @@ const PASTOR_INCLUDE = {
 };
 
 async function listar() {
-  return Campus.findAll({
+  return cache.getOrSet(CAMPUS_LIST_CACHE_KEY, async () => Campus.findAll({
     include: [PASTOR_INCLUDE],
     order: [['nome', 'ASC']]
-  });
+  }), CAMPUS_LIST_CACHE_TTL_SECONDS);
 }
 
 async function syncPastoresResponsaveis(campus, body) {
@@ -47,6 +51,7 @@ async function criar(body) {
     transmiteOnline: transmiteOnline ?? false,
   });
   await syncPastoresResponsaveis(campus, body);
+  await cache.del(CAMPUS_LIST_CACHE_KEY);
   return reloadWithIncludes(campus);
 }
 
@@ -66,6 +71,7 @@ async function atualizar(id, body) {
   if (body.transmiteOnline !== undefined) campus.transmiteOnline = body.transmiteOnline;
   await campus.save();
   await syncPastoresResponsaveis(campus, body);
+  await cache.del(CAMPUS_LIST_CACHE_KEY);
   return reloadWithIncludes(campus);
 }
 
@@ -75,6 +81,7 @@ async function deletar(id) {
     throw new Error('Campus não encontrado');
   }
   await campus.destroy();
+  await cache.del(CAMPUS_LIST_CACHE_KEY);
 }
 
 module.exports = {
