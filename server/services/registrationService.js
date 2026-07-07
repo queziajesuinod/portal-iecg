@@ -639,6 +639,47 @@ async function processarInscricao(dadosInscricao) {
     paymentOptionId // ID da forma de pagamento selecionada
   } = dadosInscricao;
 
+  // 0. Verificar duplicidade: PIX pendente do mesmo CPF no mesmo evento dentro da janela de expiração
+  const isPix = paymentData?.method === 'pix';
+  if (isPix && buyerData) {
+    const parsedTimeout = Number(process.env.PIX_PENDING_TIMEOUT_MINUTES);
+    const timeoutMinutes = Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : 120;
+    const cutoff = new Date(Date.now() - timeoutMinutes * 60 * 1000);
+    const cpfComprador = String(buyerData.cpf || buyerData.document || buyerData.documento || '').replace(/\D/g, '');
+
+    if (cpfComprador) {
+      const registracoesRecentes = await Registration.findAll({
+        where: {
+          eventId,
+          paymentMethod: 'pix',
+          paymentStatus: 'pending',
+          createdAt: { [Op.gte]: cutoff },
+        },
+        attributes: ['id', 'orderCode', 'buyerData', 'pixQrCode', 'pixQrCodeBase64', 'pixTransactionId', 'finalPrice', 'paymentStatus', 'quantity', 'createdAt'],
+      });
+
+      const duplicata = registracoesRecentes.find((r) => {
+        const cpfExistente = String(r.buyerData?.cpf || r.buyerData?.document || r.buyerData?.documento || '').replace(/\D/g, '');
+        return cpfExistente && cpfExistente === cpfComprador;
+      });
+
+      if (duplicata) {
+        return {
+          duplicata: true,
+          registration: duplicata,
+          orderCode: duplicata.orderCode,
+          pagamento: {
+            sucesso: true,
+            status: 'pending',
+            qrCodeString: duplicata.pixQrCode,
+            qrCodeBase64: duplicata.pixQrCodeBase64,
+            transactionId: duplicata.pixTransactionId,
+          },
+        };
+      }
+    }
+  }
+
   // 1. Validar evento
   const evento = await eventService.buscarEventoPublicoPorId(eventId, { useCache: false });
   const eventRequiresPayment = evento.requiresPayment !== false;

@@ -102,6 +102,27 @@ async function processar(req, res) {
   try {
     const resultado = await registrationService.processarInscricao(req.body);
 
+    // Inscrição duplicada: PIX pendente do mesmo comprador ainda dentro da janela de expiração
+    if (resultado.duplicata) {
+      const existing = resultado.registration;
+      return res.status(200).json({
+        sucesso: true,
+        duplicata: true,
+        pagamentoAprovado: false,
+        orderCode: resultado.orderCode,
+        message: 'Você já possui uma inscrição pendente para este evento. Complete o pagamento via PIX.',
+        registration: {
+          id: existing.id,
+          orderCode: existing.orderCode,
+          quantity: existing.quantity,
+          finalPrice: existing.finalPrice,
+          paymentStatus: existing.paymentStatus,
+          attendees: [],
+        },
+        pagamento: resultado.pagamento,
+      });
+    }
+
     // Enviar notificação ao administrador (implementar depois)
     // await notificarAdmin(resultado);
 
@@ -126,7 +147,7 @@ async function processar(req, res) {
       expired: 'Pagamento expirado. Inscrição registrada com status expirado.'
     };
 
-    res.status(201).json({
+    return res.status(201).json({
       sucesso: true,
       pagamentoAprovado: paymentStatus === 'confirmed',
       orderCode: resultado.orderCode,
@@ -143,7 +164,7 @@ async function processar(req, res) {
     });
   } catch (err) {
     console.error('Erro ao processar inscrição:', err);
-    res.status(400).json({
+    return res.status(400).json({
       sucesso: false,
       message: err.message
     });
