@@ -27,9 +27,9 @@ const sequelize = new Sequelize(
     dialect: config.dialect,
     dialectOptions: config.dialectOptions,
     pool: {
-      max: Number.isFinite(parsedPoolMax) && parsedPoolMax > 0 ? parsedPoolMax : 5,
+      max: Number.isFinite(parsedPoolMax) && parsedPoolMax > 0 ? parsedPoolMax : 10,
       min: Number.isFinite(parsedPoolMin) && parsedPoolMin >= 0 ? parsedPoolMin : 0,
-      acquire: Number.isFinite(parsedPoolAcquire) && parsedPoolAcquire > 0 ? parsedPoolAcquire : 30000,
+      acquire: Number.isFinite(parsedPoolAcquire) && parsedPoolAcquire > 0 ? parsedPoolAcquire : 60000,
       idle: Number.isFinite(parsedPoolIdle) && parsedPoolIdle > 0 ? parsedPoolIdle : 10000,
       evict: Number.isFinite(parsedPoolEvict) && parsedPoolEvict > 0 ? parsedPoolEvict : 1000
     },
