@@ -21,17 +21,26 @@ const PIX_PENDING_INITIAL_DELAY_MS = Number.isFinite(parsedInitialDelay) && pars
 const parsedConcurrency = Number(process.env.PIX_PENDING_JOB_CONCURRENCY);
 const PIX_PENDING_JOB_CONCURRENCY = Number.isFinite(parsedConcurrency) && parsedConcurrency > 0
   ? parsedConcurrency
-  : 2;
+  : 1;
+
+const parsedBatchSize = Number(process.env.PIX_PENDING_JOB_BATCH_SIZE);
+const PIX_PENDING_JOB_BATCH_SIZE = Number.isFinite(parsedBatchSize) && parsedBatchSize > 0
+  ? parsedBatchSize
+  : 25;
 
 let running = false;
 
 async function runWithConcurrency(items, worker, limit = 1) {
   const concurrency = Math.max(1, Number(limit) || 1);
   const executing = new Set();
+  const errors = [];
 
   for (const item of items) {
     const task = Promise.resolve()
       .then(() => worker(item))
+      .catch((error) => {
+        errors.push(error);
+      })
       .finally(() => executing.delete(task));
 
     executing.add(task);
@@ -42,6 +51,12 @@ async function runWithConcurrency(items, worker, limit = 1) {
   }
 
   await Promise.all(executing);
+
+  if (errors.length) {
+    const error = new Error('Falha ao processar um ou mais itens do job PIX pendente');
+    error.causes = errors;
+    throw error;
+  }
 }
 
 async function checkPixPendingRegistrations() {
@@ -70,7 +85,8 @@ async function checkPixPendingRegistrations() {
           as: 'payments'
         }
       ],
-      order: [['createdAt', 'ASC']]
+      order: [['createdAt', 'ASC']],
+      limit: PIX_PENDING_JOB_BATCH_SIZE
     });
 
     if (!pending.length) {

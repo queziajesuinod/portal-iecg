@@ -16,7 +16,12 @@ const SINGLE_PAYMENT_STATUS_INITIAL_DELAY_MS = Number.isFinite(parsedInitialDela
 const parsedConcurrency = Number(process.env.SINGLE_PAYMENT_STATUS_JOB_CONCURRENCY);
 const SINGLE_PAYMENT_STATUS_JOB_CONCURRENCY = Number.isFinite(parsedConcurrency) && parsedConcurrency > 0
   ? parsedConcurrency
-  : 2;
+  : 1;
+
+const parsedBatchSize = Number(process.env.SINGLE_PAYMENT_STATUS_JOB_BATCH_SIZE);
+const SINGLE_PAYMENT_STATUS_JOB_BATCH_SIZE = Number.isFinite(parsedBatchSize) && parsedBatchSize > 0
+  ? parsedBatchSize
+  : 25;
 
 const TARGET_PAYMENT_STATUSES = ['expired'];
 const FINAL_REGISTRATION_STATUSES = new Set(['cancelled', 'refunded']);
@@ -26,10 +31,14 @@ let running = false;
 async function runWithConcurrency(items, worker, limit = 1) {
   const concurrency = Math.max(1, Number(limit) || 1);
   const executing = new Set();
+  const errors = [];
 
   for (const item of items) {
     const task = Promise.resolve()
       .then(() => worker(item))
+      .catch((error) => {
+        errors.push(error);
+      })
       .finally(() => executing.delete(task));
 
     executing.add(task);
@@ -40,6 +49,12 @@ async function runWithConcurrency(items, worker, limit = 1) {
   }
 
   await Promise.all(executing);
+
+  if (errors.length) {
+    const error = new Error('Falha ao processar um ou mais itens do job de status de pagamento unico');
+    error.causes = errors;
+    throw error;
+  }
 }
 
 async function checkSinglePaymentStatus() {
@@ -57,6 +72,7 @@ async function checkSinglePaymentStatus() {
         providerPaymentId: { [Op.ne]: null }
       },
       order: [['createdAt', 'DESC']],
+      limit: SINGLE_PAYMENT_STATUS_JOB_BATCH_SIZE,
       include: [
         {
           model: Registration,
