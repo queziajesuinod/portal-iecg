@@ -28,6 +28,11 @@ const PIX_PENDING_JOB_BATCH_SIZE = Number.isFinite(parsedBatchSize) && parsedBat
   ? parsedBatchSize
   : 10;
 
+const parsedLookbackHours = Number(process.env.PIX_PENDING_JOB_LOOKBACK_HOURS);
+const PIX_PENDING_JOB_LOOKBACK_HOURS = Number.isFinite(parsedLookbackHours) && parsedLookbackHours > 0
+  ? parsedLookbackHours
+  : 24;
+
 let running = false;
 
 async function runWithConcurrency(items, worker, limit = 1) {
@@ -73,7 +78,37 @@ async function checkPixPendingRegistrations() {
 
   try {
     const cutoff = new Date(Date.now() - PIX_PENDING_TIMEOUT_MINUTES * 60 * 1000);
-    const pending = await Registration.findAll({
+    const lookback = new Date(Date.now() - PIX_PENDING_JOB_LOOKBACK_HOURS * 60 * 60 * 1000);
+    const registrationsById = new Map();
+
+    const pendingPayments = await RegistrationPayment.findAll({
+      where: {
+        method: 'pix',
+        providerPaymentId: { [Op.ne]: null },
+        status: { [Op.in]: ['pending', 'authorized'] },
+        createdAt: { [Op.gte]: lookback }
+      },
+      include: [
+        {
+          model: Registration,
+          as: 'registration',
+          required: true,
+          where: {
+            paymentStatus: { [Op.in]: ['pending', 'authorized', 'partial'] }
+          }
+        }
+      ],
+      order: [['updatedAt', 'DESC']],
+      limit: PIX_PENDING_JOB_BATCH_SIZE
+    });
+
+    pendingPayments.forEach((payment) => {
+      if (payment.registration) {
+        registrationsById.set(payment.registration.id, payment.registration);
+      }
+    });
+
+    const expirable = await Registration.findAll({
       where: {
         paymentMethod: 'pix',
         paymentStatus: 'pending',
@@ -99,6 +134,12 @@ async function checkPixPendingRegistrations() {
       limit: PIX_PENDING_JOB_BATCH_SIZE
     });
 
+    expirable.forEach((registration) => {
+      registrationsById.set(registration.id, registration);
+    });
+
+    const pending = [...registrationsById.values()];
+
     if (!pending.length) {
       return;
     }
@@ -112,6 +153,10 @@ async function checkPixPendingRegistrations() {
 
       if (registration.paymentStatus !== 'pending') {
         console.info(`[pixPendingJob] Inscricao ${registration.orderCode} ja atualizada para ${registration.paymentStatus}`);
+        return;
+      }
+
+      if (registration.createdAt && new Date(registration.createdAt) >= cutoff) {
         return;
       }
 
@@ -157,6 +202,12 @@ function startPixPendingJob() {
     console.warn('[pixPendingJob] Tempo limite invalido, job nao iniciado');
     return;
   }
+
+  console.info(
+    `[pixPendingJob] Iniciado: initialDelay=${PIX_PENDING_INITIAL_DELAY_MS}ms, `
+    + `interval=${PIX_PENDING_CHECK_INTERVAL_MS}ms, timeout=${PIX_PENDING_TIMEOUT_MINUTES}min, `
+    + `batchSize=${PIX_PENDING_JOB_BATCH_SIZE}, lookback=${PIX_PENDING_JOB_LOOKBACK_HOURS}h`
+  );
 
   setTimeout(scheduleNextRun, PIX_PENDING_INITIAL_DELAY_MS);
 }
