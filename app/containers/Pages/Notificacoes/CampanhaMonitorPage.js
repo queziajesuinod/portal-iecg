@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useHistory } from 'react-router-dom';
 import {
-  Alert, Box, Card, CardContent, Chip, CircularProgress,
+  Alert, Box, Button, Card, CardContent, Chip, CircularProgress,
   FormControl, Grid, IconButton, InputLabel, LinearProgress, MenuItem,
   Paper, Select, Tab, TablePagination, Tabs, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Toolbar, Tooltip, Typography
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import StopCircleIcon from '@mui/icons-material/StopCircle';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import SendIcon from '@mui/icons-material/Send';
@@ -187,6 +188,7 @@ export default function CampanhaMonitorPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
 
   // destinatários
@@ -213,6 +215,30 @@ export default function CampanhaMonitorPage() {
     } finally {
       setLoading(false);
       if (manual) setRefreshing(false);
+    }
+  };
+
+  const handleParar = async () => {
+    // eslint-disable-next-line no-alert
+    if (!window.confirm('Parar o envio desta campanha? Os destinatários ainda não processados permanecerão pendentes.')) return;
+    setStopping(true);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/notificacoes/campanhas/${id}/parar`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token()}` }
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        // eslint-disable-next-line no-alert
+        window.alert(json.erro || 'Não foi possível parar a campanha.');
+      } else {
+        await fetchMonitor(true);
+      }
+    } catch {
+      // eslint-disable-next-line no-alert
+      window.alert('Erro de conexão ao parar a campanha.');
+    } finally {
+      setStopping(false);
     }
   };
 
@@ -325,6 +351,19 @@ export default function CampanhaMonitorPage() {
             <Typography variant="caption" color="textSecondary">{recDesc}</Typography>
           )}
         </Box>
+        {isSending && (
+          <Button
+            onClick={handleParar}
+            disabled={stopping}
+            size="small"
+            variant="outlined"
+            color="error"
+            startIcon={stopping ? <CircularProgress size={14} color="inherit" /> : <StopCircleIcon />}
+            sx={{ mr: 1 }}
+          >
+            {stopping ? 'Parando…' : 'Parar'}
+          </Button>
+        )}
         <Tooltip title="Atualizar agora">
           <span>
             <IconButton onClick={() => fetchMonitor(true)} size="small" disabled={refreshing}>
@@ -375,6 +414,11 @@ export default function CampanhaMonitorPage() {
                 {campaign.status === 'failed' && (
                   <Alert severity="error" sx={{ mt: 1, py: 0 }}>
                     O disparo encontrou erros críticos.
+                  </Alert>
+                )}
+                {campaign.status === 'cancelled' && (
+                  <Alert severity="warning" sx={{ mt: 1, py: 0 }}>
+                    Campanha interrompida. Os destinatários pendentes não foram processados.
                   </Alert>
                 )}
               </Box>

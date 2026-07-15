@@ -194,6 +194,14 @@ async function monitorarCampanha(req, res) {
   }
 }
 
+async function pararCampanha(req, res) {
+  try {
+    return res.json(await NotificationCampaignService.cancelar(req.params.id));
+  } catch (err) {
+    return res.status(400).json({ erro: err.message });
+  }
+}
+
 async function listarDestinatarios(req, res) {
   try {
     const result = await NotificationCampaignService.listarDestinatarios(req.params.id, req.query);
@@ -201,6 +209,27 @@ async function listarDestinatarios(req, res) {
   } catch (err) {
     return res.status(400).json({ erro: err.message });
   }
+}
+
+// ── Rastreamento de abertura de e-mail (público, sem auth) ──────────────────────
+// GIF transparente 1x1 servido para o pixel de rastreamento.
+const TRACKING_PIXEL = Buffer.from(
+  'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+  'base64'
+);
+
+async function trackOpen(req, res) {
+  try {
+    await NotificationCampaignService.registrarAbertura(req.params.recipientId);
+  } catch (err) {
+    // Nunca falha o pixel: rastreamento é best-effort.
+    console.error('[Notificacoes] Erro ao registrar abertura:', err.message);
+  }
+  res.set('Content-Type', 'image/gif');
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  return res.end(TRACKING_PIXEL);
 }
 
 // ── Sequências ────────────────────────────────────────────────────────────────
@@ -278,7 +307,9 @@ module.exports = {
   previewCampanha,
   dispararCampanha,
   monitorarCampanha,
+  pararCampanha,
   listarDestinatarios,
+  trackOpen,
   listarSequencias,
   buscarSequencia,
   criarSequencia,

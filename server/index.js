@@ -125,6 +125,8 @@ app.use('/api/public/diario-bordo', require('./routers/publicBoardJournalRoutes'
 app.use('/api/public/youtube', require('./routers/publicYoutubeRoutes'));
 // API publica de videos transcritos e resumidos
 app.use('/api/public/videos', require('./routers/publicVideoRoutes'));
+// Pixel publico de rastreamento de abertura de e-mail (campanhas de notificacao)
+app.use('/api/public/notificacoes', require('./routers/publicNotificacoesRoutes'));
 // Rotas administrativas de eventos (protegidas)
 app.use('/api/admin/events', authMiddleware, require('./routers/eventRoutes'));
 app.use('/api/admin/event-import', authMiddleware, require('./routers/eventImportRoutes'));
