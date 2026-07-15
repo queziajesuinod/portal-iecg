@@ -30,6 +30,7 @@ router.put('/campanhas/:id', ctrl.atualizarCampanha);
 router.delete('/campanhas/:id', ctrl.deletarCampanha);
 router.get('/campanhas/:id/preview', ctrl.previewCampanha);
 router.post('/campanhas/:id/disparar', ctrl.dispararCampanha);
+router.post('/campanhas/:id/parar', ctrl.pararCampanha);
 router.get('/campanhas/:id/monitor', ctrl.monitorarCampanha);
 router.get('/campanhas/:id/destinatarios', ctrl.listarDestinatarios);
 

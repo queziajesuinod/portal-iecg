@@ -9,17 +9,31 @@ const { resolveAudience } = require('./notificationAudienceService');
 const NotificationGroupService = require('./notificationGroupService');
 const { resolveMessage } = require('./notificationTemplateService');
 const evolutionApi = require('./evolutionApiService');
+const emailService = require('./emailService');
 
 const defaultIncludes = [
   { model: NotificationTemplate, as: 'template', attributes: ['id', 'name', 'channel', 'body'] },
   { model: User, as: 'creator', attributes: ['id', 'name'] }
 ];
 
+// Sinais de cancelamento de campanhas em andamento (processo atual).
+// O loop de disparo verifica esse conjunto a cada iteração para interromper.
+const cancelRequested = new Set();
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function buildMessage(campaign, recipient) {
   const body = campaign.customMessage || campaign.template?.body || '';
   return resolveMessage(body, recipient.variables || {});
+}
+
+// Pixel de rastreamento de abertura (leitura) para e-mail. Ao ser carregado pelo
+// cliente de e-mail, chama a rota pública que marca o destinatário como "lido".
+function buildTrackingPixel(recipientId) {
+  const base = (process.env.PUBLIC_BASE_URL || process.env.REACT_APP_API_URL || '').trim().replace(/\/$/, '');
+  if (!base) return '';
+  const url = `${base}/api/public/notificacoes/track/open/${recipientId}`;
+  return `<img src="${url}" width="1" height="1" alt="" style="display:none;border:0;width:1px;height:1px" />`;
 }
 
 function computeNextRunAt(campaign) {
@@ -172,6 +186,7 @@ const NotificationCampaignService = {
     }
     campaign.status = 'sending';
     campaign.sentAt = null;
+    cancelRequested.delete(id); // limpa sinal antigo de um run anterior
 
     try {
       // Remove destinatários do run anterior (para campanhas recorrentes)
@@ -197,7 +212,13 @@ const NotificationCampaignService = {
         where: { campaignId: id, status: 'pending' }
       });
 
+      let cancelled = false;
       for (const recipient of allRecipients) {
+        // Parada solicitada: interrompe o disparo; os pendentes permanecem "pending".
+        if (cancelRequested.has(id)) {
+          cancelled = true;
+          break;
+        }
         try {
           if (campaign.channel === 'whatsapp') {
             const response = await evolutionApi.enviarMensagemTexto(
@@ -219,6 +240,38 @@ const NotificationCampaignService = {
               });
               totalFailed += 1;
             }
+          } else if (campaign.channel === 'email') {
+            if (!emailService.isConfigured()) {
+              await recipient.update({
+                status: 'failed',
+                errorMessage: 'SMTP nao configurado (defina SMTP_HOST/USER/PASS no .env)'
+              });
+              totalFailed += 1;
+            } else {
+              const msg = recipient.resolvedMessage || '';
+              const isHtml = /<[a-z][\s\S]*>/i.test(msg);
+              let html = isHtml ? msg : `<pre style="font-family:inherit;white-space:pre-wrap;margin:0">${msg}</pre>`;
+              html += buildTrackingPixel(recipient.id);
+              const result = await emailService.sendMail({
+                to: recipient.contact,
+                subject: campaign.name || 'Notificação IECG',
+                html,
+                text: isHtml ? undefined : msg,
+              });
+              // "Entregue" = SMTP aceitou o destinatário (relay assumiu a entrega).
+              const contact = String(recipient.contact).toLowerCase();
+              const accepted = Array.isArray(result.accepted)
+                && result.accepted.some((a) => String(a).toLowerCase() === contact);
+              const now = new Date();
+              await recipient.update({
+                status: accepted ? 'delivered' : 'sent',
+                sentAt: now,
+                deliveredAt: accepted ? now : null,
+                externalId: result.messageId || null,
+                providerResponse: result
+              });
+              totalSent += 1;
+            }
           } else {
             await recipient.update({ status: 'sent', sentAt: new Date() });
             totalSent += 1;
@@ -228,6 +281,21 @@ const NotificationCampaignService = {
           totalFailed += 1;
         }
         if (delayMs > 0) await new Promise((resolve) => { setTimeout(resolve, delayMs); });
+      }
+
+      if (cancelled) {
+        cancelRequested.delete(id);
+        await campaign.update({
+          status: 'cancelled',
+          sentAt: new Date(),
+          totalRecipients: allRecipients.length,
+          totalSent,
+          totalFailed,
+          nextRunAt: null
+        });
+        return {
+          cancelled: true, totalRecipients: allRecipients.length, totalSent, totalFailed
+        };
       }
 
       const isRecurrent = campaign.recurrenceType && campaign.recurrenceType !== 'once';
@@ -244,9 +312,24 @@ const NotificationCampaignService = {
 
       return { totalRecipients: allRecipients.length, totalSent, totalFailed };
     } catch (err) {
+      cancelRequested.delete(id);
       await campaign.update({ status: 'failed' });
       throw err;
     }
+  },
+
+  // Solicita a parada de uma campanha em andamento.
+  // - Loop vivo (mesmo processo): o sinal em memória interrompe na próxima iteração.
+  // - Campanha órfã (loop morto por restart): grava 'cancelled' direto no banco,
+  //   destravando-a do estado "sending" para que possa ser excluída.
+  async cancelar(id) {
+    const campaign = await NotificationCampaignService.buscarPorId(id);
+    if (campaign.status !== 'sending') {
+      throw new Error('Só é possível parar campanhas em andamento');
+    }
+    cancelRequested.add(id);
+    await campaign.update({ status: 'cancelled', sentAt: campaign.sentAt || new Date() });
+    return { mensagem: 'Campanha interrompida.' };
   },
 
   async monitorar(id) {
@@ -297,6 +380,25 @@ const NotificationCampaignService = {
       total,
       failures
     };
+  },
+
+  // Registra a abertura (leitura) de um e-mail via pixel de rastreamento.
+  // Idempotente: nunca rebaixa o status e ignora destinatários com falha.
+  async registrarAbertura(recipientId) {
+    const recipient = await NotificationCampaignRecipient.findByPk(recipientId);
+    if (!recipient || recipient.status === 'failed') return false;
+
+    const rank = {
+      pending: 0, sent: 1, delivered: 2, read: 3
+    };
+    const updates = {};
+    const now = new Date();
+    if (!recipient.deliveredAt) updates.deliveredAt = now;
+    if (!recipient.readAt) updates.readAt = now;
+    if ((rank[recipient.status] ?? 0) < rank.read) updates.status = 'read';
+
+    if (Object.keys(updates).length) await recipient.update(updates);
+    return true;
   },
 
   async listarDestinatarios(campaignId, filters = {}) {
