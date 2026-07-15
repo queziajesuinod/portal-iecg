@@ -212,10 +212,32 @@ const NotificationCampaignService = {
         where: { campaignId: id, status: 'pending' }
       });
 
+      // Detecta parada via sinal em memória (mesmo processo) OU status no banco
+      // (funciona mesmo quando o disparo roda em outro processo, ex.: scheduler).
+      const cancelRequestedNow = async () => {
+        if (cancelRequested.has(id)) return true;
+        const fresh = await NotificationCampaign.findByPk(id, { attributes: ['status'], raw: true });
+        return !fresh || fresh.status !== 'sending';
+      };
+
+      // Espera entre envios, mas em fatias curtas para reagir rápido ao cancelamento
+      // mesmo com sendDelayMs alto (ex.: 2 min). Retorna true se cancelada.
+      const waitOrCancel = async (ms) => {
+        const STEP = 3000;
+        let waited = 0;
+        while (waited < ms) {
+          if (await cancelRequestedNow()) return true;
+          const chunk = Math.min(STEP, ms - waited);
+          await new Promise((resolve) => { setTimeout(resolve, chunk); });
+          waited += chunk;
+        }
+        return false;
+      };
+
       let cancelled = false;
       for (const recipient of allRecipients) {
         // Parada solicitada: interrompe o disparo; os pendentes permanecem "pending".
-        if (cancelRequested.has(id)) {
+        if (await cancelRequestedNow()) {
           cancelled = true;
           break;
         }
@@ -280,7 +302,12 @@ const NotificationCampaignService = {
           await recipient.update({ status: 'failed', errorMessage: err.message || 'Erro no envio' });
           totalFailed += 1;
         }
-        if (delayMs > 0) await new Promise((resolve) => { setTimeout(resolve, delayMs); });
+        if (delayMs > 0) {
+          if (await waitOrCancel(delayMs)) {
+            cancelled = true;
+            break;
+          }
+        }
       }
 
       if (cancelled) {
