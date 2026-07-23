@@ -4,6 +4,9 @@ const { google } = require('googleapis');
 const REQUIRED_SCOPES = [
   'https://www.googleapis.com/auth/youtube.readonly',
   'https://www.googleapis.com/auth/youtube.force-ssl',
+  // Necessario para publicar Shorts (videos.insert). Canais ja conectados
+  // antes deste escopo precisam re-autorizar para poder publicar.
+  'https://www.googleapis.com/auth/youtube.upload',
 ];
 
 function getEnvOrThrow(name) {

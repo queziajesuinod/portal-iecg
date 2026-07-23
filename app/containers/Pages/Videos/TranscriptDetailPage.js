@@ -45,6 +45,7 @@ import {
   regenerateSummary,
   cancelTranscript,
 } from '../../../utils/youtubeClient';
+import ClipsPanel from './ClipsPanel';
 
 function StatusChip({ status }) {
   const map = {
@@ -524,6 +525,16 @@ const TranscriptDetailPage = () => {
           minHeight={320}
         />
       </PapperBlock>
+
+      {video?.id && video?.videoId && (
+        <PapperBlock title="Recortes para Shorts" desc="Selecione, ajuste no vídeo, aprove e publique os melhores trechos." icon="ion-ios-film-outline" whiteBg>
+          <ClipsPanel
+            videoId={video.id}
+            youtubeVideoId={video.videoId}
+            canGenerate={Array.isArray(data.segments) && data.segments.length > 0}
+          />
+        </PapperBlock>
+      )}
     </div>
   );
 };

@@ -1,5 +1,6 @@
 const { YoutubeVideo, YoutubeChannel, VideoTranscript } = require('../models');
 const audioStorage = require('../services/audioStorageService');
+const videoStorage = require('../services/videoStorageService');
 const transcriptionService = require('../services/transcriptionService');
 
 async function listarVideosPendentes(req, res) {
@@ -134,8 +135,85 @@ async function uploadAudioHelper(req, res) {
   }
 }
 
+async function listarVideosParaRecorte(req, res) {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 20, 100);
+    const where = { ignored: false, clipsRequested: true, videoPath: null };
+    if (req.query.channelId) {
+      where.youtubeChannelId = req.query.channelId;
+    }
+
+    const videos = await YoutubeVideo.findAll({
+      where,
+      include: [{ model: YoutubeChannel, as: 'channel' }],
+      order: [['publishedAt', 'DESC']],
+      limit,
+    });
+
+    const items = videos.map((v) => ({
+      id: v.id,
+      videoId: v.videoId,
+      title: v.title,
+      publishedAt: v.publishedAt,
+      durationSeconds: v.durationSeconds,
+      youtubeUrl: `https://www.youtube.com/watch?v=${v.videoId}`,
+      channel: v.channel ? {
+        id: v.channel.id,
+        channelId: v.channel.channelId,
+        channelName: v.channel.channelName,
+      } : null,
+    }));
+
+    res.status(200).json({ items, count: items.length });
+  } catch (err) {
+    console.error('[helper] erro ao listar videos para recorte:', err);
+    res.status(500).json({ message: err.message });
+  }
+}
+
+async function uploadVideoHelper(req, res) {
+  try {
+    const { videoId } = req.params;
+    if (!req.file) return res.status(400).json({ message: 'Arquivo de video nao enviado' });
+
+    const video = await YoutubeVideo.findOne({ where: { videoId } });
+    if (!video) {
+      await videoStorage.removeVideo(req.file.path).catch(() => {});
+      return res.status(404).json({ message: 'Video nao encontrado pelo videoId do YouTube' });
+    }
+
+    if (video.videoPath) {
+      await videoStorage.removeVideo(video.videoPath).catch(() => {});
+    }
+
+    const saved = await videoStorage.saveVideo(video.videoId, req.file.path, req.file.originalname);
+    await video.update({
+      videoPath: saved.path,
+      videoSizeBytes: saved.size,
+      videoUploadedAt: new Date(),
+    });
+
+    console.log(`[helper] video recebido pra ${video.videoId} (${(saved.size / 1024 / 1024).toFixed(2)} MB) — disponivel para gerar recortes`);
+    return res.status(200).json({
+      video: {
+        id: video.id,
+        videoId: video.videoId,
+        videoSizeBytes: saved.size,
+      },
+    });
+  } catch (err) {
+    if (req.file?.path) {
+      await videoStorage.removeVideo(req.file.path).catch(() => {});
+    }
+    console.error('[helper] erro upload video:', err);
+    return res.status(500).json({ message: err.message });
+  }
+}
+
 module.exports = {
   listarVideosPendentes,
   listarChannelsComPendencias,
+  listarVideosParaRecorte,
   uploadAudioHelper,
+  uploadVideoHelper,
 };

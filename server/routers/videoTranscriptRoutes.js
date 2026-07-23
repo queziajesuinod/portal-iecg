@@ -63,6 +63,15 @@ router.get('/videos/:videoId/audio', controller.baixarAudio);
 router.post('/videos/:videoId/transcribe', express.json(), controller.transcribeUploadedAudio);
 router.post('/videos/:videoId/transcript/reactivate', express.json(), controller.reativarTranscricao);
 router.post('/videos/:videoId/transcript/queue', express.json(), controller.enfileirarParaHelper);
+router.post('/videos/:videoId/clips/request', express.json(), controller.solicitarRecortes);
+router.post('/videos/:videoId/clips/suggest', express.json(), controller.sugerirRecortes);
+router.get('/videos/:videoId/clips', express.json(), controller.listarRecortes);
+router.put('/clips/:clipId', express.json(), controller.editarRecorte);
+router.post('/clips/:clipId/approve', express.json(), controller.aprovarRecorte);
+router.post('/clips/:clipId/discard', express.json(), controller.descartarRecorte);
+router.post('/clips/:clipId/render', express.json(), controller.renderizarRecorte);
+router.get('/clips/:clipId/file', controller.servirRecorte);
+router.post('/clips/:clipId/publish', express.json(), controller.publicarRecorte);
 
 router.get('/worker/status', express.json(), controller.statusWorker);
 router.post('/worker/run-once', express.json(), controller.rodarWorkerAgora);

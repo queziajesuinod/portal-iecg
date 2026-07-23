@@ -8,7 +8,7 @@ let ticketEmailColumnsCheck = null;
 let ticketEmailColumnsWarned = false;
 
 function getTicketBaseUrl() {
-  return (process.env.TICKET_BASE_URL || 'https://start.iecg.com.br/ticket').replace(/\/+$/, '');
+  return (process.env.TICKET_BASE_URL || 'https://app.iecg.com.br/ticket').replace(/\/+$/, '');
 }
 
 function normalizeWhatsappDigits(value) {

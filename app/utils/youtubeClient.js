@@ -208,6 +208,86 @@ export const regenerateSummary = async (id) => {
   return parseOrThrow(res, 'Falha ao regenerar resumo');
 };
 
+// ----- Recortes / Shorts -----
+
+export const requestClips = async (videoId) => {
+  const res = await fetch(`${BASE}/videos/${videoId}/clips/request`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+  });
+  return parseOrThrow(res, 'Falha ao solicitar recortes');
+};
+
+export const suggestClips = async (videoId, options = {}) => {
+  const res = await fetch(`${BASE}/videos/${videoId}/clips/suggest`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(options),
+  });
+  return parseOrThrow(res, 'Falha ao sugerir recortes');
+};
+
+export const fetchClips = async (videoId) => {
+  const res = await fetch(`${BASE}/videos/${videoId}/clips`, { headers: jsonHeaders() });
+  return parseOrThrow(res, 'Falha ao carregar recortes');
+};
+
+export const updateClip = async (clipId, payload) => {
+  const res = await fetch(`${BASE}/clips/${clipId}`, {
+    method: 'PUT',
+    headers: jsonHeaders(),
+    body: JSON.stringify(payload),
+  });
+  return parseOrThrow(res, 'Falha ao editar recorte');
+};
+
+export const approveClip = async (clipId) => {
+  const res = await fetch(`${BASE}/clips/${clipId}/approve`, { method: 'POST', headers: jsonHeaders() });
+  return parseOrThrow(res, 'Falha ao aprovar recorte');
+};
+
+export const discardClip = async (clipId) => {
+  const res = await fetch(`${BASE}/clips/${clipId}/discard`, { method: 'POST', headers: jsonHeaders() });
+  return parseOrThrow(res, 'Falha ao descartar recorte');
+};
+
+export const renderClip = async (clipId) => {
+  const res = await fetch(`${BASE}/clips/${clipId}/render`, { method: 'POST', headers: jsonHeaders() });
+  return parseOrThrow(res, 'Falha ao renderizar recorte');
+};
+
+export const publishClip = async (clipId, options = {}) => {
+  const res = await fetch(`${BASE}/clips/${clipId}/publish`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(options),
+  });
+  return parseOrThrow(res, 'Falha ao publicar recorte');
+};
+
+// O arquivo do clip exige Authorization; buscamos como blob e devolvemos um object URL
+// (usar em <video src> e revogar com URL.revokeObjectURL quando trocar).
+export const fetchClipBlobUrl = async (clipId) => {
+  const res = await fetch(`${BASE}/clips/${clipId}/file`, { headers: authHeaders() });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.message || 'Falha ao carregar arquivo do recorte');
+  }
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+};
+
+export const downloadClipFile = async (clipId, filename = 'recorte.mp4') => {
+  const url = await fetchClipBlobUrl(clipId);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+};
+
 export const fetchWorkerStatus = async () => {
   const res = await fetch(`${BASE}/worker/status`, { headers: jsonHeaders() });
   return parseOrThrow(res, 'Falha ao consultar worker');

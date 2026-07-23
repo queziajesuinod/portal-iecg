@@ -15,6 +15,9 @@ const AUDIO_BITRATE = process.env.AUDIO_BITRATE || '96';
 const MAX_PER_TICK = Number(process.env.MAX_PER_TICK || 1);
 const TMP_DIR = process.env.TMP_DIR || path.join(os.tmpdir(), 'iecg-helper');
 const RUN_ONCE = process.argv.includes('--once');
+// Reter o video completo (alem do audio) para gerar recortes/Shorts no portal.
+const DOWNLOAD_VIDEO = process.env.HELPER_DOWNLOAD_VIDEO === 'true';
+const VIDEO_MAX_HEIGHT = Number(process.env.VIDEO_MAX_HEIGHT || 720);
 
 let activeChannelId = process.env.CHANNEL_ID || '';
 let activeChannelLabel = process.env.CHANNEL_NAME || '';
@@ -115,6 +118,13 @@ async function listPending() {
   return data?.items || [];
 }
 
+async function listPendingVideos() {
+  const params = { limit: 20 };
+  if (activeChannelId) params.channelId = activeChannelId;
+  const { data } = await api.get('/pending-videos', { params });
+  return data?.items || [];
+}
+
 async function downloadAudio(youtubeUrl, videoId) {
   await ensureTmp();
   const outBase = path.join(TMP_DIR, videoId);
@@ -134,6 +144,42 @@ async function downloadAudio(youtubeUrl, videoId) {
   const expected = `${outBase}.mp3`;
   const stat = await fsp.stat(expected);
   return { path: expected, size: stat.size };
+}
+
+async function downloadVideo(youtubeUrl, videoId) {
+  await ensureTmp();
+  const outBase = path.join(TMP_DIR, `${videoId}-video`);
+  const outTemplate = `${outBase}.%(ext)s`;
+
+  await youtubedl(youtubeUrl, {
+    output: outTemplate,
+    // Melhor video ate a altura maxima + melhor audio, remuxado em mp4.
+    format: `bestvideo[height<=${VIDEO_MAX_HEIGHT}]+bestaudio/best[height<=${VIDEO_MAX_HEIGHT}]`,
+    mergeOutputFormat: 'mp4',
+    noPlaylist: true,
+    noWarnings: true,
+    retries: 3,
+    fragmentRetries: 3,
+  });
+
+  const expected = `${outBase}.mp4`;
+  const stat = await fsp.stat(expected);
+  return { path: expected, size: stat.size };
+}
+
+async function uploadVideo(videoId, videoPath) {
+  const form = new FormData();
+  form.append('video', fs.createReadStream(videoPath), {
+    filename: `${videoId}.mp4`,
+    contentType: 'video/mp4',
+  });
+  const { data } = await api.post(`/videos/${encodeURIComponent(videoId)}/video`, form, {
+    headers: { ...form.getHeaders(), 'X-Helper-Token': HELPER_TOKEN },
+    timeout: 1800000,
+    maxContentLength: Infinity,
+    maxBodyLength: Infinity,
+  });
+  return data;
 }
 
 async function uploadAudio(videoId, audioPath) {
@@ -166,14 +212,24 @@ async function processOne(video) {
   const channelLog = video.channel?.channelName ? ` | ${video.channel.channelName}` : '';
   console.log(`▶ ${counter}${video.videoId}${channelLog} | ${video.title?.slice(0, 50)}`);
   let audioPath = null;
+  let videoPath = null;
   try {
     const dl = await downloadAudio(video.youtubeUrl, video.videoId);
     audioPath = dl.path;
     const mb = (dl.size / 1024 / 1024).toFixed(2);
-    console.log(`  ↓ baixado: ${mb} MB em ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+    console.log(`  ↓ audio baixado: ${mb} MB em ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 
     await uploadAudio(video.videoId, audioPath);
-    console.log(`  ↑ enviado pro portal em ${((Date.now() - t0) / 1000).toFixed(1)}s total ✅`);
+    console.log(`  ↑ audio enviado pro portal em ${((Date.now() - t0) / 1000).toFixed(1)}s ✅`);
+
+    if (DOWNLOAD_VIDEO) {
+      const vdl = await downloadVideo(video.youtubeUrl, video.videoId);
+      videoPath = vdl.path;
+      const vmb = (vdl.size / 1024 / 1024).toFixed(2);
+      console.log(`  ↓ video baixado (≤${VIDEO_MAX_HEIGHT}p): ${vmb} MB`);
+      await uploadVideo(video.videoId, videoPath);
+      console.log(`  ↑ video enviado pro portal em ${((Date.now() - t0) / 1000).toFixed(1)}s total ✅`);
+    }
     processedCount += 1;
   } catch (err) {
     const data = err.response?.data;
@@ -181,6 +237,45 @@ async function processOne(video) {
     console.error(`  ✖ falhou: ${msg}`);
   } finally {
     await cleanup(audioPath);
+    await cleanup(videoPath);
+  }
+}
+
+// Baixa SO o video (para videos antigos marcados para recortes/Shorts no portal).
+async function processVideoOnly(video) {
+  if (activeChannelId && video.channel?.id && video.channel.id !== activeChannelId) return;
+  const t0 = Date.now();
+  const channelLog = video.channel?.channelName ? ` | ${video.channel.channelName}` : '';
+  console.log(`🎬 recorte: ${video.videoId}${channelLog} | ${video.title?.slice(0, 50)}`);
+  let videoPath = null;
+  try {
+    const vdl = await downloadVideo(video.youtubeUrl, video.videoId);
+    videoPath = vdl.path;
+    const vmb = (vdl.size / 1024 / 1024).toFixed(2);
+    console.log(`  ↓ video baixado (≤${VIDEO_MAX_HEIGHT}p): ${vmb} MB`);
+    await uploadVideo(video.videoId, videoPath);
+    console.log(`  ↑ video enviado pro portal em ${((Date.now() - t0) / 1000).toFixed(1)}s ✅`);
+  } catch (err) {
+    const msg = err.response?.data?.message || err.stderr?.toString?.()?.slice(-300) || err.message;
+    console.error(`  ✖ falhou (recorte): ${msg}`);
+  } finally {
+    await cleanup(videoPath);
+  }
+}
+
+async function tickPendingVideos() {
+  try {
+    const pending = await listPendingVideos();
+    if (pending.length === 0) return;
+    const limit = Math.min(MAX_PER_TICK, pending.length);
+    console.log(`[${new Date().toLocaleTimeString()}] ${pending.length} video(s) para recorte, baixando ${limit}...`);
+    for (let i = 0; i < limit; i += 1) {
+      await processVideoOnly(pending[i]);
+    }
+  } catch (err) {
+    if (![401, 403, 503].includes(err.response?.status)) {
+      console.error('[recortes] erro:', err.message);
+    }
   }
 }
 
@@ -194,15 +289,17 @@ async function tick() {
     const pending = await listPending();
     if (pending.length === 0) {
       console.log(`[${new Date().toLocaleTimeString()}] sem videos pendentes em ${activeChannelLabel || 'todos os canais'}`);
-      return;
+    } else {
+      const remaining = maxVideosTotal > 0 ? maxVideosTotal - processedCount : Infinity;
+      const limit = Math.min(MAX_PER_TICK, remaining, pending.length);
+      console.log(`[${new Date().toLocaleTimeString()}] ${pending.length} pendente(s), processando ${limit}...`);
+      for (let i = 0; i < limit; i += 1) {
+        await processOne(pending[i]);
+        if (shouldStop()) break;
+      }
     }
-    const remaining = maxVideosTotal > 0 ? maxVideosTotal - processedCount : Infinity;
-    const limit = Math.min(MAX_PER_TICK, remaining, pending.length);
-    console.log(`[${new Date().toLocaleTimeString()}] ${pending.length} pendente(s), processando ${limit}...`);
-    for (let i = 0; i < limit; i += 1) {
-      await processOne(pending[i]);
-      if (shouldStop()) break;
-    }
+    // Videos antigos marcados para recortes: baixa so o video.
+    await tickPendingVideos();
   } catch (err) {
     if (err.response?.status === 401 || err.response?.status === 403) {
       console.error(`❌ Autenticação falhou (${err.response.status}). Verifique HELPER_TOKEN.`);
@@ -218,6 +315,7 @@ async function main() {
   console.log('🤝 IECG Helper — download de audio do YouTube → portal');
   console.log(`   portal: ${PORTAL_URL}`);
   console.log(`   polling: ${POLL_INTERVAL_MS / 1000}s | max por ciclo: ${MAX_PER_TICK} | bitrate: ${AUDIO_BITRATE}kbps`);
+  console.log(`   video: ${DOWNLOAD_VIDEO ? `SIM (≤${VIDEO_MAX_HEIGHT}p, para recortes/Shorts)` : 'nao (so audio)'}`);
   console.log(`   tmp dir: ${TMP_DIR}`);
   console.log('');
 

@@ -48,6 +48,28 @@ async function getNextPending() {
   });
 }
 
+// Videos marcados para recortes que ainda nao tem segments (timestamps), mas ja tem
+// midia em disco (audio OU o video baixado) para o Whisper extrair os timestamps.
+async function getNextSegmentsBackfill() {
+  return VideoTranscript.findOne({
+    where: { segments: null },
+    include: [{
+      model: YoutubeVideo,
+      as: 'video',
+      required: true,
+      where: {
+        ignored: false,
+        clipsRequested: true,
+        [Op.or]: [
+          { audioPath: { [Op.ne]: null } },
+          { videoPath: { [Op.ne]: null } },
+        ],
+      },
+    }],
+    order: [['updatedAt', 'ASC']],
+  });
+}
+
 async function processNextOne({ force = false } = {}) {
   const cfg = getConfig();
   if (!cfg.enabled) {
@@ -61,19 +83,41 @@ async function processNextOne({ force = false } = {}) {
   }
 
   const next = await getNextPending();
-  if (!next) return { skipped: true, reason: 'fila vazia (sem video com audio anexado)' };
+  if (next) {
+    if (!workStartedAt) workStartedAt = Date.now();
+    console.log(`[transcriptWorker] iniciando "${next.video.title}" (${next.video.videoId})`);
+
+    currentTranscriptId = next.id;
+    try {
+      const updated = await transcriptionService.processUploadedAudio(next.youtubeVideoId);
+      console.log(`[transcriptWorker] concluido: status=${updated.status} source=${updated.source}`);
+      return { processed: true, transcriptId: updated.id, status: updated.status };
+    } catch (err) {
+      console.error(`[transcriptWorker] erro ao processar ${next.video.videoId}:`, err.message);
+      return { processed: false, error: err.message };
+    } finally {
+      currentTranscriptId = null;
+    }
+  }
+
+  // Sem transcricao nova pendente: prepara videos antigos para recortes (backfill de segments).
+  const backfill = await getNextSegmentsBackfill();
+  if (!backfill) return { skipped: true, reason: 'fila vazia (sem transcricao pendente nem backfill de segments)' };
 
   if (!workStartedAt) workStartedAt = Date.now();
-  console.log(`[transcriptWorker] iniciando "${next.video.title}" (${next.video.videoId})`);
+  console.log(`[transcriptWorker] backfill de segments para "${backfill.video.title}" (${backfill.video.videoId})`);
 
-  currentTranscriptId = next.id;
+  currentTranscriptId = backfill.id;
   try {
-    const updated = await transcriptionService.processUploadedAudio(next.youtubeVideoId);
-    console.log(`[transcriptWorker] concluido: status=${updated.status} source=${updated.source}`);
-    return { processed: true, transcriptId: updated.id, status: updated.status };
+    const updated = await transcriptionService.backfillSegments(backfill.youtubeVideoId);
+    const n = Array.isArray(updated.segments) ? updated.segments.length : 0;
+    console.log(`[transcriptWorker] backfill concluido: ${n} segmentos para ${backfill.video.videoId}`);
+    return {
+      processed: true, transcriptId: updated.id, backfill: true, segments: n
+    };
   } catch (err) {
-    console.error(`[transcriptWorker] erro ao processar ${next.video.videoId}:`, err.message);
-    return { processed: false, error: err.message };
+    console.error(`[transcriptWorker] erro no backfill de ${backfill.video.videoId}:`, err.message);
+    return { processed: false, backfill: true, error: err.message };
   } finally {
     currentTranscriptId = null;
   }

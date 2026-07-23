@@ -11,6 +11,10 @@ module.exports = (sequelize) => {
         foreignKey: 'youtubeVideoId',
         as: 'transcript',
       });
+      YoutubeVideo.hasMany(models.VideoClip, {
+        foreignKey: 'youtubeVideoId',
+        as: 'clips',
+      });
     }
   }
 
@@ -97,6 +101,26 @@ module.exports = (sequelize) => {
       audioUploadedAt: {
         type: DataTypes.DATE,
         allowNull: true,
+      },
+      // Video completo retido para gerar recortes/Shorts (Fase 2). Temporario ate os clips serem gerados.
+      videoPath: {
+        type: DataTypes.STRING(1024),
+        allowNull: true,
+      },
+      videoSizeBytes: {
+        type: DataTypes.BIGINT,
+        allowNull: true,
+      },
+      videoUploadedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      // Admin marcou que quer gerar recortes/Shorts deste video (fluxo sob demanda).
+      // Dispara: helper baixa o video (se faltar) + worker regenera segments (se faltar).
+      clipsRequested: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
       },
     },
     {

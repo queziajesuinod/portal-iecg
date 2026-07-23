@@ -1,7 +1,20 @@
+const axios = require('axios');
 const Anthropic = require('@anthropic-ai/sdk');
 
-const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const MAX_TOKENS = 3072;
+
+// Cadeia de provedores tentada em ordem no resumo do vídeo.
+// Prioriza os gratuitos (Groq/Grok/Gemini) e cai para o Claude (pago) só se os anteriores falharem.
+// Configurável via VIDEO_SUMMARY_PROVIDERS (ex.: "grok,gemini,claude").
+const DEFAULT_CHAIN = 'groq,gemini,claude';
+const KNOWN_PROVIDERS = ['groq', 'grok', 'gemini', 'claude'];
+
+const DEFAULT_MODELS = {
+  claude: process.env.VIDEO_SUMMARY_CLAUDE_MODEL || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
+  gemini: process.env.VIDEO_SUMMARY_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+  groq: process.env.VIDEO_SUMMARY_GROQ_MODEL || process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+  grok: process.env.VIDEO_SUMMARY_GROK_MODEL || process.env.GROK_MODEL || 'grok-2-latest',
+};
 
 const TOOL_NAME = 'salvar_resumo_video';
 const TOOL_DEFINITION = {
@@ -45,7 +58,9 @@ const TOOL_DEFINITION = {
   },
 };
 
-const SYSTEM_PROMPT = `Você é um redator de blog cristão que transforma pregações e ensinos bíblicos em posts otimizados para SEO e leitura confortável no portal de uma igreja.
+// Corpo do prompt compartilhado por todos os provedores. O bloco final (formato técnico da
+// resposta) muda conforme o provedor: Claude usa tool-use; os demais usam JSON puro.
+const BASE_PROMPT = `Você é um redator de blog cristão que transforma pregações e ensinos bíblicos em posts otimizados para SEO e leitura confortável no portal de uma igreja.
 
 Seu trabalho é pegar a transcrição de um vídeo (pregação, estudo, culto) e produzir:
 1. Um post devocional fluido, calmo, com formatação rica (HTML).
@@ -108,23 +123,32 @@ IDENTIFICAÇÃO DO ORADOR (SPEAKER)
 - Mantenha o título eclesiástico junto: "Pr. Aldo Giovanni", "Pra. Ana Carolina", "Bp. Edir".
 - Se o título não traz, verifique se a transcrição apresenta a pessoa ("hoje recebemos o Pr. Silas", "vamos ouvir a Pra. Inês").
 - Se ainda não for identificável, retorne string vazia "" — NUNCA invente nome.
-- Use apenas o NOME do orador, sem o tema ou contexto extra. Errado: "Pr. Aldo - Sobre família". Certo: "Pr. Aldo".
+- Use apenas o NOME do orador, sem o tema ou contexto extra. Errado: "Pr. Aldo - Sobre família". Certo: "Pr. Aldo".`;
 
-═══════════════════════════════════════════════════════════════════
+const CLAUDE_FORMAT_ENDING = `═══════════════════════════════════════════════════════════════════
 FORMATO TÉCNICO DA RESPOSTA
 ═══════════════════════════════════════════════════════════════════
 Use SEMPRE a ferramenta "${TOOL_NAME}" para entregar o resultado. Não escreva o resumo em texto solto — só chame a ferramenta com os argumentos preenchidos. Os campos obrigatórios são: summary, bulletPoints, metaTitle, metaDescription, keywords, slug.`;
 
-function getClient() {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY não configurada no .env');
-  }
-  return new Anthropic({ apiKey });
-}
+const JSON_FORMAT_ENDING = `═══════════════════════════════════════════════════════════════════
+FORMATO TÉCNICO DA RESPOSTA
+═══════════════════════════════════════════════════════════════════
+Responda APENAS com um único objeto JSON válido (sem markdown, sem crases, sem texto fora do objeto), contendo EXATAMENTE estes campos:
+- "summary": string com o HTML do resumo (conforme as regras de formatação acima).
+- "bulletPoints": array de 5 a 7 strings em texto puro (sem HTML).
+- "metaTitle": string (50 a 60 caracteres).
+- "metaDescription": string (140 a 160 caracteres).
+- "keywords": array de 5 a 8 strings minúsculas.
+- "slug": string url-friendly (máximo 80 caracteres).
+- "speaker": string com o nome do orador, ou "" se não for identificável.
+Não inclua nenhum texto, comentário ou explicação fora do objeto JSON.`;
+
+// Exportado para retrocompatibilidade / testes.
+const SYSTEM_PROMPT = `${BASE_PROMPT}\n\n${CLAUDE_FORMAT_ENDING}`;
+const JSON_SYSTEM_PROMPT = `${BASE_PROMPT}\n\n${JSON_FORMAT_ENDING}`;
 
 function extractJson(text) {
-  const cleaned = String(text)
+  const cleaned = String(text || '')
     .trim()
     .replace(/^```(?:json)?\s*\n?/, '')
     .replace(/\n?```\s*$/, '')
@@ -138,58 +162,127 @@ function extractJson(text) {
     if (start >= 0 && end > start) {
       return JSON.parse(cleaned.slice(start, end + 1));
     }
-    throw new Error(`Falha ao parsear JSON da resposta do Claude: ${err.message}`);
+    throw new Error(`Falha ao parsear JSON da resposta da LLM: ${err.message}`);
   }
 }
 
-function parseToolInput(response) {
-  const toolUseBlock = response.content.find((b) => b.type === 'tool_use' && b.name === TOOL_NAME);
-  if (toolUseBlock && toolUseBlock.input && typeof toolUseBlock.input === 'object') {
-    return toolUseBlock.input;
-  }
-
-  const rawText = response.content
-    .filter((b) => b.type === 'text')
-    .map((b) => b.text)
-    .join('')
-    .trim();
-
-  if (!rawText) {
-    throw new Error('Claude não retornou nem tool_use nem texto');
-  }
-  return extractJson(rawText);
+function buildUserMessage(transcript, { title, language }) {
+  return `Título do vídeo: ${title || '(sem título)'}\nIdioma: ${language}\n\nTranscrição completa:\n\n${transcript}`;
 }
 
-async function generateSummary(transcript, { title, language = 'pt', model = DEFAULT_MODEL } = {}) {
-  if (!transcript || !transcript.trim()) {
-    throw new Error('Transcrição vazia');
-  }
+// ───────────────────────────── Provedores ─────────────────────────────
 
-  const client = getClient();
-  const userMessage = `Título do vídeo: ${title || '(sem título)'}\nIdioma: ${language}\n\nTranscrição completa:\n\n${transcript}\n\nUse a ferramenta ${TOOL_NAME} para entregar o resultado.`;
+async function callClaude(userMessage) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY não configurada no .env');
 
+  const client = new Anthropic({ apiKey });
   const response = await client.messages.create({
-    model,
+    model: DEFAULT_MODELS.claude,
     max_tokens: MAX_TOKENS,
-    system: [
-      {
-        type: 'text',
-        text: SYSTEM_PROMPT,
-        cache_control: { type: 'ephemeral' },
-      },
-    ],
+    system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
     tools: [TOOL_DEFINITION],
     tool_choice: { type: 'tool', name: TOOL_NAME },
-    messages: [
-      {
-        role: 'user',
-        content: userMessage,
-      },
-    ],
+    messages: [{ role: 'user', content: `${userMessage}\n\nUse a ferramenta ${TOOL_NAME} para entregar o resultado.` }],
   });
 
-  const parsed = parseToolInput(response);
+  const toolUseBlock = response.content.find((b) => b.type === 'tool_use' && b.name === TOOL_NAME);
+  if (toolUseBlock && toolUseBlock.input && typeof toolUseBlock.input === 'object') {
+    return { parsed: toolUseBlock.input, model: response.model };
+  }
+  const rawText = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+  if (!rawText) throw new Error('Claude não retornou nem tool_use nem texto');
+  return { parsed: extractJson(rawText), model: response.model };
+}
 
+async function callGemini(userMessage) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error('GEMINI_API_KEY não configurada no .env');
+  const model = DEFAULT_MODELS.gemini;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+  const { data } = await axios.post(
+    url,
+    {
+      systemInstruction: { parts: [{ text: JSON_SYSTEM_PROMPT }] },
+      contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+      generationConfig: {
+        temperature: 0.3,
+        responseMimeType: 'application/json',
+        maxOutputTokens: 8192,
+        // Modelos "thinking" (2.5) consomem orçamento pensando e devolvem vazio; desligamos.
+        thinkingConfig: { thinkingBudget: 0 },
+      },
+    },
+    { timeout: 60000, headers: { 'Content-Type': 'application/json' } }
+  );
+  const candidate = data?.candidates?.[0];
+  const text = candidate?.content?.parts?.map((p) => p.text).join('') || '';
+  if (!text) throw new Error(`Gemini retornou resposta vazia (finishReason: ${candidate?.finishReason || 'desconhecido'})`);
+  return { parsed: extractJson(text), model };
+}
+
+async function callOpenAICompatible(baseURL, apiKey, model, userMessage) {
+  const { data } = await axios.post(
+    `${baseURL}/chat/completions`,
+    {
+      model,
+      temperature: 0.3,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: JSON_SYSTEM_PROMPT },
+        { role: 'user', content: userMessage },
+      ],
+    },
+    { timeout: 60000, headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' } }
+  );
+  const text = data?.choices?.[0]?.message?.content || '';
+  if (!text) throw new Error('Resposta vazia do provedor');
+  return { parsed: extractJson(text), model };
+}
+
+async function callGroq(userMessage) {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error('GROQ_API_KEY não configurada no .env');
+  return callOpenAICompatible('https://api.groq.com/openai/v1', apiKey, DEFAULT_MODELS.groq, userMessage);
+}
+
+async function callGrok(userMessage) {
+  const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY;
+  if (!apiKey) throw new Error('GROK_API_KEY (xAI) não configurada no .env');
+  return callOpenAICompatible('https://api.x.ai/v1', apiKey, DEFAULT_MODELS.grok, userMessage);
+}
+
+const PROVIDER_FNS = {
+  claude: callClaude,
+  gemini: callGemini,
+  groq: callGroq,
+  grok: callGrok,
+};
+
+const PROVIDER_KEY_ENV = {
+  claude: () => process.env.ANTHROPIC_API_KEY,
+  gemini: () => process.env.GEMINI_API_KEY,
+  groq: () => process.env.GROQ_API_KEY,
+  grok: () => process.env.GROK_API_KEY || process.env.XAI_API_KEY,
+};
+
+function getProviderChain() {
+  return (process.env.VIDEO_SUMMARY_PROVIDERS || DEFAULT_CHAIN)
+    .split(',')
+    .map((p) => p.trim().toLowerCase())
+    .filter((p) => KNOWN_PROVIDERS.includes(p));
+}
+
+/**
+ * Retorna true se ao menos um provedor da cadeia tem chave configurada.
+ * Usado para decidir se vale a pena tentar gerar o resumo.
+ */
+function hasConfiguredProvider() {
+  return getProviderChain().some((p) => !!PROVIDER_KEY_ENV[p]());
+}
+
+function normalizeResult(parsed, meta) {
   return {
     summary: typeof parsed.summary === 'string' ? parsed.summary.trim() : '',
     bulletPoints: Array.isArray(parsed.bulletPoints)
@@ -202,12 +295,50 @@ async function generateSummary(transcript, { title, language = 'pt', model = DEF
       : [],
     slug: typeof parsed.slug === 'string' ? parsed.slug.trim().toLowerCase().slice(0, 200) : null,
     speaker: typeof parsed.speaker === 'string' ? parsed.speaker.trim().slice(0, 160) || null : null,
-    usage: response.usage,
-    model: response.model,
+    provider: meta.provider,
+    model: meta.model,
   };
+}
+
+async function generateSummary(transcript, { title, language = 'pt' } = {}) {
+  if (!transcript || !transcript.trim()) {
+    throw new Error('Transcrição vazia');
+  }
+
+  const chain = getProviderChain();
+  if (!chain.length) {
+    throw new Error(`Nenhum provedor válido em VIDEO_SUMMARY_PROVIDERS. Use: ${KNOWN_PROVIDERS.join(', ')}`);
+  }
+
+  const userMessage = buildUserMessage(transcript, { title, language });
+  const errors = [];
+
+  for (const provider of chain) {
+    if (!PROVIDER_KEY_ENV[provider]()) {
+      console.warn(`[summary] provedor "${provider}" sem chave configurada, pulando`);
+      continue;
+    }
+    try {
+      const { parsed, model } = await PROVIDER_FNS[provider](userMessage);
+      const result = normalizeResult(parsed, { provider, model });
+      if (!result.summary) throw new Error('resumo vazio na resposta');
+      if (errors.length) {
+        console.log(`[summary] gerado via "${provider}" após falha de: ${errors.map((e) => e.provider).join(', ')}`);
+      }
+      return result;
+    } catch (err) {
+      console.warn(`[summary] provedor "${provider}" falhou: ${err.message}`);
+      errors.push({ provider, message: err.message });
+    }
+  }
+
+  const detail = errors.map((e) => `${e.provider}: ${e.message}`).join(' | ');
+  throw new Error(`Falha ao gerar resumo em todos os provedores (${detail || 'nenhum provedor tentado'})`);
 }
 
 module.exports = {
   generateSummary,
+  getProviderChain,
+  hasConfiguredProvider,
   SYSTEM_PROMPT,
 };
