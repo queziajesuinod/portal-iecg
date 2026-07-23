@@ -8,8 +8,11 @@ Saida (JSON):
     "text": "...",
     "language": "pt",
     "language_probability": 0.99,
-    "duration": 3600.5
+    "duration": 3600.5,
+    "segments": [{"start": 0.0, "end": 4.2, "text": "..."}, ...]
   }
+
+Os segmentos (com timestamps start/end) alimentam a geracao de recortes/Shorts.
 """
 import json
 import sys
@@ -51,9 +54,16 @@ def main():
     )
 
     text_parts = []
+    segments = []
     last_emit_pct = -1.0
     for segment in segments_iter:
-        text_parts.append(segment.text.strip())
+        seg_text = segment.text.strip()
+        text_parts.append(seg_text)
+        segments.append({
+            "start": round(float(segment.start), 3),
+            "end": round(float(segment.end), 3),
+            "text": seg_text,
+        })
         if total_duration > 0:
             pct = (float(segment.end) / total_duration) * 100.0
             if pct - last_emit_pct >= 1.0 or pct >= 99.5:
@@ -74,6 +84,7 @@ def main():
         "language": info.language,
         "language_probability": float(info.language_probability),
         "duration": float(info.duration),
+        "segments": segments,
     }
 
     with open(output_path, "w", encoding="utf-8") as f:

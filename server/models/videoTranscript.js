@@ -43,6 +43,12 @@ module.exports = (sequelize) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      // Segmentos com timestamps do Whisper: [{ start, end, text }]. Base para recortes/Shorts.
+      segments: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: null,
+      },
       summary: {
         type: DataTypes.TEXT,
         allowNull: true,

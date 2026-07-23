@@ -28,8 +28,8 @@ function htmlToPlainText(value) {
 }
 
 async function generateAndSaveSummary(transcript, video) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.warn('[summary] ANTHROPIC_API_KEY ausente, pulando geracao de resumo');
+  if (!videoSummary.hasConfiguredProvider()) {
+    console.warn('[summary] nenhum provedor de LLM configurado, pulando geracao de resumo');
     return null;
   }
   try {
@@ -138,6 +138,7 @@ async function processUploadedAudio(youtubeVideoId) {
     });
 
     transcript.transcript = result.text;
+    transcript.segments = Array.isArray(result.segments) && result.segments.length ? result.segments : null;
     transcript.language = result.language || 'pt';
     transcript.source = 'whisper';
     transcript.status = 'done';
@@ -244,6 +245,67 @@ async function reactivateFailedTranscriptByVideoId(youtubeVideoId) {
   return transcript;
 }
 
+function segmentsAreEmpty(segments) {
+  return !Array.isArray(segments) || segments.length === 0;
+}
+
+/**
+ * Marca um video para gerar recortes/Shorts (fluxo sob demanda).
+ * Retorna o que ainda falta: baixar o video (helper) e/ou regenerar os segments (worker).
+ */
+async function requestClips(youtubeVideoId) {
+  const video = await YoutubeVideo.findByPk(youtubeVideoId);
+  if (!video) throw new Error('Video nao encontrado');
+  if (video.ignored) throw new Error('Video ignorado nao pode gerar recortes');
+
+  if (!video.clipsRequested) {
+    await video.update({ clipsRequested: true });
+  }
+
+  const transcript = await VideoTranscript.findOne({ where: { youtubeVideoId } });
+  const videoNeeded = !video.videoPath;
+  const segmentsNeeded = segmentsAreEmpty(transcript?.segments);
+
+  return {
+    videoId: video.videoId,
+    clipsRequested: true,
+    videoNeeded,
+    segmentsNeeded,
+    ready: !videoNeeded && !segmentsNeeded,
+  };
+}
+
+/**
+ * Regenera SO os timestamps (segments) rodando o Whisper sobre o midia disponivel
+ * (audio ou o proprio video baixado). Nao mexe em summary, publicacao nem webhooks.
+ * Usado para preparar videos antigos (transcritos antes de salvarmos segments).
+ */
+async function backfillSegments(youtubeVideoId, { onProgress } = {}) {
+  const video = await YoutubeVideo.findByPk(youtubeVideoId);
+  if (!video) throw new Error('Video nao encontrado');
+
+  const mediaPath = video.audioPath || video.videoPath;
+  if (!mediaPath) {
+    throw new Error('Sem audio nem video em disco para extrair os segments');
+  }
+
+  const transcript = await getOrCreateTranscript(youtubeVideoId);
+  const result = await whisperLocal.transcribeAudioFile(mediaPath, {
+    languageHint: transcript.language || 'pt',
+    onProgress,
+  });
+
+  transcript.segments = segmentsAreEmpty(result.segments) ? null : result.segments;
+  // Se o transcript ainda estava vazio, aproveita o texto tambem; senao preserva o existente.
+  if (!hasTranscriptText(transcript) && result.text) {
+    transcript.transcript = result.text;
+    transcript.language = result.language || transcript.language || 'pt';
+    if (!transcript.source) transcript.source = 'whisper';
+  }
+  await transcript.save();
+  return transcript;
+}
+
 module.exports = {
   getOrCreateTranscript,
   markTranscriptPending,
@@ -252,5 +314,7 @@ module.exports = {
   regenerateSummary,
   cancelTranscript,
   reactivateFailedTranscriptByVideoId,
+  requestClips,
+  backfillSegments,
   hasTranscriptText,
 };

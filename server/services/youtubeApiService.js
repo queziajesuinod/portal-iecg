@@ -150,8 +150,38 @@ async function fetchCaptionInfo(channel, videoId) {
   };
 }
 
+/**
+ * Publica um arquivo de video como Short no canal (videos.insert com upload resumavel).
+ * `channel` deve estar carregado com tokens (scope('withTokens')).
+ * Retorna os dados do video criado (inclui `id`).
+ */
+async function publishShort(channel, filePath, {
+  title, description, tags, privacyStatus = 'public', categoryId,
+} = {}) {
+  const fs = require('fs');
+  const youtube = await getYoutubeClient(channel);
+  const { data } = await youtube.videos.insert({
+    part: ['snippet', 'status'],
+    requestBody: {
+      snippet: {
+        title: String(title || 'Short').slice(0, 100),
+        description: String(description || '').slice(0, 5000),
+        tags: Array.isArray(tags) ? tags.slice(0, 15) : undefined,
+        categoryId: categoryId || process.env.CLIP_SHORTS_CATEGORY_ID || '22',
+      },
+      status: {
+        privacyStatus,
+        selfDeclaredMadeForKids: false,
+      },
+    },
+    media: { body: fs.createReadStream(filePath) },
+  });
+  return data;
+}
+
 module.exports = {
   syncChannelVideos,
   fetchCaptionInfo,
   parseIsoDuration,
+  publishShort,
 };

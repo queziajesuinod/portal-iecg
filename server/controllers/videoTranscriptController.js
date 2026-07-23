@@ -3,6 +3,9 @@ const {
 } = require('../models');
 const transcriptionService = require('../services/transcriptionService');
 const videoTranscriptWorker = require('../services/videoTranscriptWorker');
+const clipSelectionService = require('../services/clipSelectionService');
+const clipRenderService = require('../services/clipRenderService');
+const clipPublishService = require('../services/clipPublishService');
 const audioStorage = require('../services/audioStorageService');
 const webhookEmitter = require('../services/webhookEmitter');
 
@@ -35,6 +38,8 @@ async function listar(req, res) {
     ];
 
     const { rows, count } = await VideoTranscript.findAndCountAll({
+      // segments (timestamps) podem ser grandes; nao trafegam na listagem, so no detalhe.
+      attributes: { exclude: ['segments'] },
       where,
       include,
       order: [['updatedAt', 'DESC']],
@@ -492,6 +497,159 @@ async function enfileirarParaHelper(req, res) {
   }
 }
 
+async function solicitarRecortes(req, res) {
+  try {
+    const result = await transcriptionService.requestClips(req.params.videoId);
+    res.status(200).json(result);
+  } catch (err) {
+    console.error('[videoTranscript] Erro ao solicitar recortes:', err.message);
+    res.status(400).json({ message: err.message });
+  }
+}
+
+async function sugerirRecortes(req, res) {
+  try {
+    const result = await clipSelectionService.suggestClips(req.params.videoId, req.body || {});
+    res.status(200).json(result);
+  } catch (err) {
+    console.error('[videoTranscript] Erro ao sugerir recortes:', err.message);
+    res.status(400).json({ message: err.message });
+  }
+}
+
+async function listarRecortes(req, res) {
+  try {
+    const clips = await clipSelectionService.listClips(req.params.videoId);
+    res.status(200).json({ items: clips, count: clips.length });
+  } catch (err) {
+    console.error('[videoTranscript] Erro ao listar recortes:', err.message);
+    res.status(500).json({ message: err.message });
+  }
+}
+
+async function editarRecorte(req, res) {
+  try {
+    const clip = await clipSelectionService.updateClip(req.params.clipId, req.body || {});
+    res.status(200).json(clip);
+  } catch (err) {
+    console.error('[videoTranscript] Erro ao editar recorte:', err.message);
+    res.status(400).json({ message: err.message });
+  }
+}
+
+async function aprovarRecorte(req, res) {
+  try {
+    const clip = await clipSelectionService.approveClip(req.params.clipId);
+    res.status(200).json(clip);
+  } catch (err) {
+    console.error('[videoTranscript] Erro ao aprovar recorte:', err.message);
+    res.status(400).json({ message: err.message });
+  }
+}
+
+async function descartarRecorte(req, res) {
+  try {
+    const clip = await clipSelectionService.discardClip(req.params.clipId);
+    res.status(200).json(clip);
+  } catch (err) {
+    console.error('[videoTranscript] Erro ao descartar recorte:', err.message);
+    res.status(400).json({ message: err.message });
+  }
+}
+
+async function renderizarRecorte(req, res) {
+  try {
+    const { VideoClip } = require('../models');
+    const clip = await VideoClip.findByPk(req.params.clipId);
+    if (!clip) return res.status(404).json({ message: 'Recorte nao encontrado' });
+    if (clip.status === 'rendering') return res.status(409).json({ message: 'Recorte ja esta renderizando' });
+
+    // Renderiza em background (ffmpeg pode levar de segundos a minutos).
+    // O proprio renderClip marca status 'rendering' -> 'rendered'/'failed'.
+    setImmediate(() => {
+      clipRenderService.renderClip(clip.id).catch((err) => {
+        console.error('[videoTranscript] render em background falhou:', err.message);
+      });
+    });
+    return res.status(202).json({ id: clip.id, status: 'rendering' });
+  } catch (err) {
+    console.error('[videoTranscript] Erro ao renderizar recorte:', err.message);
+    return res.status(400).json({ message: err.message });
+  }
+}
+
+async function servirRecorte(req, res) {
+  try {
+    const { VideoClip } = require('../models');
+    const fs = require('fs');
+
+    const clip = await VideoClip.findByPk(req.params.clipId, {
+      include: [{ model: YoutubeVideo, as: 'video', attributes: ['videoId'] }],
+    });
+    if (!clip) return res.status(404).json({ message: 'Recorte nao encontrado' });
+    if (!clip.filePath) return res.status(404).json({ message: 'Recorte ainda nao foi renderizado' });
+    if (!fs.existsSync(clip.filePath)) {
+      return res.status(410).json({ message: 'Arquivo do recorte foi removido do servidor' });
+    }
+
+    const stat = fs.statSync(clip.filePath);
+    const filename = `${clip.video?.videoId || 'clip'}-${clip.position}.mp4`;
+    const isDownload = req.query.download === '1' || req.query.download === 'true';
+
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Length', String(stat.size));
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader(
+      'Content-Disposition',
+      `${isDownload ? 'attachment' : 'inline'}; filename="${filename}"`
+    );
+
+    const { range } = req.headers;
+    if (range) {
+      const m = /bytes=(\d+)-(\d*)/.exec(range);
+      if (m) {
+        const start = Number(m[1]);
+        const end = m[2] ? Number(m[2]) : stat.size - 1;
+        if (Number.isFinite(start) && start < stat.size && end >= start) {
+          res.status(206);
+          res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`);
+          res.setHeader('Content-Length', String(end - start + 1));
+          fs.createReadStream(clip.filePath, { start, end }).pipe(res);
+          return null;
+        }
+      }
+    }
+
+    fs.createReadStream(clip.filePath).pipe(res);
+    return null;
+  } catch (err) {
+    console.error('[videoTranscript] erro ao servir recorte:', err.message);
+    return res.status(500).json({ message: err.message });
+  }
+}
+
+async function publicarRecorte(req, res) {
+  try {
+    const { VideoClip } = require('../models');
+    const clip = await VideoClip.findByPk(req.params.clipId);
+    if (!clip) return res.status(404).json({ message: 'Recorte nao encontrado' });
+    if (clip.status !== 'rendered') {
+      return res.status(400).json({ message: `Recorte precisa estar 'rendered' para publicar (atual: ${clip.status})` });
+    }
+
+    // Publica em background (upload pode demorar).
+    setImmediate(() => {
+      clipPublishService.publishClip(clip.id, req.body || {}).catch((err) => {
+        console.error('[videoTranscript] publish em background falhou:', err.message);
+      });
+    });
+    return res.status(202).json({ id: clip.id, status: 'publishing' });
+  } catch (err) {
+    console.error('[videoTranscript] Erro ao publicar recorte:', err.message);
+    return res.status(400).json({ message: err.message });
+  }
+}
+
 async function regerarResumo(req, res) {
   try {
     const transcript = await transcriptionService.regenerateSummary(req.params.id);
@@ -533,6 +691,15 @@ module.exports = {
   cancelar,
   reativarTranscricao,
   enfileirarParaHelper,
+  solicitarRecortes,
+  sugerirRecortes,
+  listarRecortes,
+  editarRecorte,
+  aprovarRecorte,
+  descartarRecorte,
+  renderizarRecorte,
+  servirRecorte,
+  publicarRecorte,
   regerarResumo,
   reenviarWebhook,
   statusWorker,
