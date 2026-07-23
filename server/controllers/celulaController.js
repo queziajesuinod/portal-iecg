@@ -175,6 +175,8 @@ class CelulaController {
         liderancaMemberId,
         pastorGeracaoMemberId,
         pastorCampusMemberId,
+        semLiderMembro,
+        novasDias,
         page = 1,
         limit = 10
       } = req.query;
@@ -193,7 +195,9 @@ class CelulaController {
           liderMemberId,
           liderancaMemberId,
           pastorGeracaoMemberId,
-          pastorCampusMemberId
+          pastorCampusMemberId,
+          semLiderMembro,
+          novasDias
         },
         parseInt(page, 10),
         parseInt(limit, 10)

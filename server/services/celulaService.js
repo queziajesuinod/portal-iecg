@@ -249,6 +249,20 @@ const CelulaService = {
       if (ids.length === 0) return;
       where[field] = ids.length === 1 ? ids[0] : { [Op.in]: ids };
     });
+
+    // Células cujo líder não está vinculado a um membro (liderMemberId nulo).
+    if (['true', '1', 'yes', 'on'].includes(String(filtros.semLiderMembro || '').toLowerCase().trim())) {
+      where.liderMemberId = null;
+    }
+
+    // Células criadas nos últimos N dias (ex.: novasDias=7).
+    if (filtros.novasDias) {
+      const dias = parseInt(filtros.novasDias, 10);
+      if (Number.isFinite(dias) && dias > 0) {
+        const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000);
+        where.createdAt = { [Op.gte]: desde };
+      }
+    }
     {
       const ativoValorRaw = filtros.ativo;
       const ativoValor = typeof ativoValorRaw !== 'undefined' && ativoValorRaw !== null

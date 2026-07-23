@@ -23,6 +23,9 @@ import FilterListOffIcon from '@mui/icons-material/FilterListOff';
 import GetAppIcon from '@mui/icons-material/GetApp';
 import SyncIcon from '@mui/icons-material/Sync';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
+import FiberNewIcon from '@mui/icons-material/FiberNew';
+import LinkOffIcon from '@mui/icons-material/LinkOff';
+import { alpha } from '@mui/material/styles';
 import { useHistory } from 'react-router-dom';
 import useStyles from 'dan-components/Tables/tableStyle-jss';
 import Notification from 'dan-components/Notification/Notification';
@@ -62,6 +65,10 @@ const STATUS_OPTIONS = [
 ];
 
 const GOOGLE_MAP_LIBRARIES = ['places'];
+
+// Janela para destacar/filtrar células recém-criadas.
+const RECENT_WINDOW_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const resolveApiUrl = () => {
   if (process.env.REACT_APP_API_URL) {
@@ -117,7 +124,6 @@ const ListagemCelulasPage = () => {
   const [totalRecords, setTotalRecords] = useState(0);
   const [filterCampus, setFilterCampus] = useState('');
   const [filterRede, setFilterRede] = useState([]);
-  const [filterBairro, setFilterBairro] = useState('');
   // Filtros por membro (arrays de IDs — multi-select)
   const [filterLiderIds, setFilterLiderIds] = useState([]);
   const [filterLiderancaIds, setFilterLiderancaIds] = useState([]);
@@ -129,10 +135,14 @@ const ListagemCelulasPage = () => {
   const [pastoresGeracaoOptions, setPastoresGeracaoOptions] = useState([]);
   const [pastoresCampusOptions, setPastoresCampusOptions] = useState([]);
   const [filterDia, setFilterDia] = useState('');
+  const [filterSemLiderMembro, setFilterSemLiderMembro] = useState(false);
+  const [filterNovas, setFilterNovas] = useState(false);
   const [mapCelulas, setMapCelulas] = useState([]);
   const [hoveredMarkerId, setHoveredMarkerId] = useState(null);
   const [filterStatus, setFilterStatus] = useState('true');
   const [campi, setCampi] = useState([]);
+  // Base com todas as células (só do status atual) para montar os filtros em cascata.
+  const [hierarquiaBase, setHierarquiaBase] = useState([]);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -201,7 +211,6 @@ const ListagemCelulasPage = () => {
   } = {}) => {
     const params = new URLSearchParams({
       campusId: filterCampus || '',
-      bairro: filterBairro || '',
       dia: filterDia || '',
       page: overridePage ?? page,
       limit: overrideLimit ?? rowsPerPage
@@ -216,6 +225,12 @@ const ListagemCelulasPage = () => {
     filterPastorCampusIds.forEach((id) => params.append('pastorCampusMemberId', id));
     if (includeStatus && filterStatus && filterStatus !== 'all') {
       params.append('ativo', filterStatus);
+    }
+    if (filterSemLiderMembro) {
+      params.append('semLiderMembro', 'true');
+    }
+    if (filterNovas) {
+      params.append('novasDias', String(RECENT_WINDOW_DAYS));
     }
     return params.toString();
   };
@@ -766,25 +781,27 @@ const ListagemCelulasPage = () => {
   const activeFilterCount = [
     filterCampus,
     filterRede?.length ? filterRede : null,
-    filterBairro,
     filterLiderIds.length ? filterLiderIds : null,
     filterLiderancaIds.length ? filterLiderancaIds : null,
     filterPastorGeracaoIds.length ? filterPastorGeracaoIds : null,
     filterPastorCampusIds.length ? filterPastorCampusIds : null,
     filterDia,
-    filterStatus !== 'true' ? filterStatus : null
+    filterStatus !== 'true' ? filterStatus : null,
+    filterSemLiderMembro ? true : null,
+    filterNovas ? true : null
   ].filter(Boolean).length;
 
   const clearFilters = () => {
     setFilterCampus('');
     setFilterRede([]);
-    setFilterBairro('');
     setFilterLiderIds([]);
     setFilterLiderancaIds([]);
     setFilterPastorGeracaoIds([]);
     setFilterPastorCampusIds([]);
     setFilterDia('');
     setFilterStatus('true');
+    setFilterSemLiderMembro(false);
+    setFilterNovas(false);
     setPage(1);
   };
 
@@ -915,13 +932,14 @@ const ListagemCelulasPage = () => {
     page,
     filterCampus,
     filterRede,
-    filterBairro,
     filterLiderIds,
     filterLiderancaIds,
     filterPastorGeracaoIds,
     filterPastorCampusIds,
     filterDia,
     filterStatus,
+    filterSemLiderMembro,
+    filterNovas,
     API_URL
   ]);
 
@@ -930,13 +948,14 @@ const ListagemCelulasPage = () => {
   }, [
     filterCampus,
     filterRede,
-    filterBairro,
     filterLiderIds,
     filterLiderancaIds,
     filterPastorGeracaoIds,
     filterPastorCampusIds,
     filterDia,
     filterStatus,
+    filterSemLiderMembro,
+    filterNovas,
     API_URL
   ]);
 
@@ -984,7 +1003,88 @@ const ListagemCelulasPage = () => {
     carregarCampi();
   }, [API_URL]);
 
+  // Base de todas as células (do status atual) para os filtros em cascata.
+  useEffect(() => {
+    const carregarBase = async () => {
+      const token = localStorage.getItem('token');
+      try {
+        const params = new URLSearchParams({ page: '1', limit: '5000' });
+        if (filterStatus && filterStatus !== 'all') params.append('ativo', filterStatus);
+        const res = await fetch(`${API_URL}/start/celula?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error('Falha ao carregar base de células');
+        const data = await res.json();
+        setHierarquiaBase(data.registros || []);
+      } catch (err) {
+        console.error('Erro ao carregar base de hierarquia:', err);
+        setHierarquiaBase([]);
+      }
+    };
+    carregarBase();
+  }, [filterStatus, API_URL]);
+
   const pagedCelulas = sortedCelulas;
+
+  // ----- Destaque de células recém-criadas (últimos 7 dias) -----
+  const diasDesdeCriacao = (celula) => {
+    const ref = celula?.createdAt || celula?.updatedAt;
+    if (!ref) return null;
+    const ts = new Date(ref).getTime();
+    if (!Number.isFinite(ts)) return null;
+    return Math.floor((Date.now() - ts) / DAY_MS);
+  };
+  const isCelulaRecente = (celula) => {
+    const dias = diasDesdeCriacao(celula);
+    return dias !== null && dias >= 0 && dias < RECENT_WINDOW_DAYS;
+  };
+  // Usa a base já carregada para o mapa (todas as células do filtro atual, com createdAt),
+  // assim as recém-criadas aparecem mesmo que estejam em outra página da tabela.
+  const recentCelulas = useMemo(
+    () => (mapCelulas || [])
+      .filter(isCelulaRecente)
+      .sort((a, b) => new Date(b.createdAt || b.updatedAt) - new Date(a.createdAt || a.updatedAt)),
+    [mapCelulas]
+  );
+
+  // ----- Filtros em cascata (hierarquia) -----
+  // Para cada seletor, considera as células que batem com TODOS os outros filtros
+  // selecionados (menos o próprio), e deriva daí as opções disponíveis.
+  const cascadeCells = (exclude) => hierarquiaBase.filter((c) => {
+    if (exclude !== 'campus' && filterCampus && String(c.campusId) !== String(filterCampus)) return false;
+    if (exclude !== 'lideranca' && filterLiderancaIds.length && !filterLiderancaIds.includes(c.liderancaMemberId)) return false;
+    if (exclude !== 'pastorGeracao' && filterPastorGeracaoIds.length && !filterPastorGeracaoIds.includes(c.pastorGeracaoMemberId)) return false;
+    if (exclude !== 'pastorCampus' && filterPastorCampusIds.length && !filterPastorCampusIds.includes(c.pastorCampusMemberId)) return false;
+    if (exclude !== 'lider' && filterLiderIds.length && !filterLiderIds.includes(c.liderMemberId)) return false;
+    return true;
+  });
+  const idSetDe = (cells, key) => new Set(cells.map((c) => c[key]).filter(Boolean).map(String));
+  const baseReady = hierarquiaBase.length > 0;
+
+  const availableLiderIds = useMemo(
+    () => idSetDe(cascadeCells('lider'), 'liderMemberId'),
+    [hierarquiaBase, filterCampus, filterLiderancaIds, filterPastorGeracaoIds, filterPastorCampusIds]
+  );
+  const availableLiderancaIds = useMemo(
+    () => idSetDe(cascadeCells('lideranca'), 'liderancaMemberId'),
+    [hierarquiaBase, filterCampus, filterPastorGeracaoIds, filterPastorCampusIds, filterLiderIds]
+  );
+  const availablePastorGeracaoIds = useMemo(
+    () => idSetDe(cascadeCells('pastorGeracao'), 'pastorGeracaoMemberId'),
+    [hierarquiaBase, filterCampus, filterLiderancaIds, filterPastorCampusIds, filterLiderIds]
+  );
+  const availablePastorCampusIds = useMemo(
+    () => idSetDe(cascadeCells('pastorCampus'), 'pastorCampusMemberId'),
+    [hierarquiaBase, filterCampus, filterLiderancaIds, filterPastorGeracaoIds, filterLiderIds]
+  );
+  const availableCampusIds = useMemo(
+    () => idSetDe(cascadeCells('campus'), 'campusId'),
+    [hierarquiaBase, filterLiderancaIds, filterPastorGeracaoIds, filterPastorCampusIds, filterLiderIds]
+  );
+
+  const filterOpts = (options, availableIds) => (baseReady
+    ? options.filter((o) => availableIds.has(String(o.id)))
+    : options);
 
   const handleEdit = (celula) => {
     history.push('/app/start/celulas/cadastrar', { celula, pageTitle: 'Edição de Célula' });
@@ -1242,6 +1342,41 @@ const ListagemCelulasPage = () => {
           </Menu>
         </Box>
       </Toolbar>
+
+      {recentCelulas.length > 0 && !filterNovas && (
+        <Box mt={2}>
+          <Paper
+            variant="outlined"
+            sx={{
+              px: 2,
+              py: 1,
+              borderRadius: 2,
+              borderColor: 'success.main',
+              bgcolor: (t) => alpha(t.palette.success.main, 0.06),
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+              flexWrap: 'wrap',
+            }}
+          >
+            <FiberNewIcon color="success" fontSize="small" />
+            <Typography variant="body2">
+              <Box component="span" sx={{ fontWeight: 700 }}>{recentCelulas.length}</Box>
+              {` célula${recentCelulas.length > 1 ? 's' : ''} nova${recentCelulas.length > 1 ? 's' : ''} nos últimos ${RECENT_WINDOW_DAYS} dias`}
+            </Typography>
+            <Box sx={{ flexGrow: 1 }} />
+            <Button
+              size="small"
+              variant="contained"
+              color="success"
+              onClick={() => { setFilterNovas(true); setPage(1); }}
+            >
+              Ver todas
+            </Button>
+          </Paper>
+        </Box>
+      )}
+
       <Box mt={2}>
         <Accordion defaultExpanded variant="outlined" disableGutters>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -1270,11 +1405,13 @@ const ListagemCelulasPage = () => {
                 sx={{ minWidth: 160, flex: { xs: '1 1 100%', sm: '0 1 180px' } }}
               >
                 <MenuItem value="">Todos</MenuItem>
-                {campi.map((c) => (
-                  <MenuItem key={c.id} value={c.id}>
-                    {c.nome}
-                  </MenuItem>
-                ))}
+                {campi
+                  .filter((c) => !baseReady || availableCampusIds.has(String(c.id)))
+                  .map((c) => (
+                    <MenuItem key={c.id} value={c.id}>
+                      {c.nome}
+                    </MenuItem>
+                  ))}
               </TextField>
               <FormControl
                 variant="outlined"
@@ -1340,19 +1477,32 @@ const ListagemCelulasPage = () => {
                   </MenuItem>
                 ))}
               </TextField>
-              <TextField
-                label="Bairro"
-                variant="outlined"
-                size="small"
-                value={filterBairro}
-                onChange={(e) => { setFilterBairro(e.target.value); setPage(1); }}
-                sx={{ minWidth: 160, flex: { xs: '1 1 100%', sm: '0 1 200px' } }}
-                placeholder="Digite o bairro"
-              />
+              <Tooltip title={`Mostra apenas células criadas nos últimos ${RECENT_WINDOW_DAYS} dias`}>
+                <Chip
+                  icon={<FiberNewIcon />}
+                  label={`Novas (${RECENT_WINDOW_DAYS} dias)`}
+                  clickable
+                  color={filterNovas ? 'success' : 'default'}
+                  variant={filterNovas ? 'filled' : 'outlined'}
+                  onClick={() => { setFilterNovas((v) => !v); setPage(1); }}
+                  sx={{ height: 40, borderRadius: 1, fontWeight: 600 }}
+                />
+              </Tooltip>
+              <Tooltip title="Mostra apenas células cujo líder não está vinculado a um membro (precisa corrigir)">
+                <Chip
+                  icon={<LinkOffIcon />}
+                  label="Sem líder vinculado"
+                  clickable
+                  color={filterSemLiderMembro ? 'warning' : 'default'}
+                  variant={filterSemLiderMembro ? 'filled' : 'outlined'}
+                  onClick={() => { setFilterSemLiderMembro((v) => !v); setPage(1); }}
+                  sx={{ height: 40, borderRadius: 1, fontWeight: 600 }}
+                />
+              </Tooltip>
               <Autocomplete
                 multiple
                 size="small"
-                options={lideresOptions}
+                options={filterOpts(lideresOptions, availableLiderIds)}
                 getOptionLabel={(opt) => opt?.fullName || ''}
                 isOptionEqualToValue={(opt, val) => opt?.id === val?.id}
                 value={lideresOptions.filter((opt) => filterLiderIds.includes(opt.id))}
@@ -1368,7 +1518,7 @@ const ListagemCelulasPage = () => {
               <Autocomplete
                 multiple
                 size="small"
-                options={liderancasOptions}
+                options={filterOpts(liderancasOptions, availableLiderancaIds)}
                 getOptionLabel={(opt) => opt?.fullName || ''}
                 isOptionEqualToValue={(opt, val) => opt?.id === val?.id}
                 value={liderancasOptions.filter((opt) => filterLiderancaIds.includes(opt.id))}
@@ -1384,7 +1534,7 @@ const ListagemCelulasPage = () => {
               <Autocomplete
                 multiple
                 size="small"
-                options={pastoresGeracaoOptions}
+                options={filterOpts(pastoresGeracaoOptions, availablePastorGeracaoIds)}
                 getOptionLabel={(opt) => opt?.fullName || ''}
                 isOptionEqualToValue={(opt, val) => opt?.id === val?.id}
                 value={pastoresGeracaoOptions.filter((opt) => filterPastorGeracaoIds.includes(opt.id))}
@@ -1400,7 +1550,7 @@ const ListagemCelulasPage = () => {
               <Autocomplete
                 multiple
                 size="small"
-                options={pastoresCampusOptions}
+                options={filterOpts(pastoresCampusOptions, availablePastorCampusIds)}
                 getOptionLabel={(opt) => opt?.fullName || ''}
                 isOptionEqualToValue={(opt, val) => opt?.id === val?.id}
                 value={pastoresCampusOptions.filter((opt) => filterPastorCampusIds.includes(opt.id))}
@@ -1668,29 +1818,62 @@ const ListagemCelulasPage = () => {
                 </TableRow>
               ))
             ) : pagedCelulas.length > 0 ? (
-              pagedCelulas.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell>{c.celula}</TableCell>
-                  <TableCell>{c.rede}</TableCell>
-                  <TableCell>{c.liderMemberRef?.fullName || c.lider || '-'}</TableCell>
-                  <TableCell>{c.pastorGeracaoMemberRef?.fullName || c.pastor_geracao || '-'}</TableCell>
-                  <TableCell>{c.bairro}</TableCell>
-                  <TableCell>{c.campusRef?.nome || c.campus}</TableCell>
-                  <TableCell>{renderAtivoChip(c.ativo)}</TableCell>
-                  <TableCell padding="checkbox">
-                    <Tooltip title="Ações">
-                      <IconButton
-                        size="small"
-                        onClick={(e) => setRowMenuAnchor({ anchorEl: e.currentTarget, celulaId: c.id, celula: c })}
-                      >
-                        <Badge badgeContent={apeloCounts[c.id] || 0} color="error">
-                          <SettingsIcon fontSize="small" />
-                        </Badge>
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              ))
+              pagedCelulas.map((c) => {
+                const recente = isCelulaRecente(c);
+                return (
+                  <TableRow
+                    key={c.id}
+                    sx={recente ? {
+                      bgcolor: (t) => alpha(t.palette.success.main, 0.07),
+                      borderLeft: '4px solid',
+                      borderLeftColor: 'success.main',
+                    } : undefined}
+                  >
+                    <TableCell>
+                      <Box display="flex" alignItems="center" gap={1}>
+                        <span>{c.celula}</span>
+                        {recente && (
+                          <Chip size="small" color="success" label="Nova" sx={{ fontWeight: 700, height: 20 }} />
+                        )}
+                      </Box>
+                    </TableCell>
+                    <TableCell>{c.rede}</TableCell>
+                    <TableCell>
+                      <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                        <span>{c.liderMemberRef?.fullName || c.lider || '-'}</span>
+                        {!c.liderMemberId && (
+                          <Tooltip title="Líder não vinculado a um membro — abra a célula para vincular">
+                            <Chip
+                              size="small"
+                              color="warning"
+                              variant="outlined"
+                              icon={<LinkOffIcon />}
+                              label="não vinculado"
+                              sx={{ height: 22 }}
+                            />
+                          </Tooltip>
+                        )}
+                      </Box>
+                    </TableCell>
+                    <TableCell>{c.pastorGeracaoMemberRef?.fullName || c.pastor_geracao || '-'}</TableCell>
+                    <TableCell>{c.bairro}</TableCell>
+                    <TableCell>{c.campusRef?.nome || c.campus}</TableCell>
+                    <TableCell>{renderAtivoChip(c.ativo)}</TableCell>
+                    <TableCell padding="checkbox">
+                      <Tooltip title="Ações">
+                        <IconButton
+                          size="small"
+                          onClick={(e) => setRowMenuAnchor({ anchorEl: e.currentTarget, celulaId: c.id, celula: c })}
+                        >
+                          <Badge badgeContent={apeloCounts[c.id] || 0} color="error">
+                            <SettingsIcon fontSize="small" />
+                          </Badge>
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             ) : (
               <TableRow>
                 <TableCell colSpan={8} align="center" sx={{ py: 6 }}>

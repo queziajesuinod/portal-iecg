@@ -1028,7 +1028,9 @@ class MemberService {
   async listMembers(filters = {}, pagination = {}) {
     try {
       const page = Math.max(1, parseInt(pagination.page, 10) || 1);
-      const limit = Math.min(100, Math.max(1, parseInt(pagination.limit, 10) || 50));
+      // Teto alinhado ao controller (5000). O cap antigo de 100 truncava listas
+      // grandes (ex.: dropdowns de líderes/pastores no cadastro de células).
+      const limit = Math.min(5000, Math.max(1, parseInt(pagination.limit, 10) || 50));
       const offset = (page - 1) * limit;
 
       const where = {};
