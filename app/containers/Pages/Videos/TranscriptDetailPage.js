@@ -10,6 +10,9 @@ import draftToHtml from 'draftjs-to-html';
 import { Editor } from 'react-draft-wysiwyg';
 import 'react-draft-wysiwyg/dist/react-draft-wysiwyg.css';
 import {
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
   Alert,
   Autocomplete,
   Box,
@@ -35,6 +38,7 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import CancelIcon from '@mui/icons-material/Cancel';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { Helmet } from 'react-helmet';
 import { useHistory, useParams } from 'react-router-dom';
 import { PapperBlock } from 'dan-components';
@@ -518,12 +522,18 @@ const TranscriptDetailPage = () => {
 
         <Divider sx={{ my: 3 }} />
 
-        <Typography variant="subtitle1" sx={{ mb: 1 }}>Transcrição completa</Typography>
-        <RichTextEditor
-          editorState={transcriptEditorState}
-          onChange={setTranscriptEditorState}
-          minHeight={320}
-        />
+        <Accordion disableGutters sx={{ '&:before': { display: 'none' } }}>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography variant="subtitle1">Transcrição completa</Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <RichTextEditor
+              editorState={transcriptEditorState}
+              onChange={setTranscriptEditorState}
+              minHeight={320}
+            />
+          </AccordionDetails>
+        </Accordion>
       </PapperBlock>
 
       {video?.id && video?.videoId && (
@@ -531,6 +541,7 @@ const TranscriptDetailPage = () => {
           <ClipsPanel
             videoId={video.id}
             youtubeVideoId={video.videoId}
+            videoDuration={Number(video.durationSeconds) || 0}
             canGenerate={Array.isArray(data.segments) && data.segments.length > 0}
           />
         </PapperBlock>
