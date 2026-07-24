@@ -521,7 +521,7 @@ function ClipsPanel({
   // Preview vertical 9:16 (thumbnail do Short) por recorte.
   const renderThumb = (clip) => {
     const previewUrl = previews[clip.id];
-    const canPreview = ['rendered', 'published'].includes(clip.status);
+    const canPreview = ['rendered', 'published'].includes(clip.status) && !!clip.filePath;
     const loadingPreview = busy[`preview-${clip.id}`];
     return (
       <Box
@@ -604,8 +604,8 @@ function ClipsPanel({
           </Button>
         )}
 
-        {/* Acoes secundarias */}
-        {(isRendered || isPublished) && (
+        {/* Acoes secundarias (some quando o arquivo ja foi limpo apos publicar) */}
+        {(isRendered || isPublished) && clip.filePath && (
           <>
             <Tooltip title={staleRender ? staleMsg : ''}>
               <span>
