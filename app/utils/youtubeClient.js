@@ -113,6 +113,14 @@ export const transcribeVideoNow = async (videoId) => {
   return parseOrThrow(res, 'Falha ao transcrever audio anexado');
 };
 
+export const deleteVideoMedia = async (videoId) => {
+  const res = await fetch(`${BASE}/videos/${videoId}/media/delete`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+  });
+  return parseOrThrow(res, 'Falha ao excluir mídia do servidor');
+};
+
 export const queueVideoForHelper = async (videoId) => {
   const res = await fetch(`${BASE}/videos/${videoId}/transcript/queue`, {
     method: 'POST',
@@ -254,6 +262,11 @@ export const discardClip = async (clipId) => {
 export const renderClip = async (clipId) => {
   const res = await fetch(`${BASE}/clips/${clipId}/render`, { method: 'POST', headers: jsonHeaders() });
   return parseOrThrow(res, 'Falha ao renderizar recorte');
+};
+
+export const previewClipFrames = async (clipId) => {
+  const res = await fetch(`${BASE}/clips/${clipId}/preview-frames`, { method: 'POST', headers: jsonHeaders() });
+  return parseOrThrow(res, 'Falha ao gerar prévia do enquadramento');
 };
 
 export const publishClip = async (clipId, options = {}) => {

@@ -48,6 +48,7 @@ import {
   updateTranscript,
   regenerateSummary,
   cancelTranscript,
+  deleteVideoMedia,
 } from '../../../utils/youtubeClient';
 import ClipsPanel from './ClipsPanel';
 
@@ -152,6 +153,7 @@ const TranscriptDetailPage = () => {
   const [regenerating, setRegenerating] = useState(false);
   const [error, setError] = useState(null);
   const [feedback, setFeedback] = useState(null);
+  const [deletingMedia, setDeletingMedia] = useState(false);
 
   const [transcriptEditorState, setTranscriptEditorState] = useState(() => EditorState.createEmpty());
   const [summaryEditorState, setSummaryEditorState] = useState(() => EditorState.createEmpty());
@@ -189,6 +191,23 @@ const TranscriptDetailPage = () => {
   };
 
   useEffect(() => { load(); }, [id]);
+
+  const handleDeleteMedia = async () => {
+    // eslint-disable-next-line no-alert
+    if (!window.confirm('Excluir os arquivos de áudio/vídeo deste vídeo do servidor? A transcrição e o resumo permanecem. Para gerar novos recortes depois, será preciso baixar o vídeo novamente.')) return;
+    setDeletingMedia(true);
+    setFeedback(null);
+    try {
+      const r = await deleteVideoMedia(data.video.id);
+      const removed = (r.removed || []).join(', ') || 'nada a remover';
+      setFeedback({ severity: 'success', message: `Mídia removida do servidor (${removed}).` });
+      await load();
+    } catch (err) {
+      setFeedback({ severity: 'error', message: err.message });
+    } finally {
+      setDeletingMedia(false);
+    }
+  };
 
   useEffect(() => {
     if (data?.status !== 'processing') return undefined;
@@ -327,6 +346,18 @@ const TranscriptDetailPage = () => {
           <StatusChip status={data.status} />
           {data.source && <Chip size="small" variant="outlined" label={`Fonte: ${data.source}`} />}
           {data.language && <Chip size="small" variant="outlined" label={`Idioma: ${data.language}`} />}
+          {video && (video.audioPath || video.videoPath) && (
+            <Button
+              size="small"
+              color="error"
+              variant="outlined"
+              startIcon={<DeleteIcon />}
+              disabled={deletingMedia}
+              onClick={handleDeleteMedia}
+            >
+              Excluir mídia
+            </Button>
+          )}
         </Stack>
 
         {data.status === 'processing' && (

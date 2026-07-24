@@ -64,12 +64,14 @@ router.post('/videos/:videoId/transcribe', express.json(), controller.transcribe
 router.post('/videos/:videoId/transcript/reactivate', express.json(), controller.reativarTranscricao);
 router.post('/videos/:videoId/transcript/queue', express.json(), controller.enfileirarParaHelper);
 router.post('/videos/:videoId/clips/request', express.json(), controller.solicitarRecortes);
+router.post('/videos/:videoId/media/delete', express.json(), controller.excluirMidia);
 router.post('/videos/:videoId/clips/suggest', express.json(), controller.sugerirRecortes);
 router.get('/videos/:videoId/clips', express.json(), controller.listarRecortes);
 router.put('/clips/:clipId', express.json(), controller.editarRecorte);
 router.post('/clips/:clipId/approve', express.json(), controller.aprovarRecorte);
 router.post('/clips/:clipId/discard', express.json(), controller.descartarRecorte);
 router.post('/clips/:clipId/render', express.json(), controller.renderizarRecorte);
+router.post('/clips/:clipId/preview-frames', express.json(), controller.previewRecorteFrames);
 router.get('/clips/:clipId/file', controller.servirRecorte);
 router.post('/clips/:clipId/publish', express.json(), controller.publicarRecorte);
 
