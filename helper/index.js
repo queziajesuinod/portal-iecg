@@ -18,6 +18,32 @@ const RUN_ONCE = process.argv.includes('--once');
 // Reter o video completo (alem do audio) para gerar recortes/Shorts no portal.
 const DOWNLOAD_VIDEO = process.env.HELPER_DOWNLOAD_VIDEO === 'true';
 const VIDEO_MAX_HEIGHT = Number(process.env.VIDEO_MAX_HEIGHT || 720);
+// Autenticacao do yt-dlp (contorna o "Sign in to confirm you're not a bot" do YouTube).
+// Prioridade: cookies exportados (arquivo) > cookies do navegador local.
+const YTDLP_COOKIES_FILE = process.env.YTDLP_COOKIES_FILE || '';
+const YTDLP_COOKIES_FROM_BROWSER = process.env.YTDLP_COOKIES_FROM_BROWSER || '';
+// Proxy (ex.: residencial) para o yt-dlp. Essencial quando o helper roda no VPS,
+// pois o YouTube bloqueia IPs de datacenter no anti-bot mesmo com cookies.
+// Formato: http://user:pass@host:porta  ou  socks5://host:porta
+const YTDLP_PROXY = process.env.YTDLP_PROXY || '';
+
+// Opcoes de rede/autenticacao aplicadas a cada download do yt-dlp.
+function cookieOptions() {
+  const opts = {};
+  if (YTDLP_COOKIES_FILE) opts.cookies = YTDLP_COOKIES_FILE;
+  else if (YTDLP_COOKIES_FROM_BROWSER) opts.cookiesFromBrowser = YTDLP_COOKIES_FROM_BROWSER;
+  if (YTDLP_PROXY) opts.proxy = YTDLP_PROXY;
+  return opts;
+}
+
+// O yt-dlp precisa de um runtime JS (Deno) para resolver o "n challenge" do YouTube.
+// Sem ele, o YouTube devolve so miniaturas ("Requested format is not available").
+// Garante que o Deno (instalado em ~/.deno/bin ou DENO_BIN_DIR) esteja no PATH do yt-dlp.
+const DENO_BIN_DIR = process.env.DENO_BIN_DIR || path.join(os.homedir(), '.deno', 'bin');
+const hasDeno = fs.existsSync(DENO_BIN_DIR);
+if (hasDeno) {
+  process.env.PATH = `${DENO_BIN_DIR}${path.delimiter}${process.env.PATH || ''}`;
+}
 
 let activeChannelId = process.env.CHANNEL_ID || '';
 let activeChannelLabel = process.env.CHANNEL_NAME || '';
@@ -132,6 +158,7 @@ async function downloadAudio(youtubeUrl, videoId) {
 
   await youtubedl(youtubeUrl, {
     output: outTemplate,
+    format: 'bestaudio/best',
     extractAudio: true,
     audioFormat: 'mp3',
     audioQuality: AUDIO_BITRATE,
@@ -139,6 +166,7 @@ async function downloadAudio(youtubeUrl, videoId) {
     noWarnings: true,
     retries: 3,
     fragmentRetries: 3,
+    ...cookieOptions(),
   });
 
   const expected = `${outBase}.mp3`;
@@ -160,6 +188,7 @@ async function downloadVideo(youtubeUrl, videoId) {
     noWarnings: true,
     retries: 3,
     fragmentRetries: 3,
+    ...cookieOptions(),
   });
 
   const expected = `${outBase}.mp4`;
@@ -316,6 +345,12 @@ async function main() {
   console.log(`   portal: ${PORTAL_URL}`);
   console.log(`   polling: ${POLL_INTERVAL_MS / 1000}s | max por ciclo: ${MAX_PER_TICK} | bitrate: ${AUDIO_BITRATE}kbps`);
   console.log(`   video: ${DOWNLOAD_VIDEO ? `SIM (≤${VIDEO_MAX_HEIGHT}p, para recortes/Shorts)` : 'nao (so audio)'}`);
+  const authMode = YTDLP_COOKIES_FILE
+    ? `cookies (arquivo: ${YTDLP_COOKIES_FILE})`
+    : (YTDLP_COOKIES_FROM_BROWSER ? `cookies do navegador (${YTDLP_COOKIES_FROM_BROWSER})` : 'sem cookies (pode falhar no anti-bot)');
+  console.log(`   auth yt-dlp: ${authMode}`);
+  console.log(`   proxy yt-dlp: ${YTDLP_PROXY ? YTDLP_PROXY.replace(/\/\/[^@]*@/, '//***@') : 'nenhum'}`);
+  console.log(`   deno (n-challenge): ${hasDeno ? DENO_BIN_DIR : '⚠️  NAO encontrado — instale o Deno (deno.land) senao o download falha!'}`);
   console.log(`   tmp dir: ${TMP_DIR}`);
   console.log('');
 

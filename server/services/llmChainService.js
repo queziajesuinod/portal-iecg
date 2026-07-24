@@ -42,12 +42,33 @@ function extractJson(text) {
   }
 }
 
+// Retenta erros transitorios (429/503) antes de desistir e cair para o proximo provedor.
+async function withRetry(fn, retries = 2) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const status = err.response?.status;
+      if ((status === 429 || status === 503) && attempt < retries) {
+        // eslint-disable-next-line no-await-in-loop, no-promise-executor-return
+        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
+
 async function callGemini(systemPrompt, userMessage, maxTokens) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY nao configurada no .env');
   const model = DEFAULT_MODELS.gemini;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  const { data } = await axios.post(
+  const { data } = await withRetry(() => axios.post(
     url,
     {
       systemInstruction: { parts: [{ text: systemPrompt }] },
@@ -60,7 +81,7 @@ async function callGemini(systemPrompt, userMessage, maxTokens) {
       },
     },
     { timeout: 60000, headers: { 'Content-Type': 'application/json' } }
-  );
+  ));
   const candidate = data?.candidates?.[0];
   const text = candidate?.content?.parts?.map((p) => p.text).join('') || '';
   if (!text) throw new Error(`Gemini retornou vazio (finishReason: ${candidate?.finishReason || 'desconhecido'})`);
@@ -68,7 +89,7 @@ async function callGemini(systemPrompt, userMessage, maxTokens) {
 }
 
 async function callOpenAICompatible(baseURL, apiKey, model, systemPrompt, userMessage, maxTokens) {
-  const { data } = await axios.post(
+  const { data } = await withRetry(() => axios.post(
     `${baseURL}/chat/completions`,
     {
       model,
@@ -81,7 +102,7 @@ async function callOpenAICompatible(baseURL, apiKey, model, systemPrompt, userMe
       ],
     },
     { timeout: 60000, headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' } }
-  );
+  ));
   const text = data?.choices?.[0]?.message?.content || '';
   if (!text) throw new Error('Resposta vazia do provedor');
   return { parsed: extractJson(text), model };
