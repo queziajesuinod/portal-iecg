@@ -6,7 +6,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "once": "node index.js --once"
+    "once": "node index.js --once",
+    "videos": "node index.js --videos --once",
+    "videos:loop": "node index.js --videos"
   },
   "dependencies": {
     "axios": "^1.13.5",

@@ -137,18 +137,27 @@ async function uploadAudioHelper(req, res) {
 
 async function listarVideosParaRecorte(req, res) {
   try {
+    const fs = require('fs');
     const limit = Math.min(Number(req.query.limit) || 20, 100);
-    const where = { ignored: false, clipsRequested: true, videoPath: null };
+    // Marcados pra recorte no portal. Nao filtra por videoPath no SQL: precisa
+    // reincluir tambem os que TEM videoPath mas o arquivo sumiu do disco
+    // (ex.: gravado em storage efemero antes de configurar o disco persistente).
+    const where = { ignored: false, clipsRequested: true };
     if (req.query.channelId) {
       where.youtubeChannelId = req.query.channelId;
     }
 
-    const videos = await YoutubeVideo.findAll({
+    const candidatos = await YoutubeVideo.findAll({
       where,
       include: [{ model: YoutubeChannel, as: 'channel' }],
       order: [['publishedAt', 'DESC']],
-      limit,
+      limit: 200,
     });
+
+    // Precisa de (re)upload: sem videoPath OU o arquivo nao esta mais em disco.
+    const videos = candidatos
+      .filter((v) => !v.videoPath || !fs.existsSync(v.videoPath))
+      .slice(0, limit);
 
     const items = videos.map((v) => ({
       id: v.id,

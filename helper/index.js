@@ -15,6 +15,10 @@ const AUDIO_BITRATE = process.env.AUDIO_BITRATE || '96';
 const MAX_PER_TICK = Number(process.env.MAX_PER_TICK || 1);
 const TMP_DIR = process.env.TMP_DIR || path.join(os.tmpdir(), 'iecg-helper');
 const RUN_ONCE = process.argv.includes('--once');
+// Modo "so videos": processa APENAS a fila de videos prontos pra recorte
+// (marcados no portal, com o video ainda faltando) e refaz o upload.
+// Pula todo o fluxo de audio. Util pra reenviar videos que falharam.
+const VIDEOS_ONLY = process.argv.includes('--videos');
 // Reter o video completo (alem do audio) para gerar recortes/Shorts no portal.
 const DOWNLOAD_VIDEO = process.env.HELPER_DOWNLOAD_VIDEO === 'true';
 const VIDEO_MAX_HEIGHT = Number(process.env.VIDEO_MAX_HEIGHT || 720);
@@ -43,6 +47,22 @@ const DENO_BIN_DIR = process.env.DENO_BIN_DIR || path.join(os.homedir(), '.deno'
 const hasDeno = fs.existsSync(DENO_BIN_DIR);
 if (hasDeno) {
   process.env.PATH = `${DENO_BIN_DIR}${path.delimiter}${process.env.PATH || ''}`;
+}
+
+// Extensoes finais que o yt-dlp pode gerar pro video completo (o servidor aceita todas).
+const FINAL_VIDEO_EXTS = new Set(['.mp4', '.mkv', '.webm', '.mov', '.m4v']);
+const VIDEO_MIME_BY_EXT = {
+  '.mp4': 'video/mp4',
+  '.mkv': 'video/x-matroska',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
+  '.m4v': 'video/x-m4v',
+};
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 let activeChannelId = process.env.CHANNEL_ID || '';
@@ -174,6 +194,39 @@ async function downloadAudio(youtubeUrl, videoId) {
   return { path: expected, size: stat.size };
 }
 
+// Procura o arquivo de video ja baixado pra este videoId no TMP_DIR.
+// O yt-dlp pode gerar .mp4, .mkv ou .webm (quando os codecs nao cabem em mp4,
+// ele faz o merge em .mkv mesmo pedindo mp4). Ignora fragmentos por formato
+// (ex.: -video.f399.mp4) e temporarios (.part/.ytdl/.temp).
+function findDownloadedVideo(videoId) {
+  const baseName = `${videoId}-video`;
+  let entries;
+  try {
+    entries = fs.readdirSync(TMP_DIR);
+  } catch {
+    return null;
+  }
+  let best = null;
+  for (const name of entries) {
+    if (!name.startsWith(`${baseName}.`)) continue;
+    if (/\.f\d+\./i.test(name)) continue; // fragmento de formato ainda nao mesclado
+    if (/\.(part|ytdl|temp)$/i.test(name)) continue; // download incompleto
+    const ext = path.extname(name).toLowerCase();
+    if (!FINAL_VIDEO_EXTS.has(ext)) continue;
+    const full = path.join(TMP_DIR, name);
+    let st;
+    try {
+      st = fs.statSync(full);
+    } catch {
+      continue;
+    }
+    if (st.isFile() && st.size > 0 && (!best || st.size > best.size)) {
+      best = { path: full, size: st.size };
+    }
+  }
+  return best;
+}
+
 async function downloadVideo(youtubeUrl, videoId) {
   await ensureTmp();
   const outBase = path.join(TMP_DIR, `${videoId}-video`);
@@ -181,8 +234,8 @@ async function downloadVideo(youtubeUrl, videoId) {
 
   await youtubedl(youtubeUrl, {
     output: outTemplate,
-    // Melhor video ate a altura maxima + melhor audio, remuxado em mp4.
-    format: `bestvideo[height<=${VIDEO_MAX_HEIGHT}]+bestaudio/best[height<=${VIDEO_MAX_HEIGHT}]`,
+    // Prefere streams compativeis com mp4; senao cai pro melhor disponivel.
+    format: `bestvideo[height<=${VIDEO_MAX_HEIGHT}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=${VIDEO_MAX_HEIGHT}]+bestaudio/best[height<=${VIDEO_MAX_HEIGHT}]/best`,
     mergeOutputFormat: 'mp4',
     noPlaylist: true,
     noWarnings: true,
@@ -191,16 +244,21 @@ async function downloadVideo(youtubeUrl, videoId) {
     ...cookieOptions(),
   });
 
-  const expected = `${outBase}.mp4`;
-  const stat = await fsp.stat(expected);
-  return { path: expected, size: stat.size };
+  // Nao assume ".mp4": pega o arquivo que o yt-dlp realmente gerou.
+  const found = findDownloadedVideo(videoId);
+  if (!found) {
+    throw new Error('yt-dlp rodou mas nao encontrei o arquivo de video (ffmpeg no PATH? formato disponivel?)');
+  }
+  return found;
 }
 
 async function uploadVideo(videoId, videoPath) {
+  const ext = (path.extname(videoPath) || '.mp4').toLowerCase();
+  const contentType = VIDEO_MIME_BY_EXT[ext] || 'application/octet-stream';
   const form = new FormData();
   form.append('video', fs.createReadStream(videoPath), {
-    filename: `${videoId}.mp4`,
-    contentType: 'video/mp4',
+    filename: `${videoId}${ext}`,
+    contentType,
   });
   const { data } = await api.post(`/videos/${encodeURIComponent(videoId)}/video`, form, {
     headers: { ...form.getHeaders(), 'X-Helper-Token': HELPER_TOKEN },
@@ -209,6 +267,40 @@ async function uploadVideo(videoId, videoPath) {
     maxBodyLength: Infinity,
   });
   return data;
+}
+
+async function uploadVideoWithRetry(videoId, videoPath, attempts = 3) {
+  let lastErr;
+  for (let i = 1; i <= attempts; i += 1) {
+    try {
+      return await uploadVideo(videoId, videoPath);
+    } catch (err) {
+      lastErr = err;
+      const msg = err.response?.data?.message || err.message;
+      if (i < attempts) {
+        const waitMs = 5000 * i;
+        console.warn(`  ⚠️  upload falhou (tentativa ${i}/${attempts}): ${msg} — retry em ${waitMs / 1000}s`);
+        await sleep(waitMs);
+      }
+    }
+  }
+  throw lastErr;
+}
+
+// Garante o video no portal: reaproveita o que ja foi baixado, senao baixa,
+// envia com retry e so remove o arquivo local apos enviar com sucesso
+// (em falha, mantem pra reenviar no proximo ciclo sem re-baixar).
+async function ensureVideoOnPortal(video, t0) {
+  let file = findDownloadedVideo(video.videoId);
+  if (file) {
+    console.log(`  ↺ video ja baixado, reaproveitando: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
+  } else {
+    file = await downloadVideo(video.youtubeUrl, video.videoId);
+    console.log(`  ↓ video baixado (≤${VIDEO_MAX_HEIGHT}p): ${(file.size / 1024 / 1024).toFixed(2)} MB`);
+  }
+  await uploadVideoWithRetry(video.videoId, file.path);
+  console.log(`  ↑ video enviado pro portal em ${((Date.now() - t0) / 1000).toFixed(1)}s ✅`);
+  await cleanup(file.path);
 }
 
 async function uploadAudio(videoId, audioPath) {
@@ -241,7 +333,6 @@ async function processOne(video) {
   const channelLog = video.channel?.channelName ? ` | ${video.channel.channelName}` : '';
   console.log(`▶ ${counter}${video.videoId}${channelLog} | ${video.title?.slice(0, 50)}`);
   let audioPath = null;
-  let videoPath = null;
   try {
     const dl = await downloadAudio(video.youtubeUrl, video.videoId);
     audioPath = dl.path;
@@ -252,12 +343,7 @@ async function processOne(video) {
     console.log(`  ↑ audio enviado pro portal em ${((Date.now() - t0) / 1000).toFixed(1)}s ✅`);
 
     if (DOWNLOAD_VIDEO) {
-      const vdl = await downloadVideo(video.youtubeUrl, video.videoId);
-      videoPath = vdl.path;
-      const vmb = (vdl.size / 1024 / 1024).toFixed(2);
-      console.log(`  ↓ video baixado (≤${VIDEO_MAX_HEIGHT}p): ${vmb} MB`);
-      await uploadVideo(video.videoId, videoPath);
-      console.log(`  ↑ video enviado pro portal em ${((Date.now() - t0) / 1000).toFixed(1)}s total ✅`);
+      await ensureVideoOnPortal(video, t0);
     }
     processedCount += 1;
   } catch (err) {
@@ -266,7 +352,6 @@ async function processOne(video) {
     console.error(`  ✖ falhou: ${msg}`);
   } finally {
     await cleanup(audioPath);
-    await cleanup(videoPath);
   }
 }
 
@@ -276,19 +361,11 @@ async function processVideoOnly(video) {
   const t0 = Date.now();
   const channelLog = video.channel?.channelName ? ` | ${video.channel.channelName}` : '';
   console.log(`🎬 recorte: ${video.videoId}${channelLog} | ${video.title?.slice(0, 50)}`);
-  let videoPath = null;
   try {
-    const vdl = await downloadVideo(video.youtubeUrl, video.videoId);
-    videoPath = vdl.path;
-    const vmb = (vdl.size / 1024 / 1024).toFixed(2);
-    console.log(`  ↓ video baixado (≤${VIDEO_MAX_HEIGHT}p): ${vmb} MB`);
-    await uploadVideo(video.videoId, videoPath);
-    console.log(`  ↑ video enviado pro portal em ${((Date.now() - t0) / 1000).toFixed(1)}s ✅`);
+    await ensureVideoOnPortal(video, t0);
   } catch (err) {
     const msg = err.response?.data?.message || err.stderr?.toString?.()?.slice(-300) || err.message;
     console.error(`  ✖ falhou (recorte): ${msg}`);
-  } finally {
-    await cleanup(videoPath);
   }
 }
 
@@ -315,19 +392,21 @@ function shouldStop() {
 async function tick() {
   if (shouldStop()) return;
   try {
-    const pending = await listPending();
-    if (pending.length === 0) {
-      console.log(`[${new Date().toLocaleTimeString()}] sem videos pendentes em ${activeChannelLabel || 'todos os canais'}`);
-    } else {
-      const remaining = maxVideosTotal > 0 ? maxVideosTotal - processedCount : Infinity;
-      const limit = Math.min(MAX_PER_TICK, remaining, pending.length);
-      console.log(`[${new Date().toLocaleTimeString()}] ${pending.length} pendente(s), processando ${limit}...`);
-      for (let i = 0; i < limit; i += 1) {
-        await processOne(pending[i]);
-        if (shouldStop()) break;
+    if (!VIDEOS_ONLY) {
+      const pending = await listPending();
+      if (pending.length === 0) {
+        console.log(`[${new Date().toLocaleTimeString()}] sem videos pendentes em ${activeChannelLabel || 'todos os canais'}`);
+      } else {
+        const remaining = maxVideosTotal > 0 ? maxVideosTotal - processedCount : Infinity;
+        const limit = Math.min(MAX_PER_TICK, remaining, pending.length);
+        console.log(`[${new Date().toLocaleTimeString()}] ${pending.length} pendente(s), processando ${limit}...`);
+        for (let i = 0; i < limit; i += 1) {
+          await processOne(pending[i]);
+          if (shouldStop()) break;
+        }
       }
     }
-    // Videos antigos marcados para recortes: baixa so o video.
+    // Videos marcados para recortes no portal: baixa/reenvia so o video.
     await tickPendingVideos();
   } catch (err) {
     if (err.response?.status === 401 || err.response?.status === 403) {
@@ -345,6 +424,9 @@ async function main() {
   console.log(`   portal: ${PORTAL_URL}`);
   console.log(`   polling: ${POLL_INTERVAL_MS / 1000}s | max por ciclo: ${MAX_PER_TICK} | bitrate: ${AUDIO_BITRATE}kbps`);
   console.log(`   video: ${DOWNLOAD_VIDEO ? `SIM (≤${VIDEO_MAX_HEIGHT}p, para recortes/Shorts)` : 'nao (so audio)'}`);
+  if (VIDEOS_ONLY) {
+    console.log('   >>> MODO --videos: SO fila de recortes (reenvia video pros prontos no portal), pula audio');
+  }
   const authMode = YTDLP_COOKIES_FILE
     ? `cookies (arquivo: ${YTDLP_COOKIES_FILE})`
     : (YTDLP_COOKIES_FROM_BROWSER ? `cookies do navegador (${YTDLP_COOKIES_FROM_BROWSER})` : 'sem cookies (pode falhar no anti-bot)');
@@ -354,7 +436,7 @@ async function main() {
   console.log(`   tmp dir: ${TMP_DIR}`);
   console.log('');
 
-  if (!activeChannelId && !RUN_ONCE) {
+  if (!activeChannelId && !RUN_ONCE && !VIDEOS_ONLY) {
     try {
       const picked = await chooseChannelInteractive();
       activeChannelId = picked.channelId;
@@ -387,7 +469,7 @@ async function main() {
   console.log('');
   console.log(`   canal: ${activeChannelLabel}`);
   console.log(`   max total: ${maxVideosTotal > 0 ? maxVideosTotal : 'ilimitado'}`);
-  console.log(`   modo: ${RUN_ONCE ? '--once (executa 1x e sai)' : 'loop (Ctrl+C pra sair)'}`);
+  console.log(`   modo: ${VIDEOS_ONLY ? 'so videos (recortes)' : 'audio + videos'} | ${RUN_ONCE ? '--once (executa 1x e sai)' : 'loop (Ctrl+C pra sair)'}`);
   console.log('');
 
   await tick();
