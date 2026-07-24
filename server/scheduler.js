@@ -44,6 +44,8 @@ let ultimaValidacaoData = _state.ultimaValidacaoData || null;
 let ultimaAberturaReunioes = null;
 // Controle para sincronização automática dos canais do YouTube (1x na semana)
 let ultimaSincronizacaoYoutubeData = _state.ultimaSincronizacaoYoutubeData || null;
+// Controle para limpeza de arquivos de clips publicados (1x por dia)
+let ultimaLimpezaClipsData = _state.ultimaLimpezaClipsData || null;
 let ultimaTicketEmailResgateAt = 0;
 const TICKET_EMAIL_RESGATE_INTERVAL_MS = parsePositiveInt(process.env.TICKET_EMAIL_RESGATE_INTERVAL_MS, 300000);
 const TICKET_EMAIL_RESGATE_BATCH_SIZE = parsePositiveInt(process.env.TICKET_EMAIL_RESGATE_BATCH_SIZE, 10);
@@ -225,6 +227,30 @@ async function tickTicketEmailResgate() {
   }
 }
 
+async function tickClipCleanup() {
+  const days = Number(process.env.CLIP_CLEANUP_DAYS ?? 7);
+  if (!(days > 0)) return; // 0 ou vazio = desativado
+
+  const agora = moment.tz(APP_TIMEZONE);
+  const hoje = agora.format('YYYY-MM-DD');
+  if (ultimaLimpezaClipsData === hoje) return;
+  const hora = Number(process.env.CLIP_CLEANUP_HOUR ?? 4);
+  if (agora.hour() < hora) return;
+
+  ultimaLimpezaClipsData = hoje;
+  saveSchedulerState({ ultimaLimpezaClipsData: hoje });
+
+  try {
+    const clipRenderService = require('./services/clipRenderService');
+    const r = await clipRenderService.cleanupPublishedClips({ days });
+    if (r.removed > 0) {
+      console.log(`[Scheduler] limpeza de clips: ${r.removed} arquivo(s) removido(s) (publicados ha +${days} dias)`);
+    }
+  } catch (err) {
+    console.error('[Scheduler] Erro na limpeza de clips:', err.message);
+  }
+}
+
 const safe = (fn) => fn().catch((err) => console.error(`[Scheduler] Erro no tick (${fn.name}):`, err.message));
 
 async function tick() {
@@ -244,6 +270,7 @@ async function tick() {
       tickVideoTranscription,
       tickYoutubeChannelSync,
       tickTicketEmailResgate,
+      tickClipCleanup,
     ].reduce((promise, fn) => promise.then(() => safe(fn)), Promise.resolve());
   } catch (err) {
     console.error('[Scheduler] Erro no tick:', err.message);

@@ -371,8 +371,44 @@ async function generatePreviewFrames(clipId, { count = 3 } = {}) {
   }
 }
 
+/**
+ * Remove os arquivos de clips publicados ha mais de N dias (libera disco).
+ * Mantem o registro no banco (status published, youtubeShortId), so limpa o filePath.
+ */
+async function cleanupPublishedClips({ days } = {}) {
+  const d = Number(days ?? process.env.CLIP_CLEANUP_DAYS ?? 7);
+  if (!Number.isFinite(d) || d <= 0) return { removed: 0, disabled: true };
+
+  const { Op } = require('sequelize');
+  const cutoff = new Date(Date.now() - d * 24 * 60 * 60 * 1000);
+  const clips = await VideoClip.findAll({
+    where: {
+      status: 'published',
+      publishedAt: { [Op.lt]: cutoff },
+      filePath: { [Op.ne]: null },
+    },
+  });
+
+  let removed = 0;
+  for (const clip of clips) {
+    try {
+      if (clip.filePath) {
+        // eslint-disable-next-line no-await-in-loop
+        await fs.unlink(clip.filePath).catch(() => {});
+      }
+      // eslint-disable-next-line no-await-in-loop
+      await clip.update({ filePath: null, fileSizeBytes: null });
+      removed += 1;
+    } catch (err) {
+      console.warn(`[clipCleanup] falha ao limpar clip ${clip.id}: ${err.message}`);
+    }
+  }
+  return { removed, total: clips.length, days: d };
+}
+
 module.exports = {
   renderClip,
   generatePreviewFrames,
+  cleanupPublishedClips,
   getClipRoot,
 };
