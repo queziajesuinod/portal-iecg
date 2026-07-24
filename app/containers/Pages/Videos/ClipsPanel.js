@@ -2,6 +2,7 @@ import React, {
   useEffect, useRef, useState, useCallback,
 } from 'react';
 import PropTypes from 'prop-types';
+import { createTheme, ThemeProvider, alpha } from '@mui/material/styles';
 import {
   Alert,
   Box,
@@ -11,9 +12,12 @@ import {
   Collapse,
   Divider,
   IconButton,
+  LinearProgress,
   Paper,
   Skeleton,
   Stack,
+  Tab,
+  Tabs,
   TextField,
   Tooltip,
   Typography,
@@ -29,6 +33,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import TuneIcon from '@mui/icons-material/Tune';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import MovieCreationOutlinedIcon from '@mui/icons-material/MovieCreationOutlined';
+import CropPortraitIcon from '@mui/icons-material/CropPortrait';
 import {
   fetchClips,
   suggestClips,
@@ -40,6 +45,7 @@ import {
   publishClip,
   fetchClipBlobUrl,
   downloadClipFile,
+  previewClipFrames,
   runWorkerOnce,
 } from '../../../utils/youtubeClient';
 
@@ -54,6 +60,26 @@ const STATUS_MAP = {
 };
 
 const LOCKED = ['rendering', 'publishing', 'published'];
+
+function statusDotColor(status) {
+  const c = STATUS_MAP[status] ? STATUS_MAP[status].color : null;
+  return (!c || c === 'default') ? 'grey.500' : `${c}.main`;
+}
+
+// Tema escuro proprio do painel — da a cara de "editor de video".
+const editorTheme = createTheme({
+  palette: {
+    mode: 'dark',
+    background: { default: '#0b1220', paper: '#151d2e' },
+    primary: { main: '#38bdf8' },
+    success: { main: '#22c55e' },
+    warning: { main: '#f59e0b' },
+    error: { main: '#f87171' },
+    divider: 'rgba(148,163,184,0.18)',
+  },
+  shape: { borderRadius: 10 },
+  typography: { fontSize: 13 },
+});
 
 function fmt(totalSeconds) {
   const s = Math.max(0, Math.floor(Number(totalSeconds) || 0));
@@ -93,6 +119,111 @@ Timeline.propTypes = {
   total: PropTypes.number.isRequired,
 };
 
+// Régua de edição com alças de início/fim arrastáveis + playhead (estilo editor).
+function ClipTimeline({
+  total, start, end, playhead, onScrub, onSeek,
+}) {
+  const trackRef = useRef(null);
+  const draggingRef = useRef(null);
+
+  const pctFromClientX = (clientX) => {
+    const el = trackRef.current;
+    if (!el) return 0;
+    const rect = el.getBoundingClientRect();
+    const x = Math.min(rect.width, Math.max(0, clientX - rect.left));
+    return rect.width ? x / rect.width : 0;
+  };
+
+  const startDrag = (which) => (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    draggingRef.current = which;
+    const move = (ev) => onScrub(which, pctFromClientX(ev.clientX) * total);
+    const up = () => {
+      draggingRef.current = null;
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  const onTrackClick = (e) => {
+    if (draggingRef.current) return;
+    onSeek(pctFromClientX(e.clientX) * total);
+  };
+
+  const clampPct = (v) => Math.min(100, Math.max(0, v));
+  const leftPct = clampPct((start / (total || 1)) * 100);
+  const widthPct = clampPct(((end - start) / (total || 1)) * 100);
+  const headPct = clampPct((playhead / (total || 1)) * 100);
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * (total || 0));
+
+  const handleSx = {
+    position: 'absolute',
+    top: -3,
+    bottom: -3,
+    width: 12,
+    ml: '-6px',
+    bgcolor: 'primary.main',
+    borderRadius: 1,
+    cursor: 'ew-resize',
+    boxShadow: '0 0 0 1px rgba(0,0,0,0.4)',
+    zIndex: 3,
+  };
+
+  return (
+    <Box sx={{ mt: 1 }}>
+      <Box
+        ref={trackRef}
+        onClick={onTrackClick}
+        sx={{
+          position: 'relative',
+          height: 34,
+          bgcolor: '#0b1220',
+          borderRadius: 1,
+          border: (t) => `1px solid ${t.palette.divider}`,
+          cursor: 'pointer',
+          userSelect: 'none',
+        }}
+      >
+        <Box sx={{
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          left: `${leftPct}%`,
+          width: `${widthPct}%`,
+          bgcolor: (t) => alpha(t.palette.primary.main, 0.28),
+          borderTop: (t) => `2px solid ${t.palette.primary.main}`,
+          borderBottom: (t) => `2px solid ${t.palette.primary.main}`,
+        }}
+        />
+        <Box onMouseDown={startDrag('start')} sx={{ ...handleSx, left: `${leftPct}%` }} />
+        <Box onMouseDown={startDrag('end')} sx={{ ...handleSx, left: `${leftPct + widthPct}%` }} />
+        <Box sx={{
+          position: 'absolute', top: 0, bottom: 0, left: `${headPct}%`, width: 2, bgcolor: 'error.main', zIndex: 2,
+        }}
+        />
+      </Box>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.25 }}>
+        {ticks.map((t, i) => (
+          // eslint-disable-next-line react/no-array-index-key
+          <Typography key={i} variant="caption" color="text.secondary">{fmt(t)}</Typography>
+        ))}
+      </Box>
+    </Box>
+  );
+}
+
+ClipTimeline.propTypes = {
+  total: PropTypes.number.isRequired,
+  start: PropTypes.number.isRequired,
+  end: PropTypes.number.isRequired,
+  playhead: PropTypes.number.isRequired,
+  onScrub: PropTypes.func.isRequired,
+  onSeek: PropTypes.func.isRequired,
+};
+
 // Carrega a IFrame API do YouTube uma unica vez.
 let ytApiPromise = null;
 function loadYouTubeApi() {
@@ -121,7 +252,10 @@ function ClipsPanel({
   const [error, setError] = useState(null);
   const [feedback, setFeedback] = useState(null);
   const [previews, setPreviews] = useState({});
+  const [framePreviews, setFramePreviews] = useState({});
   const [expanded, setExpanded] = useState({});
+  const [selectedClipId, setSelectedClipId] = useState(null);
+  const [playhead, setPlayhead] = useState(0);
 
   const playerRef = useRef(null);
   const playerDivRef = useRef(null);
@@ -180,13 +314,30 @@ function ClipsPanel({
   useEffect(() => {
     const active = clips.some((c) => c.status === 'rendering' || c.status === 'publishing');
     if (!active) return undefined;
-    const t = setInterval(load, 4000);
+    const t = setInterval(load, 2000);
     return () => clearInterval(t);
   }, [clips, load]);
 
   useEffect(() => () => {
     Object.values(previewsRef.current).forEach((url) => URL.revokeObjectURL(url));
   }, []);
+
+  // Seleciona o primeiro recorte automaticamente.
+  useEffect(() => {
+    if (clips.length && !clips.some((c) => c.id === selectedClipId)) {
+      setSelectedClipId(clips[0].id);
+    }
+  }, [clips, selectedClipId]);
+
+  // Playhead: acompanha o tempo do player-fonte enquanto há recorte selecionado.
+  useEffect(() => {
+    if (!selectedClipId) return undefined;
+    const iv = setInterval(() => {
+      const p = playerRef.current;
+      if (p && p.getCurrentTime) setPlayhead(p.getCurrentTime());
+    }, 250);
+    return () => clearInterval(iv);
+  }, [selectedClipId]);
 
   const player = () => playerRef.current;
   const currentTime = () => {
@@ -216,6 +367,37 @@ function ClipsPanel({
     const t = currentTime();
     if (t == null) { setFeedback({ severity: 'warning', message: 'Player ainda não carregou.' }); return; }
     setDraft(clipId, { [field]: Number(t.toFixed(2)) });
+  };
+
+  const seekPlayer = (t) => {
+    const p = player();
+    if (p && p.seekTo) p.seekTo(Math.max(0, t), true);
+    setPlayhead(Math.max(0, t));
+  };
+
+  const selectClip = (clip) => {
+    setSelectedClipId(clip.id);
+    const s = Number((drafts[clip.id] || clip).startSeconds);
+    seekPlayer(Number.isFinite(s) ? s : 0);
+  };
+
+  const totalDuration = () => videoDuration
+    || clips.reduce((mx, c) => Math.max(mx, Number(c.endSeconds) || 0), 0)
+    || 1;
+
+  const scrubSelected = (which, t) => {
+    if (!selectedClipId) return;
+    const d = drafts[selectedClipId] || {};
+    const total = totalDuration();
+    const val = Math.max(0, Math.min(total, t));
+    if (which === 'start') {
+      const maxStart = (Number(d.endSeconds) || total) - 0.5;
+      setDraft(selectedClipId, { startSeconds: Number(Math.min(val, maxStart).toFixed(2)) });
+    } else {
+      const minEnd = (Number(d.startSeconds) || 0) + 0.5;
+      setDraft(selectedClipId, { endSeconds: Number(Math.max(val, minEnd).toFixed(2)) });
+    }
+    setPlayhead(val);
   };
 
   const nudge = (clipId, field, delta) => {
@@ -293,9 +475,48 @@ function ClipsPanel({
 
   const doDownload = (clip) => run(`download-${clip.id}`, () => downloadClipFile(clip.id, `recorte-${clip.position + 1}.mp4`));
 
+  const doFramePreview = async (clip) => {
+    setBusyFor(`frames-${clip.id}`, true);
+    setFeedback(null);
+    try {
+      const res = await previewClipFrames(clip.id);
+      setFramePreviews((p) => ({ ...p, [clip.id]: res }));
+    } catch (err) {
+      setFeedback({ severity: 'error', message: err.message });
+    } finally {
+      setBusyFor(`frames-${clip.id}`, false);
+    }
+  };
+
   const total = videoDuration
     || clips.reduce((mx, c) => Math.max(mx, Number(c.endSeconds) || 0), 0)
     || 1;
+
+  const selectedClip = clips.find((c) => c.id === selectedClipId) || null;
+  const selectedDraft = selectedClipId ? drafts[selectedClipId] : null;
+
+  // Régua de edição (in/out) do recorte selecionado — abaixo do player-fonte.
+  const renderEditorTimeline = () => {
+    if (!selectedDraft) return null;
+    const s = Number(selectedDraft.startSeconds) || 0;
+    const e = Number(selectedDraft.endSeconds) || 0;
+    return (
+      <Box sx={{ mt: 1.5 }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
+          <Typography variant="caption" color="text.secondary" noWrap sx={{ flexGrow: 1, minWidth: 0 }}>
+            Editando: {selectedClip?.title || `recorte ${(selectedClip?.position ?? 0) + 1}`}
+          </Typography>
+          <Button size="small" startIcon={<PlayArrowIcon />} onClick={() => playRange(s, e)}>Prévia</Button>
+        </Stack>
+        <ClipTimeline total={total} start={s} end={e} playhead={playhead} onScrub={scrubSelected} onSeek={seekPlayer} />
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+          {fmt(s)} – {fmt(e)} · {Math.round(e - s)}s
+          {' · '}
+          arraste as alças ou clique na régua para navegar
+        </Typography>
+      </Box>
+    );
+  };
 
   // Preview vertical 9:16 (thumbnail do Short) por recorte.
   const renderThumb = (clip) => {
@@ -305,12 +526,13 @@ function ClipsPanel({
     return (
       <Box
         sx={{
-          width: { xs: 84, sm: 104 },
+          width: { xs: 100, sm: 128 },
           aspectRatio: '9 / 16',
           flexShrink: 0,
           borderRadius: 1.5,
           overflow: 'hidden',
-          bgcolor: 'grey.900',
+          bgcolor: '#000',
+          border: (t) => `1px solid ${t.palette.divider}`,
           color: 'grey.500',
           display: 'flex',
           alignItems: 'center',
@@ -346,19 +568,24 @@ function ClipsPanel({
     );
   };
 
-  const renderActions = (clip) => {
+  const renderActions = (clip, staleRender) => {
     const isRendered = clip.status === 'rendered';
     const isPublished = clip.status === 'published';
+    const staleMsg = 'Você alterou o corte. Renderize novamente antes de publicar ou baixar.';
     return (
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
         {/* CTA primaria por estado */}
         {isRendered && (
-          <Button
-            size="small" variant="contained" color="success" startIcon={<PublishIcon />}
-            disabled={busy[`publish-${clip.id}`]} onClick={() => doPublish(clip)}
-          >
-            Publicar no Shorts
-          </Button>
+          <Tooltip title={staleRender ? staleMsg : ''}>
+            <span>
+              <Button
+                size="small" variant="contained" color="success" startIcon={<PublishIcon />}
+                disabled={busy[`publish-${clip.id}`] || staleRender} onClick={() => doPublish(clip)}
+              >
+                Publicar no Shorts
+              </Button>
+            </span>
+          </Tooltip>
         )}
         {['approved', 'failed'].includes(clip.status) && (
           <Button
@@ -380,11 +607,25 @@ function ClipsPanel({
         {/* Acoes secundarias */}
         {(isRendered || isPublished) && (
           <>
-            <Button size="small" variant="outlined" startIcon={<DownloadIcon />} disabled={busy[`download-${clip.id}`]} onClick={() => doDownload(clip)}>
-              Baixar
-            </Button>
+            <Tooltip title={staleRender ? staleMsg : ''}>
+              <span>
+                <Button
+                  size="small" variant="outlined" startIcon={<DownloadIcon />}
+                  disabled={busy[`download-${clip.id}`] || staleRender} onClick={() => doDownload(clip)}
+                >
+                  Baixar
+                </Button>
+              </span>
+            </Tooltip>
             {isRendered && (
-              <Button size="small" color="inherit" startIcon={<MovieIcon />} disabled={busy[`render-${clip.id}`]} onClick={() => doRender(clip)}>
+              <Button
+                size="small"
+                variant={staleRender ? 'contained' : 'text'}
+                color={staleRender ? 'warning' : 'inherit'}
+                startIcon={<MovieIcon />}
+                disabled={busy[`render-${clip.id}`]}
+                onClick={() => doRender(clip)}
+              >
                 Renderizar de novo
               </Button>
             )}
@@ -415,10 +656,11 @@ function ClipsPanel({
     const st = STATUS_MAP[clip.status] || { color: 'default', label: clip.status };
     const locked = LOCKED.includes(clip.status);
     const dur = Math.round((d.endSeconds - d.startSeconds) || 0);
-    const dirty = d.title !== (clip.title || '')
-      || d.caption !== (clip.caption || '')
-      || Number(d.startSeconds) !== Number(clip.startSeconds)
+    const timeDirty = Number(d.startSeconds) !== Number(clip.startSeconds)
       || Number(d.endSeconds) !== Number(clip.endSeconds);
+    const dirty = timeDirty
+      || d.title !== (clip.title || '')
+      || d.caption !== (clip.caption || '');
     return (
       <Paper
         key={clip.id}
@@ -426,8 +668,6 @@ function ClipsPanel({
         sx={{
           p: 2,
           borderRadius: 2,
-          transition: 'box-shadow 200ms ease',
-          '&:hover': { boxShadow: 3 },
           borderColor: dirty ? 'warning.light' : undefined,
         }}
       >
@@ -446,6 +686,21 @@ function ClipsPanel({
             </Stack>
 
             <Timeline start={Number(d.startSeconds) || 0} end={Number(d.endSeconds) || 0} total={total} />
+
+            {clip.status === 'rendering' && (
+              <Box sx={{ my: 1.5 }}>
+                <LinearProgress variant="determinate" value={clip.renderProgress || 0} color="warning" sx={{ height: 8, borderRadius: 4 }} />
+                <Typography variant="caption" color="text.secondary">
+                  Renderizando o vídeo 9:16 (corte + rastreamento + legenda)… {clip.renderProgress || 0}%
+                </Typography>
+              </Box>
+            )}
+            {clip.status === 'publishing' && (
+              <Box sx={{ my: 1.5 }}>
+                <LinearProgress color="warning" sx={{ height: 8, borderRadius: 4 }} />
+                <Typography variant="caption" color="text.secondary">Enviando para o YouTube Shorts…</Typography>
+              </Box>
+            )}
 
             <TextField
               label="Título"
@@ -474,6 +729,46 @@ function ClipsPanel({
             )}
             {clip.status === 'failed' && clip.errorMessage && (
               <Alert severity="error" sx={{ mt: 1 }}>{clip.errorMessage}</Alert>
+            )}
+
+            {/* Prévia do enquadramento 9:16 (sem renderizar o clipe inteiro) */}
+            {['suggested', 'approved', 'failed'].includes(clip.status) && (
+              <Box sx={{ mt: 1 }}>
+                <Button
+                  size="small"
+                  color="inherit"
+                  startIcon={busy[`frames-${clip.id}`] ? <CircularProgress size={14} color="inherit" /> : <CropPortraitIcon />}
+                  disabled={busy[`frames-${clip.id}`]}
+                  onClick={() => doFramePreview(clip)}
+                >
+                  {framePreviews[clip.id] ? 'Atualizar prévia do enquadramento' : 'Ver enquadramento (9:16)'}
+                </Button>
+                {framePreviews[clip.id] && (
+                  <Box sx={{ mt: 1 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                      Prévia do corte 9:16 — rastreamento:
+                      {' '}
+                      {framePreviews[clip.id].tracking ? 'seguindo o orador' : 'crop central'}
+                      {' · '}
+                      {framePreviews[clip.id].mode === 'dynamic' ? 'movimento dinâmico' : 'enquadramento fixo'}
+                    </Typography>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      {framePreviews[clip.id].frames.map((f) => (
+                        <Box key={f.t} sx={{ textAlign: 'center' }}>
+                          <img
+                            src={f.dataUrl}
+                            alt={`enquadramento aos ${f.t}s`}
+                            style={{
+                              width: 88, borderRadius: 6, background: '#000', display: 'block',
+                            }}
+                          />
+                          <Typography variant="caption" color="text.secondary">{fmt(f.t)}</Typography>
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Box>
+                )}
+              </Box>
             )}
 
             {/* Ajuste fino de tempo (recolhido por padrão para não poluir) */}
@@ -523,7 +818,7 @@ function ClipsPanel({
                   Salvar
                 </Button>
               )}
-              <Box sx={{ flexGrow: 1 }}>{renderActions(clip)}</Box>
+              <Box sx={{ flexGrow: 1 }}>{renderActions(clip, timeDirty)}</Box>
             </Stack>
           </Box>
         </Stack>
@@ -531,21 +826,16 @@ function ClipsPanel({
     );
   };
 
-  // Player compacto e fixo (só aparece quando já dá para trabalhar os recortes).
+  // Player-fonte (preview) — dentro da coluna esquerda no layout de editor.
   const renderPlayer = () => (
     <Paper
-      variant="outlined"
+      elevation={0}
       sx={{
         p: 0.5,
-        mb: 2,
-        bgcolor: 'black',
-        position: 'sticky',
-        top: 8,
-        zIndex: 2,
+        bgcolor: '#000',
         borderRadius: 2,
-        width: '100%',
-        maxWidth: 320,
         overflow: 'hidden',
+        border: (t) => `1px solid ${t.palette.divider}`,
       }}
     >
       <Box sx={{ position: 'relative', pt: '56.25%' }}>
@@ -556,112 +846,159 @@ function ClipsPanel({
           }}
         />
       </Box>
+      <Typography variant="caption" sx={{
+        color: 'grey.500', display: 'block', px: 0.5, pt: 0.5
+      }}>
+        Vídeo-fonte — ache o ponto e clique em “= agora” em cada recorte
+      </Typography>
     </Paper>
   );
 
   return (
-    <Box>
-      {feedback && (
-        <Alert severity={feedback.severity} sx={{ mb: 2 }} onClose={() => setFeedback(null)}>{feedback.message}</Alert>
-      )}
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-      {/* Barra de ação (só quando já dá para sugerir) */}
-      {!loading && canGenerate && (
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-          {clips.length > 0 && (
-            <Typography variant="body2" color="text.secondary">
-              {clips.length} recorte{clips.length > 1 ? 's' : ''}
-            </Typography>
-          )}
+    <ThemeProvider theme={editorTheme}>
+      <Box
+        sx={{
+          bgcolor: 'background.default',
+          color: 'text.primary',
+          borderRadius: 3,
+          p: { xs: 1.5, md: 2 },
+        }}
+      >
+        {/* Toolbar do editor */}
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
+          <MovieCreationOutlinedIcon color="primary" />
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>Editor de Recortes</Typography>
+          {clips.length > 0 && <Chip size="small" color="primary" label={clips.length} sx={{ fontWeight: 700 }} />}
           <Box sx={{ flexGrow: 1 }} />
-          <Tooltip title="Atualizar">
-            <IconButton onClick={load} size="small" aria-label="Atualizar recortes"><RefreshIcon /></IconButton>
-          </Tooltip>
-          <Button
-            variant="contained"
-            startIcon={busy.suggest ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeIcon />}
-            disabled={busy.suggest}
-            onClick={doSuggest}
-          >
-            {clips.length ? 'Sugerir novamente' : 'Sugerir com IA'}
-          </Button>
-        </Stack>
-      )}
-
-      {loading && (
-        <Stack spacing={2}>
-          {[0, 1].map((i) => (
-            <Paper key={i} variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-              <Stack direction="row" spacing={2}>
-                <Skeleton variant="rounded" sx={{ width: 104, height: 184, borderRadius: 1.5 }} />
-                <Box sx={{ flexGrow: 1 }}>
-                  <Skeleton width="40%" height={28} />
-                  <Skeleton width="100%" height={48} sx={{ mt: 1 }} />
-                  <Skeleton width="100%" height={40} sx={{ mt: 1 }} />
-                </Box>
-              </Stack>
-            </Paper>
-          ))}
-        </Stack>
-      )}
-
-      {/* Estado 1: ainda não preparado — card único de preparo */}
-      {!loading && !canGenerate && (
-        <Paper
-          variant="outlined"
-          sx={{
-            p: 4, textAlign: 'center', borderRadius: 2, borderStyle: 'dashed', maxWidth: 560, mx: 'auto',
-          }}
-        >
-          <MovieCreationOutlinedIcon sx={{ fontSize: 44, color: 'text.disabled' }} />
-          <Typography variant="subtitle1" sx={{ mt: 1, fontWeight: 600 }}>
-            Prepare este vídeo para recortes
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 2 }}>
-            Vamos gerar os timestamps com o Whisper a partir da mídia que ainda está no servidor
-            (e baixar o vídeo, se necessário). Depois disso a IA sugere os melhores trechos.
-          </Typography>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="center">
-            <Button
-              variant="contained"
-              disabled={busy.prepare}
-              startIcon={busy.prepare ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeIcon />}
-              onClick={doPrepare}
-            >
-              Preparar para recortes
-            </Button>
-            <Button color="inherit" disabled={busy.worker} onClick={doRunWorker}>
-              Rodar Whisper agora
-            </Button>
-          </Stack>
-        </Paper>
-      )}
-
-      {/* Estado 2/3: pronto — player + (vazio ou cards) */}
-      {!loading && canGenerate && (
-        <>
-          {renderPlayer()}
-          {clips.length === 0 ? (
-            <Paper
-              variant="outlined"
-              sx={{
-                p: 4, textAlign: 'center', borderRadius: 2, borderStyle: 'dashed',
-              }}
-            >
-              <MovieCreationOutlinedIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-              <Typography color="text.secondary">
-                Nenhum recorte ainda. Clique em “Sugerir com IA” para gerar os melhores trechos.
-              </Typography>
-            </Paper>
-          ) : (
-            <Stack spacing={2}>
-              {clips.map(renderCard)}
-            </Stack>
+          {!loading && canGenerate && (
+            <>
+              <Tooltip title="Atualizar">
+                <IconButton onClick={load} size="small" aria-label="Atualizar recortes"><RefreshIcon /></IconButton>
+              </Tooltip>
+              <Button
+                variant="contained"
+                startIcon={busy.suggest ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeIcon />}
+                disabled={busy.suggest}
+                onClick={doSuggest}
+              >
+                {clips.length ? 'Sugerir novamente' : 'Sugerir com IA'}
+              </Button>
+            </>
           )}
-        </>
-      )}
-    </Box>
+        </Stack>
+
+        {feedback && (
+          <Alert severity={feedback.severity} sx={{ mb: 2 }} onClose={() => setFeedback(null)}>{feedback.message}</Alert>
+        )}
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+        {loading && (
+          <Stack spacing={2}>
+            {[0, 1].map((i) => (
+              <Paper key={i} sx={{ p: 2, borderRadius: 2 }}>
+                <Stack direction="row" spacing={2}>
+                  <Skeleton variant="rounded" sx={{ width: 120, height: 213, borderRadius: 1.5 }} />
+                  <Box sx={{ flexGrow: 1 }}>
+                    <Skeleton width="40%" height={28} />
+                    <Skeleton width="100%" height={48} sx={{ mt: 1 }} />
+                    <Skeleton width="100%" height={40} sx={{ mt: 1 }} />
+                  </Box>
+                </Stack>
+              </Paper>
+            ))}
+          </Stack>
+        )}
+
+        {/* Estado 1: ainda não preparado */}
+        {!loading && !canGenerate && (
+          <Paper
+            sx={{
+              p: 4, textAlign: 'center', borderRadius: 2, borderStyle: 'dashed', border: (t) => `1px dashed ${t.palette.divider}`, maxWidth: 560, mx: 'auto',
+            }}
+          >
+            <MovieCreationOutlinedIcon sx={{ fontSize: 44, color: 'text.disabled' }} />
+            <Typography variant="subtitle1" sx={{ mt: 1, fontWeight: 600 }}>
+              Prepare este vídeo para recortes
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 2 }}>
+              Vamos gerar os timestamps com o Whisper a partir da mídia que ainda está no servidor
+              (e baixar o vídeo, se necessário). Depois disso a IA sugere os melhores trechos.
+            </Typography>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="center">
+              <Button
+                variant="contained"
+                disabled={busy.prepare}
+                startIcon={busy.prepare ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeIcon />}
+                onClick={doPrepare}
+              >
+                Preparar para recortes
+              </Button>
+              <Button color="inherit" disabled={busy.worker} onClick={doRunWorker}>
+                Rodar Whisper agora
+              </Button>
+            </Stack>
+          </Paper>
+        )}
+
+        {/* Estado 2/3: pronto — preview (esquerda) + recortes (direita) */}
+        {!loading && canGenerate && (
+          <Box sx={{
+            display: 'flex', gap: 2, flexDirection: { xs: 'column', md: 'row' }, alignItems: 'flex-start'
+          }}>
+            <Box sx={{
+              width: { xs: '100%', md: 360 }, flexShrink: 0, position: { md: 'sticky' }, top: 8,
+            }}
+            >
+              {renderPlayer()}
+              {clips.length > 0 && renderEditorTimeline()}
+            </Box>
+            <Box sx={{ flexGrow: 1, minWidth: 0, width: '100%' }}>
+              {clips.length === 0 ? (
+                <Paper sx={{
+                  p: 4, textAlign: 'center', borderRadius: 2, border: (t) => `1px dashed ${t.palette.divider}`,
+                }}
+                >
+                  <MovieCreationOutlinedIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+                  <Typography color="text.secondary">
+                    Nenhum recorte ainda. Clique em “Sugerir com IA” para gerar os melhores trechos.
+                  </Typography>
+                </Paper>
+              ) : (
+                <>
+                  <Tabs
+                    value={selectedClipId || false}
+                    onChange={(e, v) => { const c = clips.find((x) => x.id === v); if (c) selectClip(c); }}
+                    variant="scrollable"
+                    scrollButtons="auto"
+                    sx={{
+                      mb: 2, minHeight: 42, borderBottom: 1, borderColor: 'divider',
+                    }}
+                  >
+                    {clips.map((c, i) => (
+                      <Tab
+                        key={c.id}
+                        value={c.id}
+                        sx={{ minHeight: 42, minWidth: 72, textTransform: 'none' }}
+                        label={(
+                          <Stack direction="row" spacing={0.75} alignItems="center">
+                            <Box sx={{
+                              width: 9, height: 9, borderRadius: '50%', bgcolor: statusDotColor(c.status),
+                            }}
+                            />
+                            <span>{`Recorte ${i + 1}`}</span>
+                          </Stack>
+                        )}
+                      />
+                    ))}
+                  </Tabs>
+                  {selectedClip && renderCard(selectedClip)}
+                </>
+              )}
+            </Box>
+          </Box>
+        )}
+      </Box>
+    </ThemeProvider>
   );
 }
 

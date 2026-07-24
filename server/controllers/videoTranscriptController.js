@@ -315,7 +315,10 @@ async function atualizar(req, res) {
         }
       }
 
-      if (turnedOn && attachAudio) {
+      // A midia (audio/video) NAO e mais apagada automaticamente na publicacao,
+      // para nao quebrar a geracao de recortes/Shorts. Exclua manualmente depois
+      // (botao "Excluir midia") ou ligue DELETE_MEDIA_ON_PUBLISH=true para o comportamento antigo.
+      if (turnedOn && attachAudio && process.env.DELETE_MEDIA_ON_PUBLISH === 'true') {
         if (allDelivered) {
           await audioStorage.removeAudio(video.audioPath).catch((err) => {
             console.warn('[publish] falha ao remover audio:', err.message);
@@ -578,6 +581,50 @@ async function renderizarRecorte(req, res) {
   }
 }
 
+async function excluirMidia(req, res) {
+  try {
+    const { videoId } = req.params;
+    const video = await YoutubeVideo.findByPk(videoId);
+    if (!video) return res.status(404).json({ message: 'Video nao encontrado' });
+
+    const videoStorage = require('../services/videoStorageService');
+    const removed = [];
+    if (video.audioPath) {
+      await audioStorage.removeAudio(video.audioPath).catch(() => {});
+      removed.push('audio');
+    }
+    if (video.videoPath) {
+      await videoStorage.removeVideo(video.videoPath).catch(() => {});
+      removed.push('video');
+    }
+    await video.update({
+      audioPath: null,
+      audioSizeBytes: null,
+      audioUploadedAt: null,
+      videoPath: null,
+      videoSizeBytes: null,
+      videoUploadedAt: null,
+    });
+    console.log(`[midia] removida (${removed.join(', ') || 'nada'}) do video ${video.videoId}`);
+    return res.status(200).json({ removed });
+  } catch (err) {
+    console.error('[videoTranscript] Erro ao excluir midia:', err.message);
+    return res.status(500).json({ message: err.message });
+  }
+}
+
+async function previewRecorteFrames(req, res) {
+  try {
+    const result = await clipRenderService.generatePreviewFrames(req.params.clipId, {
+      count: Math.min(Math.max(parseInt(req.query.count, 10) || 3, 1), 5),
+    });
+    res.status(200).json(result);
+  } catch (err) {
+    console.error('[videoTranscript] Erro na previa do recorte:', err.message);
+    res.status(400).json({ message: err.message });
+  }
+}
+
 async function servirRecorte(req, res) {
   try {
     const { VideoClip } = require('../models');
@@ -698,8 +745,10 @@ module.exports = {
   aprovarRecorte,
   descartarRecorte,
   renderizarRecorte,
+  previewRecorteFrames,
   servirRecorte,
   publicarRecorte,
+  excluirMidia,
   regerarResumo,
   reenviarWebhook,
   statusWorker,

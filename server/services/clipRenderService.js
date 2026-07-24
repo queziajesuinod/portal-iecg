@@ -212,7 +212,7 @@ async function renderClip(clipId, { onProgress } = {}) {
   const duration = end - start;
   if (!(duration > 0)) throw new Error('Intervalo do recorte invalido');
 
-  await clip.update({ status: 'rendering', errorMessage: null });
+  await clip.update({ status: 'rendering', errorMessage: null, renderProgress: 0 });
 
   const workDir = path.join(os.tmpdir(), `cliprender-${crypto.randomBytes(5).toString('hex')}`);
   try {
@@ -265,10 +265,28 @@ async function renderClip(clipId, { onProgress } = {}) {
     ];
 
     console.log(`[clipRender] ${clip.id} | ${duration.toFixed(1)}s | crop ${plan.mode} | legenda=${ass ? 'sim' : 'nao'}`);
+
+    // Progresso do ffmpeg: parseia "time=HH:MM:SS.xx" e grava a % (com throttle).
+    let lastPct = 0;
+    let lastAt = 0;
+    const onFfmpegStderr = (chunk) => {
+      if (onProgress) onProgress(chunk);
+      const m = /time=(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(chunk);
+      if (!m || !(duration > 0)) return;
+      const secs = Number(m[1]) * 3600 + Number(m[2]) * 60 + parseFloat(m[3]);
+      const pct = Math.max(0, Math.min(99, Math.round((secs / duration) * 100)));
+      const now = Date.now();
+      if (pct > lastPct && (pct - lastPct >= 3 || now - lastAt >= 1500)) {
+        lastPct = pct;
+        lastAt = now;
+        VideoClip.update({ renderProgress: pct }, { where: { id: clip.id } }).catch(() => {});
+      }
+    };
+
     await ffmpeg.run(ffmpeg.getFfmpeg(), args, {
       cwd: workDir,
       timeoutMs: Number(process.env.CLIP_RENDER_TIMEOUT_MS || 600000),
-      onStderr: onProgress ? (t) => onProgress(t) : undefined,
+      onStderr: onFfmpegStderr,
     });
 
     const stat = await fs.stat(outPath);
@@ -277,6 +295,7 @@ async function renderClip(clipId, { onProgress } = {}) {
       filePath: outPath,
       fileSizeBytes: stat.size,
       errorMessage: null,
+      renderProgress: 100,
     });
     console.log(`[clipRender] concluido ${outName} (${(stat.size / 1024 / 1024).toFixed(2)} MB)`);
     return clip;
@@ -289,7 +308,71 @@ async function renderClip(clipId, { onProgress } = {}) {
   }
 }
 
+// Posicao horizontal do crop num instante (relativo ao inicio do recorte).
+function cropXAt(plan, relSeconds) {
+  if (plan.mode !== 'dynamic') return plan.x;
+  let best = plan.keyframes[0];
+  for (const k of plan.keyframes) {
+    if (k.t <= relSeconds) best = k;
+    else break;
+  }
+  return best.x;
+}
+
+/**
+ * Gera frames de amostra do enquadramento 9:16 (com rastreamento aplicado), SEM renderizar
+ * o clipe inteiro. Serve para o admin ver como o corte vai ficar antes de renderizar.
+ * Retorna { mode, tracking, frames: [{ t, dataUrl }] } (imagens JPEG em base64).
+ */
+async function generatePreviewFrames(clipId, { count = 3 } = {}) {
+  const clip = await VideoClip.findByPk(clipId, {
+    include: [{ model: YoutubeVideo, as: 'video' }],
+  });
+  if (!clip) throw new Error('Recorte nao encontrado');
+  const { video } = clip;
+  if (!video?.videoPath) throw new Error('Video completo nao esta em disco (baixe o video antes)');
+
+  const start = Number(clip.startSeconds);
+  const end = Number(clip.endSeconds);
+  const duration = end - start;
+  if (!(duration > 0)) throw new Error('Intervalo do recorte invalido');
+
+  const meta = await ffmpeg.probe(video.videoPath);
+  const faceData = await runFaceTrack(video.videoPath, start, end);
+  const plan = buildCropPlan(meta, faceData?.samples, duration);
+
+  // Preview em tamanho reduzido (mantendo 9:16) para o payload ficar leve.
+  const pw = Math.round(TARGET_W / 3);
+  const ph = Math.round(TARGET_H / 3);
+
+  const workDir = path.join(os.tmpdir(), `clippreview-${crypto.randomBytes(4).toString('hex')}`);
+  await fs.mkdir(workDir, { recursive: true });
+  try {
+    const frames = [];
+    for (let i = 0; i < count; i += 1) {
+      const frac = count === 1 ? 0.5 : i / (count - 1);
+      const relT = frac * duration;
+      const absT = start + relT;
+      const x = cropXAt(plan, relT);
+      const outJpg = path.join(workDir, `f${i}.jpg`);
+      const filter = `crop=${plan.cropW}:${plan.cropH}:${x}:${plan.y},scale=${pw}:${ph}`;
+      // eslint-disable-next-line no-await-in-loop
+      await ffmpeg.run(ffmpeg.getFfmpeg(), [
+        '-y', '-ss', String(absT), '-i', video.videoPath,
+        '-frames:v', '1', '-filter_complex', filter, '-q:v', '4', outJpg,
+      ], { timeoutMs: 60000 });
+      // eslint-disable-next-line no-await-in-loop
+      const buf = await fs.readFile(outJpg);
+      frames.push({ t: Number(absT.toFixed(1)), dataUrl: `data:image/jpeg;base64,${buf.toString('base64')}` });
+    }
+    return { mode: plan.mode, tracking: !!(faceData && faceData.samples && faceData.samples.length), frames };
+  } finally {
+    await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 module.exports = {
   renderClip,
+  generatePreviewFrames,
   getClipRoot,
 };

@@ -63,6 +63,12 @@ module.exports = (sequelize) => {
         allowNull: false,
         defaultValue: 'suggested',
       },
+      // Progresso da renderizacao (0-100), atualizado pelo ffmpeg.
+      renderProgress: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        defaultValue: 0,
+      },
       filePath: {
         type: DataTypes.STRING(1024),
         allowNull: true,
