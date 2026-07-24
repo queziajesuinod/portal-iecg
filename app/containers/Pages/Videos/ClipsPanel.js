@@ -656,8 +656,10 @@ function ClipsPanel({
     const st = STATUS_MAP[clip.status] || { color: 'default', label: clip.status };
     const locked = LOCKED.includes(clip.status);
     const dur = Math.round((d.endSeconds - d.startSeconds) || 0);
-    const timeDirty = Number(d.startSeconds) !== Number(clip.startSeconds)
-      || Number(d.endSeconds) !== Number(clip.endSeconds);
+    // Tolerancia pra evitar falso "corte alterado" por imprecisao de float
+    // (ex.: 2859.76 vs 2859.7600001 vindo do banco), que travava Baixar/Publicar.
+    const timeDirty = Math.abs(Number(d.startSeconds) - Number(clip.startSeconds)) > 0.05
+      || Math.abs(Number(d.endSeconds) - Number(clip.endSeconds)) > 0.05;
     const dirty = timeDirty
       || d.title !== (clip.title || '')
       || d.caption !== (clip.caption || '');

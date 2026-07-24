@@ -161,6 +161,16 @@ function escapeAss(text) {
     .trim();
 }
 
+// Legenda no estilo Shorts/Reels: TUDO MAIUSCULO e sem nenhuma pontuacao.
+// Mantem hifen/apostrofo dentro de palavras (ex.: NAO-SEI, D'AGUA) pra nao juntar letras.
+function toCaption(text) {
+  return escapeAss(text)
+    .toUpperCase()
+    .replace(/[.,;:!?¿¡…"“”«»()[\]{}/\\]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function buildAss(segments, start, end) {
   const duration = end - start;
   const dialogues = [];
@@ -169,7 +179,7 @@ function buildAss(segments, start, end) {
     const s = Math.max(0, seg.start - start);
     const e = Math.min(duration, seg.end - start);
     if (e - s < 0.3) continue;
-    const text = escapeAss(seg.text);
+    const text = toCaption(seg.text);
     if (!text) continue;
     dialogues.push(`Dialogue: 0,${assTime(s)},${assTime(e)},Legenda,,0,0,0,,${text}`);
   }
@@ -179,11 +189,11 @@ function buildAss(segments, start, end) {
 ScriptType: v4.00+
 PlayResX: ${TARGET_W}
 PlayResY: ${TARGET_H}
-WrapStyle: 0
+WrapStyle: 2
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Legenda, Arial, 52, &H00FFFFFF, &H00000000, &H80000000, 1, 0, 0, 0, 100, 100, 0, 0, 1, 3, 0, 2, 80, 80, 300, 1
+Style: Legenda, Arial, 46, &H00FFFFFF, &H00000000, &H00000000, 1, 0, 0, 0, 100, 100, 0, 0, 3, 6, 0, 2, 60, 60, 820, 1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
