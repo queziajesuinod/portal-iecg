@@ -332,18 +332,35 @@ async function processOne(video) {
   const counter = maxVideosTotal > 0 ? `[${processedCount + 1}/${maxVideosTotal}] ` : '';
   const channelLog = video.channel?.channelName ? ` | ${video.channel.channelName}` : '';
   console.log(`▶ ${counter}${video.videoId}${channelLog} | ${video.title?.slice(0, 50)}`);
+
+  // Se o portal ja tem o arquivo no volume, nao baixa/reenvia (economiza banda/proxy).
+  const needAudio = !video.audioReady;
+  const needVideo = DOWNLOAD_VIDEO && !video.videoReady;
+  if (!needAudio && !needVideo) {
+    console.log(`  ↺ portal ja tem audio${DOWNLOAD_VIDEO ? ' e video' : ''}; nada a enviar, pulando`);
+    return;
+  }
+
   let audioPath = null;
   try {
-    const dl = await downloadAudio(video.youtubeUrl, video.videoId);
-    audioPath = dl.path;
-    const mb = (dl.size / 1024 / 1024).toFixed(2);
-    console.log(`  ↓ audio baixado: ${mb} MB em ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+    if (needAudio) {
+      const dl = await downloadAudio(video.youtubeUrl, video.videoId);
+      audioPath = dl.path;
+      const mb = (dl.size / 1024 / 1024).toFixed(2);
+      console.log(`  ↓ audio baixado: ${mb} MB em ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 
-    await uploadAudio(video.videoId, audioPath);
-    console.log(`  ↑ audio enviado pro portal em ${((Date.now() - t0) / 1000).toFixed(1)}s ✅`);
+      await uploadAudio(video.videoId, audioPath);
+      console.log(`  ↑ audio enviado pro portal em ${((Date.now() - t0) / 1000).toFixed(1)}s ✅`);
+    } else {
+      console.log('  ↺ audio ja no portal, pulando download/envio');
+    }
 
     if (DOWNLOAD_VIDEO) {
-      await ensureVideoOnPortal(video, t0);
+      if (needVideo) {
+        await ensureVideoOnPortal(video, t0);
+      } else {
+        console.log('  ↺ video ja no portal, pulando download/envio');
+      }
     }
     processedCount += 1;
   } catch (err) {
@@ -361,6 +378,10 @@ async function processVideoOnly(video) {
   const t0 = Date.now();
   const channelLog = video.channel?.channelName ? ` | ${video.channel.channelName}` : '';
   console.log(`🎬 recorte: ${video.videoId}${channelLog} | ${video.title?.slice(0, 50)}`);
+  if (video.videoReady) {
+    console.log('  ↺ video ja no portal (volume), pulando download/envio');
+    return;
+  }
   try {
     await ensureVideoOnPortal(video, t0);
   } catch (err) {

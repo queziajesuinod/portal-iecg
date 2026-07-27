@@ -17,7 +17,11 @@ async function listarPorCanal(req, res) {
     if (search) {
       where.title = { [Op.iLike]: `%${search}%` };
     }
-    if (req.query.includeIgnored !== 'true') {
+    if (req.query.ignoreReason) {
+      // Filtra somente ignorados de um motivo especifico (ex.: 'manual').
+      where.ignored = true;
+      where.ignoreReason = req.query.ignoreReason;
+    } else if (req.query.includeIgnored !== 'true') {
       where.ignored = false;
     }
 

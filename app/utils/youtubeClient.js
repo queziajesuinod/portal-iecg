@@ -63,13 +63,14 @@ export const startChannelOAuth = async (ownerName, channelId = null) => {
 };
 
 export const fetchChannelVideos = async (channelId, {
-  search, limit = 50, offset = 0, includeIgnored = false,
+  search, limit = 50, offset = 0, includeIgnored = false, ignoreReason,
 } = {}) => {
   const params = new URLSearchParams();
   if (search) params.set('search', search);
   params.set('limit', String(limit));
   params.set('offset', String(offset));
   if (includeIgnored) params.set('includeIgnored', 'true');
+  if (ignoreReason) params.set('ignoreReason', ignoreReason);
   const res = await fetch(`${BASE}/channels/${channelId}/videos?${params.toString()}`, {
     headers: jsonHeaders(),
   });
