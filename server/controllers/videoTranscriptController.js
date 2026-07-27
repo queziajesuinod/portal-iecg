@@ -222,14 +222,25 @@ async function uploadAudio(req, res) {
 }
 
 async function transcribeUploadedAudio(req, res) {
+  const { videoId } = req.params;
+  let prepared;
   try {
-    const { videoId } = req.params;
-    const transcript = await transcriptionService.processUploadedAudio(videoId);
-    res.status(200).json(transcript);
+    // Valida a midia em disco e marca 'processing' de forma sincrona (feedback imediato).
+    prepared = await transcriptionService.prepareOnDemandTranscription(videoId);
   } catch (err) {
-    console.error('[videoTranscript] Erro ao transcrever audio anexado:', err);
-    res.status(500).json({ message: err.message });
+    console.error('[videoTranscript] Nao foi possivel disparar transcricao:', err.message);
+    return res.status(400).json({ message: err.message });
   }
+
+  // Responde na hora com o transcript ja em 'processing' -> o front liga a barra de progresso.
+  res.status(202).json(prepared.transcript);
+
+  // Whisper roda em background; sucesso/erro ficam gravados no proprio transcript (done/failed).
+  setImmediate(() => {
+    transcriptionService.runTranscriptionJob(prepared.video, prepared.transcript, prepared.mediaPath)
+      .catch((err) => console.error(`[videoTranscript] job de transcricao falhou (video ${videoId}):`, err.message));
+  });
+  return undefined;
 }
 
 async function atualizar(req, res) {

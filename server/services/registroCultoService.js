@@ -47,12 +47,21 @@ const mesAnterior = (ano, mes) => {
   return { ano, mes: mes - 1 };
 };
 
+// Fluxo Geral do relatorio mensal: adultos que participam (homens + mulheres + voluntarios).
+// Criancas e bebes NAO entram aqui -> sao contabilizados a parte (ver criancasRegistro/bebesRegistro).
 const presencaRegistro = (registro) => (
   (registro.qtdHomens || 0)
   + (registro.qtdMulheres || 0)
-  + (registro.qtdCriancas || 0)
-  + (registro.qtdBebes || 0)
+  + (registro.qtdVoluntarios || 0)
 );
+
+const criancasRegistro = (registro) => (registro.qtdCriancas || 0);
+const bebesRegistro = (registro) => (registro.qtdBebes || 0);
+
+// Tipo de evento que conta como "Culto" no Fluxo/Media. Os demais tipos NAO entram no
+// calculo de fluxo/media -> aparecem apenas na contagem por tipo. Configuravel por env.
+const CULTO_TIPO_EVENTO_ID = process.env.CULTO_TIPO_EVENTO_ID || 'd4a20133-e4dd-40da-862a-28679e9ba077';
+const ehCulto = (registro) => String(registro.tipoEventoId) === CULTO_TIPO_EVENTO_ID;
 
 const arredondar = (valor, casas = 2) => Number(Number(valor || 0).toFixed(casas));
 
@@ -119,8 +128,22 @@ const montarTextoRelatorio = (relatorio) => {
     `🔘 *Media Geral Atual:* ${formatarDecimalTexto(relatorio.resumo.mediaGeralAtual)}`,
     `🔘 *Media Geral Anterior:* ${formatarDecimalTexto(relatorio.resumo.mediaGeralAnterior)}`,
     `🔘 *Variacao:* ${formatarVariacaoTexto(relatorio.resumo.variacao)}`,
-    `🔘 *Tendencia:* ${relatorio.resumo.tendencia.label} ${relatorio.resumo.tendencia.icone}`
+    `🔘 *Tendencia:* ${relatorio.resumo.tendencia.label} ${relatorio.resumo.tendencia.icone}`,
+    `🧒 *Total de Criancas:* ${relatorio.resumo.criancas}   👶 *Total de Bebes:* ${relatorio.resumo.bebes}`
   );
+
+  if (Array.isArray(relatorio.tiposEvento) && relatorio.tiposEvento.length) {
+    linhas.push(
+      '',
+      '#########################',
+      '',
+      '🗂️ *EVENTOS POR TIPO*',
+      '_(Fluxo/Media consideram apenas Culto)_'
+    );
+    relatorio.tiposEvento.forEach((tipo) => {
+      linhas.push(`🔘 *${tipo.nome}:* ${tipo.quantidade}${tipo.ehCulto ? ' ✅' : ''}`);
+    });
+  }
 
   return linhas.join('\n');
 };
@@ -257,7 +280,10 @@ const RegistroCultoService = {
           ...whereBase,
           data: { [Op.between]: [periodoAtual.dataInicio, periodoAtual.dataFim] },
         },
-        include: [{ model: Campus, as: 'campus', attributes: ['id', 'nome'] }],
+        include: [
+          { model: Campus, as: 'campus', attributes: ['id', 'nome'] },
+          { model: TipoEvento, as: 'tipoEvento', attributes: ['id', 'nome'] },
+        ],
         order: [[{ model: Campus, as: 'campus' }, 'nome', 'ASC'], ['data', 'ASC'], ['horario', 'ASC']],
       }),
       RegistroCulto.findAll({
@@ -284,7 +310,9 @@ const RegistroCultoService = {
     registrosAtual.forEach((registro) => adicionarCampus(registro.campus));
     registrosAnterior.forEach((registro) => adicionarCampus(registro.campus));
 
-    const baseMetricas = () => ({ totalCultos: 0, fluxoGeral: 0 });
+    const baseMetricas = () => ({
+      totalCultos: 0, fluxoGeral: 0, criancas: 0, bebes: 0,
+    });
     const atuaisPorCampus = new Map();
     const anterioresPorCampus = new Map();
 
@@ -294,10 +322,17 @@ const RegistroCultoService = {
       const item = mapa.get(campusId);
       item.totalCultos += 1;
       item.fluxoGeral += presencaRegistro(registro);
+      item.criancas += criancasRegistro(registro);
+      item.bebes += bebesRegistro(registro);
     };
 
-    registrosAtual.forEach((registro) => agregar(atuaisPorCampus, registro));
-    registrosAnterior.forEach((registro) => agregar(anterioresPorCampus, registro));
+    // Fluxo/Media consideram SOMENTE eventos do tipo Culto. Os demais tipos ficam de fora
+    // do calculo (entram apenas em tiposEvento, a contagem por tipo mais abaixo).
+    const cultosAtual = registrosAtual.filter(ehCulto);
+    const cultosAnterior = registrosAnterior.filter(ehCulto);
+
+    cultosAtual.forEach((registro) => agregar(atuaisPorCampus, registro));
+    cultosAnterior.forEach((registro) => agregar(anterioresPorCampus, registro));
 
     const linhasCampus = Array.from(campusMap.values())
       .sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'))
@@ -312,6 +347,8 @@ const RegistroCultoService = {
           campus,
           totalCultos: atual.totalCultos,
           fluxoGeral: atual.fluxoGeral,
+          criancas: atual.criancas,
+          bebes: atual.bebes,
           mediaPorCulto: arredondar(mediaPorCulto),
           mediaMesAnterior: arredondar(mediaMesAnterior),
           variacao: arredondar(variacao),
@@ -319,28 +356,47 @@ const RegistroCultoService = {
         };
       });
 
-    const totalAtual = registrosAtual.reduce((acc, registro) => {
+    const totalAtual = cultosAtual.reduce((acc, registro) => {
       acc.totalCultos += 1;
       acc.fluxoGeral += presencaRegistro(registro);
+      acc.criancas += criancasRegistro(registro);
+      acc.bebes += bebesRegistro(registro);
       return acc;
     }, baseMetricas());
 
-    const totalAnterior = registrosAnterior.reduce((acc, registro) => {
+    const totalAnterior = cultosAnterior.reduce((acc, registro) => {
       acc.totalCultos += 1;
       acc.fluxoGeral += presencaRegistro(registro);
+      acc.criancas += criancasRegistro(registro);
+      acc.bebes += bebesRegistro(registro);
       return acc;
     }, baseMetricas());
 
     const mediaGeralAtual = totalAtual.totalCultos ? totalAtual.fluxoGeral / totalAtual.totalCultos : 0;
     const mediaGeralAnterior = totalAnterior.totalCultos ? totalAnterior.fluxoGeral / totalAnterior.totalCultos : 0;
     const variacaoResumo = calcularVariacao(mediaGeralAtual, mediaGeralAnterior);
-    const registrosOrdenadosPorPresenca = [...registrosAtual]
+    const registrosOrdenadosPorPresenca = [...cultosAtual]
       .sort((a, b) => presencaRegistro(b) - presencaRegistro(a));
     const cultoAcimaMedia = registrosOrdenadosPorPresenca
       .find((registro) => presencaRegistro(registro) > mediaGeralAtual);
-    const cultoAbaixoMedia = [...registrosAtual]
+    const cultoAbaixoMedia = [...cultosAtual]
       .sort((a, b) => presencaRegistro(a) - presencaRegistro(b))
       .find((registro) => presencaRegistro(registro) < mediaGeralAtual);
+
+    // Contagem de eventos por tipo (TODOS os tipos do mes, dentro do ministerio/campus filtrado).
+    const tiposMap = new Map();
+    registrosAtual.forEach((registro) => {
+      const id = registro.tipoEventoId || 'sem-tipo';
+      const nome = registro.tipoEvento?.nome || 'Sem tipo';
+      if (!tiposMap.has(id)) {
+        tiposMap.set(id, {
+          id, nome, quantidade: 0, ehCulto: ehCulto(registro)
+        });
+      }
+      tiposMap.get(id).quantidade += 1;
+    });
+    const tiposEvento = Array.from(tiposMap.values())
+      .sort((a, b) => b.quantidade - a.quantidade || String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
 
     const relatorio = {
       referencia: {
@@ -366,6 +422,8 @@ const RegistroCultoService = {
       resumo: {
         totalCultos: totalAtual.totalCultos,
         fluxoGeral: totalAtual.fluxoGeral,
+        criancas: totalAtual.criancas,
+        bebes: totalAtual.bebes,
         mediaGeralAtual: arredondar(mediaGeralAtual),
         mediaGeralAnterior: arredondar(mediaGeralAnterior),
         variacao: arredondar(variacaoResumo),
@@ -375,6 +433,7 @@ const RegistroCultoService = {
         acimaMedia: montarRegistroDestaque(cultoAcimaMedia, mediaGeralAtual),
         abaixoMedia: montarRegistroDestaque(cultoAbaixoMedia, mediaGeralAtual),
       },
+      tiposEvento,
     };
 
     return {

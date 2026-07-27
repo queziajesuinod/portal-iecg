@@ -1,3 +1,4 @@
+const fs = require('fs');
 const { Op } = require('sequelize');
 const {
   sequelize, YoutubeChannel, YoutubeVideo, VideoTranscript
@@ -49,8 +50,16 @@ async function listarPorCanal(req, res) {
       offset,
     });
 
+    // Verifica no DISCO (volume) se audio/video existem de fato -> habilita transcricao/clipes.
+    const items = rows.map((row) => {
+      const v = row.toJSON();
+      v.audioReady = Boolean(v.audioPath) && fs.existsSync(v.audioPath);
+      v.videoReady = Boolean(v.videoPath) && fs.existsSync(v.videoPath);
+      return v;
+    });
+
     res.status(200).json({
-      items: rows, total: count, limit, offset
+      items, total: count, limit, offset
     });
   } catch (err) {
     console.error('[youtubeVideo] Erro ao listar:', err);

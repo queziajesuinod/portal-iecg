@@ -111,6 +111,14 @@ function TranscriptBadge({ transcript }) {
     );
   }
 
+  if (transcript.status === 'failed' && transcript.errorMessage) {
+    return (
+      <Tooltip title={transcript.errorMessage}>
+        <Chip size="small" color={cfg.color} label={cfg.label} />
+      </Tooltip>
+    );
+  }
+
   return <Chip size="small" color={cfg.color} label={cfg.label} />;
 }
 
@@ -120,6 +128,7 @@ TranscriptBadge.propTypes = {
     progressPercent: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
     progressStage: PropTypes.string,
     hasText: PropTypes.bool,
+    errorMessage: PropTypes.string,
   }),
 };
 
@@ -241,23 +250,19 @@ const VideosPage = () => {
   };
 
   const handleTranscribeNow = async (video) => {
-    if (hasFilledTranscript(video)) {
-      setFeedback({
-        severity: 'info',
-        message: 'Este video ja possui transcricao. Use a acao de revisar/editar.',
-      });
-      return;
-    }
-    if (!video.audioPath) {
+    if (!video.audioReady && !video.videoReady) {
       setFeedback({
         severity: 'warning',
-        message: 'Anexe o audio antes de transcrever (botao de upload).',
+        message: 'Nao ha audio nem video no volume. Anexe o audio ou reenvie o video pelo helper.',
       });
       return;
     }
+    const jaTem = hasFilledTranscript(video);
+    const fonte = video.audioReady ? 'audio' : 'video';
     const durMin = video.durationSeconds ? Math.round(video.durationSeconds / 60) : null;
     const tempoEstimado = durMin ? Math.round(durMin * 2.5) : '60-180';
-    const msg = `Disparar transcricao de "${video.title}"?\n\n`
+    const msg = `${jaTem ? 'RE-transcrever' : 'Transcrever'} "${video.title}" (fonte: ${fonte})?\n\n`
+      + (jaTem ? 'Isso SOBRESCREVE a transcricao e os segmentos atuais (gera os tempos p/ criar clipes).\n\n' : '')
       + `Whisper local vai rodar por ~${tempoEstimado} min, usando ~10GB de RAM da VPS.\n`
       + 'Nao dispare mais de 1 transcricao por vez (risco de OOM).\n\n'
       + 'Confirmar?';
@@ -268,7 +273,7 @@ const VideosPage = () => {
       setVideos((prev) => prev.map((v) => (v.id === video.id ? { ...v, transcript } : v)));
       setFeedback({
         severity: 'success',
-        message: `Transcricao iniciada (${transcript.status}). Use a barra de progresso pra acompanhar.`,
+        message: 'Transcricao disparada. Acompanhe pela barra de progresso na coluna Transcricao.',
       });
     } catch (err) {
       setFeedback({ severity: 'error', message: err.message });
@@ -278,13 +283,6 @@ const VideosPage = () => {
   };
 
   const handlePickAudio = (video) => {
-    if (hasFilledTranscript(video)) {
-      setFeedback({
-        severity: 'info',
-        message: 'Este video ja possui transcricao. Use a acao de revisar/editar.',
-      });
-      return;
-    }
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'audio/*,.mp3,.m4a,.wav,.ogg,.opus,.flac,.aac';
@@ -300,6 +298,7 @@ const VideosPage = () => {
           audioPath: resp.video.audioPath,
           audioSizeBytes: resp.video.audioSizeBytes,
           audioUploadedAt: resp.video.audioUploadedAt,
+          audioReady: true,
           transcript: resp.transcript,
         } : v)));
         setFeedback({
@@ -489,16 +488,34 @@ const VideosPage = () => {
                   <TableCell>{formatDuration(video.durationSeconds)}</TableCell>
                   <TableCell>
                     <TranscriptBadge transcript={video.transcript} />
+                    <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
+                      <Tooltip title={video.audioReady ? 'Audio presente no volume' : 'Audio ausente no volume'}>
+                        <Chip
+                          size="small"
+                          variant={video.audioReady ? 'filled' : 'outlined'}
+                          color={video.audioReady ? 'success' : 'default'}
+                          label={video.audioReady ? 'Áudio ✓' : 'Áudio —'}
+                        />
+                      </Tooltip>
+                      <Tooltip title={video.videoReady ? 'Video presente no volume (pronto p/ clipes)' : 'Video ausente no volume'}>
+                        <Chip
+                          size="small"
+                          variant={video.videoReady ? 'filled' : 'outlined'}
+                          color={video.videoReady ? 'success' : 'default'}
+                          label={video.videoReady ? 'Vídeo ✓' : 'Vídeo —'}
+                        />
+                      </Tooltip>
+                    </Stack>
                   </TableCell>
                   <TableCell align="right">
-                    {!video.ignored && !video.audioPath && video.transcript?.status !== 'pending' && video.transcript?.status !== 'processing' && (
+                    {!video.ignored && !video.audioReady && video.transcript?.status !== 'pending' && video.transcript?.status !== 'processing' && (
                       <Tooltip title="Enfileirar para o helper (helper baixa o áudio do YouTube automaticamente)">
                         <IconButton size="small" color="secondary" onClick={() => handleQueueForHelper(video)}>
                           <PlaylistAddIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                     )}
-                    {!video.ignored && !hasFilledTranscript(video) && !video.audioPath && (
+                    {!video.ignored && !video.audioReady && (
                       <Tooltip title="Anexar arquivo de audio (MP3, M4A, WAV) — Whisper local transcreve em seguida">
                         <span>
                           <IconButton
@@ -512,8 +529,11 @@ const VideosPage = () => {
                         </span>
                       </Tooltip>
                     )}
-                    {!video.ignored && !hasFilledTranscript(video) && video.audioPath && video.transcript?.status !== 'processing' && (
-                      <Tooltip title="Audio ja anexado — re-disparar transcricao com Whisper local">
+                    {!video.ignored && (video.audioReady || video.videoReady) && video.transcript?.status !== 'processing' && (
+                      <Tooltip title={hasFilledTranscript(video)
+                        ? 'Re-transcrever (sobrescreve e gera os segmentos com tempo p/ clipes)'
+                        : `Transcrever com Whisper local (fonte: ${video.audioReady ? 'audio' : 'video'})`}
+                      >
                         <span>
                           <IconButton
                             size="small"

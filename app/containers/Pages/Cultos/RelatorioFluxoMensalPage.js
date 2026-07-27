@@ -229,22 +229,25 @@ const drawCampusTable = (doc, state, campusRows) => {
   drawSectionTitle(doc, state, 'Resultado por campus');
   const columns = [
     {
-      label: 'Campus', x: 16, width: 52, align: 'left',
+      label: 'Campus', x: 16, width: 38, align: 'left',
     },
     {
-      label: 'Cultos', x: 75, width: 16, align: 'right',
+      label: 'Cultos', x: 66, width: 14, align: 'right',
     },
     {
-      label: 'Fluxo', x: 99, width: 18, align: 'right',
+      label: 'Fluxo', x: 88, width: 16, align: 'right',
     },
     {
-      label: 'Media', x: 126, width: 19, align: 'right',
+      label: 'Cri/Beb', x: 116, width: 22, align: 'right',
     },
     {
-      label: 'Anterior', x: 153, width: 21, align: 'right',
+      label: 'Media', x: 138, width: 18, align: 'right',
     },
     {
-      label: 'Variacao', x: 183, width: 22, align: 'right',
+      label: 'Anterior', x: 163, width: 20, align: 'right',
+    },
+    {
+      label: 'Variacao', x: 190, width: 22, align: 'right',
     },
   ];
 
@@ -272,15 +275,36 @@ const drawCampusTable = (doc, state, campusRows) => {
 
     const trendColor = colorByTrend(item.tendencia?.label);
     setPdfText(doc, 8, PDF.black, true);
-    const nomeCampus = doc.splitTextToSize(item.campus?.nome || '-', 50)[0];
+    const nomeCampus = doc.splitTextToSize(item.campus?.nome || '-', 36)[0];
     doc.text(nomeCampus, columns[0].x, state.y + 6);
     setPdfText(doc, 8, PDF.black);
     doc.text(formatarNumero(item.totalCultos), columns[1].x, state.y + 6, { align: 'right' });
     doc.text(formatarNumero(item.fluxoGeral), columns[2].x, state.y + 6, { align: 'right' });
-    doc.text(formatarDecimal(item.mediaPorCulto), columns[3].x, state.y + 6, { align: 'right' });
-    doc.text(formatarDecimal(item.mediaMesAnterior), columns[4].x, state.y + 6, { align: 'right' });
+    doc.text(`${formatarNumero(item.criancas)} / ${formatarNumero(item.bebes)}`, columns[3].x, state.y + 6, { align: 'right' });
+    doc.text(formatarDecimal(item.mediaPorCulto), columns[4].x, state.y + 6, { align: 'right' });
+    doc.text(formatarDecimal(item.mediaMesAnterior), columns[5].x, state.y + 6, { align: 'right' });
     setPdfText(doc, 8, trendColor, true);
-    doc.text(formatarPercentual(item.variacao), columns[5].x, state.y + 6, { align: 'right' });
+    doc.text(formatarPercentual(item.variacao), columns[6].x, state.y + 6, { align: 'right' });
+    state.y += rowHeight;
+  });
+  state.y += 6;
+};
+
+const drawTiposEvento = (doc, state, tipos) => {
+  if (!Array.isArray(tipos) || !tipos.length) return;
+  drawSectionTitle(doc, state, 'Eventos por tipo (fluxo/media apenas Culto)');
+  tipos.forEach((tipo, index) => {
+    ensurePdfSpace(doc, state, 9);
+    const rowHeight = 7;
+    const fill = index % 2 === 0 ? [250, 252, 254] : PDF.white;
+    doc.setFillColor(...fill);
+    doc.rect(PDF.margin, state.y, PDF.contentWidth, rowHeight, 'F');
+    doc.setDrawColor(...PDF.border);
+    doc.line(PDF.margin, state.y + rowHeight, PDF.pageWidth - PDF.margin, state.y + rowHeight);
+    setPdfText(doc, 8, PDF.black, false);
+    doc.text(`${tipo.nome || '-'}${tipo.ehCulto ? '  (culto)' : ''}`, PDF.margin + 2, state.y + 5);
+    setPdfText(doc, 8, PDF.black, true);
+    doc.text(formatarNumero(tipo.quantidade), PDF.pageWidth - PDF.margin - 2, state.y + 5, { align: 'right' });
     state.y += rowHeight;
   });
   state.y += 6;
@@ -411,8 +435,13 @@ const RelatorioFluxoMensalPage = () => {
     );
     estado.y += 36;
 
+    drawMetricCard(doc, 14, estado.y, 42, 'Criancas', formatarNumero(resumoAtual.criancas), 'no mes', PDF.accent);
+    drawMetricCard(doc, 59, estado.y, 42, 'Bebes', formatarNumero(resumoAtual.bebes), 'no mes', PDF.warning);
+    estado.y += 32;
+
     drawExecutiveInsights(doc, estado, relatorio);
     drawCampusTable(doc, estado, campusRows);
+    drawTiposEvento(doc, estado, Array.isArray(relatorio.tiposEvento) ? relatorio.tiposEvento : []);
 
     drawFooter(doc, doc.getNumberOfPages());
 
@@ -421,6 +450,7 @@ const RelatorioFluxoMensalPage = () => {
 
   const resumo = relatorio?.resumo;
   const campusRelatorio = Array.isArray(relatorio?.campus) ? relatorio.campus : [];
+  const tiposEvento = Array.isArray(relatorio?.tiposEvento) ? relatorio.tiposEvento : [];
   const nomeMesSelecionado = mesReferencia
     ? `${MESES[parseInt(mesReferencia.split('-')[1], 10) - 1]}/${mesReferencia.split('-')[0]}`
     : '';
@@ -531,6 +561,23 @@ const RelatorioFluxoMensalPage = () => {
                   <CardContent>
                     <Typography variant="caption" color="textSecondary">Fluxo Geral</Typography>
                     <Typography variant="h5" fontWeight={700}>{formatarNumero(resumo.fluxoGeral)}</Typography>
+                    <Typography variant="caption" color="textSecondary">H + M + Voluntarios</Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              <Grid item xs={6} sm={4} md={2}>
+                <Card variant="outlined">
+                  <CardContent>
+                    <Typography variant="caption" color="textSecondary">Criancas</Typography>
+                    <Typography variant="h5" fontWeight={700}>{formatarNumero(resumo.criancas)}</Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              <Grid item xs={6} sm={4} md={2}>
+                <Card variant="outlined">
+                  <CardContent>
+                    <Typography variant="caption" color="textSecondary">Bebes</Typography>
+                    <Typography variant="h5" fontWeight={700}>{formatarNumero(resumo.bebes)}</Typography>
                   </CardContent>
                 </Card>
               </Grid>
@@ -581,6 +628,8 @@ const RelatorioFluxoMensalPage = () => {
                     <TableCell>Campus</TableCell>
                     <TableCell align="right">Total de Cultos</TableCell>
                     <TableCell align="right">Fluxo Geral</TableCell>
+                    <TableCell align="right">Criancas</TableCell>
+                    <TableCell align="right">Bebes</TableCell>
                     <TableCell align="right">Media por Culto</TableCell>
                     <TableCell align="right">Media Mes Anterior</TableCell>
                     <TableCell align="right">Variacao</TableCell>
@@ -590,7 +639,7 @@ const RelatorioFluxoMensalPage = () => {
                 <TableBody>
                   {campusRelatorio.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} align="center">Nenhum campus encontrado para este ministerio.</TableCell>
+                      <TableCell colSpan={9} align="center">Nenhum campus encontrado para este ministerio.</TableCell>
                     </TableRow>
                   )}
                   {campusRelatorio.map((item) => (
@@ -598,6 +647,8 @@ const RelatorioFluxoMensalPage = () => {
                       <TableCell>{item.campus.nome}</TableCell>
                       <TableCell align="right">{formatarNumero(item.totalCultos)}</TableCell>
                       <TableCell align="right">{formatarNumero(item.fluxoGeral)}</TableCell>
+                      <TableCell align="right">{formatarNumero(item.criancas)}</TableCell>
+                      <TableCell align="right">{formatarNumero(item.bebes)}</TableCell>
                       <TableCell align="right">{formatarDecimal(item.mediaPorCulto)}</TableCell>
                       <TableCell align="right">{formatarDecimal(item.mediaMesAnterior)}</TableCell>
                       <TableCell align="right">{formatarPercentual(item.variacao)}</TableCell>
@@ -607,6 +658,39 @@ const RelatorioFluxoMensalPage = () => {
                           color={corTendencia(item.tendencia.label)}
                           size="small"
                         />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Fluxo Geral e Medias consideram apenas eventos do tipo <strong>Culto</strong>. Os demais tipos aparecem so na contagem abaixo.
+            </Alert>
+
+            <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>Eventos por tipo</Typography>
+            <TableContainer component={Paper} variant="outlined" sx={{ mb: 3 }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Tipo de evento</TableCell>
+                    <TableCell align="right">Quantidade</TableCell>
+                    <TableCell align="center">Entra no fluxo?</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {tiposEvento.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={3} align="center">Nenhum evento registrado no periodo.</TableCell>
+                    </TableRow>
+                  )}
+                  {tiposEvento.map((tipo) => (
+                    <TableRow key={tipo.id} hover>
+                      <TableCell>{tipo.nome}</TableCell>
+                      <TableCell align="right">{formatarNumero(tipo.quantidade)}</TableCell>
+                      <TableCell align="center">
+                        {tipo.ehCulto ? <Chip label="Culto" color="success" size="small" /> : '—'}
                       </TableCell>
                     </TableRow>
                   ))}
