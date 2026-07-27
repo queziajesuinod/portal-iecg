@@ -27,6 +27,8 @@ import sys
 NET_W = 320
 NET_H = 240
 CONF_THRESHOLD = 0.6  # confianca minima para aceitar um rosto (0..1)
+MIN_FACE_FRAC = 0.05  # largura minima do rosto (fracao da largura) -> rejeita falsos positivos pequenos
+CONTINUITY_WEIGHT = 0.35  # penaliza rostos longe do anterior (evita "pular" entre pessoas/deteccoes)
 
 
 def eprint(*a):
@@ -119,6 +121,7 @@ def main():
 
     samples = []
     step = 1.0 / sample_fps if sample_fps > 0 else 0.25
+    prev_cx = None  # centro escolhido no frame anterior (para continuidade temporal)
     for idx, raw in enumerate(frames):
         t = idx * step
         if t > duration:
@@ -133,11 +136,21 @@ def main():
             continue
         b = boxes[0][keep]          # [x1,y1,x2,y2] normalizado 0..1
         c = conf[keep]
-        # Maior rosto (mais provavel de ser o orador em primeiro plano), com desempate por confianca.
-        areas = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
-        best = int(np.argmax(areas + c * 1e-3))
-        x1, x2 = float(b[best, 0]), float(b[best, 2])
-        cx = min(1.0, max(0.0, (x1 + x2) / 2.0))
+        widths = b[:, 2] - b[:, 0]
+        # Descarta deteccoes minusculas (ruido / rostos ao fundo).
+        big = widths >= MIN_FACE_FRAC
+        if not np.any(big):
+            continue
+        b, c, widths = b[big], c[big], widths[big]
+        areas = widths * (b[:, 3] - b[:, 1])
+        cxs = (b[:, 0] + b[:, 2]) / 2.0
+        # Escolhe o rosto priorizando area e confianca, penalizando saltos em relacao ao frame anterior.
+        score = areas + c * 1e-3
+        if prev_cx is not None:
+            score = score - CONTINUITY_WEIGHT * np.abs(cxs - prev_cx)
+        best = int(np.argmax(score))
+        cx = float(min(1.0, max(0.0, cxs[best])))
+        prev_cx = cx
         samples.append({"t": round(t, 3), "cx": round(cx, 4)})
 
     with open(out_path, "w", encoding="utf-8") as f:

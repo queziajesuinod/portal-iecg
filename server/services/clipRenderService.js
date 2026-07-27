@@ -9,15 +9,24 @@ const ffmpeg = require('./ffmpegService');
 const TARGET_W = 1080;
 const TARGET_H = 1920;
 const TARGET_AR = 9 / 16;
-const GRID_STEP = 0.25; // segundos entre keyframes de crop
-const EMA_ALPHA = 0.3; // suavizacao do movimento do rosto
-const STATIC_THRESHOLD_PX = 8; // abaixo disso, trata como orador parado -> crop estatico
+const GRID_STEP = 0.1; // segundos entre keyframes de crop (grade fina -> pan continuo)
+const EMA_ALPHA = 0.16; // suavizacao do movimento do rosto (menor = mais suave)
+const MEDIAN_WIN = 5; // janela (impar) do filtro de mediana p/ rejeitar deteccoes outliers
+const DEADBAND_PX = 26; // zona morta: so reposiciona apos o rosto sair desse raio (mata micro-tremor)
+const MAX_PAN_PX_PER_SEC = 90; // velocidade maxima do pan (limita saltos -> movimento gradual)
+const STATIC_THRESHOLD_PX = 12; // abaixo disso, trata como orador parado -> crop estatico
 const FACE_TRACK_SCRIPT = path.join(__dirname, '..', 'scripts', 'face_track.py');
 
 // Estilo da legenda queimada (ASS)
 const CAPTION_FONT_SIZE = 46;
 const CAPTION_MARGIN_H = 60; // MarginL / MarginR (px)
 const CAPTION_MARGIN_V = 820; // MarginV (px)
+const CAPTION_FADE_MS = 130; // fade in/out (ms) -> transicao suave ao trocar de legenda
+const CAPTION_POP_MS = 150; // duracao do "pop" (zoom-in) de entrada
+const CAPTION_POP_SCALE = 82; // escala inicial (%) do pop -> anima ate 100
+// Largura util e limite de caracteres por linha (Arial Bold MAIUSCULO ~0.66*fontsize por char).
+const CAPTION_AVAIL_W = TARGET_W - CAPTION_MARGIN_H * 2;
+const MAX_CHARS_PER_LINE = Math.max(1, Math.floor(CAPTION_AVAIL_W / (CAPTION_FONT_SIZE * 0.66)));
 
 function getClipRoot() {
   return process.env.CLIP_STORAGE_PATH || path.join(process.cwd(), 'uploads', 'clips');
@@ -57,7 +66,17 @@ async function runFaceTrack(videoPath, start, end) {
   }
 }
 
-// Interpola as amostras de centro do rosto sobre uma grade regular e suaviza (EMA).
+// Filtro de mediana deslizante: remove picos isolados (deteccoes espurias) sem borrar o sinal.
+function medianFilter(arr, win) {
+  const half = Math.floor(win / 2);
+  return arr.map((_, i) => {
+    const slice = arr.slice(Math.max(0, i - half), Math.min(arr.length, i + half + 1))
+      .slice().sort((a, b) => a - b);
+    return slice[Math.floor(slice.length / 2)];
+  });
+}
+
+// Interpola as amostras de centro do rosto sobre uma grade regular e suaviza (mediana + EMA).
 function buildCenterTrajectory(samples, srcW, duration) {
   const valid = (samples || [])
     .filter((s) => Number.isFinite(s.t) && Number.isFinite(s.cx))
@@ -80,9 +99,12 @@ function buildCenterTrajectory(samples, srcW, duration) {
     return cx * srcW;
   });
 
-  // Suavizacao EMA (ida e volta para nao atrasar o movimento).
+  // 1) Mediana: descarta deteccoes fora da curva (rejeita outliers antes de suavizar).
+  const clean = medianFilter(interp, MEDIAN_WIN);
+
+  // 2) EMA ida e volta (zero-phase): suaviza sem atrasar o movimento real.
   const fwd = [];
-  interp.forEach((v, i) => fwd.push(i === 0 ? v : EMA_ALPHA * v + (1 - EMA_ALPHA) * fwd[i - 1]));
+  clean.forEach((v, i) => fwd.push(i === 0 ? v : EMA_ALPHA * v + (1 - EMA_ALPHA) * fwd[i - 1]));
   const smooth = new Array(fwd.length);
   for (let i = fwd.length - 1; i >= 0; i -= 1) {
     smooth[i] = i === fwd.length - 1 ? fwd[i] : EMA_ALPHA * fwd[i] + (1 - EMA_ALPHA) * smooth[i + 1];
@@ -127,20 +149,40 @@ function buildCropPlan(meta, samples, duration) {
     };
   }
 
-  const keyframes = traj.map(({ t, cxPx }) => ({
+  // Alvo de x (canto esquerdo do crop) por keyframe, centrando o rosto.
+  const targets = traj.map(({ t, cxPx }) => ({
     t,
     x: Math.max(0, Math.min(maxX, Math.round(cxPx - cropW / 2))),
   }));
 
-  const xs = keyframes.map((k) => k.x);
-  const range = Math.max(...xs) - Math.min(...xs);
+  const targetXs = targets.map((k) => k.x);
+  const range = Math.max(...targetXs) - Math.min(...targetXs);
   if (range < STATIC_THRESHOLD_PX) {
     // Orador praticamente parado: crop estatico na mediana (evita micro-tremor).
-    const sorted = [...xs].sort((a, b) => a - b);
+    const sorted = [...targetXs].sort((a, b) => a - b);
     return {
       cropW, cropH, y, mode: 'static', x: sorted[Math.floor(sorted.length / 2)]
     };
   }
+
+  // Zona morta + limite de velocidade: o crop so persegue o rosto quando ele sai do raio
+  // DEADBAND_PX, e sempre com passo <= MAX_PAN_PX_PER_SEC. Elimina o micro-tremor mantendo
+  // o enquadramento em movimentos reais.
+  const maxStep = Math.max(1, Math.round(MAX_PAN_PX_PER_SEC * GRID_STEP));
+  let cur = targets[0].x;
+  const smoothed = targets.map(({ t, x: target }) => {
+    const diff = target - cur;
+    if (Math.abs(diff) > DEADBAND_PX) {
+      // Move em direcao ao alvo (parando na borda da zona morta), limitado pela velocidade.
+      const goal = target - Math.sign(diff) * DEADBAND_PX;
+      const delta = Math.max(-maxStep, Math.min(maxStep, goal - cur));
+      cur = Math.max(0, Math.min(maxX, cur + delta));
+    }
+    return { t, x: Math.round(cur) };
+  });
+
+  // Remove keyframes consecutivos identicos: o sendcmd so dispara em mudancas reais.
+  const keyframes = smoothed.filter((k, i) => i === 0 || k.x !== smoothed[i - 1].x);
 
   return {
     cropW, cropH, y, mode: 'dynamic', keyframes, initialX: keyframes[0].x
@@ -176,25 +218,32 @@ function toCaption(text) {
     .trim();
 }
 
-// Ajusta a legenda a largura util da tela, quebrando em no maximo duas linhas
-// balanceadas. Insere \N (quebra manual do ASS) quando o texto nao cabe em uma linha.
-function wrapCaption(text) {
-  const availW = TARGET_W - CAPTION_MARGIN_H * 2;
-  // Largura media aproximada de um caractere em Arial Bold maiusculo (~0.62 * fontsize).
-  const maxChars = Math.max(1, Math.floor(availW / (CAPTION_FONT_SIZE * 0.62)));
-  if (text.length <= maxChars) return text;
+// Empacota palavras em linhas de no maximo MAX_CHARS_PER_LINE (guloso).
+function packLines(words) {
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    if (!cur) cur = w;
+    else if ((cur + ' ' + w).length <= MAX_CHARS_PER_LINE) cur += ` ${w}`;
+    else { lines.push(cur); cur = w; }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
 
+// Quebra um texto que cabe em ate 2 linhas no ponto mais equilibrado possivel.
+function balanceTwoLines(text) {
+  if (text.length <= MAX_CHARS_PER_LINE) return text;
   const words = text.split(' ');
-  if (words.length < 2) return text; // palavra unica gigante: deixa o libass lidar
-
-  let best = null; // melhor equilibrio com as DUAS linhas dentro do limite
-  let fallback = null; // melhor equilibrio geral (quando nao cabe em duas linhas)
+  if (words.length < 2) return text; // palavra unica gigante
+  let best = null;
+  let fallback = null;
   let line1 = words[0];
   for (let i = 1; i < words.length; i += 1) {
     const line2 = words.slice(i).join(' ');
     const diff = Math.abs(line1.length - line2.length);
     if (fallback === null || diff < fallback.diff) fallback = { diff, line1, line2 };
-    if (line1.length <= maxChars && line2.length <= maxChars && (best === null || diff < best.diff)) {
+    if (line1.length <= MAX_CHARS_PER_LINE && line2.length <= MAX_CHARS_PER_LINE && (best === null || diff < best.diff)) {
       best = { diff, line1, line2 };
     }
     line1 += ` ${words[i]}`;
@@ -203,17 +252,42 @@ function wrapCaption(text) {
   return `${chosen.line1}\\N${chosen.line2}`;
 }
 
+// Divide a legenda em blocos de NO MAXIMO 2 linhas. Se o texto nao couber em 2 linhas,
+// vira varios blocos sequenciais (a frase avanca -> troca a legenda).
+function chunkCaption(text) {
+  const clean = String(text || '').trim();
+  if (!clean) return [];
+  const lines = packLines(clean.split(' '));
+  if (lines.length <= 2) return [balanceTwoLines(clean)];
+  const chunks = [];
+  for (let i = 0; i < lines.length; i += 2) chunks.push(lines.slice(i, i + 2).join('\\N'));
+  return chunks;
+}
+
 function buildAss(segments, start, end) {
   const duration = end - start;
   const dialogues = [];
+  const fadeOut = Math.round(CAPTION_FADE_MS / 2);
+  // Entrada: fade + "pop" (entra em CAPTION_POP_SCALE% e cresce ate 100% via \t).
+  const intro = `{\\fad(${CAPTION_FADE_MS},${fadeOut})\\fscx${CAPTION_POP_SCALE}\\fscy${CAPTION_POP_SCALE}\\t(0,${CAPTION_POP_MS},\\fscx100\\fscy100)}`;
   for (const seg of segments || []) {
     if (!(seg.end > start && seg.start < end)) continue;
     const s = Math.max(0, seg.start - start);
     const e = Math.min(duration, seg.end - start);
     if (e - s < 0.3) continue;
-    const text = wrapCaption(toCaption(seg.text));
-    if (!text) continue;
-    dialogues.push(`Dialogue: 0,${assTime(s)},${assTime(e)},Legenda,,0,0,0,,${text}`);
+    const chunks = chunkCaption(toCaption(seg.text));
+    if (!chunks.length) continue;
+    // Reparte o tempo do segmento entre os blocos, proporcional ao tamanho de cada um.
+    const weights = chunks.map((c) => Math.max(1, c.replace(/\\N/g, ' ').length));
+    const totalW = weights.reduce((a, b) => a + b, 0);
+    let cs = s;
+    chunks.forEach((chunk, idx) => {
+      const ce = idx === chunks.length - 1 ? e : Math.min(e, cs + (e - s) * (weights[idx] / totalW));
+      if (ce - cs >= 0.05) {
+        dialogues.push(`Dialogue: 0,${assTime(cs)},${assTime(ce)},Legenda,,0,0,0,,${intro}${chunk}`);
+      }
+      cs = ce;
+    });
   }
   if (!dialogues.length) return null;
 
@@ -221,7 +295,7 @@ function buildAss(segments, start, end) {
 ScriptType: v4.00+
 PlayResX: ${TARGET_W}
 PlayResY: ${TARGET_H}
-WrapStyle: 0
+WrapStyle: 2
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
