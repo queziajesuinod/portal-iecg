@@ -14,6 +14,11 @@ const EMA_ALPHA = 0.3; // suavizacao do movimento do rosto
 const STATIC_THRESHOLD_PX = 8; // abaixo disso, trata como orador parado -> crop estatico
 const FACE_TRACK_SCRIPT = path.join(__dirname, '..', 'scripts', 'face_track.py');
 
+// Estilo da legenda queimada (ASS)
+const CAPTION_FONT_SIZE = 46;
+const CAPTION_MARGIN_H = 60; // MarginL / MarginR (px)
+const CAPTION_MARGIN_V = 820; // MarginV (px)
+
 function getClipRoot() {
   return process.env.CLIP_STORAGE_PATH || path.join(process.cwd(), 'uploads', 'clips');
 }
@@ -171,6 +176,33 @@ function toCaption(text) {
     .trim();
 }
 
+// Ajusta a legenda a largura util da tela, quebrando em no maximo duas linhas
+// balanceadas. Insere \N (quebra manual do ASS) quando o texto nao cabe em uma linha.
+function wrapCaption(text) {
+  const availW = TARGET_W - CAPTION_MARGIN_H * 2;
+  // Largura media aproximada de um caractere em Arial Bold maiusculo (~0.62 * fontsize).
+  const maxChars = Math.max(1, Math.floor(availW / (CAPTION_FONT_SIZE * 0.62)));
+  if (text.length <= maxChars) return text;
+
+  const words = text.split(' ');
+  if (words.length < 2) return text; // palavra unica gigante: deixa o libass lidar
+
+  let best = null; // melhor equilibrio com as DUAS linhas dentro do limite
+  let fallback = null; // melhor equilibrio geral (quando nao cabe em duas linhas)
+  let line1 = words[0];
+  for (let i = 1; i < words.length; i += 1) {
+    const line2 = words.slice(i).join(' ');
+    const diff = Math.abs(line1.length - line2.length);
+    if (fallback === null || diff < fallback.diff) fallback = { diff, line1, line2 };
+    if (line1.length <= maxChars && line2.length <= maxChars && (best === null || diff < best.diff)) {
+      best = { diff, line1, line2 };
+    }
+    line1 += ` ${words[i]}`;
+  }
+  const chosen = best || fallback;
+  return `${chosen.line1}\\N${chosen.line2}`;
+}
+
 function buildAss(segments, start, end) {
   const duration = end - start;
   const dialogues = [];
@@ -179,7 +211,7 @@ function buildAss(segments, start, end) {
     const s = Math.max(0, seg.start - start);
     const e = Math.min(duration, seg.end - start);
     if (e - s < 0.3) continue;
-    const text = toCaption(seg.text);
+    const text = wrapCaption(toCaption(seg.text));
     if (!text) continue;
     dialogues.push(`Dialogue: 0,${assTime(s)},${assTime(e)},Legenda,,0,0,0,,${text}`);
   }
@@ -189,11 +221,11 @@ function buildAss(segments, start, end) {
 ScriptType: v4.00+
 PlayResX: ${TARGET_W}
 PlayResY: ${TARGET_H}
-WrapStyle: 2
+WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Legenda, Arial, 46, &H00FFFFFF, &H00000000, &H00000000, 1, 0, 0, 0, 100, 100, 0, 0, 3, 6, 0, 2, 60, 60, 820, 1
+Style: Legenda, Arial, ${CAPTION_FONT_SIZE}, &H00FFFFFF, &H00000000, &H00000000, 1, 0, 0, 0, 100, 100, 0, 0, 3, 6, 0, 2, ${CAPTION_MARGIN_H}, ${CAPTION_MARGIN_H}, ${CAPTION_MARGIN_V}, 1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
