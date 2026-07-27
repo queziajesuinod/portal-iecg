@@ -1,4 +1,5 @@
 const path = require('path');
+const fss = require('fs');
 const { YoutubeVideo, VideoTranscript } = require('../models');
 const whisperLocal = require('./whisperLocalService');
 const videoSummary = require('./videoSummaryService');
@@ -94,33 +95,24 @@ async function emitTranscriptCompletedWebhook({ video, transcript, audioPath }) 
   });
 }
 
-async function processUploadedAudio(youtubeVideoId) {
-  const video = await YoutubeVideo.findByPk(youtubeVideoId);
-  if (!video) throw new Error('Video nao encontrado');
-  if (video.ignored) {
-    throw new Error('Este video esta marcado como ignorado.');
-  }
-  if (!video.audioPath) {
-    throw new Error('Video sem audio anexado. Faca upload do audio antes.');
-  }
+// Resolve o arquivo de midia para transcricao, verificando existencia em DISCO
+// (nao confia so na coluna do banco). Prefere o audio; cai para o video se preciso.
+function resolveMediaForTranscription(video) {
+  const audio = video.audioPath && fss.existsSync(video.audioPath) ? video.audioPath : null;
+  const videoFile = video.videoPath && fss.existsSync(video.videoPath) ? video.videoPath : null;
+  const mediaPath = audio || videoFile;
+  return { mediaPath, isAudio: Boolean(audio), isVideo: !audio && Boolean(videoFile) };
+}
 
-  const transcript = await getOrCreateTranscript(youtubeVideoId);
-  if (hasTranscriptText(transcript)) {
-    throw new Error('Este video ja possui transcricao preenchida. Edite a transcricao e o resumo existentes.');
-  }
-
-  transcript.status = 'processing';
-  transcript.errorMessage = null;
-  transcript.progressPercent = 0;
-  transcript.progressStage = 'whisper';
-  await transcript.save();
-
+// Executa o Whisper e finaliza o transcript (done/failed). NAO marca 'processing'
+// (o chamador ja marcou). Serve tanto para o worker quanto para o disparo on-demand.
+async function runTranscriptionJob(video, transcript, mediaPath) {
   try {
-    console.log(`[whisper] transcrevendo audio anexado de ${video.videoId} (${video.audioPath})...`);
+    console.log(`[whisper] transcrevendo ${video.videoId} (${mediaPath})...`);
     let lastSavedPct = 0;
     let lastSaveAt = 0;
     const VT = VideoTranscript;
-    const result = await whisperLocal.transcribeAudioFile(video.audioPath, {
+    const result = await whisperLocal.transcribeAudioFile(mediaPath, {
       languageHint: 'pt',
       onProgress: (evt) => {
         if (evt.event !== 'progress') return;
@@ -153,7 +145,7 @@ async function processUploadedAudio(youtubeVideoId) {
     await transcript.save();
 
     setImmediate(() => {
-      emitTranscriptCompletedWebhook({ video, transcript, audioPath: video.audioPath })
+      emitTranscriptCompletedWebhook({ video, transcript, audioPath: mediaPath })
         .catch((err) => console.error('[webhook] falha ao enviar:', err.message));
     });
 
@@ -166,6 +158,57 @@ async function processUploadedAudio(youtubeVideoId) {
     await transcript.save();
     throw err;
   }
+}
+
+// Fila noturna (worker): transcreve o audio anexado; NAO sobrescreve transcricao ja preenchida.
+async function processUploadedAudio(youtubeVideoId) {
+  const video = await YoutubeVideo.findByPk(youtubeVideoId);
+  if (!video) throw new Error('Video nao encontrado');
+  if (video.ignored) {
+    throw new Error('Este video esta marcado como ignorado.');
+  }
+  if (!video.audioPath) {
+    throw new Error('Video sem audio anexado. Faca upload do audio antes.');
+  }
+
+  const transcript = await getOrCreateTranscript(youtubeVideoId);
+  if (hasTranscriptText(transcript)) {
+    throw new Error('Este video ja possui transcricao preenchida. Edite a transcricao e o resumo existentes.');
+  }
+
+  transcript.status = 'processing';
+  transcript.errorMessage = null;
+  transcript.progressPercent = 0;
+  transcript.progressStage = 'whisper';
+  await transcript.save();
+
+  return runTranscriptionJob(video, transcript, video.audioPath);
+}
+
+// Disparo on-demand (botao "rodar whisper agora"): valida a midia EM DISCO (audio ou video),
+// SOBRESCREVE transcricao existente (a intencao e (re)gerar os segmentos com tempo p/ habilitar
+// clipes) e marca 'processing'. NAO roda o Whisper aqui — devolve o necessario p/ o controller
+// executar em background (runTranscriptionJob) e responder na hora.
+async function prepareOnDemandTranscription(youtubeVideoId) {
+  const video = await YoutubeVideo.findByPk(youtubeVideoId);
+  if (!video) throw new Error('Video nao encontrado');
+  if (video.ignored) {
+    throw new Error('Este video esta marcado como ignorado.');
+  }
+
+  const { mediaPath } = resolveMediaForTranscription(video);
+  if (!mediaPath) {
+    throw new Error('Nao ha audio nem video no volume para transcrever. Anexe o audio ou reenvie o video pelo helper.');
+  }
+
+  const transcript = await getOrCreateTranscript(youtubeVideoId);
+  transcript.status = 'processing';
+  transcript.errorMessage = null;
+  transcript.progressPercent = 0;
+  transcript.progressStage = 'whisper';
+  await transcript.save();
+
+  return { video, transcript, mediaPath };
 }
 
 async function resendWebhook(transcriptId) {
@@ -310,6 +353,9 @@ module.exports = {
   getOrCreateTranscript,
   markTranscriptPending,
   processUploadedAudio,
+  prepareOnDemandTranscription,
+  runTranscriptionJob,
+  resolveMediaForTranscription,
   resendWebhook,
   regenerateSummary,
   cancelTranscript,
