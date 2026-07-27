@@ -150,17 +150,32 @@ const VideosPage = () => {
 
   const hasFilledTranscript = (video) => Boolean(video.transcript?.hasText);
 
+  const applyIgnored = async (video, ignored) => {
+    const updated = await toggleVideoIgnored(video.id, ignored);
+    setVideos((prev) => prev.map((v) => (v.id === video.id ? { ...v, ...updated } : v)));
+    return updated;
+  };
+
   const handleToggleIgnored = async (video) => {
     try {
-      const updated = await toggleVideoIgnored(video.id, !video.ignored);
-      setVideos((prev) => prev.map((v) => (v.id === video.id ? { ...v, ...updated } : v)));
-      setFeedback({
-        severity: 'success',
-        message: updated.ignored ? 'Vídeo marcado como ignorado.' : 'Vídeo reativado.',
-      });
-      if (updated.ignored && !showIgnored) {
-        // some ja some da lista — recarrega
-        loadVideos();
+      const updated = await applyIgnored(video, !video.ignored);
+      if (updated.ignored) {
+        setFeedback({
+          severity: 'success',
+          message: `Vídeo "${video.title}" marcado como ignorado.`,
+          undo: async () => {
+            try {
+              await applyIgnored(video, false);
+              setFeedback({ severity: 'success', message: 'Ação desfeita — vídeo reativado.' });
+              loadVideos();
+            } catch (err) {
+              setFeedback({ severity: 'error', message: err.message });
+            }
+          },
+        });
+        if (!showIgnored) loadVideos(); // some da lista filtrada — recarrega
+      } else {
+        setFeedback({ severity: 'success', message: 'Vídeo reativado.' });
       }
     } catch (err) {
       setFeedback({ severity: 'error', message: err.message });
@@ -409,7 +424,20 @@ const VideosPage = () => {
         </Stack>
 
         {feedback && (
-          <Alert severity={feedback.severity} sx={{ mb: 2 }} onClose={() => setFeedback(null)}>
+          <Alert
+            severity={feedback.severity}
+            sx={{ mb: 2 }}
+            onClose={() => setFeedback(null)}
+            action={feedback.undo ? (
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => { const { undo } = feedback; setFeedback(null); undo(); }}
+              >
+                DESFAZER
+              </Button>
+            ) : undefined}
+          >
             {feedback.message}
           </Alert>
         )}
