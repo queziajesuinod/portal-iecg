@@ -20,7 +20,7 @@ import {
   TextField,
   Tooltip,
   Typography,
-  FormControlLabel, Switch
+  FormControl, InputLabel, MenuItem, Select
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import SyncIcon from '@mui/icons-material/Sync';
@@ -146,7 +146,8 @@ const VideosPage = () => {
   const [error, setError] = useState(null);
   const [feedback, setFeedback] = useState(null);
   const [transcribingId, setTranscribingId] = useState(null);
-  const [showIgnored, setShowIgnored] = useState(false);
+  // 'ativos' = esconde ignorados | 'todos' = inclui ignorados | 'manuais' = so ignorados manualmente
+  const [ignoredView, setIgnoredView] = useState('ativos');
 
   const hasFilledTranscript = (video) => Boolean(video.transcript?.hasText);
 
@@ -173,9 +174,10 @@ const VideosPage = () => {
             }
           },
         });
-        if (!showIgnored) loadVideos(); // some da lista filtrada — recarrega
+        if (ignoredView === 'ativos') loadVideos(); // some da lista filtrada — recarrega
       } else {
         setFeedback({ severity: 'success', message: 'Vídeo reativado.' });
+        if (ignoredView !== 'ativos') loadVideos(); // saiu do filtro de ignorados — recarrega
       }
     } catch (err) {
       setFeedback({ severity: 'error', message: err.message });
@@ -195,7 +197,8 @@ const VideosPage = () => {
         search: searchDebounced || undefined,
         limit: rowsPerPage,
         offset: page * rowsPerPage,
-        includeIgnored: showIgnored,
+        includeIgnored: ignoredView !== 'ativos',
+        ignoreReason: ignoredView === 'manuais' ? 'manual' : undefined,
       });
       setVideos(data.items);
       setTotal(data.total);
@@ -208,7 +211,7 @@ const VideosPage = () => {
 
   useEffect(() => {
     loadVideos();
-  }, [channelId, page, rowsPerPage, searchDebounced, showIgnored]);
+  }, [channelId, page, rowsPerPage, searchDebounced, ignoredView]);
 
   useEffect(() => {
     const processingIds = videos
@@ -407,17 +410,18 @@ const VideosPage = () => {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <FormControlLabel
-            control={(
-              <Switch
-                size="small"
-                checked={showIgnored}
-                onChange={(e) => setShowIgnored(e.target.checked)}
-              />
-            )}
-            label="Mostrar ignorados"
-            sx={{ ml: 1 }}
-          />
+          <FormControl size="small" sx={{ minWidth: 210, ml: 1 }}>
+            <InputLabel>Exibir</InputLabel>
+            <Select
+              label="Exibir"
+              value={ignoredView}
+              onChange={(e) => { setIgnoredView(e.target.value); setPage(0); }}
+            >
+              <MenuItem value="ativos">Ativos (esconde ignorados)</MenuItem>
+              <MenuItem value="todos">Incluir ignorados</MenuItem>
+              <MenuItem value="manuais">Só ignorados manualmente</MenuItem>
+            </Select>
+          </FormControl>
           <IconButton onClick={loadVideos}>
             <RefreshIcon />
           </IconButton>
@@ -503,7 +507,7 @@ const VideosPage = () => {
                               size="small"
                               color="default"
                               variant="outlined"
-                              label={video.ignoreReason === 'too_short' ? 'Ignorado: curto' : video.ignoreReason === 'not_public' ? 'Ignorado: não público' : 'Ignorado'}
+                              label={video.ignoreReason === 'too_short' ? 'Ignorado: curto' : video.ignoreReason === 'not_public' ? 'Ignorado: não público' : video.ignoreReason === 'manual' ? 'Ignorado: manual' : 'Ignorado'}
                             />
                           )}
                         </Stack>

@@ -1,7 +1,12 @@
+const fs = require('fs');
 const { YoutubeVideo, YoutubeChannel, VideoTranscript } = require('../models');
 const audioStorage = require('../services/audioStorageService');
 const videoStorage = require('../services/videoStorageService');
 const transcriptionService = require('../services/transcriptionService');
+
+// Verifica se o arquivo existe DE FATO no volume (nao confia so na coluna do banco).
+const audioNoVolume = (v) => Boolean(v.audioPath) && fs.existsSync(v.audioPath);
+const videoNoVolume = (v) => Boolean(v.videoPath) && fs.existsSync(v.videoPath);
 
 async function listarVideosPendentes(req, res) {
   try {
@@ -39,6 +44,8 @@ async function listarVideosPendentes(req, res) {
         channelName: v.channel.channelName,
       } : null,
       transcriptStatus: v.transcript?.status || null,
+      audioReady: audioNoVolume(v),
+      videoReady: videoNoVolume(v),
     }));
 
     res.status(200).json({ items, count: items.length });
@@ -137,7 +144,6 @@ async function uploadAudioHelper(req, res) {
 
 async function listarVideosParaRecorte(req, res) {
   try {
-    const fs = require('fs');
     const limit = Math.min(Number(req.query.limit) || 20, 100);
     // Marcados pra recorte no portal. Nao filtra por videoPath no SQL: precisa
     // reincluir tambem os que TEM videoPath mas o arquivo sumiu do disco
@@ -171,6 +177,8 @@ async function listarVideosParaRecorte(req, res) {
         channelId: v.channel.channelId,
         channelName: v.channel.channelName,
       } : null,
+      audioReady: audioNoVolume(v),
+      videoReady: videoNoVolume(v),
     }));
 
     res.status(200).json({ items, count: items.length });
