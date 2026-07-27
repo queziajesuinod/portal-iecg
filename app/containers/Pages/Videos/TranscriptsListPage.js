@@ -191,9 +191,29 @@ const TranscriptsListPage = () => {
                           width: 80, height: 45, objectFit: 'cover', borderRadius: 0.5
                         }} />
                       )}
-                      <Typography variant="body2" noWrap title={t.video?.title} sx={{ maxWidth: 340 }}>
-                        {t.video?.title}
-                      </Typography>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="body2" noWrap title={t.video?.title} sx={{ maxWidth: 340 }}>
+                          {t.video?.title}
+                        </Typography>
+                        <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
+                          <Tooltip title={t.video?.audioReady ? 'Audio presente no volume' : 'Audio ausente no volume'}>
+                            <Chip
+                              size="small"
+                              variant={t.video?.audioReady ? 'filled' : 'outlined'}
+                              color={t.video?.audioReady ? 'success' : 'default'}
+                              label={t.video?.audioReady ? 'Áudio ✓' : 'Áudio —'}
+                            />
+                          </Tooltip>
+                          <Tooltip title={t.video?.videoReady ? 'Video presente no volume (pronto p/ clipes)' : 'Video ausente no volume'}>
+                            <Chip
+                              size="small"
+                              variant={t.video?.videoReady ? 'filled' : 'outlined'}
+                              color={t.video?.videoReady ? 'success' : 'default'}
+                              label={t.video?.videoReady ? 'Vídeo ✓' : 'Vídeo —'}
+                            />
+                          </Tooltip>
+                        </Stack>
+                      </Box>
                     </Stack>
                   </TableCell>
                   <TableCell>

@@ -1,3 +1,4 @@
+const fs = require('fs');
 const {
   VideoTranscript, YoutubeVideo, YoutubeChannel, WebhookEventDefinition
 } = require('../models');
@@ -48,8 +49,18 @@ async function listar(req, res) {
       distinct: true,
     });
 
+    // Verifica no DISCO (volume) se audio/video existem -> mostra o "check" na lista (inclusive pendentes).
+    const items = rows.map((row) => {
+      const t = row.toJSON();
+      if (t.video) {
+        t.video.audioReady = Boolean(t.video.audioPath) && fs.existsSync(t.video.audioPath);
+        t.video.videoReady = Boolean(t.video.videoPath) && fs.existsSync(t.video.videoPath);
+      }
+      return t;
+    });
+
     res.status(200).json({
-      items: rows, total: count, limit, offset
+      items, total: count, limit, offset
     });
   } catch (err) {
     console.error('[videoTranscript] Erro ao listar:', err);
@@ -405,7 +416,6 @@ async function baixarAudio(req, res) {
       return res.status(404).json({ message: 'Este video nao tem audio anexado' });
     }
 
-    const fs = require('fs');
     const path = require('path');
 
     if (!fs.existsSync(video.audioPath)) {
@@ -639,7 +649,6 @@ async function previewRecorteFrames(req, res) {
 async function servirRecorte(req, res) {
   try {
     const { VideoClip } = require('../models');
-    const fs = require('fs');
 
     const clip = await VideoClip.findByPk(req.params.clipId, {
       include: [{ model: YoutubeVideo, as: 'video', attributes: ['videoId'] }],
