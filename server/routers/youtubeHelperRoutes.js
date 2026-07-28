@@ -9,11 +9,20 @@ const helperAuth = require('../middlewares/helperAuth');
 
 const router = Router();
 
-const uploadTmpDir = path.join(os.tmpdir(), 'iecg-helper-upload');
-fs.mkdirSync(uploadTmpDir, { recursive: true });
+// Grava o arquivo temporario no MESMO volume do destino final. Assim o
+// saveVideo/saveAudio usa rename() (move instantaneo, mesmo filesystem) em vez
+// de copyFile() entre filesystems. A copia cross-fs deixava a conexao HTTP
+// ociosa por dezenas de segundos apos o upload — tempo suficiente pra um
+// NAT/roteador/antivirus na ponta do cliente derrubar a conexao (erro 499).
+const audioRoot = process.env.AUDIO_STORAGE_PATH || path.join(os.tmpdir(), 'iecg-audios');
+const videoRoot = process.env.VIDEO_STORAGE_PATH || path.join(os.tmpdir(), 'iecg-videos');
+const audioTmpDir = path.join(audioRoot, '.uploads-tmp');
+const videoTmpDir = path.join(videoRoot, '.uploads-tmp');
+fs.mkdirSync(audioTmpDir, { recursive: true });
+fs.mkdirSync(videoTmpDir, { recursive: true });
 
 const upload = multer({
-  dest: uploadTmpDir,
+  dest: audioTmpDir,
   limits: { fileSize: 500 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = /audio\/(mpeg|mp3|mp4|m4a|wav|ogg|opus|aac|flac|webm)|application\/octet-stream/;
@@ -25,7 +34,7 @@ const upload = multer({
 // Video completo (recortes/Shorts) — arquivos bem maiores que o audio.
 const VIDEO_UPLOAD_LIMIT_MB = Number(process.env.HELPER_VIDEO_UPLOAD_LIMIT_MB || 2048);
 const uploadVideo = multer({
-  dest: uploadTmpDir,
+  dest: videoTmpDir,
   limits: { fileSize: VIDEO_UPLOAD_LIMIT_MB * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = /video\/(mp4|x-matroska|webm|quicktime|x-m4v)|application\/octet-stream/;
