@@ -215,7 +215,7 @@ const db = require('./models');
 require('./hooks/audienceAutoSync').setupAudienceAutoSync(db);
 
 // Iniciar servidor
-app.listen(port, host, async (err) => {
+const server = app.listen(port, host, async (err) => {
   if (err) {
     return logger.error(err.message);
   }
@@ -257,3 +257,12 @@ app.listen(port, host, async (err) => {
     console.info('[embedding] Desativado. Defina EMBEDDING_ENABLED=true para iniciar o servidor Python.');
   }
 });
+
+// Uploads grandes (video do helper): sem isso o Node corta o corpo da requisicao
+// pelos timeouts padrao (headersTimeout 60s / requestTimeout 5min), derrubando o
+// upload no meio da transferencia. Zeramos para nao limitar por tempo — o limite
+// de tamanho ja e controlado pelo multer (HELPER_VIDEO_UPLOAD_LIMIT_MB).
+server.requestTimeout = 0;
+server.headersTimeout = 0;
+server.timeout = 0;
+server.keepAliveTimeout = 65000;
