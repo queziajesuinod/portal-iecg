@@ -628,7 +628,50 @@ async function usuarioPodeRegistrarPagamentoOffline(userId) {
   return (usuario.Perfil?.descricao || '').toLowerCase().includes('admin');
 }
 
+// Serializa submissoes concorrentes do mesmo comprador no mesmo evento. Em internet
+// lenta a pessoa clica varias vezes e as requisicoes chegam quase juntas: sem trava,
+// todas rodam a checagem de duplicata ANTES de qualquer uma gravar a inscricao, entao
+// todas criam inscricao PIX pendente "lixo". Com o advisory lock (por transacao), a 2a
+// requisicao fica bloqueada ate a 1a commitar; ao destravar, a checagem de duplicata em
+// processarInscricaoInterna ja enxerga a pendente e reaproveita o mesmo QR.
+// A transacao "guarda" existe so pra segurar o lock — os creates internos usam o pool
+// normal e commitam sozinhos (ficam visiveis pro proximo que pegar o lock).
+async function executarComLockInscricao(lockKey, fn) {
+  const guardTx = await sequelize.transaction();
+  try {
+    await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:lockKey))', {
+      replacements: { lockKey },
+      transaction: guardTx,
+    });
+    const resultado = await fn();
+    await guardTx.commit();
+    return resultado;
+  } catch (err) {
+    await guardTx.rollback().catch(() => {});
+    throw err;
+  }
+}
+
 async function processarInscricao(dadosInscricao) {
+  const isPix = dadosInscricao?.paymentData?.method === 'pix';
+  const cpf = String(
+    dadosInscricao?.buyerData?.cpf
+    || dadosInscricao?.buyerData?.document
+    || dadosInscricao?.buyerData?.documento
+    || ''
+  ).replace(/\D/g, '');
+
+  // So serializamos PIX com CPF — que e exatamente o caso coberto pela checagem de
+  // duplicata em processarInscricaoInterna. CPF vazio fica pra camada de idempotencia.
+  if (!isPix || !cpf || !dadosInscricao?.eventId) {
+    return processarInscricaoInterna(dadosInscricao);
+  }
+
+  const lockKey = `insc:${dadosInscricao.eventId}:${cpf}`;
+  return executarComLockInscricao(lockKey, () => processarInscricaoInterna(dadosInscricao));
+}
+
+async function processarInscricaoInterna(dadosInscricao) {
   const {
     eventId,
     couponCode,
