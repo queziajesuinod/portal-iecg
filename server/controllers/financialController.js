@@ -66,6 +66,19 @@ async function getFeeConfig(req, res) {
   }
 }
 
+// Endpoint público: expõe apenas as taxas por bandeira/parcela usadas no checkout
+// para o repasse ao cliente (sem dados internos da config financeira).
+async function getPublicFeeConfig(req, res) {
+  try {
+    const config = await financialService.getFeeConfig();
+    res.status(200).json({
+      creditCardBrandRates: config.creditCardBrandRates || {}
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Erro ao carregar taxas' });
+  }
+}
+
 async function updateFeeConfig(req, res) {
   try {
     const userId = req.user?.userId || req.user?.id || null;
@@ -176,6 +189,7 @@ module.exports = {
   exportEntries,
   exportExpenses,
   getFeeConfig,
+  getPublicFeeConfig,
   getHistoricoFeeConfig,
   updateFeeConfig,
   createExpense,

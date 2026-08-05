@@ -1,5 +1,18 @@
 const checkInService = require('../services/checkInService');
 
+function responderErroCheckIn(res, error, mensagemLog) {
+  console.error(mensagemLog, error);
+  const status = error.statusCode || 400;
+  const body = { erro: error.message };
+  if (error.code) {
+    body.code = error.code;
+  }
+  if (error.details && typeof error.details === 'object') {
+    Object.assign(body, error.details);
+  }
+  return res.status(status).json(body);
+}
+
 class CheckInController {
   // ========== AGENDAMENTOS ==========
 
@@ -99,8 +112,7 @@ class CheckInController {
       const checkIn = await checkInService.realizarCheckInManual(req.body, userId);
       return res.status(201).json(checkIn);
     } catch (error) {
-      console.error('Erro ao realizar check-in manual:', error);
-      return res.status(400).json({ erro: error.message });
+      return responderErroCheckIn(res, error, 'Erro ao realizar check-in manual:');
     }
   }
 
@@ -109,8 +121,7 @@ class CheckInController {
       const checkIn = await checkInService.realizarCheckInQRCode(req.body);
       return res.status(201).json(checkIn);
     } catch (error) {
-      console.error('Erro ao realizar check-in QR Code:', error);
-      return res.status(400).json({ erro: error.message });
+      return responderErroCheckIn(res, error, 'Erro ao realizar check-in QR Code:');
     }
   }
 
@@ -119,8 +130,7 @@ class CheckInController {
       const checkIn = await checkInService.realizarCheckInNFC(req.body);
       return res.status(201).json(checkIn);
     } catch (error) {
-      console.error('Erro ao realizar check-in NFC:', error);
-      return res.status(400).json({ erro: error.message });
+      return responderErroCheckIn(res, error, 'Erro ao realizar check-in NFC:');
     }
   }
 
@@ -179,8 +189,9 @@ class CheckInController {
   async listarAttendeesPublico(req, res) {
     try {
       const orderCode = req.query.orderCode || req.params.orderCode;
+      const query = req.query.query || req.query.q || req.query.email || req.query.termo;
       const eventId = req.query.eventId || req.query.event_id || req.params.eventId;
-      const resultado = await checkInService.listarAttendeesPublico({ orderCode, eventId });
+      const resultado = await checkInService.listarAttendeesPublico({ orderCode, query, eventId });
       return res.status(200).json(resultado);
     } catch (error) {
       console.error('Erro ao listar attendees de check-in:', error);

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import {
   Grid,
   Card,
@@ -15,7 +16,9 @@ import NFCIcon from '@mui/icons-material/Nfc';
 import ManualIcon from '@mui/icons-material/TouchApp';
 import { obterEstatisticasCheckIn } from '../../../../api/checkInApi';
 
-function StatCard({ title, value, icon: Icon, color = 'primary', subtitle }) {
+function StatCard({
+  title, value, icon: Icon, color, subtitle
+}) {
   return (
     <Card>
       <CardContent>
@@ -42,7 +45,7 @@ function StatCard({ title, value, icon: Icon, color = 'primary', subtitle }) {
   );
 }
 
-function CheckInStats({ eventId, compact = false }) {
+function CheckInStats({ eventId, compact }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -119,7 +122,7 @@ function CheckInStats({ eventId, compact = false }) {
         <Grid item xs={6} sm={3}>
           <StatCard
             title="Pendentes"
-            value={stats.totalInscricoes - stats.totalCheckIns}
+            value={stats.pendingEvento ?? Math.max((stats.totalInscricoes || 0) - (stats.totalPresentes ?? (stats.totalCheckIns || 0)), 0)}
             icon={PeopleIcon}
             color="#f44336"
           />
@@ -161,7 +164,7 @@ function CheckInStats({ eventId, compact = false }) {
       <Grid item xs={12} sm={6} md={3}>
         <StatCard
           title="Pendentes"
-          value={stats.totalInscricoes - stats.totalCheckIns}
+          value={stats.pendingEvento ?? Math.max((stats.totalInscricoes || 0) - (stats.totalPresentes ?? (stats.totalCheckIns || 0)), 0)}
           icon={PeopleIcon}
           color="#f44336"
           subtitle="Ainda não fizeram check-in"
@@ -230,5 +233,29 @@ function CheckInStats({ eventId, compact = false }) {
     </Grid>
   );
 }
+
+StatCard.propTypes = {
+  title: PropTypes.node.isRequired,
+  value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  icon: PropTypes.elementType.isRequired,
+  color: PropTypes.string,
+  subtitle: PropTypes.node,
+};
+
+StatCard.defaultProps = {
+  value: 0,
+  color: 'primary',
+  subtitle: null,
+};
+
+CheckInStats.propTypes = {
+  eventId: PropTypes.string,
+  compact: PropTypes.bool,
+};
+
+CheckInStats.defaultProps = {
+  eventId: null,
+  compact: false,
+};
 
 export default CheckInStats;

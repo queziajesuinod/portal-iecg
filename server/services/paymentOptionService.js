@@ -46,6 +46,9 @@ function buildPaymentOptionPayload(dados = {}, current = null) {
     ? normalizeInstallmentInterestRates(rawInstallments, maxInstallments)
     : {};
   const sanitizedInterestType = interestType === 'fixed' ? 'fixed' : 'percentage';
+  const absorverTaxaParcelamento = Boolean(
+    dados.absorverTaxaParcelamento ?? current?.absorverTaxaParcelamento ?? false
+  );
 
   return {
     paymentType,
@@ -53,6 +56,7 @@ function buildPaymentOptionPayload(dados = {}, current = null) {
     interestRate: isCreditCard ? interestRate : 0,
     interestType: isCreditCard ? sanitizedInterestType : 'percentage',
     installmentInterestRates,
+    absorverTaxaParcelamento: isCreditCard ? absorverTaxaParcelamento : false,
     isActive: dados.isActive ?? current?.isActive ?? true
   };
 }
@@ -117,6 +121,7 @@ async function atualizar(id, dados) {
   paymentOption.interestRate = payload.interestRate;
   paymentOption.interestType = payload.interestType;
   paymentOption.installmentInterestRates = payload.installmentInterestRates;
+  paymentOption.absorverTaxaParcelamento = payload.absorverTaxaParcelamento;
   paymentOption.isActive = payload.isActive;
 
   await paymentOption.save();

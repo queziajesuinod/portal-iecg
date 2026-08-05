@@ -35,6 +35,67 @@ class CheckInService {
       || fallback;
   }
 
+  obterEmailAttendee(attendee, registration = null) {
+    const attendeeData = attendee?.attendeeData || {};
+    const buyerData = registration?.buyerData || {};
+    return attendeeData.email
+      || attendeeData.email_inscrito
+      || buyerData.email
+      || null;
+  }
+
+  /**
+   * Monta a resposta de um check-in bem sucedido com dados para exibir a
+   * confirmacao no app (nome do inscrito, agendamento, horario).
+   */
+  montarRespostaCheckIn(checkIn, { registration, attendee, schedule } = {}) {
+    const nome = this.obterNomeAttendee(attendee);
+    const email = this.obterEmailAttendee(attendee, registration);
+    const checkInAtLabel = checkIn.checkInAt
+      ? moment.tz(checkIn.checkInAt, TIMEZONE).format('DD/MM/YYYY HH:mm')
+      : null;
+
+    return {
+      success: true,
+      id: checkIn.id,
+      message: `Check-in de ${nome} realizado com sucesso!`,
+      attendee: { name: nome, email },
+      checkInAt: checkIn.checkInAt,
+      checkInAtLabel,
+      scheduleId: schedule?.id || checkIn.scheduleId || null,
+      scheduleName: schedule?.name || null,
+      method: checkIn.checkInMethod,
+      registrationId: checkIn.registrationId,
+      attendeeId: checkIn.attendeeId,
+      orderCode: registration?.orderCode || null
+    };
+  }
+
+  /**
+   * Cria um erro estruturado (HTTP 409) para quando o inscrito ja fez check-in
+   * no agendamento, carregando nome e horario do check-in anterior.
+   */
+  criarErroDuplicado(attendee, checkInExistente, schedule = null) {
+    const nome = this.obterNomeAttendee(attendee);
+    const horaLabel = checkInExistente?.checkInAt
+      ? moment.tz(checkInExistente.checkInAt, TIMEZONE).format('DD/MM/YYYY HH:mm')
+      : null;
+    const mensagem = horaLabel
+      ? `${nome} ja fez check-in neste agendamento em ${horaLabel}.`
+      : `${nome} ja fez check-in neste agendamento.`;
+
+    const erro = new Error(mensagem);
+    erro.code = 'ALREADY_CHECKED_IN';
+    erro.statusCode = 409;
+    erro.details = {
+      attendee: { name: nome },
+      checkInAt: checkInExistente?.checkInAt || null,
+      checkInAtLabel: horaLabel,
+      scheduleName: schedule?.name || null
+    };
+    return erro;
+  }
+
   resolverAttendeeParaCheckIn(registration, attendeeId) {
     const attendees = Array.isArray(registration?.attendees) ? registration.attendees : [];
 
@@ -354,10 +415,10 @@ class CheckInService {
       eventId
     );
     if (checkInNoAgendamento) {
-      throw new Error('Check-in ja realizado neste agendamento');
+      throw this.criarErroDuplicado(attendee, checkInNoAgendamento, scheduleAtivo);
     }
 
-    return EventCheckIn.create({
+    const checkIn = await EventCheckIn.create({
       registrationId: registration.id,
       attendeeId: attendee.id,
       eventId,
@@ -368,6 +429,8 @@ class CheckInService {
       checkInBy: userId,
       notes
     });
+
+    return this.montarRespostaCheckIn(checkIn, { registration, attendee, schedule: scheduleAtivo });
   }
 
   /**
@@ -422,10 +485,10 @@ class CheckInService {
       eventId
     );
     if (checkInNoAgendamento) {
-      throw new Error('Check-in ja realizado neste agendamento');
+      throw this.criarErroDuplicado(attendee, checkInNoAgendamento, scheduleAtivo);
     }
 
-    return EventCheckIn.create({
+    const checkIn = await EventCheckIn.create({
       registrationId: registration.id,
       attendeeId: attendee.id,
       eventId,
@@ -437,6 +500,8 @@ class CheckInService {
       longitude,
       deviceInfo
     });
+
+    return this.montarRespostaCheckIn(checkIn, { registration, attendee, schedule: scheduleAtivo });
   }
 
   /**
@@ -501,10 +566,10 @@ class CheckInService {
       eventId
     );
     if (checkInNoAgendamento) {
-      throw new Error('Check-in ja realizado neste agendamento');
+      throw this.criarErroDuplicado(attendee, checkInNoAgendamento, scheduleAtivo);
     }
 
-    return EventCheckIn.create({
+    const checkIn = await EventCheckIn.create({
       registrationId: registration.id,
       attendeeId: attendee.id,
       eventId,
@@ -516,6 +581,8 @@ class CheckInService {
       longitude,
       deviceInfo
     });
+
+    return this.montarRespostaCheckIn(checkIn, { registration, attendee, schedule: scheduleAtivo });
   }
 
   /**
@@ -590,18 +657,47 @@ class CheckInService {
    * Obter estatÃ­sticas de check-in de um evento
    */
   async obterEstatisticas(eventId) {
-    const totalCheckIns = await EventCheckIn.count({ where: { eventId } });
-
     const event = await Event.findByPk(eventId, { attributes: ['registrationPaymentMode'] });
     const confirmedStatuses = event?.registrationPaymentMode === 'BALANCE_DUE'
       ? ['confirmed', 'partial']
       : ['confirmed'];
 
-    const totalInscricoes = await Registration.count({
-      where: {
-        eventId,
-        paymentStatus: { [Op.in]: confirmedStatuses }
-      }
+    // Total de INSCRITOS (attendees) de inscricoes confirmadas — nao de pedidos/compras.
+    const totalInscritos = await RegistrationAttendee.count({
+      include: [{
+        model: Registration,
+        as: 'registration',
+        attributes: [],
+        required: true,
+        where: {
+          eventId,
+          paymentStatus: { [Op.in]: confirmedStatuses }
+        }
+      }]
+    });
+
+    // Escopo dos contadores: agendamento ativo no momento.
+    const scheduleAtivo = await this.verificarAgendamentoAtivo(eventId);
+
+    // Feitos = inscritos distintos que fizeram check-in no agendamento ativo.
+    const done = scheduleAtivo
+      ? await EventCheckIn.count({
+        where: { eventId, scheduleId: scheduleAtivo.id },
+        distinct: true,
+        col: 'attendeeId'
+      })
+      : 0;
+
+    const pending = Math.max(totalInscritos - done, 0);
+
+    // Total historico de check-ins (todos os agendamentos), para relatorios.
+    const totalCheckIns = await EventCheckIn.count({ where: { eventId } });
+
+    // Inscritos distintos que compareceram em qualquer agendamento (para a taxa).
+    const totalPresentes = await EventCheckIn.count({
+      where: { eventId },
+      distinct: true,
+      col: 'attendeeId'
     });
 
     const porMetodo = await EventCheckIn.findAll({
@@ -630,13 +726,26 @@ class CheckInService {
       group: ['scheduleId', 'schedule.id', 'schedule.name']
     });
 
-    const taxaComparecimento = totalInscricoes > 0
-      ? ((totalCheckIns / totalInscricoes) * 100).toFixed(2)
+    // Taxa baseada em inscritos distintos presentes (nunca passa de 100%).
+    const taxaComparecimento = totalInscritos > 0
+      ? ((totalPresentes / totalInscritos) * 100).toFixed(2)
       : 0;
 
     return {
+      // Contadores exibidos no app (por inscrito, escopo do agendamento ativo)
+      done,
+      pending,
+      totalInscritos,
+      totalCheckInsNoAgendamento: done,
+      scheduleAtivo: scheduleAtivo
+        ? { id: scheduleAtivo.id, name: scheduleAtivo.name }
+        : null,
+      // Escopo do evento inteiro
+      totalPresentes,
+      pendingEvento: Math.max(totalInscritos - totalPresentes, 0),
+      // Compatibilidade / relatorios
+      totalInscricoes: totalInscritos,
       totalCheckIns,
-      totalInscricoes,
       taxaComparecimento: parseFloat(taxaComparecimento),
       porMetodo,
       porAgendamento
@@ -692,14 +801,21 @@ class CheckInService {
     };
   }
 
-  async listarAttendeesPublico({ orderCode, eventId } = {}) {
-    const codigo = String(orderCode || '').trim();
+  async listarAttendeesPublico({ orderCode, query, eventId } = {}) {
     const idEvento = String(eventId || '').trim();
+    const termo = String(query || orderCode || '').trim();
 
-    if (!codigo) {
-      throw new Error('orderCode e obrigatorio');
+    if (!termo) {
+      throw new Error('Informe o codigo de inscricao ou o e-mail do comprador');
     }
 
+    // Busca por e-mail do comprador: agrega os inscritos de todos os pedidos
+    // confirmados daquele e-mail no evento.
+    if (termo.includes('@')) {
+      return this.listarAttendeesPorEmail(termo, idEvento);
+    }
+
+    const codigo = termo;
     const resultado = await this.validarCodigo(codigo);
     if (!resultado?.valido) {
       throw new Error(resultado?.mensagem || 'Codigo de inscricao invalido');
@@ -715,6 +831,7 @@ class CheckInService {
 
     return {
       valido: true,
+      matchedBy: 'orderCode',
       orderCode: resultado.registration?.orderCode,
       eventId: resultado.registration?.eventId,
       eventTitle: resultado.registration?.eventTitle,
@@ -722,6 +839,93 @@ class CheckInService {
       totalCheckInsNoAgendamento: resultado.totalCheckInsNoAgendamento || 0,
       attendees,
       registration: resultado.registration
+    };
+  }
+
+  /**
+   * Buscar inscritos pelo e-mail do comprador dentro de um evento.
+   * Agrega os inscritos de todos os pedidos confirmados daquele e-mail.
+   */
+  async listarAttendeesPorEmail(email, eventId) {
+    if (!eventId) {
+      throw new Error('eventId e obrigatorio para busca por e-mail');
+    }
+
+    const event = await Event.findByPk(eventId, {
+      attributes: ['id', 'title', 'registrationPaymentMode']
+    });
+    if (!event) {
+      throw new Error('Evento nao encontrado');
+    }
+
+    const confirmedStatuses = event.registrationPaymentMode === 'BALANCE_DUE'
+      ? ['confirmed', 'partial']
+      : ['confirmed'];
+    const emailNormalizado = email.trim().toLowerCase();
+
+    const registrations = await Registration.findAll({
+      where: {
+        eventId,
+        paymentStatus: { [Op.in]: confirmedStatuses }
+      },
+      include: [{ model: RegistrationAttendee, as: 'attendees' }]
+    });
+
+    const pedidosDoEmail = registrations.filter((reg) => {
+      const buyerEmail = String(reg.buyerData?.email || '').trim().toLowerCase();
+      return buyerEmail && buyerEmail === emailNormalizado;
+    });
+
+    if (pedidosDoEmail.length === 0) {
+      throw new Error('Nenhuma inscricao confirmada encontrada para este e-mail neste evento');
+    }
+
+    const scheduleAtivo = await this.verificarAgendamentoAtivo(eventId);
+    const attendees = [];
+
+    for (const reg of pedidosDoEmail) {
+      const checkInsAtivos = scheduleAtivo
+        // eslint-disable-next-line no-await-in-loop
+        ? await EventCheckIn.findAll({
+          where: { registrationId: reg.id, scheduleId: scheduleAtivo.id },
+          attributes: ['attendeeId', 'checkInAt']
+        })
+        : [];
+
+      const checkInPorAttendee = checkInsAtivos.reduce((acc, checkIn) => {
+        if (checkIn.attendeeId) {
+          acc[String(checkIn.attendeeId)] = checkIn;
+        }
+        return acc;
+      }, {});
+
+      (reg.attendees || []).forEach((attendee, index) => {
+        const checkIn = checkInPorAttendee[String(attendee.id)] || null;
+        const attendeeJson = attendee.toJSON ? attendee.toJSON() : attendee;
+        const nome = this.obterNomeAttendee(attendee, `Inscrito ${index + 1}`);
+
+        attendees.push({
+          ...attendeeJson,
+          attendeeId: attendee.id,
+          attendeeName: nome,
+          name: nome,
+          email: this.obterEmailAttendee(attendee, reg),
+          orderCode: reg.orderCode,
+          jaFezCheckInNoAgendamento: !!checkIn,
+          checkInAt: checkIn ? checkIn.checkInAt : null
+        });
+      });
+    }
+
+    return {
+      valido: true,
+      matchedBy: 'email',
+      query: email,
+      eventId,
+      eventTitle: event.title,
+      totalPedidos: pedidosDoEmail.length,
+      totalAttendees: attendees.length,
+      attendees
     };
   }
 
