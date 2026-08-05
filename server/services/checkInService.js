@@ -35,13 +35,43 @@ class CheckInService {
       || fallback;
   }
 
+  // Normaliza buyerData/attendeeData (pode vir como objeto ou string JSON)
+  _parseDados(data) {
+    if (!data) return {};
+    if (typeof data === 'string') {
+      try {
+        const parsed = JSON.parse(data);
+        return parsed && typeof parsed === 'object' ? parsed : {};
+      } catch (_) {
+        return {};
+      }
+    }
+    return typeof data === 'object' ? data : {};
+  }
+
+  // Todos os valores (string, minusculos) de um objeto de dados
+  _coletarValores(data) {
+    return Object.values(this._parseDados(data))
+      .map((valor) => String(valor ?? '').trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  // Primeiro campo cujo NOME contenha "email" (cobre buyer_email, email_do_inscrito, etc.)
+  _extrairEmail(data) {
+    const obj = this._parseDados(data);
+    if (obj.email) return obj.email;
+    const chave = Object.keys(obj).find(
+      (k) => k.toLowerCase().includes('email') && obj[k]
+    );
+    return chave ? obj[chave] : null;
+  }
+
   obterEmailAttendee(attendee, registration = null) {
-    const attendeeData = attendee?.attendeeData || {};
-    const buyerData = registration?.buyerData || {};
-    return attendeeData.email
-      || attendeeData.email_inscrito
-      || buyerData.email
-      || null;
+    return (
+      this._extrairEmail(attendee?.attendeeData)
+      || this._extrairEmail(registration?.buyerData)
+      || null
+    );
   }
 
   /**
@@ -871,9 +901,15 @@ class CheckInService {
       include: [{ model: RegistrationAttendee, as: 'attendees' }]
     });
 
+    // Casa o e-mail com qualquer campo do comprador (buyer_email, email, ...)
+    // ou de qualquer inscrito (email_do_inscrito, email, ...), sem depender do
+    // nome exato do campo (que varia por evento).
     const pedidosDoEmail = registrations.filter((reg) => {
-      const buyerEmail = String(reg.buyerData?.email || '').trim().toLowerCase();
-      return buyerEmail && buyerEmail === emailNormalizado;
+      if (this._coletarValores(reg.buyerData).includes(emailNormalizado)) {
+        return true;
+      }
+      return (reg.attendees || []).some((att) => this._coletarValores(att.attendeeData).includes(emailNormalizado)
+      );
     });
 
     if (pedidosDoEmail.length === 0) {
