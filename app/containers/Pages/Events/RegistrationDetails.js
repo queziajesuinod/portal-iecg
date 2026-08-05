@@ -57,6 +57,7 @@ import {
   atualizarParticipante
 } from '../../../api/eventsApi';
 import { getPaymentStatusChipSx, getPaymentStatusLabel } from '../../../constants/paymentStatus';
+import { getCieloReturnCodeMessage } from '../../../constants/cieloReturnCodes';
 import { getStoredPermissions } from '../../../utils/permissions';
 import { formatDateTimeInAppTimezone } from '../../../utils/dateTime';
 import Notification from '../../../components/Notification/Notification';
@@ -420,7 +421,13 @@ function RegistrationDetails() {
 
   const formatarData = (data) => formatDateTimeInAppTimezone(data);
 
-  const formatarPreco = (preco) => `R$ ${parseFloat(preco).toFixed(2).replace('.', ',')}`;
+  const formatarPreco = (preco) => {
+    const valor = parseFloat(preco);
+    if (!Number.isFinite(valor)) {
+      return '—';
+    }
+    return `R$ ${valor.toFixed(2).replace('.', ',')}`;
+  };
 
   const getMetodoPagamentoLabel = (metodo) => {
     const labels = {
@@ -449,11 +456,42 @@ function RegistrationDetails() {
   // Status numéricos da Cielo: 10 = Voided, 11 = Refunded — só estes confirmam estorno/cancelamento.
   const CIELO_VOID_OK_STATUSES = new Set(['10', '11', 10, 11]);
 
+  // Rótulo e cor por status numérico da Cielo (usado na autorização de cartão).
+  const CIELO_AUTH_STATUS_META = {
+    0: { label: 'Não finalizada', color: 'default' },
+    1: { label: 'Autorizada', color: 'success' },
+    2: { label: 'Confirmada', color: 'success' },
+    3: { label: 'Negada', color: 'error' },
+    10: { label: 'Cancelada', color: 'default' },
+    11: { label: 'Reembolsada', color: 'default' },
+    12: { label: 'Pendente', color: 'default' },
+    13: { label: 'Abortada', color: 'error' },
+    20: { label: 'Agendada', color: 'default' }
+  };
+
+  // A resposta da Cielo pode vir como string (JSON) e, na autorização/consulta,
+  // os campos ficam aninhados dentro de Payment. Este helper normaliza os dois casos.
+  const obterRespostaCielo = (transaction) => {
+    let data = transaction.responseData;
+    if (typeof data === 'string') {
+      try {
+        data = JSON.parse(data);
+      } catch (error) {
+        return { root: {}, payment: {} };
+      }
+    }
+    if (!data || typeof data !== 'object') {
+      return { root: {}, payment: {} };
+    }
+    return { root: data, payment: data.Payment || {} };
+  };
+
   const getResultadoTransacao = (transaction) => {
     const tipo = transaction.transactionType;
     const { status } = transaction;
     const hasError = Boolean(transaction.errorMessage);
-    const cieloStatus = transaction.responseData?.Status;
+    const { root, payment } = obterRespostaCielo(transaction);
+    const cieloStatus = root.Status;
 
     if (tipo === 'refund' || tipo === 'cancellation') {
       const semRespostaCielo = cieloStatus === undefined || cieloStatus === null;
@@ -472,16 +510,53 @@ function RegistrationDetails() {
       };
     }
 
+    // Autorização/captura: traduz o status numérico da Cielo (raiz ou Payment).
+    const statusNumerico = Number(
+      payment.Status != null ? payment.Status : (status != null ? status : cieloStatus)
+    );
+    const meta = Number.isFinite(statusNumerico) ? CIELO_AUTH_STATUS_META[statusNumerico] : null;
+    if (meta) {
+      return meta;
+    }
+
     if (hasError) {
       return { label: 'Falha', color: 'error' };
     }
-    return { label: status || '—', color: 'default' };
+    return { label: getPaymentStatusLabel(status) || '—', color: 'default' };
+  };
+
+  // Valor da transação: usa o campo gravado e, na falta dele, o Amount que a
+  // Cielo devolve no payload (em centavos).
+  const getValorTransacao = (transaction) => {
+    if (transaction.amount != null && Number.isFinite(Number(transaction.amount))) {
+      return Number(transaction.amount);
+    }
+    const { root, payment } = obterRespostaCielo(transaction);
+    const cieloAmount = payment.Amount ?? root.Amount;
+    if (cieloAmount != null && Number.isFinite(Number(cieloAmount))) {
+      return Number(cieloAmount) / 100;
+    }
+    return null;
   };
 
   const getMensagemCielo = (transaction) => {
-    if (transaction.errorMessage) return transaction.errorMessage;
-    const data = transaction.responseData || {};
-    return data.ReturnMessage || data.ProviderReturnMessage || data.ReasonMessage || null;
+    const { root, payment } = obterRespostaCielo(transaction);
+    // ReturnCode/ReturnMessage podem estar na raiz (estorno/cancelamento) ou
+    // aninhados em Payment (autorização/consulta de cartão).
+    const returnCode = payment.ReturnCode ?? root.ReturnCode ?? null;
+    const returnMessage = payment.ReturnMessage
+      || root.ReturnMessage
+      || payment.ProviderReturnMessage
+      || root.ProviderReturnMessage
+      || root.ReasonMessage
+      || transaction.errorMessage
+      || null;
+
+    const traduzido = getCieloReturnCodeMessage(returnCode, returnMessage);
+    if (traduzido && returnCode) {
+      return `${traduzido} (código ${returnCode})`;
+    }
+    return traduzido || returnMessage || null;
   };
 
   const copiarParaAreaTransferencia = async (texto, rotulo = 'Texto') => {
@@ -909,6 +984,7 @@ function RegistrationDetails() {
                         {inscricao.transactions.map((transaction) => {
                           const resultado = getResultadoTransacao(transaction);
                           const mensagemCielo = getMensagemCielo(transaction);
+                          const valorTransacao = getValorTransacao(transaction);
                           return (
                             <TableRow key={transaction.id}>
                               <TableCell>
@@ -937,7 +1013,7 @@ function RegistrationDetails() {
                                 />
                               </TableCell>
                               <TableCell align="right">
-                                {formatarPreco(transaction.amount)}
+                                {valorTransacao != null ? formatarPreco(valorTransacao) : '—'}
                               </TableCell>
                               <TableCell>
                                 {mensagemCielo ? (

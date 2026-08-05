@@ -5,9 +5,12 @@ const couponController = require('../controllers/couponController');
 const registrationController = require('../controllers/registrationController');
 const batchController = require('../controllers/batchController');
 const paymentOptionController = require('../controllers/paymentOptionController');
+const financialController = require('../controllers/financialController');
 
 // ============= EVENTOS PÚBLICOS =============
 router.get('/', eventController.listarPublicos);
+// Taxas por bandeira/parcela para repasse no checkout (antes de /:id para não colidir)
+router.get('/fee-config', financialController.getPublicFeeConfig);
 router.get('/:id', eventController.buscarPublicoPorId);
 router.get('/:eventId/batches', batchController.listarPorEvento);
 router.get('/:eventId/form-fields', require('../controllers/formFieldController').listarPorEvento);

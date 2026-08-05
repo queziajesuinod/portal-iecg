@@ -34,7 +34,9 @@ import {
   Backdrop,
   Skeleton,
   Stack,
-  Alert
+  Alert,
+  FormControlLabel,
+  Checkbox
 } from '@mui/material';
 import BackIcon from '@mui/icons-material/ArrowBack';
 import EditIcon from '@mui/icons-material/Edit';
@@ -257,7 +259,8 @@ function EventDetails() {
   const [formPagamento, setFormPagamento] = useState({
     paymentType: 'credit_card',
     maxInstallments: 1,
-    installmentInterestRates: {}
+    installmentInterestRates: {},
+    absorverTaxaParcelamento: false
   });
 
   useEffect(() => {
@@ -437,14 +440,16 @@ function EventDetails() {
         maxInstallments,
         installmentInterestRates: Object.keys(normalizedRates).length > 0
           ? normalizedRates
-          : buildLegacyRates(maxInstallments, pagamento.interestRate)
+          : buildLegacyRates(maxInstallments, pagamento.interestRate),
+        absorverTaxaParcelamento: !!pagamento.absorverTaxaParcelamento
       });
     } else {
       setPagamentoEdicao(null);
       setFormPagamento({
         paymentType: 'credit_card',
         maxInstallments: 1,
-        installmentInterestRates: {}
+        installmentInterestRates: {},
+        absorverTaxaParcelamento: false
       });
     }
     setDialogPagamentoAberto(true);
@@ -2031,41 +2036,68 @@ function EventDetails() {
                 </Grid>
 
                 <Grid item xs={12}>
-                  <Typography variant="body2" color="textSecondary">
-                    Configure o juros percentual para cada quantidade de parcela (a partir de 2x).
-                  </Typography>
-                </Grid>
-
-                {Array.from({ length: Math.max(0, Number(formPagamento.maxInstallments || 1) - 1) }).map((_, index) => {
-                  const installments = index + 2;
-                  return (
-                    <Grid item xs={12} sm={6} key={`interest-${installments}`}>
-                      <TextField
-                        fullWidth
-                        type="number"
-                        label={`Juros para ${installments}x (%)`}
-                        value={formPagamento.installmentInterestRates?.[String(installments)] ?? 0}
-                        onChange={(e) => {
-                          const nextRate = Number(e.target.value);
-                          setFormPagamento((prev) => ({
-                            ...prev,
-                            installmentInterestRates: {
-                              ...(prev.installmentInterestRates || {}),
-                              [String(installments)]: Number.isFinite(nextRate) && nextRate >= 0 ? nextRate : 0
-                            }
-                          }));
-                        }}
-                        inputProps={{ min: 0, step: 0.01 }}
+                  <FormControlLabel
+                    control={(
+                      <Checkbox
+                        checked={!!formPagamento.absorverTaxaParcelamento}
+                        onChange={(e) => setFormPagamento((prev) => ({
+                          ...prev,
+                          absorverTaxaParcelamento: e.target.checked
+                        }))}
                       />
-                    </Grid>
-                  );
-                })}
+                    )}
+                    label="Absorver a taxa de parcelamento (não repassar ao cliente)"
+                  />
+                </Grid>
 
                 <Grid item xs={12}>
-                  <Typography variant="caption" color="textSecondary">
-                    Exemplo: 2x = 1,50 e 3x = 2,10. Deixe 0 para parcela sem juros.
-                  </Typography>
+                  <Alert severity={formPagamento.absorverTaxaParcelamento ? 'warning' : 'info'}>
+                    {formPagamento.absorverTaxaParcelamento
+                      ? 'Este evento NÃO repassa a taxa de parcelamento. A igreja absorve o custo do parcelado.'
+                      : 'A taxa de parcelamento (2x+) é aplicada automaticamente por bandeira, usando a tabela de taxas do Financeiro. Não é necessário configurar juros aqui.'}
+                  </Alert>
                 </Grid>
+
+                {!formPagamento.absorverTaxaParcelamento && (
+                  <>
+                    <Grid item xs={12}>
+                      <Typography variant="body2" color="textSecondary">
+                        Juros manual por parcela (opcional) — usado apenas como fallback quando a bandeira não tiver taxa cadastrada no Financeiro.
+                      </Typography>
+                    </Grid>
+
+                    {Array.from({ length: Math.max(0, Number(formPagamento.maxInstallments || 1) - 1) }).map((_, index) => {
+                      const installments = index + 2;
+                      return (
+                        <Grid item xs={12} sm={6} key={`interest-${installments}`}>
+                          <TextField
+                            fullWidth
+                            type="number"
+                            label={`Juros fallback ${installments}x (%)`}
+                            value={formPagamento.installmentInterestRates?.[String(installments)] ?? 0}
+                            onChange={(e) => {
+                              const nextRate = Number(e.target.value);
+                              setFormPagamento((prev) => ({
+                                ...prev,
+                                installmentInterestRates: {
+                                  ...(prev.installmentInterestRates || {}),
+                                  [String(installments)]: Number.isFinite(nextRate) && nextRate >= 0 ? nextRate : 0
+                                }
+                              }));
+                            }}
+                            inputProps={{ min: 0, step: 0.01 }}
+                          />
+                        </Grid>
+                      );
+                    })}
+
+                    <Grid item xs={12}>
+                      <Typography variant="caption" color="textSecondary">
+                        Deixe 0 para usar somente a taxa automática da bandeira.
+                      </Typography>
+                    </Grid>
+                  </>
+                )}
               </>
             )}
           </Grid>

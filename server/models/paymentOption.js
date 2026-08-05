@@ -1,4 +1,3 @@
-'use strict';
 const { Model, DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
@@ -49,7 +48,14 @@ module.exports = (sequelize) => {
       type: DataTypes.JSONB,
       allowNull: true,
       defaultValue: {},
-      comment: 'Mapa de juros por parcela. Ex.: {"2": 1.5, "3": 2.1}'
+      comment: 'Mapa de juros por parcela (legado). Ex.: {"2": 1.5, "3": 2.1}'
+    },
+    absorverTaxaParcelamento: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: 'true = evento absorve a taxa de parcelamento (não repassa). '
+        + 'false (padrão) = repassa automaticamente a taxa da Cielo por bandeira.'
     },
     isActive: {
       type: DataTypes.BOOLEAN,

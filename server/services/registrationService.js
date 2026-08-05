@@ -22,6 +22,7 @@ const couponService = require('./couponService');
 const formFieldService = require('./formFieldService');
 const registrationRuleService = require('./registrationRuleService');
 const paymentService = require('./paymentService');
+const financialService = require('./financialService');
 const efiService = require('./efiService');
 const eventService = require('./eventService');
 const webhookEmitter = require('./webhookEmitter');
@@ -257,14 +258,69 @@ function calcularValorCobradoPagamento(payment = {}) {
   return normalizarValor(Number(payment.amount || 0) + Number(payment.taxa || 0));
 }
 
-function calcularValorComJurosPorParcelas(valorBase, paymentOption, parcelas) {
+function normalizarBandeiraParaTaxa(brand) {
+  const normalizado = paymentService.normalizeCardBrand(brand);
+  return normalizado ? normalizado.toLowerCase() : null;
+}
+
+/**
+ * Taxa TOTAL da Cielo (%) para a bandeira e a quantidade de parcelas, lida da
+ * configuração global de taxas (creditCardBrandRates). Retorna null se não houver.
+ */
+function obterTaxaCieloPorBandeira(cieloBrandRates, brand, installments) {
+  if (!cieloBrandRates || typeof cieloBrandRates !== 'object') {
+    return null;
+  }
+  const brandKey = normalizarBandeiraParaTaxa(brand);
+  if (!brandKey) {
+    return null;
+  }
+  const cfg = cieloBrandRates[brandKey];
+  if (!cfg) {
+    return null;
+  }
+  const map = cfg.installmentPercent && typeof cfg.installmentPercent === 'object' ? cfg.installmentPercent : {};
+  const perInstallment = Number(map[String(installments)]);
+  if (Number.isFinite(perInstallment) && perInstallment > 0) {
+    return perInstallment;
+  }
+  const def = Number(cfg.defaultPercent);
+  return Number.isFinite(def) && def > 0 ? def : null;
+}
+
+/**
+ * Calcula o valor final cobrado do cliente incluindo o repasse da taxa de
+ * parcelamento (apenas cartão de crédito, 2x+).
+ *
+ * Modelo atual (repasse automático por bandeira):
+ *   - 1x / PIX / opção que absorve → sem repasse (retorna o valor base).
+ *   - 2x+ → usa a taxa TOTAL da Cielo daquela bandeira/parcela (config global)
+ *     com gross-up: total = base ÷ (1 − taxa%/100), para cobrir 100% da taxa.
+ *
+ * opts: { brand, cieloBrandRates } — sem opts, cai no comportamento legado
+ * (juros configurado por parcela no próprio evento), preservando compatibilidade.
+ */
+function calcularValorComJurosPorParcelas(valorBase, paymentOption, parcelas, opts = {}) {
   const valor = normalizarValor(valorBase);
   const installments = Number(parcelas) || 1;
 
+  // À vista (1x) e não-cartão: sem repasse.
   if (paymentOption?.paymentType !== 'credit_card' || installments <= 1) {
     return valor;
   }
 
+  // Opt-out por evento: absorve a taxa de parcelamento.
+  if (paymentOption.absorverTaxaParcelamento) {
+    return valor;
+  }
+
+  // Preferencial: taxa real da Cielo por bandeira, com gross-up.
+  const taxaCielo = obterTaxaCieloPorBandeira(opts.cieloBrandRates, opts.brand, installments);
+  if (Number.isFinite(taxaCielo) && taxaCielo > 0 && taxaCielo < 100) {
+    return normalizarValor(valor / (1 - (taxaCielo / 100)));
+  }
+
+  // Fallback (compatibilidade): juros configurado por parcela no evento.
   const installmentRates = paymentOption.installmentInterestRates && typeof paymentOption.installmentInterestRates === 'object'
     ? paymentOption.installmentInterestRates
     : {};
@@ -284,6 +340,43 @@ function calcularValorComJurosPorParcelas(valorBase, paymentOption, parcelas) {
   }
 
   return normalizarValor(valor + (valor * (legacyRate / 100)));
+}
+
+/**
+ * Detecta a bandeira do cartão (para o cálculo do repasse) a partir do
+ * paymentData, sem depender do fluxo de cobrança.
+ */
+function detectarBandeiraParaTaxa(paymentOption, paymentData = {}) {
+  if (paymentOption?.paymentType !== 'credit_card') {
+    return null;
+  }
+  if (paymentData.brand) {
+    return paymentData.brand;
+  }
+  const cardDigits = (paymentData.cardNumber || '').replace(/\D/g, '');
+  return cardDigits ? paymentService.detectarBandeira(cardDigits) : null;
+}
+
+/**
+ * Carrega as taxas Cielo por bandeira (config global) apenas quando há repasse
+ * de parcelamento a calcular. Retorna null caso contrário.
+ */
+async function obterCieloBrandRatesParaRepasse(paymentOption, parcelas) {
+  const installments = Number(parcelas) || 1;
+  if (
+    paymentOption?.paymentType !== 'credit_card'
+    || installments <= 1
+    || paymentOption.absorverTaxaParcelamento
+  ) {
+    return null;
+  }
+  try {
+    const feeConfig = await financialService.getFeeConfig();
+    return feeConfig?.creditCardBrandRates || null;
+  } catch (error) {
+    console.error('[registrationService] Falha ao carregar taxas Cielo para repasse:', error.message);
+    return null;
+  }
 }
 
 function obterRegraJurosParcelamento(paymentOption, parcelas) {
@@ -924,8 +1017,13 @@ async function processarInscricaoInterna(dadosInscricao) {
   const valorBasePagamento = paymentMode === 'BALANCE_DUE' && valorInformadoBase > 0
     ? valorInformadoBase
     : precoFinal;
-  let valorFinalComJuros = valorBasePagamento;
-  valorFinalComJuros = calcularValorComJurosPorParcelas(valorBasePagamento, paymentOption, parcelas);
+  // Repasse automático da taxa de parcelamento por bandeira (2x+), da config global.
+  const bandeiraParaTaxa = detectarBandeiraParaTaxa(paymentOption, paymentData);
+  const cieloBrandRates = await obterCieloBrandRatesParaRepasse(paymentOption, parcelas);
+  const valorFinalComJuros = calcularValorComJurosPorParcelas(valorBasePagamento, paymentOption, parcelas, {
+    brand: bandeiraParaTaxa,
+    cieloBrandRates
+  });
 
   // 8.2. Processar pagamento conforme o tipo
   let resultadoPagamento;
@@ -1557,7 +1655,12 @@ async function criarPagamentoOnline(registrationId, payload = {}) {
       throw new Error(`Valor mÃ­nimo de sinal Ã© R$ ${Number(registration.event.minDepositAmount).toFixed(2).replace('.', ',')}`);
     }
   }
-  const valorFinalComJuros = calcularValorComJurosPorParcelas(amount, paymentOption, parcelas);
+  const bandeiraParaTaxa = detectarBandeiraParaTaxa(paymentOption, paymentData);
+  const cieloBrandRates = await obterCieloBrandRatesParaRepasse(paymentOption, parcelas);
+  const valorFinalComJuros = calcularValorComJurosPorParcelas(amount, paymentOption, parcelas, {
+    brand: bandeiraParaTaxa,
+    cieloBrandRates
+  });
 
   const merchantOrderId = `${registration.orderCode}-P${pagamentosExistentes.length + 1}`;
   let resultadoPagamento;
