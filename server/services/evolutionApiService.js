@@ -215,20 +215,25 @@ class EvolutionApiService {
    * Verificar status da instância
    * @returns {Promise<Object>}
    */
-  async verificarStatus() {
+  async verificarStatus(instanceName = this.instanceName) {
+    const instance = instanceName || this.instanceName;
     try {
       const client = this.getClient();
-      const response = await client.get(`/instance/connectionState/${this.instanceName}`);
+      const response = await client.get(`/instance/connectionState/${instance}`);
+      const estado = response.data?.state || response.data?.instance?.state;
 
       return {
-        conectado: response.data?.state === 'open',
-        estado: response.data?.state,
+        instancia: instance,
+        conectado: estado === 'open',
+        estado,
         dados: response.data
       };
     } catch (error) {
-      console.error('Erro ao verificar status da instância:', error.response?.data || error.message);
+      console.error(`Erro ao verificar status da instância ${instance}:`, error.response?.data || error.message);
       return {
+        instancia: instance,
         conectado: false,
+        httpStatus: error.response?.status || null,
         erro: error.response?.data?.message || error.message
       };
     }

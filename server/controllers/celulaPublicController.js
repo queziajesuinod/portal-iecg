@@ -35,12 +35,26 @@ class CelulaPublicController {
     }
   }
 
+  async listarHierarquiaOptions(req, res) {
+    try {
+      const options = await CelulaPublicService.listarHierarquiaOptions();
+      return res.status(200).json(options);
+    } catch (error) {
+      return res.status(500).json({ erro: error.message });
+    }
+  }
+
   async criar(req, res) {
     try {
       let payload = req.body || {};
       if (!payload.celula && payload.json) {
         payload = payload.json;
       }
+      // leaderId nao e coluna da celula: normaliza para liderId antes do dedup.
+      if (payload.leaderId && !payload.liderId) {
+        payload.liderId = payload.leaderId;
+      }
+      delete payload.leaderId;
       const existente = await CelulaPublicService.buscarPorCampos(payload);
       if (existente) {
         return res.status(200).json(formatarResposta(existente));
@@ -51,7 +65,6 @@ class CelulaPublicController {
       return res.status(400).json({ erro: error.message });
     }
   }
-
 }
 
 module.exports = new CelulaPublicController();

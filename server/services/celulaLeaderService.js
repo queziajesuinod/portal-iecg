@@ -1,5 +1,5 @@
 /* eslint-disable camelcase */
-const { Op } = require('sequelize');
+const { Op, literal } = require('sequelize');
 const {
   Celula, User, Member, MemberJourney
 } = require('../models');
@@ -103,7 +103,15 @@ class CelulaLeaderService {
   static async findCandidateLeader({ email, telefone, excludeId } = {}) {
     const clauses = [];
     if (email) clauses.push({ email: { [Op.iLike]: email } });
-    if (telefone) clauses.push({ telefone });
+    if (telefone) {
+      // Match pelos ultimos 11 digitos (ignora mascara/DDI 55). telefone aqui
+      // ja vem sanitizado (so digitos), sem risco de injecao no literal.
+      const digits = String(telefone).replace(/\D/g, '');
+      if (digits) {
+        const last11 = digits.slice(-11);
+        clauses.push(literal(`regexp_replace(COALESCE("User"."telefone", ''), '\\D', '', 'g') LIKE '%${last11}'`));
+      }
+    }
     if (!clauses.length) return null;
 
     const where = { [Op.or]: clauses };
@@ -241,7 +249,10 @@ class CelulaLeaderService {
     numero,
     cep,
     escolaridade,
-    nome_esposo
+    nome_esposo,
+    liderancaApostolicaMemberId,
+    pastorGeracaoMemberId,
+    pastorCampusMemberId
   }) {
     const celula = celulaId ? await Celula.findByPk(celulaId) : null;
     if (celulaId && !celula) throw new Error('Célula não encontrada');
@@ -321,6 +332,15 @@ class CelulaLeaderService {
         cep,
         image
       });
+
+      // Cadeia de cobertura (Lideranca Apostolica -> Pastor de Geracao -> Pastor
+      // de Campus). O membro e a fonte da verdade: ao gravar aqui, o hook
+      // afterSave do Member cascateia a trinca para as celulas onde ele e lider.
+      await CelulaLeaderService.persistMemberHierarquia(liderMemberId, {
+        liderancaApostolicaMemberId,
+        pastorGeracaoMemberId,
+        pastorCampusMemberId
+      });
     }
 
     const estadoCivilNorm = normalizeEstadoCivil(estado_civil);
@@ -395,6 +415,41 @@ class CelulaLeaderService {
     if (Object.keys(updates).length) {
       await member.update(updates, { skipLinkedUserSync: true });
     }
+  }
+
+  /**
+   * Grava a trinca de hierarquia (Lideranca Apostolica, Pastor de Geracao,
+   * Pastor de Campus) no cadastro do membro. So considera campos definidos
+   * (undefined = nao mexe); string vazia limpa o vinculo. A gravacao dispara
+   * o hook afterSave do Member, que cascateia a hierarquia para as celulas.
+   */
+  static async persistMemberHierarquia(memberId, {
+    liderancaApostolicaMemberId,
+    pastorGeracaoMemberId,
+    pastorCampusMemberId
+  } = {}) {
+    const normalize = (value) => {
+      if (value === undefined) return undefined; // nao enviado -> nao altera
+      const trimmed = String(value).trim();
+      return trimmed.length ? trimmed : null; // vazio -> limpa
+    };
+
+    const updates = {};
+    const la = normalize(liderancaApostolicaMemberId);
+    const pg = normalize(pastorGeracaoMemberId);
+    const pc = normalize(pastorCampusMemberId);
+    if (la !== undefined) updates.liderancaApostolicaMemberId = la;
+    if (pg !== undefined) updates.pastorGeracaoMemberId = pg;
+    if (pc !== undefined) updates.pastorCampusMemberId = pc;
+
+    if (!Object.keys(updates).length) return;
+
+    const member = await Member.findByPk(memberId);
+    if (!member) return;
+
+    // Evita auto-referencia: se a LA apontar para o proprio membro, mantem
+    // (o membro pode ser a propria Lideranca Apostolica).
+    await member.update(updates);
   }
 
   static async linkSpouseByContact({ leaderId, email, telefone }) {

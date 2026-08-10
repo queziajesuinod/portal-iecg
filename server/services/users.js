@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const uuid = require('uuid');
-const { Op } = require('sequelize');
+const { Op, literal } = require('sequelize');
 const {
   User,
   Perfil,
@@ -376,8 +376,12 @@ async function findUserWithSpouseByContact({ email, telefone }) {
   }
   if (telefone) {
     const digits = sanitizePhone(telefone);
+    // Compara pelos ultimos 11 digitos (ignora mascara, DDI 55 e formatacao),
+    // tolerante a numeros salvos com/sem codigo do pais. digits e so numeros
+    // (sanitizePhone), entao nao ha risco de injecao no literal.
     if (digits) {
-      clauses.push({ telefone: digits });
+      const last11 = digits.slice(-11);
+      clauses.push(literal(`regexp_replace(COALESCE("User"."telefone", ''), '\\D', '', 'g') LIKE '%${last11}'`));
     }
   }
 

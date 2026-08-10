@@ -1,4 +1,3 @@
-'use strict';
 const { Model, DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
@@ -10,6 +9,8 @@ module.exports = (sequelize) => {
       if (models.ApeloDirecionadoHistorico) {
         ApeloDirecionadoCelula.hasMany(models.ApeloDirecionadoHistorico, { foreignKey: 'apelo_id', as: 'historicos' });
       }
+      // Auto-referência: vínculo de casal entre dois apelos (cada cônjuge em sua rede).
+      ApeloDirecionadoCelula.belongsTo(ApeloDirecionadoCelula, { foreignKey: 'conjuge_apelo_id', as: 'conjuge' });
     }
   }
 
@@ -64,6 +65,14 @@ module.exports = (sequelize) => {
       type: DataTypes.BOOLEAN,
       allowNull: true
     },
+    celula_casal: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true
+    },
+    conjuge_apelo_id: {
+      type: DataTypes.UUID,
+      allowNull: true
+    },
     idade: {
       type: DataTypes.INTEGER,
       allowNull: true
@@ -106,10 +115,6 @@ module.exports = (sequelize) => {
     },
     celula_id: {
       type: DataTypes.UUID,
-      allowNull: true
-    },
-    data_direcionamento: {
-      type: DataTypes.DATEONLY,
       allowNull: true
     },
     createdAt: {

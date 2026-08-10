@@ -19,6 +19,7 @@ import {
   buscarMembro,
   sincronizarDadosDoUser,
   notificarDadosIncompletos as notificarDadosIncompletosApi,
+  notificarCelulasLider as notificarCelulasLiderApi,
   adicionarCargoMembro,
   removerCargoMembro
 } from '../../../api/membersApi';
@@ -40,15 +41,18 @@ import MembersTable from './members/MembersTable';
 import DuplicatesPanel from './members/DuplicatesPanel';
 import MemberFormDialog from './members/MemberFormDialog';
 import MergeConfirmDialog from './members/MergeConfirmDialog';
+import NotifyCelulasDialog from './members/NotifyCelulasDialog';
 
 // Fetcher paginado server-side: a UI passa page/limit/filters; o backend devolve a fatia.
 const fetchMembersPage = async ({
-  page, limit, search, status, isLider
+  page, limit, search, status, isLider, cargo, minCelulas
 }) => {
   const params = { page, limit };
   if (search) params.search = search;
   if (status) params.status = status;
   if (isLider) params.isLider = 'true';
+  if (Array.isArray(cargo) && cargo.length) params.cargo = cargo.join(',');
+  if (minCelulas) params.minCelulas = String(minCelulas);
   const response = await listarMembros(params);
   return {
     members: Array.isArray(response?.members) ? response.members : [],
@@ -82,7 +86,11 @@ const MembrosPage = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [isLiderFilter, setIsLiderFilter] = useState(false);
+  const [cargoFilter, setCargoFilter] = useState([]);
+  const [minCelulasFilter, setMinCelulasFilter] = useState('');
   const [notificandoMembro, setNotificandoMembro] = useState({});
+  const [notificandoCelulas, setNotificandoCelulas] = useState({});
+  const [notifyCelulasTarget, setNotifyCelulasTarget] = useState(null);
   const [sincronizandoMembro, setSincronizandoMembro] = useState({});
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -114,7 +122,9 @@ const MembrosPage = () => {
     search: debouncedSearch || undefined,
     status: statusFilter || undefined,
     isLider: isLiderFilter || undefined,
-  }), [page, rowsPerPage, debouncedSearch, statusFilter, isLiderFilter]);
+    cargo: cargoFilter.length ? cargoFilter : undefined,
+    minCelulas: minCelulasFilter || undefined,
+  }), [page, rowsPerPage, debouncedSearch, statusFilter, isLiderFilter, cargoFilter, minCelulasFilter]);
 
   // Pagina atual de membros — server-side. placeholderData mantem a anterior visivel durante refetch.
   const membersQuery = useQuery({
@@ -508,6 +518,26 @@ const MembrosPage = () => {
     }
   };
 
+  // Abre o dialog de confirmação (layout do sistema) antes de notificar.
+  const notificarCelulasLiderHandler = (member) => {
+    setNotifyCelulasTarget(member);
+  };
+
+  const enviarNotificacaoCelulas = async () => {
+    const member = notifyCelulasTarget;
+    if (!member) return;
+    setNotificandoCelulas((prev) => ({ ...prev, [member.id]: true }));
+    try {
+      await notificarCelulasLiderApi(member.id);
+      notify('Notificação enviada ao líder com o link para atualizar as células.');
+      setNotifyCelulasTarget(null);
+    } catch (err) {
+      notify(err.message || 'Erro ao notificar o líder.', 'error');
+    } finally {
+      setNotificandoCelulas((prev) => ({ ...prev, [member.id]: false }));
+    }
+  };
+
   return (
     <PapperBlock title="Membros" desc="Lista de membros">
       <Helmet>
@@ -534,6 +564,10 @@ const MembrosPage = () => {
             onStatusFilterChange={(value) => { setStatusFilter(value); setPage(0); }}
             isLiderFilter={isLiderFilter}
             onToggleLiderFilter={() => { setIsLiderFilter((v) => !v); setPage(0); }}
+            cargoFilter={cargoFilter}
+            onCargoFilterChange={(value) => { setCargoFilter(value); setPage(0); }}
+            minCelulasFilter={minCelulasFilter}
+            onMinCelulasFilterChange={(value) => { setMinCelulasFilter(value); setPage(0); }}
             onCreate={handleOpenCreate}
           />
           <MembersTable
@@ -544,11 +578,14 @@ const MembrosPage = () => {
             onPageChange={setPage}
             onRowsPerPageChange={(value) => { setRowsPerPage(value); setPage(0); }}
             loading={loading}
+            showLeaderColumns={isLiderFilter || Boolean(minCelulasFilter)}
             updatingMemberId={updatingMemberId}
             notificandoMembro={notificandoMembro}
+            notificandoCelulas={notificandoCelulas}
             sincronizandoMembro={sincronizandoMembro}
             onToggleStatus={handleToggleMemberStatus}
             onNotifyIncomplete={notificarDadosIncompletosHandler}
+            onNotifyLeaderCells={notificarCelulasLiderHandler}
             onSyncMember={sincronizarMembro}
             onOpenDetails={handleOpenDetails}
             onOpenEdit={handleOpenEdit}
@@ -603,6 +640,14 @@ const MembrosPage = () => {
         suggestion={pendingMergeSuggestion}
         onClose={() => { setMergeConfirmOpen(false); setPendingMergeSuggestion(null); }}
         onConfirm={handleMergeConfirm}
+      />
+
+      <NotifyCelulasDialog
+        open={Boolean(notifyCelulasTarget)}
+        member={notifyCelulasTarget}
+        sending={Boolean(notifyCelulasTarget && notificandoCelulas[notifyCelulasTarget.id])}
+        onClose={() => setNotifyCelulasTarget(null)}
+        onConfirm={enviarNotificacaoCelulas}
       />
     </PapperBlock>
   );

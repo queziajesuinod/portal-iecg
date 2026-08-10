@@ -35,10 +35,10 @@ class ApeloDirecionadoCelulaController {
   async listarTodos(req, res) {
     try {
       const {
-        month, status, page, limit, nome, decisao, year
+        month, status, page, limit, nome, decisao, year, celulaCasal
       } = req.query;
       const lista = await ApeloDirecionadoCelulaService.listarTodos({
-        month, status, page, limit, nome, decisao, year
+        month, status, page, limit, nome, decisao, year, celulaCasal
       });
       return res.status(200).json(lista);
     } catch (error) {
@@ -205,6 +205,17 @@ class ApeloDirecionadoCelulaController {
         return res.status(400).json({ erro: 'status é obrigatório' });
       }
       const item = await ApeloDirecionadoCelulaService.atualizarStatusPublico(id, { status, motivo });
+      return res.status(200).json(item);
+    } catch (error) {
+      return res.status(400).json({ erro: error.message });
+    }
+  }
+
+  async registrarFeedbackPublico(req, res) {
+    try {
+      const { id } = req.params;
+      const feedback = req.body || {};
+      const item = await ApeloDirecionadoCelulaService.registrarFeedbackPublico(id, feedback);
       return res.status(200).json(item);
     } catch (error) {
       return res.status(400).json({ erro: error.message });

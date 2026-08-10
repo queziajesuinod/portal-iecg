@@ -107,5 +107,6 @@ export const removerCargoMembro = (id, cargo) => fetchWithAuth(`${API_URL}/api/a
 });
 
 export const notificarDadosIncompletos = (id) => fetchWithAuth(`${API_URL}/api/admin/members/${id}/notificar-dados`, { method: 'POST' });
+export const notificarCelulasLider = (id) => fetchWithAuth(`${API_URL}/api/admin/members/${id}/notificar-celulas`, { method: 'POST' });
 
 export const sincronizarDadosDoUser = (id) => fetchWithAuth(`${API_URL}/api/admin/members/${id}/sync-from-user`, { method: 'POST' });

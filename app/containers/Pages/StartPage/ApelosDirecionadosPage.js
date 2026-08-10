@@ -81,6 +81,7 @@ const ApelosDirecionadosPage = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [nomeFilter, setNomeFilter] = useState('');
   const [decisaoFilter, setDecisaoFilter] = useState('');
+  const [celulaCasalFilter, setCelulaCasalFilter] = useState('');
   const [yearFilter, setYearFilter] = useState(YEAR_OPTIONS[0]);
   const [page, setPage] = useState(1);
   const [notification, setNotification] = useState('');
@@ -90,6 +91,7 @@ const ApelosDirecionadosPage = () => {
   const [apeloSelecionado, setApeloSelecionado] = useState(null);
   const [celulaDestinoId, setCelulaDestinoId] = useState('');
   const [filtroCelula, setFiltroCelula] = useState('');
+  const [apenasCasal, setApenasCasal] = useState(false);
   const [motivo, setMotivo] = useState('');
   const [celulaDialogOpen, setCelulaDialogOpen] = useState(false);
   const [celulaDetalhe, setCelulaDetalhe] = useState(null);
@@ -132,9 +134,9 @@ const ApelosDirecionadosPage = () => {
 
   const apelosFilters = useMemo(
     () => ({
-      monthFilter, statusFilter, nomeFilter, decisaoFilter, yearFilter, page
+      monthFilter, statusFilter, nomeFilter, decisaoFilter, celulaCasalFilter, yearFilter, page
     }),
-    [monthFilter, statusFilter, nomeFilter, decisaoFilter, yearFilter, page]
+    [monthFilter, statusFilter, nomeFilter, decisaoFilter, celulaCasalFilter, yearFilter, page]
   );
 
   const apelosQuery = useQuery({
@@ -146,6 +148,7 @@ const ApelosDirecionadosPage = () => {
       if (apelosFilters.statusFilter) params.append('status', apelosFilters.statusFilter);
       if (apelosFilters.nomeFilter) params.append('nome', apelosFilters.nomeFilter);
       if (apelosFilters.decisaoFilter) params.append('decisao', apelosFilters.decisaoFilter);
+      if (apelosFilters.celulaCasalFilter) params.append('celulaCasal', apelosFilters.celulaCasalFilter);
       if (apelosFilters.yearFilter) params.append('year', apelosFilters.yearFilter);
       params.append('page', apelosFilters.page);
       params.append('limit', 10);
@@ -191,7 +194,7 @@ const ApelosDirecionadosPage = () => {
   });
   const celulas = celulasQuery.data || [];
 
-  const activeFilterCount = [monthFilter, statusFilter, nomeFilter, decisaoFilter, yearFilter].filter(Boolean).length;
+  const activeFilterCount = [monthFilter, statusFilter, nomeFilter, decisaoFilter, celulaCasalFilter, yearFilter].filter(Boolean).length;
 
   const clearFilters = () => {
     setNomeFilter('');
@@ -199,6 +202,7 @@ const ApelosDirecionadosPage = () => {
     setYearFilter(YEAR_OPTIONS[0]);
     setDecisaoFilter('');
     setStatusFilter('');
+    setCelulaCasalFilter('');
     setPage(1);
   };
 
@@ -316,6 +320,8 @@ const ApelosDirecionadosPage = () => {
     setCelulaDestinoId('');
     setMotivo('');
     setFiltroCelula('');
+    // Se o apelo é de casal, já abre filtrando por células de casal.
+    setApenasCasal(Boolean(apelo?.celula_casal || apelo?.conjuge_apelo_id));
     setLimiteSugestoes(5);
     setMoveDialogOpen(true);
     sugerirCelulasProximas(apelo);
@@ -805,7 +811,8 @@ const ApelosDirecionadosPage = () => {
     }
   }, []);
 
-  const celulasDisponiveis = apeloSelecionado ? celulasMesmaRede(apeloSelecionado) : [];
+  const celulasDisponiveis = (apeloSelecionado ? celulasMesmaRede(apeloSelecionado) : [])
+    .filter((c) => !apenasCasal || c.casalCelulaId);
   const celulasRedeSemFiltro = useMemo(
     () => (apeloSelecionado ? celulasMesmaRede(apeloSelecionado, '') : []),
     [apeloSelecionado, celulas]
@@ -831,18 +838,22 @@ const ApelosDirecionadosPage = () => {
     });
     return base;
   }, [apeloSelecionado, celulasRedeSemFiltro, apeloCoords]);
+  const sugestoesBase = useMemo(
+    () => (apenasCasal ? sugestoes.filter((c) => c.casalCelulaId) : sugestoes),
+    [sugestoes, apenasCasal]
+  );
   const sugestoesFiltradas = useMemo(() => {
     const filtradas = filtroCelula
-      ? sugestoes.filter((c) => normalizeSearchValue(c.celula).includes(normalizeSearchValue(filtroCelula)))
-      : sugestoes;
+      ? sugestoesBase.filter((c) => normalizeSearchValue(c.celula).includes(normalizeSearchValue(filtroCelula)))
+      : sugestoesBase;
     return filtradas.slice(0, limiteSugestoes);
-  }, [sugestoes, filtroCelula, limiteSugestoes]);
+  }, [sugestoesBase, filtroCelula, limiteSugestoes]);
 
   const totalSugestoesFiltradas = useMemo(() => {
-    if (!filtroCelula) return sugestoes.length;
+    if (!filtroCelula) return sugestoesBase.length;
     const termo = normalizeSearchValue(filtroCelula);
-    return sugestoes.filter((c) => normalizeSearchValue(c.celula).includes(termo)).length;
-  }, [sugestoes, filtroCelula]);
+    return sugestoesBase.filter((c) => normalizeSearchValue(c.celula).includes(termo)).length;
+  }, [sugestoesBase, filtroCelula]);
   const mostrarFallbackCelulas = !loadingSugestoes && sugestoes.length === 0 && celulasRedeOrdenadas.length > 0;
 
   return (
@@ -928,6 +939,18 @@ const ApelosDirecionadosPage = () => {
                     <MenuItem key={key} value={key}>{statusConfig[key].label}</MenuItem>
                   ))}
                 </TextField>
+                <TextField
+                  select
+                  label="Célula de casal"
+                  size="small"
+                  value={celulaCasalFilter}
+                  onChange={(e) => { setCelulaCasalFilter(e.target.value); setPage(1); }}
+                  sx={{ minWidth: 170 }}
+                >
+                  <MenuItem value="">Todas</MenuItem>
+                  <MenuItem value="true">Somente casal</MenuItem>
+                  <MenuItem value="false">Somente não-casal</MenuItem>
+                </TextField>
                 {activeFilterCount > 0 && (
                   <Button size="small" onClick={clearFilters}>Limpar filtros</Button>
                 )}
@@ -1001,6 +1024,21 @@ const ApelosDirecionadosPage = () => {
                         {apelo.observacao && apelo.observacao.trim() !== '' && (
                           <Tooltip title={apelo.observacao}>
                             <ArticleOutlinedIcon fontSize="small" color="action" />
+                          </Tooltip>
+                        )}
+                        {apelo.celula_casal && (
+                          <Tooltip
+                            title={apelo.conjuge
+                              ? `Casal — vinculado a ${apelo.conjuge.nome}${apelo.conjuge.rede ? ` (${apelo.conjuge.rede})` : ''}`
+                              : 'Direcionamento de casal'}
+                          >
+                            <Chip
+                              size="small"
+                              color="secondary"
+                              variant="outlined"
+                              label="Casal"
+                              sx={{ height: 20, fontWeight: 600 }}
+                            />
                           </Tooltip>
                         )}
                       </Box>
@@ -1110,6 +1148,21 @@ const ApelosDirecionadosPage = () => {
             value={filtroCelula}
             onChange={(e) => setFiltroCelula(e.target.value)}
           />
+          <Box sx={{ mt: 0.5, mb: 0.5 }}>
+            <Chip
+              label="Somente célula de casal"
+              clickable
+              size="small"
+              color={apenasCasal ? 'secondary' : 'default'}
+              variant={apenasCasal ? 'filled' : 'outlined'}
+              onClick={() => { setApenasCasal((v) => !v); setLimiteSugestoes(5); }}
+            />
+            {apenasCasal && apeloSelecionado?.conjuge_apelo_id && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                Ao selecionar uma célula de casal, o cônjuge será movido automaticamente para a célula vinculada (rede-espelho).
+              </Typography>
+            )}
+          </Box>
           <TextField
             select
             label="Célula destino"
@@ -1170,9 +1223,12 @@ const ApelosDirecionadosPage = () => {
                       onClick={() => setCelulaDestinoId(c.id)}
                     >
                       <CardContent sx={{ pb: '12px !important' }}>
-                        <Box display="flex" alignItems="center" gap={0.5} mb={0.5}>
+                        <Box display="flex" alignItems="center" gap={0.5} mb={0.5} flexWrap="wrap">
                           {isSelected && <CheckCircleIcon fontSize="small" color="primary" />}
                           <Typography variant="subtitle2">{c.celula}</Typography>
+                          {c.casalCelulaId && (
+                            <Chip label="Casal" size="small" color="secondary" sx={{ height: 18 }} />
+                          )}
                         </Box>
                         <Typography variant="caption" display="block">Rede: {c.rede}</Typography>
                         <Typography variant="caption" display="block">Bairro: {c.bairro || '-'}</Typography>
@@ -1344,6 +1400,16 @@ const ApelosDirecionadosPage = () => {
                   <Typography variant="caption" color="textSecondary">Célula atual</Typography>
                   <Typography variant="body2">{detailApelo.celulaAtual?.celula || 'Sem célula'}</Typography>
                 </Grid>
+                {detailApelo.celula_casal && (
+                  <Grid item xs={12}>
+                    <Typography variant="caption" color="textSecondary">Direcionamento de casal</Typography>
+                    <Typography variant="body2">
+                      {detailApelo.conjuge
+                        ? `Vinculado a ${detailApelo.conjuge.nome}${detailApelo.conjuge.rede ? ` — ${detailApelo.conjuge.rede}` : ''}`
+                        : 'Sim (cônjuge não encontrado)'}
+                    </Typography>
+                  </Grid>
+                )}
               </Grid>
               <Box mt={3}>
                 <Typography variant="subtitle2" gutterBottom>Editar bairro e CEP</Typography>

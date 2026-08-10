@@ -23,6 +23,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import SyncIcon from '@mui/icons-material/Sync';
 import { calcCompletude, INACTIVE_STATUSES } from './membersHelpers';
 
@@ -36,13 +37,16 @@ const MembersTable = ({
   loading,
   updatingMemberId,
   notificandoMembro,
+  notificandoCelulas,
   sincronizandoMembro,
   onToggleStatus,
   onNotifyIncomplete,
+  onNotifyLeaderCells,
   onSyncMember,
   onOpenDetails,
   onOpenEdit,
-  onDeleteMember
+  onDeleteMember,
+  showLeaderColumns
 }) => (
   <>
     <Table size="small">
@@ -53,6 +57,7 @@ const MembersTable = ({
           <TableCell>Email</TableCell>
           <TableCell>Telefone</TableCell>
           <TableCell>Status</TableCell>
+          {showLeaderColumns && <TableCell>Células que lidera</TableCell>}
           <TableCell>Ações</TableCell>
         </TableRow>
       </TableHead>
@@ -86,6 +91,51 @@ const MembersTable = ({
               <TableCell>
                 <Chip label={member.status || '-'} color={isActive ? 'primary' : 'default'} size="small" />
               </TableCell>
+              {showLeaderColumns && (
+                <TableCell sx={{ minWidth: 220 }}>
+                  {(() => {
+                    const qtd = member.qtdCelulasLideradas || 0;
+                    const celulas = member.liderancaCelulas || [];
+                    return (
+                      <Stack spacing={0.5}>
+                        <Stack direction="row" spacing={0.5} alignItems="center">
+                          <Chip
+                            size="small"
+                            color={qtd > 1 ? 'secondary' : 'default'}
+                            label={`${qtd} ${qtd === 1 ? 'célula' : 'células'}`}
+                            sx={{ width: 'fit-content' }}
+                          />
+                          {qtd > 0 && (
+                            <Tooltip title={qtd > 1
+                              ? 'Notificar líder: confirmar/atualizar e inativar células que não lidera mais'
+                              : 'Notificar líder no WhatsApp para conferir/atualizar a célula'}
+                            >
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  color="success"
+                                  disabled={!!notificandoCelulas[member.id]}
+                                  onClick={() => onNotifyLeaderCells(member)}
+                                >
+                                  {notificandoCelulas[member.id]
+                                    ? <CircularProgress size={16} />
+                                    : <WhatsAppIcon fontSize="small" />}
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          )}
+                        </Stack>
+                        {celulas.map((c) => (
+                          <Typography key={c.id} variant="caption" color="textSecondary">
+                            {[c.celula, c.rede, [c.dia, c.horario].filter(Boolean).join(' ')]
+                              .filter(Boolean).join(' · ')}
+                          </Typography>
+                        ))}
+                      </Stack>
+                    );
+                  })()}
+                </TableCell>
+              )}
               <TableCell>
                 <Stack direction="row" spacing={1} alignItems="center">
                   <FormControlLabel
@@ -153,14 +203,14 @@ const MembersTable = ({
         })}
         {!pagedMembers.length && !loading && (
           <TableRow>
-            <TableCell colSpan={6}>
+            <TableCell colSpan={showLeaderColumns ? 7 : 6}>
               <Typography color="textSecondary">Nenhum membro encontrado.</Typography>
             </TableCell>
           </TableRow>
         )}
         {loading && (
           <TableRow>
-            <TableCell colSpan={6}>
+            <TableCell colSpan={showLeaderColumns ? 7 : 6}>
               <Box display="flex" justifyContent="center" py={2}>
                 <CircularProgress size={24} />
               </Box>
@@ -191,20 +241,26 @@ MembersTable.propTypes = {
   loading: PropTypes.bool,
   updatingMemberId: PropTypes.string,
   notificandoMembro: PropTypes.object,
+  notificandoCelulas: PropTypes.object,
   sincronizandoMembro: PropTypes.object,
   onToggleStatus: PropTypes.func.isRequired,
   onNotifyIncomplete: PropTypes.func.isRequired,
+  onNotifyLeaderCells: PropTypes.func,
   onSyncMember: PropTypes.func.isRequired,
   onOpenDetails: PropTypes.func.isRequired,
   onOpenEdit: PropTypes.func.isRequired,
   onDeleteMember: PropTypes.func.isRequired,
+  showLeaderColumns: PropTypes.bool,
 };
 
 MembersTable.defaultProps = {
   loading: false,
   updatingMemberId: '',
   notificandoMembro: {},
+  notificandoCelulas: {},
   sincronizandoMembro: {},
+  onNotifyLeaderCells: () => {},
+  showLeaderColumns: false,
 };
 
 export default MembersTable;

@@ -15,6 +15,8 @@ module.exports = (sequelize) => {
         Celula.belongsTo(models.Member, { foreignKey: 'pastorGeracaoMemberId', as: 'pastorGeracaoMemberRef' });
         Celula.belongsTo(models.Member, { foreignKey: 'pastorCampusMemberId', as: 'pastorCampusMemberRef' });
       }
+      // Auto-referência: vínculo de célula de casal (Mulheres IECG <-> Homens IECG)
+      Celula.belongsTo(Celula, { foreignKey: 'casalCelulaId', as: 'casalRef' });
       if (models.CelulaMembroVinculo) {
         Celula.hasMany(models.CelulaMembroVinculo, { foreignKey: 'celulaId', as: 'membrosVinculo' });
       }
@@ -136,6 +138,10 @@ module.exports = (sequelize) => {
       allowNull: true
     },
     pastorCampusMemberId: {
+      type: DataTypes.UUID,
+      allowNull: true
+    },
+    casalCelulaId: {
       type: DataTypes.UUID,
       allowNull: true
     }

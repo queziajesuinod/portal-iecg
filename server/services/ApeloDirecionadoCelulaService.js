@@ -167,6 +167,62 @@ async function geocodeAddress(query) {
   }
 }
 
+// Limites de encerramento automático do acompanhamento.
+const MAX_TENTATIVAS_SEM_RETORNO = 3; // na 3ª mensagem sem retorno, encerra
+const MAX_CICLOS_CONSOLIDACAO = 2; // após 2 ciclos preso em consolidação, encerra
+
+// Deriva a situação do apelo a partir dos contadores (vindos do histórico) e do
+// feedback do líder. Função pura: mesma entrada → mesma saída, sem efeito colateral.
+function derivarSituacao(contadores = {}, feedback = {}) {
+  const { tentativasSemResposta = 0, ciclosEmConsolidacao = 0 } = contadores;
+
+  if (feedback.numeroInvalido) return 'ENVIO_LIDER_PENDENTE_WHATS_ERRADO';
+  if (!feedback.contatoRealizado) return 'ENVIO_LIDER_PENDENTE';
+
+  if (!feedback.houveResposta) {
+    return tentativasSemResposta + 1 >= MAX_TENTATIVAS_SEM_RETORNO
+      ? 'CONSOLIDACAO_INTERROMPIDA'
+      : 'CONTATO_LIDER_SEM_RETORNO';
+  }
+
+  if (feedback.foiCelula) {
+    return feedback.vaiContinuar ? 'CONSOLIDADO_CELULA' : 'CONSOLIDACAO_INTERROMPIDA';
+  }
+
+  if (!feedback.vaiNaProxima) return 'CONSOLIDACAO_INTERROMPIDA';
+
+  return ciclosEmConsolidacao + 1 >= MAX_CICLOS_CONSOLIDACAO
+    ? 'CONSOLIDACAO_INTERROMPIDA'
+    : 'EM_CONSOLIDACAO';
+}
+
+// Pares de rede para célula de casal: o cônjuge é direcionado para a rede-espelho.
+const REDE_CASAL_PAR = {
+  'MULHERES IECG': 'HOMENS IECG',
+  'HOMENS IECG': 'MULHERES IECG',
+  'JUVENTUDE RELEVANTE MOÇAS': 'JUVENTUDE RELEVANTE RAPAZES',
+  'JUVENTUDE RELEVANTE RAPAZES': 'JUVENTUDE RELEVANTE MOÇAS'
+};
+
+function normalizarRede(value = '') {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Mapa normalizado (sem acento/caixa) → valor canônico do par, para lookup robusto.
+const REDE_CASAL_PAR_NORMALIZADO = Object.entries(REDE_CASAL_PAR).reduce((acc, [origem, par]) => {
+  acc[normalizarRede(origem)] = par;
+  return acc;
+}, {});
+
+function redeParDeCasal(rede) {
+  return REDE_CASAL_PAR_NORMALIZADO[normalizarRede(rede)] || null;
+}
+
 class ApeloDirecionadoCelulaService {
   _extrairPayloadEntrada(dados = {}) {
     if (typeof dados === 'string') {
@@ -536,6 +592,33 @@ class ApeloDirecionadoCelulaService {
     return member;
   }
 
+  // Registra a atividade de consolidacao na celula (idempotente por membro+tipo).
+  async _ensureConsolidacaoActivity(memberId, apelo, transaction) {
+    if (!memberId) {
+      return null;
+    }
+    const activityType = 'CONSOLIDADO_CELULA';
+    const existing = await MemberActivity.findOne({
+      where: { memberId, activityType },
+      transaction
+    });
+    if (existing) {
+      return existing;
+    }
+    const points = await this._resolveActivityPoints(activityType, transaction);
+    return MemberActivity.create({
+      memberId,
+      activityType,
+      activityDate: new Date(),
+      points,
+      celulaId: apelo?.celula_id || null,
+      metadata: {
+        apeloId: apelo?.id || null,
+        source: 'apelo_direcionado'
+      }
+    }, { transaction });
+  }
+
   async _processarConsolidacaoDoApelo(apelo, transaction) {
     const member = await this._ensureMemberForApelo(apelo, transaction);
     await this._promoverMembroConsolidado(member, transaction);
@@ -546,6 +629,7 @@ class ApeloDirecionadoCelulaService {
       'Consolidado via apelo direcionado',
       transaction
     );
+    await this._ensureConsolidacaoActivity(member.id, apelo, transaction);
 
     // Vincula o membro à célula como discípulo
     if (member?.id && apelo?.celula_id) {
@@ -708,6 +792,11 @@ class ApeloDirecionadoCelulaService {
       delete payload.direcionar_celula;
     }
 
+    if (Object.prototype.hasOwnProperty.call(payload, 'celula_casal')) {
+      const valor = payload.celula_casal;
+      payload.celula_casal = valor === true || valor === 'true' || valor === 'on' || valor === 1 || valor === '1';
+    }
+
     if (!Object.prototype.hasOwnProperty.call(payload, 'cep_apelo')) {
       if (Object.prototype.hasOwnProperty.call(payload, 'cep')) {
         payload.cep_apelo = payload.cep;
@@ -821,6 +910,84 @@ class ApeloDirecionadoCelulaService {
     return nextPayload;
   }
 
+  // Cria (ou recadastra, se já existir) um apelo e integra o membro. Reutilizável
+  // tanto para o cadastro principal quanto para o cônjuge na célula de casal.
+  async _criarOuRecadastrarApelo(dadosNormalizados, transaction) {
+    const existente = await this._buscarRegistroExistenteParaRecadastro(dadosNormalizados, transaction);
+
+    if (!existente) {
+      const created = await ApeloDirecionadoCelula.create(dadosNormalizados, { transaction });
+      await this._processarIntegracaoMembroNaCriacao(created, transaction);
+      return created;
+    }
+
+    const statusAnterior = existente.status || null;
+    const statusNovo = 'APELO_CADASTRADO';
+    const payloadRecadastro = {
+      ...dadosNormalizados,
+      status: statusNovo,
+      celula_id: null,
+      lider_direcionado: null,
+      cel_lider: null,
+      bairro_direcionado: null,
+      data_direcionamento: null
+    };
+
+    await existente.update(payloadRecadastro, { transaction });
+
+    await ApeloDirecionadoHistorico.create({
+      apelo_id: existente.id,
+      status_anterior: statusAnterior,
+      status_novo: statusNovo,
+      data_movimento: new Date(),
+      tipo_evento: 'STATUS',
+      motivo: ' Procurou novamente o start - Cadastro '
+    }, { transaction });
+
+    await this._processarIntegracaoMembroNaCriacao(existente, transaction);
+    return existente;
+  }
+
+  // Monta o cadastro-espelho do cônjuge a partir do principal já normalizado.
+  // O cônjuge herda endereço/campus/decisão; muda nome, whatsapp, idade e a rede-espelho.
+  _montarDadosConjuge(dadosPrincipal, payloadEntrada) {
+    if (dadosPrincipal.celula_casal !== true) return null;
+
+    const conjugeNome = String(payloadEntrada.conjuge_nome || '').trim();
+    const conjugeWhatsapp = this._normalizarWhatsapp(payloadEntrada.conjuge_whatsapp || '');
+    if (!conjugeNome || !conjugeWhatsapp) return null;
+
+    const redePar = redeParDeCasal(dadosPrincipal.rede);
+    if (!redePar) {
+      throw new Error(`A rede "${dadosPrincipal.rede}" não possui par de célula de casal configurado`);
+    }
+
+    const idadeConjuge = Number(payloadEntrada.conjuge_idade);
+
+    const dadosConjuge = {
+      ...dadosPrincipal,
+      nome: conjugeNome,
+      whatsapp: conjugeWhatsapp,
+      idade: Number.isFinite(idadeConjuge) && idadeConjuge > 0 ? idadeConjuge : null,
+      rede: redePar,
+      celula_casal: true,
+      status: 'APELO_CADASTRADO',
+      celula_id: null,
+      lider_direcionado: null,
+      cel_lider: null,
+      bairro_direcionado: null,
+      data_direcionamento: null,
+      conjuge_apelo_id: null
+    };
+
+    // Remove os campos de entrada do cônjuge para não poluírem o registro.
+    delete dadosConjuge.conjuge_nome;
+    delete dadosConjuge.conjuge_whatsapp;
+    delete dadosConjuge.conjuge_idade;
+
+    return dadosConjuge;
+  }
+
   async criar(dados) {
     const payloadEntrada = this._extrairPayloadEntrada(dados);
     let dadosNormalizados = this._normalizarCampos(payloadEntrada);
@@ -832,40 +999,19 @@ class ApeloDirecionadoCelulaService {
       dadosNormalizados.status = 'NAO_HAVERAR_DIRECIONAMENTO';
     }
 
-    return ApeloDirecionadoCelula.sequelize.transaction(async (transaction) => {
-      const existente = await this._buscarRegistroExistenteParaRecadastro(dadosNormalizados, transaction);
+    // Célula de casal: gera o cadastro-espelho do cônjuge na rede do par.
+    const dadosConjuge = this._montarDadosConjuge(dadosNormalizados, payloadEntrada);
 
-      if (!existente) {
-        const created = await ApeloDirecionadoCelula.create(dadosNormalizados, { transaction });
-        await this._processarIntegracaoMembroNaCriacao(created, transaction);
-        return created;
+    return ApeloDirecionadoCelula.sequelize.transaction(async (transaction) => {
+      const principal = await this._criarOuRecadastrarApelo(dadosNormalizados, transaction);
+
+      if (dadosConjuge) {
+        const conjuge = await this._criarOuRecadastrarApelo(dadosConjuge, transaction);
+        await principal.update({ conjuge_apelo_id: conjuge.id }, { transaction });
+        await conjuge.update({ conjuge_apelo_id: principal.id }, { transaction });
       }
 
-      const statusAnterior = existente.status || null;
-      const statusNovo = 'APELO_CADASTRADO';
-      const payloadRecadastro = {
-        ...dadosNormalizados,
-        status: statusNovo,
-        celula_id: null,
-        lider_direcionado: null,
-        cel_lider: null,
-        bairro_direcionado: null,
-        data_direcionamento: null
-      };
-
-      await existente.update(payloadRecadastro, { transaction });
-
-      await ApeloDirecionadoHistorico.create({
-        apelo_id: existente.id,
-        status_anterior: statusAnterior,
-        status_novo: statusNovo,
-        data_movimento: new Date(),
-        tipo_evento: 'STATUS',
-        motivo: ' Procurou novamente o start - Cadastro '
-      }, { transaction });
-
-      await this._processarIntegracaoMembroNaCriacao(existente, transaction);
-      return existente;
+      return principal;
     });
   }
 
@@ -903,26 +1049,34 @@ class ApeloDirecionadoCelulaService {
     const limit = parseInt(filtro.limit, 10) || 10;
     const offset = (page - 1) * limit;
 
+    // Filtro por "direcionamento de casal": usa o flag do próprio apelo.
+    const casalFiltro = String(filtro.celulaCasal || '').toLowerCase().trim();
+    if (['true', '1', 'sim', 'yes'].includes(casalFiltro)) {
+      where.celula_casal = true;
+    } else if (['false', '0', 'nao', 'não', 'no'].includes(casalFiltro)) {
+      where[Op.and] = (where[Op.and] || []).concat({
+        [Op.or]: [{ celula_casal: false }, { celula_casal: null }]
+      });
+    }
+
     const { rows, count } = await ApeloDirecionadoCelula.findAndCountAll({
       where,
       order: [['data_direcionamento', 'DESC']],
       limit,
       offset,
+      distinct: true,
       include: [
         {
           model: Celula,
           as: 'celulaAtual',
           attributes: [
-            'id',
-            'celula',
-            'rede',
-            'lider',
-            'cel_lider',
-            'dia',
-            'horario',
-            'bairro',
-            'campus'
+            'id', 'celula', 'rede', 'lider', 'cel_lider', 'dia', 'horario', 'bairro', 'campus', 'casalCelulaId'
           ]
+        },
+        {
+          model: ApeloDirecionadoCelula,
+          as: 'conjuge',
+          attributes: ['id', 'nome', 'whatsapp', 'rede', 'status']
         }
       ]
     });
@@ -1004,6 +1158,50 @@ class ApeloDirecionadoCelulaService {
     }));
   }
 
+  // Aplica a movimentação de um apelo para uma célula (campos + histórico).
+  // Não move o cônjuge (isso é orquestrado por moverApelo). Se já estiver na
+  // célula, apenas retorna (evita erro ao cascatear para o cônjuge).
+  async _aplicarMovimentacao(apelo, celulaDestino, motivo, transaction) {
+    const origem = apelo.celula_id;
+    if (origem && String(origem) === String(celulaDestino.id)) {
+      return apelo;
+    }
+
+    const novoStatus = 'MOVIMENTACAO_CELULA';
+    const statusAnterior = apelo.status;
+    apelo.status = novoStatus;
+    apelo.celula_id = celulaDestino.id;
+    apelo.lider_direcionado = celulaDestino.lider || null;
+    apelo.cel_lider = celulaDestino.cel_lider || null;
+    apelo.bairro_direcionado = celulaDestino.bairro || null;
+    apelo.campus_iecg = celulaDestino.campus || null;
+    apelo.direcionado_celula = true;
+    apelo.data_direcionamento = new Date();
+    await apelo.save({ transaction });
+
+    if (statusAnterior !== novoStatus) {
+      await ApeloDirecionadoHistorico.create({
+        apelo_id: apelo.id,
+        status_anterior: statusAnterior || null,
+        status_novo: novoStatus,
+        data_movimento: new Date(),
+        tipo_evento: 'STATUS',
+        motivo: motivo || null
+      }, { transaction });
+    }
+
+    await ApeloDirecionadoHistorico.create({
+      apelo_id: apelo.id,
+      celula_id_origem: origem,
+      celula_id_destino: celulaDestino.id,
+      motivo: motivo || null,
+      data_movimento: new Date(),
+      tipo_evento: 'CELULA'
+    }, { transaction });
+
+    return apelo;
+  }
+
   async moverApelo(apeloId, celulaDestinoId, motivo = '') {
     const apelo = await this.buscarPorId(apeloId);
     const celulaDestino = await Celula.findByPk(celulaDestinoId);
@@ -1016,39 +1214,30 @@ class ApeloDirecionadoCelulaService {
     if (origem && celulaDestinoId && String(origem) === String(celulaDestinoId)) {
       throw new Error('Não é possível direcionar para a mesma célula.');
     }
-    const novoStatus = 'MOVIMENTACAO_CELULA';
-    const statusAnterior = apelo.status;
-    apelo.status = novoStatus;
-    apelo.celula_id = celulaDestinoId || null;
-    apelo.lider_direcionado = celulaDestino.lider || null;
-    apelo.cel_lider = celulaDestino.cel_lider || null;
-    apelo.bairro_direcionado = celulaDestino.bairro || null;
-    apelo.campus_iecg = celulaDestino.campus || null;
-    apelo.direcionado_celula = true;
-    apelo.data_direcionamento = new Date();
-    await apelo.save();
 
-    if (statusAnterior !== novoStatus) {
-      await ApeloDirecionadoHistorico.create({
-        apelo_id: apelo.id,
-        status_anterior: statusAnterior || null,
-        status_novo: novoStatus,
-        data_movimento: new Date(),
-        tipo_evento: 'STATUS',
-        motivo: motivo || null
-      });
-    }
+    return ApeloDirecionadoCelula.sequelize.transaction(async (transaction) => {
+      await this._aplicarMovimentacao(apelo, celulaDestino, motivo, transaction);
 
-    await ApeloDirecionadoHistorico.create({
-      apelo_id: apelo.id,
-      celula_id_origem: origem,
-      celula_id_destino: celulaDestinoId || null,
-      motivo: motivo || null,
-      data_movimento: new Date(),
-      tipo_evento: 'CELULA'
+      // Célula de casal: ao mover o apelo principal para uma célula de casal,
+      // move automaticamente o cônjuge para a célula par (casalCelulaId), que
+      // está na rede-espelho. Assim os dois direcionamentos andam juntos.
+      if (celulaDestino.casalCelulaId && apelo.conjuge_apelo_id) {
+        const [conjuge, celulaPar] = await Promise.all([
+          ApeloDirecionadoCelula.findByPk(apelo.conjuge_apelo_id, { transaction }),
+          Celula.findByPk(celulaDestino.casalCelulaId, { transaction })
+        ]);
+        if (conjuge && celulaPar) {
+          await this._aplicarMovimentacao(
+            conjuge,
+            celulaPar,
+            motivo || 'Movimentação automática (cônjuge de célula de casal)',
+            transaction
+          );
+        }
+      }
+
+      return apelo;
     });
-
-    return apelo;
   }
 
   async historico(apeloId) {
@@ -1120,6 +1309,76 @@ class ApeloDirecionadoCelulaService {
       }, { transaction });
 
       if (status === 'CONSOLIDADO_CELULA') {
+        await this._processarConsolidacaoDoApelo(item, transaction);
+      }
+
+      return item.reload({ transaction });
+    });
+  }
+
+  // Conta os ciclos do apelo direto do histórico — evita colunas de contador.
+  async _contarCiclosDoApelo(apeloId, transaction) {
+    const historico = await ApeloDirecionadoHistorico.findAll({
+      where: { apelo_id: apeloId, tipo_evento: 'STATUS' },
+      attributes: ['status_novo'],
+      transaction
+    });
+    const contar = (statusAlvo) => historico.filter((h) => h.status_novo === statusAlvo).length;
+    return {
+      tentativasSemResposta: contar('CONTATO_LIDER_SEM_RETORNO'),
+      ciclosEmConsolidacao: contar('EM_CONSOLIDACAO')
+    };
+  }
+
+  // Monta o texto do histórico: observação do líder (ou resumo padrão) + flags de convite.
+  _montarMotivoFeedback(status, feedback = {}) {
+    const RESUMO_PADRAO = {
+      ENVIO_LIDER_PENDENTE_WHATS_ERRADO: 'Número de WhatsApp inválido — não foi possível contatar',
+      ENVIO_LIDER_PENDENTE: 'Líder ainda não conseguiu fazer o contato',
+      CONTATO_LIDER_SEM_RETORNO: 'Líder enviou mensagem, sem retorno',
+      CONSOLIDACAO_INTERROMPIDA: 'Consolidação interrompida',
+      EM_CONSOLIDACAO: 'Em consolidação — aguardando ida à célula',
+      CONSOLIDADO_CELULA: 'Foi à célula e decidiu continuar'
+    };
+
+    const partes = [];
+    const observacao = String(feedback.observacao || '').trim();
+    partes.push(observacao || RESUMO_PADRAO[status] || null);
+
+    const flags = [];
+    if (feedback.conviteFeito !== undefined && feedback.conviteFeito !== null) {
+      flags.push(feedback.conviteFeito ? 'convite feito' : 'convite não feito');
+    }
+    if (feedback.conviteAceito !== undefined && feedback.conviteAceito !== null) {
+      flags.push(feedback.conviteAceito ? 'convite aceito' : 'convite recusado');
+    }
+    if (flags.length) partes.push(`[${flags.join(', ')}]`);
+
+    return partes.filter(Boolean).join(' ') || null;
+  }
+
+  // Recebe o feedback cru do líder, deriva a situação e registra a movimentação.
+  async registrarFeedbackPublico(id, feedback = {}) {
+    const item = await this.buscarPorId(id);
+    const statusAnterior = item.status;
+
+    return ApeloDirecionadoCelula.sequelize.transaction(async (transaction) => {
+      const contadores = await this._contarCiclosDoApelo(id, transaction);
+      const statusNovo = derivarSituacao(contadores, feedback);
+      const motivo = this._montarMotivoFeedback(statusNovo, feedback);
+
+      await item.update({ status: statusNovo }, { transaction });
+
+      await ApeloDirecionadoHistorico.create({
+        apelo_id: item.id,
+        status_anterior: statusAnterior || null,
+        status_novo: statusNovo,
+        data_movimento: new Date(),
+        tipo_evento: 'STATUS',
+        motivo
+      }, { transaction });
+
+      if (statusNovo === 'CONSOLIDADO_CELULA') {
         await this._processarConsolidacaoDoApelo(item, transaction);
       }
 

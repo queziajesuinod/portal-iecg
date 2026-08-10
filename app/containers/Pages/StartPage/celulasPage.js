@@ -25,6 +25,7 @@ import SyncIcon from '@mui/icons-material/Sync';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import FiberNewIcon from '@mui/icons-material/FiberNew';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
+import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import { alpha } from '@mui/material/styles';
 import { useHistory } from 'react-router-dom';
 import useStyles from 'dan-components/Tables/tableStyle-jss';
@@ -137,6 +138,7 @@ const ListagemCelulasPage = () => {
   const [filterDia, setFilterDia] = useState('');
   const [filterSemLiderMembro, setFilterSemLiderMembro] = useState(false);
   const [filterNovas, setFilterNovas] = useState(false);
+  const [filterCasal, setFilterCasal] = useState(false);
   const [mapCelulas, setMapCelulas] = useState([]);
   const [hoveredMarkerId, setHoveredMarkerId] = useState(null);
   const [filterStatus, setFilterStatus] = useState('true');
@@ -231,6 +233,9 @@ const ListagemCelulasPage = () => {
     }
     if (filterNovas) {
       params.append('novasDias', String(RECENT_WINDOW_DAYS));
+    }
+    if (filterCasal) {
+      params.append('casal', 'true');
     }
     return params.toString();
   };
@@ -788,7 +793,8 @@ const ListagemCelulasPage = () => {
     filterDia,
     filterStatus !== 'true' ? filterStatus : null,
     filterSemLiderMembro ? true : null,
-    filterNovas ? true : null
+    filterNovas ? true : null,
+    filterCasal ? true : null
   ].filter(Boolean).length;
 
   const clearFilters = () => {
@@ -802,6 +808,7 @@ const ListagemCelulasPage = () => {
     setFilterStatus('true');
     setFilterSemLiderMembro(false);
     setFilterNovas(false);
+    setFilterCasal(false);
     setPage(1);
   };
 
@@ -940,6 +947,7 @@ const ListagemCelulasPage = () => {
     filterStatus,
     filterSemLiderMembro,
     filterNovas,
+    filterCasal,
     API_URL
   ]);
 
@@ -956,6 +964,7 @@ const ListagemCelulasPage = () => {
     filterStatus,
     filterSemLiderMembro,
     filterNovas,
+    filterCasal,
     API_URL
   ]);
 
@@ -1339,6 +1348,12 @@ const ListagemCelulasPage = () => {
               <ListItemIcon><SyncIcon fontSize="small" /></ListItemIcon>
               <ListItemText>Migrar liderança apostólica (texto → membro)</ListItemText>
             </MenuItem>
+            <MenuItem
+              onClick={() => { setActionsMenuAnchor(null); history.push('/app/start/celulas/casais'); }}
+            >
+              <ListItemIcon><FavoriteBorderIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Sugerir células de casais</ListItemText>
+            </MenuItem>
           </Menu>
         </Box>
       </Toolbar>
@@ -1496,6 +1511,17 @@ const ListagemCelulasPage = () => {
                   color={filterSemLiderMembro ? 'warning' : 'default'}
                   variant={filterSemLiderMembro ? 'filled' : 'outlined'}
                   onClick={() => { setFilterSemLiderMembro((v) => !v); setPage(1); }}
+                  sx={{ height: 40, borderRadius: 1, fontWeight: 600 }}
+                />
+              </Tooltip>
+              <Tooltip title="Mostra apenas células de casal (vinculadas a outra célula)">
+                <Chip
+                  icon={<FavoriteBorderIcon />}
+                  label="Casais"
+                  clickable
+                  color={filterCasal ? 'secondary' : 'default'}
+                  variant={filterCasal ? 'filled' : 'outlined'}
+                  onClick={() => { setFilterCasal((v) => !v); setPage(1); }}
                   sx={{ height: 40, borderRadius: 1, fontWeight: 600 }}
                 />
               </Tooltip>
@@ -1830,10 +1856,21 @@ const ListagemCelulasPage = () => {
                     } : undefined}
                   >
                     <TableCell>
-                      <Box display="flex" alignItems="center" gap={1}>
+                      <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
                         <span>{c.celula}</span>
                         {recente && (
                           <Chip size="small" color="success" label="Nova" sx={{ fontWeight: 700, height: 20 }} />
+                        )}
+                        {c.casalCelulaId && (
+                          <Tooltip title={c.casalRef?.celula ? `Célula de casal — vinculada com ${c.casalRef.celula}` : 'Célula de casal'}>
+                            <Chip
+                              size="small"
+                              color="secondary"
+                              icon={<FavoriteBorderIcon />}
+                              label="Casal"
+                              sx={{ fontWeight: 700, height: 20, '& .MuiChip-icon': { fontSize: 14 } }}
+                            />
+                          </Tooltip>
                         )}
                       </Box>
                     </TableCell>
@@ -2167,11 +2204,18 @@ const ListagemCelulasPage = () => {
       </Dialog>
 
       <Dialog open={duplicadosDialogOpen} onClose={() => !duplicadosLoading && setDuplicadosDialogOpen(false)} fullWidth maxWidth="lg">
-        <DialogTitle>Verificar células duplicadas</DialogTitle>
+        <DialogTitle>Possíveis células duplicadas</DialogTitle>
         <DialogContent dividers>
+          {!duplicadosLoading && gruposDuplicados.length > 0 && (
+            <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+              Agrupadas por <strong>mesmo endereço</strong> combinado com o <strong>mesmo líder</strong> (vínculo)
+              ou o mesmo nome de líder + celular. São candidatas para revisão manual — confira e use
+              &quot;Manter esta, remover outra&quot; para mesclar (os dados e direcionamentos são preservados na que ficar).
+            </Typography>
+          )}
           {duplicadosLoading && <Typography variant="body2">Buscando duplicados...</Typography>}
           {!duplicadosLoading && gruposDuplicados.length === 0 && (
-            <Typography variant="body2" color="textSecondary">Nenhum duplicado encontrado.</Typography>
+            <Typography variant="body2" color="textSecondary">Nenhuma possível duplicada encontrada.</Typography>
           )}
           {!duplicadosLoading && gruposDuplicados.map((grupo, gi) => (
             <Box key={gi} mb={3}>
@@ -2185,9 +2229,11 @@ const ListagemCelulasPage = () => {
                       <TableCell>Nome</TableCell>
                       <TableCell>Rede</TableCell>
                       <TableCell>Líder</TableCell>
-                      <TableCell>Campus</TableCell>
+                      <TableCell>Endereço</TableCell>
                       <TableCell>Bairro</TableCell>
-                      <TableCell>Atualizado em</TableCell>
+                      <TableCell>Dia / Horário</TableCell>
+                      <TableCell>Campus</TableCell>
+                      <TableCell>Criada em</TableCell>
                       <TableCell>Ação</TableCell>
                     </TableRow>
                   </TableHead>
@@ -2197,9 +2243,11 @@ const ListagemCelulasPage = () => {
                         <TableCell>{c.celula}</TableCell>
                         <TableCell>{c.rede || '-'}</TableCell>
                         <TableCell>{c.lider || '-'}</TableCell>
-                        <TableCell>{c.campusRef?.nome || c.campus || '-'}</TableCell>
+                        <TableCell>{[c.endereco, c.numero].filter(Boolean).join(', ') || '-'}</TableCell>
                         <TableCell>{c.bairro || '-'}</TableCell>
-                        <TableCell>{c.updatedAt ? new Date(c.updatedAt).toLocaleDateString('pt-BR') : '-'}</TableCell>
+                        <TableCell>{[c.dia, c.horario].filter(Boolean).join(' • ') || '-'}</TableCell>
+                        <TableCell>{c.campusRef?.nome || c.campus || '-'}</TableCell>
+                        <TableCell>{c.createdAt ? new Date(c.createdAt).toLocaleDateString('pt-BR') : '-'}</TableCell>
                         <TableCell>
                           {grupo.map((outro) => outro.id !== c.id && (
                             <Button

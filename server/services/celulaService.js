@@ -75,6 +75,11 @@ const defaultCelulaIncludes = [
     model: Member,
     as: 'pastorCampusMemberRef',
     attributes: ['id', 'fullName', 'photoUrl']
+  },
+  {
+    model: Celula,
+    as: 'casalRef',
+    attributes: ['id', 'celula', 'rede', 'lider', 'dia', 'horario']
   }
 ];
 
@@ -255,6 +260,11 @@ const CelulaService = {
       where.liderMemberId = null;
     }
 
+    // Apenas células de casal (vinculadas a outra célula).
+    if (['true', '1', 'yes', 'on'].includes(String(filtros.casal || '').toLowerCase().trim())) {
+      where.casalCelulaId = { [Op.ne]: null };
+    }
+
     // Células criadas nos últimos N dias (ex.: novasDias=7).
     if (filtros.novasDias) {
       const dias = parseInt(filtros.novasDias, 10);
@@ -394,21 +404,67 @@ const CelulaService = {
       order: [['celula', 'ASC']]
     });
 
-    const normalizar = (v) => String(v || '').replace(/\D/g, '').toLowerCase();
-    const normalizarTexto = (v) => String(v || '').trim().toLowerCase();
+    const normDigits = (v) => String(v || '').replace(/\D/g, '');
+    const normText = (v) => String(v || '')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+    // Chave por logradouro (sem número): tolera número inconsistente/ausente,
+    // já que isso é apenas um sinal para revisão manual.
+    const enderecoKey = (c) => normText(c.endereco);
 
-    const grupos = {};
+    // Cada "sinal" liga células que provavelmente são a mesma. Todos exigem o
+    // mesmo endereço; variamos o segundo critério para pegar mais casos.
+    const sinais = new Map();
+    const addSinal = (chave, id) => {
+      if (!sinais.has(chave)) sinais.set(chave, []);
+      sinais.get(chave).push(id);
+    };
     celulas.forEach((c) => {
-      const endereco = normalizarTexto(c.endereco);
-      const lider = normalizarTexto(c.lider);
-      const celLider = normalizar(c.cel_lider);
-      if (!endereco || !lider || !celLider) return;
-      const chave = `${endereco}||${lider}||${celLider}`;
-      if (!grupos[chave]) grupos[chave] = [];
-      grupos[chave].push(c);
+      const end = enderecoKey(c);
+      if (!end) return;
+      // 1) mesmo líder vinculado (membro) + mesmo endereço
+      if (c.liderMemberId) addSinal(`L|${c.liderMemberId}|${end}`, c.id);
+      // 2) mesmo endereço + mesmo nome de líder (texto) + mesmo celular
+      const lider = normText(c.lider);
+      const cel = normDigits(c.cel_lider);
+      if (lider && cel) addSinal(`T|${end}|${lider}|${cel}`, c.id);
     });
 
-    return Object.values(grupos).filter((grupo) => grupo.length > 1);
+    // Union-find: une células que compartilham qualquer sinal (transitividade).
+    const parent = new Map();
+    celulas.forEach((c) => parent.set(c.id, c.id));
+    const find = (x) => {
+      let raiz = x;
+      while (parent.get(raiz) !== raiz) raiz = parent.get(raiz);
+      let atual = x;
+      while (parent.get(atual) !== raiz) {
+        const prox = parent.get(atual);
+        parent.set(atual, raiz);
+        atual = prox;
+      }
+      return raiz;
+    };
+    const union = (a, b) => { parent.set(find(a), find(b)); };
+    sinais.forEach((ids) => {
+      for (let i = 1; i < ids.length; i += 1) union(ids[0], ids[i]);
+    });
+
+    const byId = new Map(celulas.map((c) => [c.id, c]));
+    const porRaiz = new Map();
+    celulas.forEach((c) => {
+      const raiz = find(c.id);
+      if (!porRaiz.has(raiz)) porRaiz.set(raiz, []);
+      porRaiz.get(raiz).push(byId.get(c.id));
+    });
+
+    return [...porRaiz.values()]
+      .filter((grupo) => grupo.length > 1)
+      // Dentro do grupo, a mais antiga primeiro (candidata natural a manter).
+      .map((grupo) => grupo.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)))
+      .sort((a, b) => b.length - a.length);
   },
 
   async mesclarCelulas(celulaMantenerId, celulaRemoverId) {
@@ -439,6 +495,41 @@ const CelulaService = {
         { celula_id: celulaMantenerId },
         { where: { celula_id: celulaRemoverId }, transaction: t }
       );
+
+      // Reatribui todas as tabelas filhas que referenciam a célula removida para
+      // a célula mantida. Sem isso o DELETE viola FKs (Members, MemberActivities)
+      // ou apaga dados em cascata (vínculos, reuniões, presenças).
+      const SCHEMA = process.env.DB_SCHEMA || 'dev_iecg';
+      const reatribuicoes = [
+        `UPDATE "${SCHEMA}"."Members" SET "celulaId" = :mantener WHERE "celulaId" = :remover`,
+        `UPDATE "${SCHEMA}"."MemberActivities" SET "celulaId" = :mantener WHERE "celulaId" = :remover`,
+        // Índice único parcial (celulaId, membroId) WHERE ativo=true: remove os
+        // vínculos ativos da removida cujo membro já está ativo na mantida.
+        `DELETE FROM "${SCHEMA}"."CelulaMembroVinculos" v
+           WHERE v."celulaId" = :remover AND v.ativo = true
+             AND EXISTS (SELECT 1 FROM "${SCHEMA}"."CelulaMembroVinculos" v2
+                         WHERE v2."celulaId" = :mantener AND v2."membroId" = v."membroId" AND v2.ativo = true)`,
+        `UPDATE "${SCHEMA}"."CelulaMembroVinculos" SET "celulaId" = :mantener WHERE "celulaId" = :remover`,
+        // Índice único (celulaId, data): remove as reuniões da removida cuja data
+        // já existe na mantida (presenças filhas caem em cascata) antes de reatribuir.
+        `DELETE FROM "${SCHEMA}"."CelulaReunioes" r
+           WHERE r."celulaId" = :remover
+             AND EXISTS (SELECT 1 FROM "${SCHEMA}"."CelulaReunioes" r2
+                         WHERE r2."celulaId" = :mantener AND r2.data = r.data)`,
+        `UPDATE "${SCHEMA}"."CelulaReunioes" SET "celulaId" = :mantener WHERE "celulaId" = :remover`,
+        `UPDATE "${SCHEMA}"."PreCadastroPresencas" SET "celulaId" = :mantener WHERE "celulaId" = :remover`,
+        `UPDATE "${SCHEMA}"."apelos_direcionados_historico" SET "celula_id_destino" = :mantener WHERE "celula_id_destino" = :remover`,
+        `UPDATE "${SCHEMA}"."apelos_direcionados_historico" SET "celula_id_origem" = :mantener WHERE "celula_id_origem" = :remover`,
+        // Vínculo de casal é auto-referência sem FK no banco: desfaz refs pendentes.
+        `UPDATE "${SCHEMA}"."celulas" SET "casalCelulaId" = NULL WHERE "casalCelulaId" = :remover`
+      ];
+      for (const sql of reatribuicoes) {
+        // eslint-disable-next-line no-await-in-loop
+        await sequelize.query(sql, {
+          replacements: { mantener: celulaMantenerId, remover: celulaRemoverId },
+          transaction: t
+        });
+      }
 
       await remover.destroy({ transaction: t });
       await t.commit();
@@ -504,13 +595,31 @@ const CelulaService = {
         'photoUrl',
         'notes',
         'spouseMemberId',
-        'campusId'
+        'campusId',
+        'liderancaApostolicaMemberId',
+        'pastorGeracaoMemberId',
+        'pastorCampusMemberId'
       ],
       include: [
         {
           model: Celula,
           as: 'liderancaCelulas',
           include: celulaForLeaderSearchIncludes
+        },
+        {
+          model: Member,
+          as: 'liderancaApostolica',
+          attributes: ['id', 'fullName']
+        },
+        {
+          model: Member,
+          as: 'pastorGeracao',
+          attributes: ['id', 'fullName']
+        },
+        {
+          model: Member,
+          as: 'pastorCampus',
+          attributes: ['id', 'fullName']
         },
         {
           model: Member,
@@ -600,7 +709,7 @@ const CelulaService = {
       pastorCampusMemberId: m.pastorCampusMemberId
     }));
 
-    return celulas.map((c) => {
+    const linhas = celulas.map((c) => {
       const matches = topMatches(c.lideranca, candidatos, { limit: 5, minScore: 0.6 });
       return {
         celulaId: c.id,
@@ -616,6 +725,17 @@ const CelulaService = {
         matches
       };
     });
+
+    // Lista completa de Lideranças Apostólicas para seleção manual quando não
+    // houver match automático.
+    const liderancas = candidatos.map((m) => ({
+      id: m.id,
+      fullName: m.fullName,
+      pastorGeracaoMemberId: m.pastorGeracaoMemberId,
+      pastorCampusMemberId: m.pastorCampusMemberId
+    }));
+
+    return { celulas: linhas, liderancas };
   },
 
   /**
@@ -646,6 +766,212 @@ const CelulaService = {
     }
 
     return { atualizadas, erros };
+  },
+
+  /**
+   * Sugere pares de célula de casal cruzando redes de "mesmo público" em pares
+   * feminino×masculino: Mulheres IECG × Homens IECG e Juventude Relevante
+   * Moças × Rapazes. Células com o MESMO endereço + número são candidatas.
+   * Marca também se dia e horário coincidem (score de confiança).
+   * Considera apenas células ativas e ainda não vinculadas como casal.
+   */
+  async sugerirCasais() {
+    const norm = (v) => String(v || '')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+    // Normaliza o conjunto de dias (ignora ordem): "Quarta, Segunda" == "Segunda, Quarta"
+    const normDias = (v) => norm(v)
+      .split(',')
+      .map((d) => d.trim())
+      .filter(Boolean)
+      .sort()
+      .join(',');
+
+    const attrs = [
+      'id', 'celula', 'rede', 'lider', 'email_lider', 'cel_lider',
+      'endereco', 'numero', 'bairro', 'cidade', 'dia', 'horario',
+      'campus', 'casalCelulaId'
+    ];
+
+    // Pares de redes (lado feminino × lado masculino) que formam célula de casal.
+    const PARES_REDE = [
+      { fem: 'MULHERES IECG', masc: 'HOMENS IECG' },
+      { fem: 'JUVENTUDE RELEVANTE MOÇAS', masc: 'JUVENTUDE RELEVANTE RAPAZES' }
+    ];
+
+    const buscarPorRede = (redeLike) => Celula.findAll({
+      where: {
+        ativo: true,
+        casalCelulaId: null,
+        rede: { [Op.iLike]: `%${redeLike}%` }
+      },
+      attributes: attrs,
+      order: [['celula', 'ASC']]
+    });
+
+    // Só é possível parear quando há endereço; a chave é endereço + número.
+    const enderecoKey = (c) => {
+      const e = norm(c.endereco);
+      if (!e) return null;
+      return `${e}|${norm(c.numero)}`;
+    };
+
+    const toDto = (c) => ({
+      id: c.id,
+      celula: c.celula,
+      rede: c.rede,
+      lider: c.lider,
+      endereco: c.endereco,
+      numero: c.numero,
+      bairro: c.bairro,
+      cidade: c.cidade,
+      dia: c.dia,
+      horario: c.horario,
+      campus: c.campus
+    });
+
+    // Busca as células de todos os pares em paralelo (sem await em loop).
+    const resultadosPorPar = await Promise.all(
+      PARES_REDE.map(async (par) => {
+        const [fem, masc] = await Promise.all([
+          buscarPorRede(par.fem),
+          buscarPorRede(par.masc)
+        ]);
+        return { par, fem, masc };
+      })
+    );
+
+    const sugestoes = [];
+    resultadosPorPar.forEach(({ par, fem, masc }) => {
+      const mascPorEndereco = new Map();
+      masc.forEach((h) => {
+        const chave = enderecoKey(h);
+        if (!chave) return;
+        if (!mascPorEndereco.has(chave)) mascPorEndereco.set(chave, []);
+        mascPorEndereco.get(chave).push(h);
+      });
+
+      fem.forEach((m) => {
+        const chave = enderecoKey(m);
+        if (!chave) return;
+        const candidatos = mascPorEndereco.get(chave) || [];
+        candidatos.forEach((h) => {
+          const diaM = normDias(m.dia);
+          const diaMatch = Boolean(diaM) && diaM === normDias(h.dia);
+          const horM = norm(m.horario);
+          const horarioMatch = Boolean(horM) && horM === norm(h.horario);
+          // Endereço sempre bate (é a chave). Confiança sobe com dia e horário.
+          const score = (1 + (diaMatch ? 1 : 0) + (horarioMatch ? 1 : 0)) / 3;
+          sugestoes.push({
+            id: `${m.id}::${h.id}`,
+            parRede: `${par.fem} × ${par.masc}`,
+            mulheres: toDto(m),
+            homens: toDto(h),
+            enderecoMatch: true,
+            diaMatch,
+            horarioMatch,
+            score
+          });
+        });
+      });
+    });
+
+    // Melhores primeiro (endereço+dia+horário no topo).
+    sugestoes.sort((a, b) => b.score - a.score);
+    return sugestoes;
+  },
+
+  /**
+   * Vincula em lote pares de célula de casal, gravando casalCelulaId nos dois
+   * lados (1:1 bidirecional) dentro de uma transação por par.
+   * Items: [{ celulaMulheresId, celulaHomensId }]
+   */
+  async vincularCasaisEmLote(items = []) {
+    if (!Array.isArray(items) || items.length === 0) {
+      return { vinculadas: 0, erros: [] };
+    }
+    let vinculadas = 0;
+    const erros = [];
+
+    for (const item of items) {
+      const { celulaMulheresId, celulaHomensId } = item || {};
+      const t = await Celula.sequelize.transaction();
+      try {
+        if (!celulaMulheresId || !celulaHomensId) {
+          erros.push({ item, erro: 'celulaMulheresId e celulaHomensId sao obrigatorios' });
+          await t.rollback();
+          continue;
+        }
+        if (celulaMulheresId === celulaHomensId) {
+          erros.push({ item, erro: 'As celulas devem ser diferentes' });
+          await t.rollback();
+          continue;
+        }
+
+        const [m, h] = await Promise.all([
+          Celula.findByPk(celulaMulheresId, { transaction: t }),
+          Celula.findByPk(celulaHomensId, { transaction: t })
+        ]);
+
+        if (!m || !h) {
+          erros.push({ item, erro: 'Celula nao encontrada' });
+          await t.rollback();
+          continue;
+        }
+
+        await m.update({ casalCelulaId: h.id }, { transaction: t });
+        await h.update({ casalCelulaId: m.id }, { transaction: t });
+        await t.commit();
+        vinculadas += 1;
+
+        webhookEmitter.emit('celula.updated', { id: m.id, data: { casalCelulaId: h.id } });
+        webhookEmitter.emit('celula.updated', { id: h.id, data: { casalCelulaId: m.id } });
+      } catch (err) {
+        await t.rollback();
+        erros.push({ item, erro: err.message });
+      }
+    }
+
+    return { vinculadas, erros };
+  },
+
+  /**
+   * Remove o vínculo de casal dos dois lados (a célula informada e o seu par).
+   */
+  async desvincularCasal(celulaId) {
+    if (!celulaId) throw new Error('celulaId é obrigatório');
+    const t = await Celula.sequelize.transaction();
+    try {
+      const celula = await Celula.findByPk(celulaId, { transaction: t });
+      if (!celula) {
+        await t.rollback();
+        throw new Error('Célula não encontrada');
+      }
+      const parId = celula.casalCelulaId;
+      await celula.update({ casalCelulaId: null }, { transaction: t });
+
+      if (parId) {
+        const par = await Celula.findByPk(parId, { transaction: t });
+        if (par && par.casalCelulaId === celula.id) {
+          await par.update({ casalCelulaId: null }, { transaction: t });
+        }
+      }
+
+      await t.commit();
+
+      webhookEmitter.emit('celula.updated', { id: celula.id, data: { casalCelulaId: null } });
+      if (parId) {
+        webhookEmitter.emit('celula.updated', { id: parId, data: { casalCelulaId: null } });
+      }
+
+      return { mensagem: 'Vínculo de casal removido com sucesso.' };
+    } catch (err) {
+      await t.rollback();
+      throw err;
+    }
   }
 };
 

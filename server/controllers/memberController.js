@@ -1,6 +1,6 @@
 const memberService = require('../services/memberService');
 const evolutionApiService = require('../services/evolutionApiService');
-const { Member, User } = require('../models');
+const { Member, User, Celula } = require('../models');
 const { syncMemberFromUserRecord } = require('../utils/memberUserSync');
 
 function sanitizeMemberPayload(payload = {}) {
@@ -165,7 +165,7 @@ async function list(req, res) {
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 5000);
     const filters = {};
-    ['status', 'campusId', 'celulaId', 'search', 'cargo'].forEach((key) => {
+    ['status', 'campusId', 'celulaId', 'search', 'cargo', 'minCelulas'].forEach((key) => {
       const value = req.query[key];
       if (value && value !== 'undefined') {
         filters[key] = value;
@@ -419,6 +419,51 @@ async function notificarDadosIncompletos(req, res) {
   }
 }
 
+async function notificarCelulasLider(req, res) {
+  try {
+    const { id } = req.params;
+    const member = await Member.findByPk(id, {
+      attributes: ['id', 'fullName', 'phone', 'whatsapp']
+    });
+    if (!member) return res.status(404).json({ erro: 'Membro não encontrado' });
+
+    const telefone = member.phone || member.whatsapp;
+    if (!telefone) return res.status(400).json({ erro: 'Membro não possui telefone cadastrado para envio' });
+
+    const celulas = await Celula.findAll({
+      where: { liderMemberId: id, ativo: true },
+      attributes: ['id', 'celula', 'rede', 'bairro'],
+      order: [['celula', 'ASC']]
+    });
+    if (!celulas.length) {
+      return res.status(400).json({ erro: 'Este membro não é líder de nenhuma célula ativa' });
+    }
+
+    const phoneDigits = String(telefone).replace(/\D/g, '');
+    const link = `https://start.iecg.com.br/celulas/atualizar?phone=${phoneDigits}`;
+
+    let mensagem;
+    if (celulas.length === 1) {
+      const c = celulas[0];
+      mensagem = `Olá ${member.fullName}! Você está cadastrado(a) como líder da célula "${c.celula}". `
+        + `Por favor, confira e mantenha os dados atualizados (endereço, dia e horário) pelo link: ${link}`;
+    } else {
+      const lista = celulas
+        .map((c, i) => `${i + 1}) ${c.celula}${c.bairro ? ` - ${c.bairro}` : ''}`)
+        .join('\n');
+      mensagem = `Olá ${member.fullName}! Identificamos que você está como líder de ${celulas.length} células:\n${lista}\n\n`
+        + `Você lidera todas mesmo? Confirme e *inative* as que não lidera mais pelo link: ${link}`;
+    }
+
+    const resultado = await evolutionApiService.enviarMensagemTexto(telefone, mensagem, 'START_IECG');
+    if (!resultado.sucesso) return res.status(500).json({ erro: resultado.erro || 'Falha ao enviar mensagem' });
+
+    return res.status(200).json({ mensagem: 'Notificação enviada com sucesso', celulas: celulas.length });
+  } catch (error) {
+    return res.status(500).json({ erro: error.message });
+  }
+}
+
 async function listCargos(req, res) {
   try {
     const cargos = await memberService.listMemberCargos(req.params.id);
@@ -496,6 +541,7 @@ module.exports = {
   updateActivityType,
   setActivityTypeActive,
   notificarDadosIncompletos,
+  notificarCelulasLider,
   syncFromUser,
   listCargos,
   addCargo,

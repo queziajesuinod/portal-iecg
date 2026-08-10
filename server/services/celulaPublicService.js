@@ -1,6 +1,18 @@
-const { Celula } = require('../models');
 const { Op } = require('sequelize');
+const {
+  Celula, Member, MemberCargo
+} = require('../models');
 const webhookEmitter = require('./webhookEmitter');
+const CelulaService = require('./celulaService');
+
+// leaderId (id do User) chega do formulario publico; a coluna da celula e liderId.
+const normalizeLeaderId = (payload) => {
+  if (payload.leaderId && !payload.liderId) {
+    payload.liderId = payload.leaderId;
+  }
+  delete payload.leaderId;
+  return payload;
+};
 
 const sanitizeCelular = (valor) => {
   if (!valor) return '';
@@ -41,7 +53,10 @@ const CelulaPublicService = {
     if (!dados.celula) {
       throw new Error('Nome da celula (celula) e obrigatorio');
     }
-    const payload = preparePayload(dados);
+    const payload = normalizeLeaderId(preparePayload(dados));
+    // liderId -> liderMemberId e (se so veio a Lideranca) preenche PdG/PdC.
+    await CelulaService.resolveLeaderLinks(payload);
+    await CelulaService.resolveHierarchyFromLideranca(payload);
     const created = await Celula.create(payload);
     webhookEmitter.emit('celula.created', {
       id: created.id,
@@ -92,8 +107,12 @@ const CelulaPublicService = {
       throw new Error('Celula nao encontrada');
     }
 
-    const { id: _, createdAt, updatedAt, ...rest } = dados;
-    const payload = preparePayload(rest);
+    const {
+      id: _, createdAt, updatedAt, ...rest
+    } = dados;
+    const payload = normalizeLeaderId(preparePayload(rest));
+    await CelulaService.resolveLeaderLinks(payload);
+    await CelulaService.resolveHierarchyFromLideranca(payload);
 
     const updated = await celula.update(payload);
     webhookEmitter.emit('celula.updated', {
@@ -104,6 +123,57 @@ const CelulaPublicService = {
       lider: updated.lider
     });
     return updated;
+  },
+
+  /**
+   * Opcoes para os selects de hierarquia do formulario publico de celula.
+   * Retorna membros com cargo de Lideranca Apostolica (ja com os pastores
+   * vinculados, para auto-preencher), e as listas de Pastor de Geracao/Campus.
+   */
+  async listarHierarquiaOptions() {
+    const buscarPorCargo = (cargo, extraAttrs = [], extraIncludes = []) => Member.findAll({
+      attributes: ['id', 'fullName', ...extraAttrs],
+      include: [
+        {
+          model: MemberCargo,
+          as: 'cargos',
+          where: { cargo, ativo: true },
+          attributes: [],
+          required: true
+        },
+        ...extraIncludes
+      ],
+      order: [['fullName', 'ASC']],
+      subQuery: false
+    });
+
+    const [liderancasRaw, pastoresGeracao, pastoresCampus] = await Promise.all([
+      buscarPorCargo(
+        'lideranca_apostolica',
+        ['pastorGeracaoMemberId', 'pastorCampusMemberId'],
+        [
+          { model: Member, as: 'pastorGeracao', attributes: ['id', 'fullName'] },
+          { model: Member, as: 'pastorCampus', attributes: ['id', 'fullName'] }
+        ]
+      ),
+      buscarPorCargo('pastor_geracao'),
+      buscarPorCargo('pastor_campus')
+    ]);
+
+    const simples = (m) => ({ id: m.id, fullName: m.fullName });
+
+    return {
+      liderancas: liderancasRaw.map((m) => ({
+        id: m.id,
+        fullName: m.fullName,
+        pastorGeracaoMemberId: m.pastorGeracaoMemberId || null,
+        pastorGeracao: m.pastorGeracao ? simples(m.pastorGeracao) : null,
+        pastorCampusMemberId: m.pastorCampusMemberId || null,
+        pastorCampus: m.pastorCampus ? simples(m.pastorCampus) : null
+      })),
+      pastoresGeracao: pastoresGeracao.map(simples),
+      pastoresCampus: pastoresCampus.map(simples)
+    };
   }
 };
 
