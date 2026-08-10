@@ -407,7 +407,7 @@ async function notificarDadosIncompletos(req, res) {
     const emailDigits = member.email ? member.email.trim() : null;
     const phoneDigits = String(telefone).replace(/\D/g, '');
     const param = emailDigits ? `email=${encodeURIComponent(emailDigits)}` : `telefone=${phoneDigits}`;
-    const link = `https://start.iecg.com.br/celulas/lider?${param}`;
+    const link = `https://start.iecg.com.br/membros/cadastro?${param}`;
     const mensagem = `Olá ${member.fullName}, seus dados de membresia estão incompletos. Atualize pelo link: ${link}`;
 
     const resultado = await evolutionApiService.enviarMensagemTexto(telefone, mensagem, 'START_IECG');
