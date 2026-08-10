@@ -2,12 +2,13 @@ const { Op } = require('sequelize');
 const { YoutubeVideo, VideoTranscript, VideoClip } = require('../models');
 const llmChain = require('./llmChainService');
 
-// Teto absoluto de recortes por video (nao ultrapassar, mesmo via env).
-const HARD_MAX_CLIPS = 5;
+// Teto de recortes ATIVOS (nao descartados) acumulados por video. Cada clique em
+// "Sugerir novamente" adiciona ate CLIP_MAX_COUNT novos, respeitando este total.
+const HARD_MAX_TOTAL = Number(process.env.CLIP_MAX_TOTAL || 20);
 
 const DEFAULTS = {
   minClips: Number(process.env.CLIP_MIN_COUNT || 2),
-  maxClips: Math.min(Number(process.env.CLIP_MAX_COUNT || 5), HARD_MAX_CLIPS),
+  maxClips: Number(process.env.CLIP_MAX_COUNT || 5), // por rodada de sugestao
   minSeconds: Number(process.env.CLIP_MIN_SECONDS || 15),
   maxSeconds: Number(process.env.CLIP_MAX_SECONDS || 75),
 };
@@ -35,7 +36,8 @@ CRITÉRIOS DE UM BOM RECORTE:
 REGRAS:
 - Escolha entre ${minClips} e ${maxClips} recortes, os MELHORES (qualidade acima de quantidade — se só houver 1 ótimo, retorne 1).
 - Cada recorte deve durar entre ${minSeconds} e ${maxSeconds} segundos. Some a duração dos segmentos escolhidos (do startIndex ao endIndex) para respeitar isso.
-- Os recortes NÃO podem se sobrepor.
+- Os recortes NÃO podem se sobrepor entre si.
+- IMPORTANTE: se houver uma lista de "trechos JÁ escolhidos" no fim da mensagem, esses momentos já viraram recortes em rodadas anteriores. NÃO os repita e NÃO escolha nada que se sobreponha a eles — traga momentos DIFERENTES e novos.
 - "startIndex" e "endIndex" são índices inteiros de segmentos (inclusivos), referentes aos #N fornecidos.
 - "title": título curto e chamativo do recorte (máx 80 caracteres), em português.
 - "caption": a frase/ensinamento central do trecho em texto puro (sem aspas desnecessárias), que pode virar legenda.
@@ -45,9 +47,13 @@ FORMATO: responda APENAS com um objeto JSON válido, sem markdown, no formato:
 { "clips": [ { "startIndex": 0, "endIndex": 3, "title": "...", "caption": "...", "reason": "..." } ] }`;
 }
 
-function buildUserMessage(title, segments) {
+function buildUserMessage(title, segments, blockedRanges = []) {
   const lines = segments.map((seg, i) => `#${i} [${formatTime(seg.start)}] ${String(seg.text || '').trim()}`);
-  return `Título do vídeo: ${title || '(sem título)'}\nTotal de segmentos: ${segments.length}\n\nSegmentos:\n${lines.join('\n')}`;
+  const taken = blockedRanges.length
+    ? `\n\nTrechos JÁ escolhidos (evite repetir ou sobrepor — traga outros):\n${blockedRanges
+      .map(([s, e]) => `- ${formatTime(s)} a ${formatTime(e)}`).join('\n')}`
+    : '';
+  return `Título do vídeo: ${title || '(sem título)'}\nTotal de segmentos: ${segments.length}\n\nSegmentos:\n${lines.join('\n')}${taken}`;
 }
 
 function clampInt(value, min, max) {
@@ -73,9 +79,9 @@ function fitDuration(segments, startIndex, endIndex, minSeconds, maxSeconds) {
   return { s, e, seconds: dur() };
 }
 
-function normalizeClips(rawClips, segments, cfg) {
+function normalizeClips(rawClips, segments, cfg, blockedRanges = []) {
   const lastIdx = segments.length - 1;
-  const used = []; // intervalos [s,e] ja aceitos, para evitar sobreposicao
+  const used = []; // intervalos [s,e] ja aceitos nesta rodada, para evitar sobreposicao
   const result = [];
 
   for (const raw of Array.isArray(rawClips) ? rawClips : []) {
@@ -87,15 +93,23 @@ function normalizeClips(rawClips, segments, cfg) {
     const fitted = fitDuration(segments, startIndex, endIndex, cfg.minSeconds, cfg.maxSeconds);
     if (fitted.seconds < Math.min(cfg.minSeconds, 5)) continue;
 
-    // Descarta se sobrepoe um recorte ja aceito.
+    // Descarta se sobrepoe um recorte ja aceito nesta rodada.
     const overlaps = used.some(([us, ue]) => fitted.s <= ue && fitted.e >= us);
     if (overlaps) continue;
+
+    const startSeconds = Number(Number(segments[fitted.s].start).toFixed(3));
+    const endSeconds = Number(Number(segments[fitted.e].end).toFixed(3));
+
+    // Descarta se sobrepoe um recorte ja escolhido em rodadas anteriores (em segundos).
+    const blocked = blockedRanges.some(([rs, re]) => startSeconds < re && endSeconds > rs);
+    if (blocked) continue;
+
     used.push([fitted.s, fitted.e]);
 
     const text = segments.slice(fitted.s, fitted.e + 1).map((sg) => String(sg.text || '').trim()).join(' ').trim();
     result.push({
-      startSeconds: Number(Number(segments[fitted.s].start).toFixed(3)),
-      endSeconds: Number(Number(segments[fitted.e].end).toFixed(3)),
+      startSeconds,
+      endSeconds,
       title: typeof raw.title === 'string' ? raw.title.trim().slice(0, 200) : null,
       caption: typeof raw.caption === 'string' && raw.caption.trim()
         ? raw.caption.trim()
@@ -111,11 +125,12 @@ function normalizeClips(rawClips, segments, cfg) {
 
 /**
  * Gera sugestoes de recortes para um video (a partir dos segments) e persiste como VideoClip.
- * Substitui apenas os recortes ainda 'suggested' (preserva approved/rendered/published).
+ * ADITIVO: preserva os recortes existentes e ANEXA ate CLIP_MAX_COUNT novos por rodada,
+ * pedindo a IA (e filtrando) trechos que NAO se repitam nem se sobreponham aos ja escolhidos.
+ * Respeita o teto total de recortes ativos (HARD_MAX_TOTAL).
  */
 async function suggestClips(youtubeVideoId, options = {}) {
   const cfg = { ...DEFAULTS, ...options };
-  cfg.maxClips = Math.min(Number(cfg.maxClips) || DEFAULTS.maxClips, HARD_MAX_CLIPS);
 
   const video = await YoutubeVideo.findByPk(youtubeVideoId);
   if (!video) throw new Error('Video nao encontrado');
@@ -126,23 +141,36 @@ async function suggestClips(youtubeVideoId, options = {}) {
     throw new Error('Video sem segments (timestamps). Rode o backfill/transcricao antes de sugerir recortes.');
   }
 
-  const systemPrompt = buildSystemPrompt(cfg);
-  const userMessage = buildUserMessage(video.title, segments);
+  // Recortes ja existentes: os ATIVOS ocupam vaga no total; os DESCARTADOS nao ocupam
+  // vaga, mas ainda entram na lista de "evitar repetir".
+  const existing = await VideoClip.findAll({ where: { youtubeVideoId } });
+  const activeClips = existing.filter((c) => c.status !== 'discarded');
+  const blockedRanges = existing.map((c) => [Number(c.startSeconds), Number(c.endSeconds)]);
+
+  const room = HARD_MAX_TOTAL - activeClips.length;
+  if (room <= 0) {
+    throw new Error(`Limite de ${HARD_MAX_TOTAL} recortes atingido. Descarte alguns antes de sugerir novos.`);
+  }
+  const batch = Math.max(1, Math.min(Number(cfg.maxClips) || DEFAULTS.maxClips, room));
+  const promptCfg = { ...cfg, maxClips: batch, minClips: Math.min(cfg.minClips, batch) };
+
+  const systemPrompt = buildSystemPrompt(promptCfg);
+  const userMessage = buildUserMessage(video.title, segments, blockedRanges);
 
   const { data, provider, model } = await llmChain.chatJson(systemPrompt, userMessage, { maxTokens: 1500 });
-  const clips = normalizeClips(data?.clips, segments, cfg);
+  const clips = normalizeClips(data?.clips, segments, promptCfg, blockedRanges);
 
   if (!clips.length) {
-    throw new Error('A IA nao retornou nenhum recorte valido');
+    throw new Error('A IA nao retornou nenhum recorte novo valido (talvez os melhores trechos ja tenham sido escolhidos).');
   }
 
-  // Remove sugestoes anteriores ainda nao trabalhadas; mantem as aprovadas/publicadas.
-  await VideoClip.destroy({ where: { youtubeVideoId, status: 'suggested' } });
+  // ADITIVO: anexa apos a ultima posicao existente (nao remove nada).
+  const startPos = existing.reduce((mx, c) => Math.max(mx, Number(c.position) || 0), -1) + 1;
 
   const created = await VideoClip.bulkCreate(
     clips.map((c, i) => ({
       youtubeVideoId,
-      position: i,
+      position: startPos + i,
       startSeconds: c.startSeconds,
       endSeconds: c.endSeconds,
       title: c.title,
@@ -152,7 +180,7 @@ async function suggestClips(youtubeVideoId, options = {}) {
     }))
   );
 
-  console.log(`[clips] ${created.length} recorte(s) sugerido(s) para ${video.videoId} via ${provider} (${model})`);
+  console.log(`[clips] +${created.length} recorte(s) novo(s) para ${video.videoId} via ${provider} (${model})`);
   return { clips: created, provider, model };
 }
 

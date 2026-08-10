@@ -179,9 +179,27 @@ async function publishShort(channel, filePath, {
   return data;
 }
 
+/**
+ * Apaga um video do canal no YouTube (videos.delete). Requer o escopo
+ * youtube.force-ssl (ja concedido). `channel` deve estar com tokens (scope('withTokens')).
+ * Retorna { deleted: true } ou { deleted: false, missing: true } se o video ja nao existe.
+ */
+async function deleteVideo(channel, videoId) {
+  const youtube = await getYoutubeClient(channel);
+  try {
+    await youtube.videos.delete({ id: videoId });
+    return { deleted: true };
+  } catch (err) {
+    const status = err?.code || err?.response?.status;
+    if (status === 404) return { deleted: false, missing: true };
+    throw err;
+  }
+}
+
 module.exports = {
   syncChannelVideos,
   fetchCaptionInfo,
   parseIsoDuration,
   publishShort,
+  deleteVideo,
 };

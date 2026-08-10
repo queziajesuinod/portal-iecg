@@ -279,6 +279,11 @@ export const publishClip = async (clipId, options = {}) => {
   return parseOrThrow(res, 'Falha ao publicar recorte');
 };
 
+export const unpublishClip = async (clipId) => {
+  const res = await fetch(`${BASE}/clips/${clipId}/unpublish`, { method: 'POST', headers: jsonHeaders() });
+  return parseOrThrow(res, 'Falha ao excluir publicação do recorte');
+};
+
 // O arquivo do clip exige Authorization; buscamos como blob e devolvemos um object URL
 // (usar em <video src> e revogar com URL.revokeObjectURL quando trocar).
 export const fetchClipBlobUrl = async (clipId) => {

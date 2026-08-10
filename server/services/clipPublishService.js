@@ -64,6 +64,55 @@ async function publishClip(clipId, overrides = {}) {
   }
 }
 
+/**
+ * Exclui a publicacao de um recorte: APAGA o Short do YouTube (videos.delete) e
+ * volta o recorte para um estado re-renderizavel/republicavel. Use para refazer
+ * um clip antigo com o novo rastreamento (anti-tremor).
+ * Fluxo de status: published -> rendered (se o arquivo ainda existe) ou approved
+ * (se ja foi limpo do disco e precisa re-render).
+ */
+async function unpublishClip(clipId) {
+  const clip = await VideoClip.findByPk(clipId, {
+    include: [{ model: YoutubeVideo, as: 'video' }],
+  });
+  if (!clip) throw new Error('Recorte nao encontrado');
+  if (clip.status !== 'published') {
+    throw new Error(`Recorte precisa estar 'published' para excluir a publicacao (atual: ${clip.status})`);
+  }
+
+  const { video } = clip;
+  if (clip.youtubeShortId) {
+    const channel = await YoutubeChannel.scope('withTokens').findByPk(video.youtubeChannelId);
+    if (!channel) throw new Error('Canal do video nao encontrado');
+    if (!channel.getRefreshToken()) {
+      throw new Error('Canal sem autorizacao OAuth. Reconecte o canal para excluir a publicacao.');
+    }
+    const result = await youtubeApi.deleteVideo(channel, clip.youtubeShortId);
+    if (result.missing) {
+      console.warn(`[clipPublish] Short ${clip.youtubeShortId} ja nao existe no YouTube; desmarcando localmente`);
+    } else {
+      console.log(`[clipPublish] Short ${clip.youtubeShortId} apagado do YouTube (recorte ${clip.id})`);
+    }
+  }
+
+  // Se o arquivo renderizado ainda esta em disco, volta para 'rendered' (republica direto);
+  // se ja foi limpo, volta para 'approved' (precisa re-renderizar).
+  const hasFile = Boolean(clip.filePath) && fs.existsSync(clip.filePath);
+  const updates = {
+    status: hasFile ? 'rendered' : 'approved',
+    youtubeShortId: null,
+    publishedAt: null,
+    errorMessage: null,
+  };
+  if (!hasFile) {
+    updates.filePath = null;
+    updates.fileSizeBytes = null;
+  }
+  await clip.update(updates);
+  return clip;
+}
+
 module.exports = {
   publishClip,
+  unpublishClip,
 };

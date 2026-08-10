@@ -9,12 +9,25 @@ const ffmpeg = require('./ffmpegService');
 const TARGET_W = 1080;
 const TARGET_H = 1920;
 const TARGET_AR = 9 / 16;
-const GRID_STEP = 0.1; // segundos entre keyframes de crop (grade fina -> pan continuo)
-const EMA_ALPHA = 0.16; // suavizacao do movimento do rosto (menor = mais suave)
-const MEDIAN_WIN = 5; // janela (impar) do filtro de mediana p/ rejeitar deteccoes outliers
-const DEADBAND_PX = 26; // zona morta: so reposiciona apos o rosto sair desse raio (mata micro-tremor)
-const MAX_PAN_PX_PER_SEC = 90; // velocidade maxima do pan (limita saltos -> movimento gradual)
-const STATIC_THRESHOLD_PX = 12; // abaixo disso, trata como orador parado -> crop estatico
+// Le um numero de env com fallback (ignora valores vazios/invalidos).
+function envNum(name, def) {
+  const v = Number(process.env[name]);
+  return Number.isFinite(v) && v > 0 ? v : def;
+}
+
+// Reenquadramento estilo AutoFlip: a camera fica TRAVADA e so se move em pans
+// suaves (velocidade/aceleracao limitadas) quando o rosto sai da zona segura.
+// Os 3 parametros de pan sao tunaveis por env (ver tabela no README/.env.example).
+const GRID_STEP = 0.1; // s entre keyframes de crop (grade fina -> pan continuo)
+const MEDIAN_WIN = 7; // janela impar do filtro de mediana (rejeita deteccoes outliers)
+// Zona morta: rosto pode variar +-18% da largura do crop antes da camera mover.
+const SAFE_ZONE_FRAC = envNum('CLIP_SAFE_ZONE_FRAC', 0.18);
+// Teto de velocidade do pan (fracao da largura do crop / s).
+const MAX_PAN_VEL_FRAC = envNum('CLIP_MAX_PAN_VEL_FRAC', 0.33);
+// Teto de aceleracao do pan (fracao da largura do crop / s^2).
+const MAX_PAN_ACCEL_FRAC = envNum('CLIP_MAX_PAN_ACCEL_FRAC', 1.1);
+const STATIC_RANGE_FRAC = 0.02; // se a camera anda menos que isso no clipe todo -> crop estatico
+const FACE_SAMPLE_FPS = envNum('FACE_TRACK_SAMPLE_FPS', 10); // amostragem da deteccao (Hz)
 const FACE_TRACK_SCRIPT = path.join(__dirname, '..', 'scripts', 'face_track.py');
 
 // Estilo da legenda queimada (ASS)
@@ -47,7 +60,7 @@ function makeEven(n) {
 
 async function runFaceTrack(videoPath, start, end) {
   const outJson = path.join(os.tmpdir(), `facetrack-${crypto.randomBytes(4).toString('hex')}.json`);
-  const args = [FACE_TRACK_SCRIPT, videoPath, String(start), String(end), outJson, '4'];
+  const args = [FACE_TRACK_SCRIPT, videoPath, String(start), String(end), outJson, String(FACE_SAMPLE_FPS)];
   try {
     await new Promise((resolve, reject) => {
       const proc = spawn(getPythonBin(), args, { stdio: ['ignore', 'ignore', 'pipe'] });
@@ -76,8 +89,10 @@ function medianFilter(arr, win) {
   });
 }
 
-// Interpola as amostras de centro do rosto sobre uma grade regular e suaviza (mediana + EMA).
-function buildCenterTrajectory(samples, srcW, duration) {
+// Interpola as amostras do centro do rosto sobre uma grade regular e remove picos
+// isolados (mediana). NAO suaviza o movimento aqui -> quem faz isso e o caminho de
+// camera (computeRestTargets + followTargets), no estilo AutoFlip.
+function buildFocusTrack(samples, srcW, duration) {
   const valid = (samples || [])
     .filter((s) => Number.isFinite(s.t) && Number.isFinite(s.cx))
     .sort((a, b) => a.t - b.t);
@@ -99,17 +114,62 @@ function buildCenterTrajectory(samples, srcW, duration) {
     return cx * srcW;
   });
 
-  // 1) Mediana: descarta deteccoes fora da curva (rejeita outliers antes de suavizar).
+  // Mediana: descarta deteccoes fora da curva antes de planejar a camera.
   const clean = medianFilter(interp, MEDIAN_WIN);
+  return times.map((t, i) => ({ t, cxPx: clean[i] }));
+}
 
-  // 2) EMA ida e volta (zero-phase): suaviza sem atrasar o movimento real.
-  const fwd = [];
-  clean.forEach((v, i) => fwd.push(i === 0 ? v : EMA_ALPHA * v + (1 - EMA_ALPHA) * fwd[i - 1]));
-  const smooth = new Array(fwd.length);
-  for (let i = fwd.length - 1; i >= 0; i -= 1) {
-    smooth[i] = i === fwd.length - 1 ? fwd[i] : EMA_ALPHA * fwd[i] + (1 - EMA_ALPHA) * smooth[i + 1];
+// Passo 1 do AutoFlip: segmenta o tempo em trechos onde uma camera PARADA mantem o
+// rosto dentro da zona segura (+-radius). Cada trecho vira uma "tomada travada" e o
+// alvo de repouso e o centro do trecho (folga maxima nas duas bordas).
+function computeRestTargets(focusPx, radius) {
+  const n = focusPx.length;
+  const rest = new Array(n);
+  let i = 0;
+  while (i < n) {
+    let lo = focusPx[i];
+    let hi = focusPx[i];
+    let j = i;
+    while (j < n) {
+      const nlo = Math.min(lo, focusPx[j]);
+      const nhi = Math.max(hi, focusPx[j]);
+      if (nhi - nlo > 2 * radius) break; // camera parada nao conteria mais o rosto
+      lo = nlo; hi = nhi; j += 1;
+    }
+    const center = (lo + hi) / 2;
+    for (let k = i; k < j; k += 1) rest[k] = center;
+    i = j;
   }
-  return times.map((t, i) => ({ t, cxPx: smooth[i] }));
+  return rest;
+}
+
+// Passo 2 do AutoFlip: segue o alvo de repouso com velocidade e aceleracao limitadas
+// (perfil trapezoidal). Como o alvo e constante por trecho, cada mudanca vira UM pan
+// suave -> sem o micro-tremor do modelo reativo.
+function followTargets(targets, cropW) {
+  const dt = GRID_STEP;
+  const vMax = cropW * MAX_PAN_VEL_FRAC;
+  const aMax = cropW * MAX_PAN_ACCEL_FRAC;
+  let cc = targets[0];
+  let v = 0;
+  return targets.map((target) => {
+    const err = target - cc;
+    const dir = Math.sign(err);
+    const stopDist = (v * v) / (2 * aMax); // distancia p/ frear a partir da velocidade atual
+    let a;
+    if (Math.abs(err) <= 0.5 && Math.abs(v) <= aMax * dt) {
+      v = 0; a = 0; // repouso: trava a camera
+    } else if (v !== 0 && Math.sign(v) !== dir) {
+      a = -Math.sign(v) * aMax; // indo pro lado errado -> freia
+    } else if (Math.abs(err) > stopDist) {
+      a = dir * aMax; // acelera em direcao ao alvo
+    } else {
+      a = -Math.sign(v) * aMax; // ja da pra parar no alvo -> desacelera
+    }
+    v = Math.max(-vMax, Math.min(vMax, v + a * dt));
+    cc += v * dt;
+    return cc;
+  });
 }
 
 // Define geometria do crop 9:16 e a trajetoria (estatica ou dinamica) de x.
@@ -142,47 +202,34 @@ function buildCropPlan(meta, samples, duration) {
     };
   }
 
-  const traj = buildCenterTrajectory(samples, srcW, duration);
-  if (!traj) {
+  const focus = buildFocusTrack(samples, srcW, duration);
+  if (!focus) {
     return {
       cropW, cropH, y, mode: 'static', x: centerX
     };
   }
 
-  // Alvo de x (canto esquerdo do crop) por keyframe, centrando o rosto.
-  const targets = traj.map(({ t, cxPx }) => ({
-    t,
-    x: Math.max(0, Math.min(maxX, Math.round(cxPx - cropW / 2))),
-  }));
+  // Caminho de camera: alvos de repouso (travados) -> perseguicao suave.
+  const radius = cropW * SAFE_ZONE_FRAC;
+  const rest = computeRestTargets(focus.map((f) => f.cxPx), radius);
+  const camCenter = followTargets(rest, cropW);
 
-  const targetXs = targets.map((k) => k.x);
-  const range = Math.max(...targetXs) - Math.min(...targetXs);
-  if (range < STATIC_THRESHOLD_PX) {
-    // Orador praticamente parado: crop estatico na mediana (evita micro-tremor).
-    const sorted = [...targetXs].sort((a, b) => a - b);
+  // Centro da camera -> x (canto esquerdo do crop), dentro dos limites.
+  const xs = camCenter.map((cc) => Math.max(0, Math.min(maxX, Math.round(cc - cropW / 2))));
+
+  const range = Math.max(...xs) - Math.min(...xs);
+  if (range < cropW * STATIC_RANGE_FRAC) {
+    // Camera praticamente imovel: crop estatico na mediana (evita keyframes a toa).
+    const sorted = [...xs].sort((a, b) => a - b);
     return {
       cropW, cropH, y, mode: 'static', x: sorted[Math.floor(sorted.length / 2)]
     };
   }
 
-  // Zona morta + limite de velocidade: o crop so persegue o rosto quando ele sai do raio
-  // DEADBAND_PX, e sempre com passo <= MAX_PAN_PX_PER_SEC. Elimina o micro-tremor mantendo
-  // o enquadramento em movimentos reais.
-  const maxStep = Math.max(1, Math.round(MAX_PAN_PX_PER_SEC * GRID_STEP));
-  let cur = targets[0].x;
-  const smoothed = targets.map(({ t, x: target }) => {
-    const diff = target - cur;
-    if (Math.abs(diff) > DEADBAND_PX) {
-      // Move em direcao ao alvo (parando na borda da zona morta), limitado pela velocidade.
-      const goal = target - Math.sign(diff) * DEADBAND_PX;
-      const delta = Math.max(-maxStep, Math.min(maxStep, goal - cur));
-      cur = Math.max(0, Math.min(maxX, cur + delta));
-    }
-    return { t, x: Math.round(cur) };
-  });
-
-  // Remove keyframes consecutivos identicos: o sendcmd so dispara em mudancas reais.
-  const keyframes = smoothed.filter((k, i) => i === 0 || k.x !== smoothed[i - 1].x);
+  // Keyframes: so onde x muda (o sendcmd so dispara em mudancas reais).
+  const keyframes = focus
+    .map((f, i) => ({ t: f.t, x: xs[i] }))
+    .filter((k, i, arr) => i === 0 || k.x !== arr[i - 1].x);
 
   return {
     cropW, cropH, y, mode: 'dynamic', keyframes, initialX: keyframes[0].x
@@ -271,9 +318,22 @@ function buildAss(segments, start, end) {
   // Entrada: fade + "pop" (entra em CAPTION_POP_SCALE% e cresce ate 100% via \t).
   const intro = `{\\fad(${CAPTION_FADE_MS},${fadeOut})\\fscx${CAPTION_POP_SCALE}\\fscy${CAPTION_POP_SCALE}\\t(0,${CAPTION_POP_MS},\\fscx100\\fscy100)}`;
   for (const seg of segments || []) {
-    if (!(seg.end > start && seg.start < end)) continue;
-    const s = Math.max(0, seg.start - start);
-    const e = Math.min(duration, seg.end - start);
+    const segStart = Number(seg.start);
+    const segEnd = Number(seg.end);
+    if (!(segEnd > start && segStart < end)) continue;
+
+    // Quanto do segmento cai DENTRO do recorte. Se a fala aconteceu (na maior parte)
+    // fora do corte, queimar o texto inteiro dela legenda "parte que nao esta" —
+    // entao so incluimos segmentos majoritariamente dentro do corte (ou um segmento
+    // gigante que cobre quase todo o recorte).
+    const segDur = segEnd - segStart;
+    const inClip = Math.min(segEnd, end) - Math.max(segStart, start);
+    const mostlyInside = inClip >= 0.5 * segDur;
+    const coversClip = inClip >= 0.8 * duration;
+    if (inClip < 0.3 || !(mostlyInside || coversClip)) continue;
+
+    const s = Math.max(0, segStart - start);
+    const e = Math.min(duration, segEnd - start);
     if (e - s < 0.3) continue;
     const chunks = chunkCaption(toCaption(seg.text));
     if (!chunks.length) continue;
