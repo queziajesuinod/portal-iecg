@@ -43,6 +43,7 @@ import {
   discardClip,
   renderClip,
   publishClip,
+  unpublishClip,
   fetchClipBlobUrl,
   downloadClipFile,
   previewClipFrames,
@@ -424,7 +425,7 @@ function ClipsPanel({
   const doSuggest = () => run('suggest', async () => {
     await requestClips(videoId).catch(() => {});
     await suggestClips(videoId);
-  }, 'Recortes sugeridos pela IA.');
+  }, 'Novos recortes adicionados pela IA (sem repetir os já escolhidos).');
 
   const doPrepare = async () => {
     setBusyFor('prepare', true);
@@ -466,6 +467,16 @@ function ClipsPanel({
   const doDiscard = (clip) => run(`discard-${clip.id}`, () => discardClip(clip.id));
   const doRender = (clip) => run(`render-${clip.id}`, () => renderClip(clip.id), 'Renderização iniciada…');
   const doPublish = (clip) => run(`publish-${clip.id}`, () => publishClip(clip.id), 'Publicação iniciada…');
+
+  const doUnpublish = (clip) => {
+    // eslint-disable-next-line no-alert
+    const ok = window.confirm(
+      'Isso vai APAGAR o Short do YouTube (irreversível) e voltar o recorte para renderizado, '
+      + 'para você refazer com o novo enquadramento e republicar. Continuar?'
+    );
+    if (!ok) return;
+    run(`unpublish-${clip.id}`, () => unpublishClip(clip.id), 'Publicação removida do YouTube. Agora você pode renderizar de novo e republicar.');
+  };
 
   const doPreview = (clip) => run(`preview-${clip.id}`, async () => {
     const url = await fetchClipBlobUrl(clip.id);
@@ -635,6 +646,18 @@ function ClipsPanel({
           <Button size="small" variant="outlined" startIcon={<OpenInNewIcon />} onClick={() => window.open(`https://youtube.com/shorts/${clip.youtubeShortId}`, '_blank', 'noopener')}>
             Ver no YouTube
           </Button>
+        )}
+        {isPublished && (
+          <Tooltip title="Apaga o Short do YouTube e libera o recorte para renderizar de novo (novo enquadramento) e republicar">
+            <span>
+              <Button
+                size="small" variant="outlined" color="error" startIcon={<DeleteIcon />}
+                disabled={busy[`unpublish-${clip.id}`]} onClick={() => doUnpublish(clip)}
+              >
+                Excluir publicação
+              </Button>
+            </span>
+          </Tooltip>
         )}
 
         <Box sx={{ flexGrow: 1 }} />
@@ -883,7 +906,7 @@ function ClipsPanel({
                 disabled={busy.suggest}
                 onClick={doSuggest}
               >
-                {clips.length ? 'Sugerir novamente' : 'Sugerir com IA'}
+                {clips.length ? 'Sugerir mais recortes' : 'Sugerir com IA'}
               </Button>
             </>
           )}

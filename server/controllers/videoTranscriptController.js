@@ -717,6 +717,16 @@ async function publicarRecorte(req, res) {
   }
 }
 
+async function despublicarRecorte(req, res) {
+  try {
+    const clip = await clipPublishService.unpublishClip(req.params.clipId);
+    res.status(200).json(clip);
+  } catch (err) {
+    console.error('[videoTranscript] Erro ao excluir publicacao do recorte:', err.message);
+    res.status(400).json({ message: err.message });
+  }
+}
+
 async function regerarResumo(req, res) {
   try {
     const transcript = await transcriptionService.regenerateSummary(req.params.id);
@@ -768,6 +778,7 @@ module.exports = {
   previewRecorteFrames,
   servirRecorte,
   publicarRecorte,
+  despublicarRecorte,
   excluirMidia,
   regerarResumo,
   reenviarWebhook,

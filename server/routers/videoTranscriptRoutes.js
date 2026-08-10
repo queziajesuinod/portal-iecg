@@ -74,6 +74,7 @@ router.post('/clips/:clipId/render', express.json(), controller.renderizarRecort
 router.post('/clips/:clipId/preview-frames', express.json(), controller.previewRecorteFrames);
 router.get('/clips/:clipId/file', controller.servirRecorte);
 router.post('/clips/:clipId/publish', express.json(), controller.publicarRecorte);
+router.post('/clips/:clipId/unpublish', express.json(), controller.despublicarRecorte);
 
 router.get('/worker/status', express.json(), controller.statusWorker);
 router.post('/worker/run-once', express.json(), controller.rodarWorkerAgora);
