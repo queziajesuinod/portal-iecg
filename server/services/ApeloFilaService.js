@@ -1,3 +1,4 @@
+/* eslint-disable max-classes-per-file */
 const axios = require('axios');
 const { Op } = require('sequelize');
 const { ApeloDirecionadoCelula, Celula } = require('../models');
@@ -9,28 +10,28 @@ const CONFIG = {
   // Limites de capacidade
   diasRecencia: 90,
   maxPorCelulaRecente: 2, // Máximo 2 direcionamentos em 90 dias
-  
+
   // Estratégia de busca por raios expandidos
   raios: {
     enabled: true,
-    inicial: 5,              // Começar buscando em 5km
-    incremento: 5,           // Aumentar 5km a cada iteração
-    maximo: 50,              // Raio máximo de busca
-    tentativasMaximas: 10    // (50-5)/5 = 9 iterações
+    inicial: 5, // Começar buscando em 5km
+    incremento: 5, // Aumentar 5km a cada iteração
+    maximo: 50, // Raio máximo de busca
+    tentativasMaximas: 10 // (50-5)/5 = 9 iterações
   },
-  
+
   // Pesos para scoring (total = 100)
   scoring: {
-    pesoDistancia: 45,           // 45% do score
-    pesoCapacidade: 25,          // 25% - quanto menos direcionamentos recentes, melhor
-    pesoBairro: 20,              // 20% - mesmo bairro
-    pesoDiaSemana: 10,           // 10% - mesmo dia da semana
+    pesoDistancia: 45, // 45% do score
+    pesoCapacidade: 25, // 25% - quanto menos direcionamentos recentes, melhor
+    pesoBairro: 20, // 20% - mesmo bairro
+    pesoDiaSemana: 10, // 10% - mesmo dia da semana
   },
-  
+
   // Configurações de geocoding
   timeoutGeocoding: 5000,
   statusTransitionDelayMs: 20 * 1000,
-  
+
   // Validação da origem do apelo
   validacaoOrigem: {
     maxDivergenciaKm: 2 // Se coordenada salva divergir muito do CEP, usa CEP
@@ -42,7 +43,7 @@ const CONFIG = {
   }
 };
 
-const GOOGLE_GEOCODE_KEY = process.env.GOOGLE_GEOCODE_KEY;
+const { GOOGLE_GEOCODE_KEY } = process.env;
 
 // ==================== CACHE ====================
 class GeocodingCache {
@@ -55,22 +56,22 @@ class GeocodingCache {
   get(key) {
     const item = this.cache.get(key);
     if (!item) {
-      this.stats.misses++;
+      this.stats.misses += 1;
       return null;
     }
-    
+
     if (Date.now() - item.timestamp > this.ttl) {
       this.cache.delete(key);
-      this.stats.misses++;
+      this.stats.misses += 1;
       return null;
     }
-    
-    this.stats.hits++;
+
+    this.stats.hits += 1;
     return item.value;
   }
 
   set(key, value) {
-    this.stats.sets++;
+    this.stats.sets += 1;
     this.cache.set(key, { value, timestamp: Date.now() });
   }
 
@@ -79,7 +80,7 @@ class GeocodingCache {
     return {
       ...this.stats,
       size: this.cache.size,
-      hitRate: total > 0 ? (this.stats.hits / total * 100).toFixed(2) + '%' : '0%'
+      hitRate: total > 0 ? `${((this.stats.hits / total) * 100).toFixed(2)}%` : '0%'
     };
   }
 
@@ -104,13 +105,11 @@ const haversine = (lat1, lon1, lat2, lon2) => {
   return R * c;
 };
 
-const normalizeAddress = (address) => {
-  return address
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, ' ')
-    .replace(/[^a-z0-9\s,]/g, '');
-};
+const normalizeAddress = (address) => address
+  .toLowerCase()
+  .trim()
+  .replace(/\s+/g, ' ')
+  .replace(/[^a-z0-9\s,]/g, '');
 
 const normalizeCep = (value) => {
   const digits = String(value || '').replace(/\D/g, '');
@@ -155,41 +154,39 @@ const parseCoordinates = (lat, lon) => {
 
 const normalizeDiaSemana = (dia) => {
   if (!dia) return null;
-  
+
   const mapa = {
-    'segunda': 'segunda-feira',
+    segunda: 'segunda-feira',
     'segunda-feira': 'segunda-feira',
-    'seg': 'segunda-feira',
-    'terca': 'terça-feira',
-    'terça': 'terça-feira',
+    seg: 'segunda-feira',
+    terca: 'terça-feira',
+    terça: 'terça-feira',
     'terça-feira': 'terça-feira',
-    'ter': 'terça-feira',
-    'quarta': 'quarta-feira',
+    ter: 'terça-feira',
+    quarta: 'quarta-feira',
     'quarta-feira': 'quarta-feira',
-    'qua': 'quarta-feira',
-    'quinta': 'quinta-feira',
+    qua: 'quarta-feira',
+    quinta: 'quinta-feira',
     'quinta-feira': 'quinta-feira',
-    'qui': 'quinta-feira',
-    'sexta': 'sexta-feira',
+    qui: 'quinta-feira',
+    sexta: 'sexta-feira',
     'sexta-feira': 'sexta-feira',
-    'sex': 'sexta-feira',
-    'sabado': 'sábado',
-    'sábado': 'sábado',
-    'sab': 'sábado',
-    'domingo': 'domingo',
-    'dom': 'domingo',
+    sex: 'sexta-feira',
+    sabado: 'sábado',
+    sábado: 'sábado',
+    sab: 'sábado',
+    domingo: 'domingo',
+    dom: 'domingo',
   };
-  
+
   return mapa[dia.toLowerCase().trim()] || null;
 };
-
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const scheduleStatusTransition = (apeloId) => {
   setTimeout(async () => {
     try {
-      await ApeloDirecionadoCelulaService.atualizar(apeloId, { 
-        status: 'DIRECIONADO_COM_SUCESSO' 
+      await ApeloDirecionadoCelulaService.atualizar(apeloId, {
+        status: 'DIRECIONADO_COM_SUCESSO'
       });
       WebhookService.sendEvent('apelo.status_changed', {
         apeloId,
@@ -230,8 +227,8 @@ const geocode = async (query) => {
       }
     );
 
-    const data = res.data;
-    
+    const { data } = res;
+
     if (!data || data.status !== 'OK' || !Array.isArray(data.results) || data.results.length === 0) {
       geocodingCache.set(normalizedQuery, null);
       return null;
@@ -243,14 +240,13 @@ const geocode = async (query) => {
       return null;
     }
 
-    const result = { 
-      lat: parseFloat(location.lat), 
-      lon: parseFloat(location.lng) 
+    const result = {
+      lat: parseFloat(location.lat),
+      lon: parseFloat(location.lng)
     };
-    
+
     geocodingCache.set(normalizedQuery, result);
     return result;
-    
   } catch (err) {
     console.error('Erro no geocoding:', err.message);
     geocodingCache.set(normalizedQuery, null);
@@ -268,16 +264,16 @@ class ScoringEngine {
     // 1. SCORE POR DISTÂNCIA (45 pontos)
     const scoreDistancia = this.calcularScoreDistancia(distKm);
     score += scoreDistancia * (CONFIG.scoring.pesoDistancia / 100);
-    detalhes.distancia = { 
-      valor: distKm.toFixed(2) + 'km', 
+    detalhes.distancia = {
+      valor: distKm.toFixed(2) + 'km',
       score: scoreDistancia.toFixed(2),
-      peso: CONFIG.scoring.pesoDistancia 
+      peso: CONFIG.scoring.pesoDistancia
     };
 
     // 2. SCORE POR CAPACIDADE (25 pontos)
     const scoreCapacidade = this.calcularScoreCapacidade(totalRecentes);
     score += scoreCapacidade * (CONFIG.scoring.pesoCapacidade / 100);
-    detalhes.capacidade = { 
+    detalhes.capacidade = {
       recentes: totalRecentes,
       max: CONFIG.maxPorCelulaRecente,
       score: scoreCapacidade.toFixed(2),
@@ -287,7 +283,7 @@ class ScoringEngine {
     // 3. SCORE POR BAIRRO (20 pontos)
     const scoreBairro = this.calcularScoreBairro(apelo, celula);
     score += scoreBairro * (CONFIG.scoring.pesoBairro / 100);
-    detalhes.bairro = { 
+    detalhes.bairro = {
       matchExato: scoreBairro === 100,
       matchProximo: scoreBairro === 75,
       matchParcial: scoreBairro === 40,
@@ -317,7 +313,7 @@ class ScoringEngine {
     // 0-5km = 100 pontos
     // 5-20km = decrescimento linear
     // >20km = pontuação mínima mas ainda válida
-    
+
     if (distKm <= 5) return 100;
     if (distKm <= 20) {
       return 100 * (1 - (distKm - 5) / 15);
@@ -334,22 +330,22 @@ class ScoringEngine {
     // 0 recentes = 100 pontos
     // 1 recente = 50 pontos
     // 2+ recentes = 0 pontos (não deveria chegar aqui devido ao filtro)
-    
+
     const percentualDisponivel = (CONFIG.maxPorCelulaRecente - totalRecentes) / CONFIG.maxPorCelulaRecente;
     return percentualDisponivel * 100;
   }
 
   static calcularScoreBairro(apelo, celula) {
     if (!apelo.bairro_apelo || !celula.bairro) return 0;
-    
+
     const bairroApeloNorm = normalizeAddress(apelo.bairro_apelo);
     const bairroCelulaNorm = normalizeAddress(celula.bairro);
-    
+
     // Match exato
     if (bairroApeloNorm === bairroCelulaNorm) {
       return 100;
     }
-    
+
     // Verificar bairros próximos (se existir no apelo)
     if (Array.isArray(apelo.bairro_proximo)) {
       for (const bairroProx of apelo.bairro_proximo) {
@@ -361,30 +357,30 @@ class ScoringEngine {
         }
       }
     }
-    
+
     // Match parcial (contém)
-    if (bairroApeloNorm.includes(bairroCelulaNorm) || 
-        bairroCelulaNorm.includes(bairroApeloNorm)) {
+    if (bairroApeloNorm.includes(bairroCelulaNorm)
+        || bairroCelulaNorm.includes(bairroApeloNorm)) {
       return 40;
     }
-    
+
     return 0;
   }
 
   static calcularScoreDiaSemana(apelo, celula) {
     // apelo.dias_semana é JSONB array: ["segunda-feira", "quarta-feira"]
     // celula.dia é VARCHAR: "segunda-feira"
-    
+
     if (!celula.dia) return 50; // Neutro se célula não tem dia definido
-    
+
     const celulaDiaNorm = normalizeDiaSemana(celula.dia);
     if (!celulaDiaNorm) return 50;
-    
+
     // Se apelo não tem preferência de dias, neutro
     if (!apelo.dias_semana || !Array.isArray(apelo.dias_semana) || apelo.dias_semana.length === 0) {
       return 50;
     }
-    
+
     // Verificar se há match
     for (const diaApelo of apelo.dias_semana) {
       const diaApeloNorm = normalizeDiaSemana(diaApelo);
@@ -392,7 +388,7 @@ class ScoringEngine {
         return 100; // Match perfeito
       }
     }
-    
+
     return 0; // Não tem match
   }
 }
@@ -413,9 +409,11 @@ class ApeloFilaService {
           {
             [Op.or]: [
               { status: null },
-              { status: {
-                [Op.notIn]: ['DIRECIONADO_COM_SUCESSO', 'PRIMEIRO_CONTATO', 'NAO_HAVERAR_DIRECIONAMENTO', 'CONSOLIDADO_CELULA', 'SEM_CELULA_DISPONIVEL']
-              }}
+              {
+                status: {
+                  [Op.notIn]: ['DIRECIONADO_COM_SUCESSO', 'PRIMEIRO_CONTATO', 'NAO_HAVERAR_DIRECIONAMENTO', 'CONSOLIDADO_CELULA', 'SEM_CELULA_DISPONIVEL']
+                }
+              }
             ]
           }
         ]
@@ -431,20 +429,23 @@ class ApeloFilaService {
    * - Com coordenadas válidas
    */
   async celulasCandidatas(rede) {
-    const where = { 
+    const where = {
       ativo: true,
       lat: { [Op.not]: null },
-      lon: { [Op.not]: null }
+      lon: { [Op.not]: null },
+      // Não direciona automaticamente para célula de casal — esses casos são
+      // tratados manualmente (vínculo de casal feito na tela de Células de Casais).
+      casalCelulaId: { [Op.is]: null }
     };
-    
+
     // REGRA: Mesma rede é OBRIGATÓRIA
     if (!rede) {
       console.warn('⚠️  Apelo sem rede definida - não é possível buscar células');
       return [];
     }
-    
+
     where.rede = { [Op.iLike]: `%${rede}%` };
-    
+
     const celulas = await Celula.findAll({ where });
     const celulasComCoordValida = celulas.filter((celula) => parseCoordinates(celula.lat, celula.lon));
 
@@ -453,7 +454,7 @@ class ApeloFilaService {
     }
 
     console.log(`📍 Encontradas ${celulasComCoordValida.length} células da rede "${rede}" com coordenadas válidas`);
-    
+
     return celulasComCoordValida;
   }
 
@@ -466,7 +467,7 @@ class ApeloFilaService {
     limiteData.setDate(limiteData.getDate() - CONFIG.diasRecencia);
 
     const result = [];
-    
+
     for (const celula of celulas) {
       const recentes = await ApeloDirecionadoCelula.count({
         where: {
@@ -483,9 +484,9 @@ class ApeloFilaService {
         });
       }
     }
-    
+
     console.log(`✓ ${result.length} células com capacidade disponível (max ${CONFIG.maxPorCelulaRecente} direcionamentos em ${CONFIG.diasRecencia} dias)`);
-    
+
     return result;
   }
 
@@ -632,7 +633,7 @@ class ApeloFilaService {
         tries.push(`${cep}, ${apelo.cidade_apelo || ''}, ${apelo.estado_apelo || ''}, Brasil`.trim());
       }
     }
-    
+
     // 2. Bairro do apelo
     if (apelo.bairro_apelo) {
       tries.push(`${apelo.bairro_apelo}, ${apelo.cidade_apelo || ''}, ${apelo.estado_apelo || ''}`.trim());
@@ -668,7 +669,7 @@ class ApeloFilaService {
 
     // 2. Buscar células da mesma rede
     const baseCelulas = await this.celulasCandidatas(apelo.rede);
-    
+
     if (!baseCelulas.length) {
       console.warn(`❌ Nenhuma célula ativa encontrada para a rede "${apelo.rede}"`);
       return null;
@@ -676,7 +677,7 @@ class ApeloFilaService {
 
     // 3. Filtrar células com capacidade disponível
     const celulasDisponiveis = await this.celulasComCapacidade(baseCelulas);
-    
+
     if (!celulasDisponiveis.length) {
       console.warn('❌ Nenhuma célula com capacidade disponível (todas ultrapassaram o limite de direcionamentos)');
       return null;
@@ -722,25 +723,25 @@ class ApeloFilaService {
     let tentativa = 0;
 
     while (raioAtual <= CONFIG.raios.maximo && tentativa < CONFIG.raios.tentativasMaximas) {
-      tentativa++;
-      
+      tentativa += 1;
+
       console.log(`\n🔍 Tentativa ${tentativa}: Buscando células em raio de ${raioAtual}km...`);
-      
+
       // Filtrar células dentro do raio atual
       const celulasNoRaio = this.filtrarPorRaio(celulasComDistancia, raioAtual);
-      
+
       console.log(`   📍 ${celulasNoRaio.length} células encontradas neste raio`);
-      
+
       if (celulasNoRaio.length > 0) {
         // Encontrou células - avaliar e retornar a melhor
         const resultado = await this.avaliarCelulas(celulasNoRaio, apelo, raioAtual);
-        
+
         if (resultado) {
           console.log(`✅ Célula encontrada no raio de ${raioAtual}km!`);
           return resultado;
         }
       }
-      
+
       // Não encontrou - expandir raio
       raioAtual += CONFIG.raios.incremento;
     }
@@ -754,7 +755,7 @@ class ApeloFilaService {
    */
   async avaliarCelulas(celulasNoRaio, apelo, raioAtual) {
     const celulasComScore = [];
-    
+
     for (const celulaInfo of celulasNoRaio) {
       const { celula } = celulaInfo;
       const dist = celulaInfo.distKm;
@@ -797,7 +798,7 @@ class ApeloFilaService {
     });
 
     const melhor = celulasComScore[0];
-    
+
     // Log detalhado
     console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log(`✓ CÉLULA SELECIONADA: ${melhor.celula.celula}`);
@@ -808,7 +809,7 @@ class ApeloFilaService {
     console.log(`  Score Total: ${melhor.score.toFixed(2)}/100`);
     console.log(`  Distância: ${melhor.distKm.toFixed(2)}km (raio ${raioAtual}km)`);
     console.log(`  Direcionamentos recentes: ${melhor.totalRecentes}/${CONFIG.maxPorCelulaRecente}`);
-    console.log(`\n  📊 Detalhes do Score:`);
+    console.log('\n  📊 Detalhes do Score:');
     Object.entries(melhor.detalhes).forEach(([criterio, dados]) => {
       console.log(`    ${criterio}:`, JSON.stringify(dados, null, 2).replace(/\n/g, '\n      '));
     });
@@ -873,7 +874,9 @@ class ApeloFilaService {
       };
     }
 
-    const { celula, distKm, score, detalhes, raioEncontrado } = selecionada;
+    const {
+      celula, distKm, score, detalhes, raioEncontrado
+    } = selecionada;
 
     const payloadAtualizar = {
       celula_id: celula.id,
@@ -891,8 +894,8 @@ class ApeloFilaService {
       apeloId: apelo.id,
       destinoCelulaId: celula.id,
       distanciaKm: distKm,
-      score: score,
-      raioEncontrado: raioEncontrado,
+      score,
+      raioEncontrado,
       detalhesScore: detalhes
     }).catch(() => {});
 
@@ -918,8 +921,8 @@ class ApeloFilaService {
         dia: celula.dia
       },
       distanciaKm: distKm,
-      raioEncontrado: raioEncontrado,
-      score: score,
+      raioEncontrado,
+      score,
       detalhesScore: detalhes
     };
   }

@@ -20,6 +20,7 @@ const pageTitles = {
   'app/start': 'Start',
   'app/start/celulas': 'Listagem de Células',
   'app/start/celulas/cadastrar': 'Cadastrar Célula',
+  'app/start/celulas/casais': 'Células de Casais',
   'app/start/celulas/detalhes': 'Detalhes da Célula',
   'app/start/campus': 'Campus',
   'app/start/direcionamentos': 'Apelos Direcionados',

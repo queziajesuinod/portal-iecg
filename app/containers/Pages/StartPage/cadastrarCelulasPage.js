@@ -23,6 +23,8 @@ import {
 } from '@mui/material';
 import PropTypes from 'prop-types';
 import GroupsIcon from '@mui/icons-material/Groups';
+import FavoriteRoundedIcon from '@mui/icons-material/FavoriteRounded';
+import LinkOffIcon from '@mui/icons-material/LinkOff';
 import PlaceIcon from '@mui/icons-material/Place';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import HomeIcon from '@mui/icons-material/Home';
@@ -59,7 +61,8 @@ const formInicial = {
   dia: '',
   lat: '',
   lon: '',
-  horario: ''
+  horario: '',
+  casalCelulaId: ''
 };
 
 const memberHasCargo = (member, cargo) => Array.isArray(member?.cargos)
@@ -247,6 +250,7 @@ const CadastrarCelula = () => {
   const [geoLoading, setGeoLoading] = useState(false);
   const [leaderSearchLoading, setLeaderSearchLoading] = useState(false);
   const [leaderSearchResult, setLeaderSearchResult] = useState(null);
+  const [casalVinculo, setCasalVinculo] = useState(null);
   const location = useLocation();
   const history = useHistory();
   const celulaEditando = location.state?.celula;
@@ -281,6 +285,7 @@ const CadastrarCelula = () => {
         .map((d) => d.trim())
         .filter(Boolean);
       setDiasSelecionados(dias);
+      setCasalVinculo(celulaEditando.casalRef || null);
     }
   }, [isEdit, celulaEditando]);
 
@@ -469,6 +474,7 @@ const CadastrarCelula = () => {
       liderancaMemberId: formData.liderancaMemberId || null,
       pastorGeracaoMemberId: formData.pastorGeracaoMemberId || null,
       pastorCampusMemberId: formData.pastorCampusMemberId || null,
+      casalCelulaId: formData.casalCelulaId || null,
       dia: diasSelecionados.join(', '),
       lat: formData.lat ? parseFloat(formData.lat) : null,
       lon: formData.lon ? parseFloat(formData.lon) : null
@@ -585,6 +591,35 @@ const CadastrarCelula = () => {
       setNotification('Erro ao buscar coordenadas.');
     } finally {
       setGeoLoading(false);
+    }
+  };
+
+  const handleDesvincularCasal = async () => {
+    if (!formData.id) return;
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/start/celula/casais/desvincular`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ celulaId: formData.id })
+      });
+      if (res.ok) {
+        setCasalVinculo(null);
+        setFormData((prev) => ({ ...prev, casalCelulaId: '' }));
+        setNotification('Vínculo de casal removido.');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setNotification(`Erro: ${data.erro || 'Falha ao desvincular'}`);
+      }
+    } catch (error) {
+      console.error('Erro ao desvincular casal:', error);
+      setNotification('Erro na conexão com o servidor.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -714,6 +749,49 @@ const CadastrarCelula = () => {
                         ))}
                       </TextField>
                     </Grid>
+                    {isEdit && casalVinculo && (
+                      <Grid item xs={12}>
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            flexDirection: { xs: 'column', sm: 'row' },
+                            alignItems: { sm: 'center' },
+                            gap: 1.5,
+                            p: 1.5,
+                            borderRadius: 2,
+                            border: 1,
+                            borderColor: 'success.light',
+                            bgcolor: 'success.50'
+                          }}
+                        >
+                          <FavoriteRoundedIcon color="success" fontSize="small" />
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                              Célula de casal — vinculada com
+                            </Typography>
+                            <Typography variant="body2" fontWeight={600}>
+                              {casalVinculo.celula}
+                              {casalVinculo.rede ? ` (${casalVinculo.rede})` : ''}
+                            </Typography>
+                            {casalVinculo.lider && (
+                              <Typography variant="caption" color="text.secondary">
+                                Líder: {casalVinculo.lider}
+                              </Typography>
+                            )}
+                          </Box>
+                          <Button
+                            variant="outlined"
+                            color="warning"
+                            size="small"
+                            startIcon={<LinkOffIcon />}
+                            onClick={handleDesvincularCasal}
+                            disabled={loading}
+                          >
+                            Desvincular
+                          </Button>
+                        </Box>
+                      </Grid>
+                    )}
                   </Grid>
                 </SectionCard>
 

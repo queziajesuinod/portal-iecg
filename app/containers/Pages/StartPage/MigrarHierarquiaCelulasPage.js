@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet';
 import {
   Box, Paper, Stack, Typography, Button, Chip, Table, TableHead, TableRow, TableCell, TableBody,
-  Autocomplete, TextField, LinearProgress, Tooltip, Checkbox
+  Autocomplete, TextField, LinearProgress, Checkbox
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
@@ -28,6 +28,7 @@ const scoreColor = (score) => {
 const MigrarHierarquiaCelulasPage = () => {
   const history = useHistory();
   const [rows, setRows] = useState([]);
+  const [liderancas, setLiderancas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [notification, setNotification] = useState('');
@@ -45,8 +46,12 @@ const MigrarHierarquiaCelulasPage = () => {
     setLoading(true);
     try {
       const data = await fetchWithAuth(`${API_URL}/start/celula/lideranca-legada`);
-      const lista = Array.isArray(data) ? data : [];
+      // Compat: aceita tanto o formato novo { celulas, liderancas } quanto array puro.
+      const lista = Array.isArray(data?.celulas)
+        ? data.celulas
+        : (Array.isArray(data) ? data : []);
       setRows(lista);
+      setLiderancas(Array.isArray(data?.liderancas) ? data.liderancas : []);
       // pre-seleciona automaticamente quando ha um unico match com score 1
       const auto = {};
       lista.forEach((r) => {
@@ -163,7 +168,14 @@ const MigrarHierarquiaCelulasPage = () => {
               )}
               {rows.map((r) => {
                 const selectedId = selecoes[r.celulaId] || '';
-                const selectedOption = (r.matches || []).find((m) => m.id === selectedId) || null;
+                const scoreById = new Map((r.matches || []).map((m) => [m.id, m.score]));
+                // Sugestoes primeiro (com %), depois o restante da lista completa.
+                const sugeridas = (r.matches || [])
+                  .map((m) => liderancas.find((l) => l.id === m.id))
+                  .filter(Boolean);
+                const restantes = liderancas.filter((l) => !scoreById.has(l.id));
+                const opcoes = [...sugeridas, ...restantes];
+                const selectedOption = opcoes.find((m) => m.id === selectedId) || null;
                 return (
                   <TableRow key={r.celulaId} hover>
                     <TableCell padding="checkbox">
@@ -178,7 +190,7 @@ const MigrarHierarquiaCelulasPage = () => {
                             setSelecoes((prev) => ({ ...prev, [r.celulaId]: r.matches[0].id }));
                           }
                         }}
-                        disabled={!r.matches?.length}
+                        disabled={!selectedId && !r.matches?.length}
                       />
                     </TableCell>
                     <TableCell>
@@ -194,43 +206,46 @@ const MigrarHierarquiaCelulasPage = () => {
                       <Chip label={r.textoLideranca} size="small" />
                     </TableCell>
                     <TableCell>
-                      {r.matches?.length > 0 ? (
-                        <Autocomplete
-                          size="small"
-                          options={r.matches}
-                          value={selectedOption}
-                          getOptionLabel={(opt) => opt?.fullName || ''}
-                          isOptionEqualToValue={(opt, val) => opt?.id === val?.id}
-                          onChange={(_evt, value) => {
-                            setSelecoes((prev) => {
-                              const next = { ...prev };
-                              if (value) next[r.celulaId] = value.id;
-                              else delete next[r.celulaId];
-                              return next;
-                            });
-                          }}
-                          renderOption={(props, option) => (
+                      <Autocomplete
+                        size="small"
+                        options={opcoes}
+                        value={selectedOption}
+                        getOptionLabel={(opt) => opt?.fullName || ''}
+                        isOptionEqualToValue={(opt, val) => opt?.id === val?.id}
+                        onChange={(_evt, value) => {
+                          setSelecoes((prev) => {
+                            const next = { ...prev };
+                            if (value) next[r.celulaId] = value.id;
+                            else delete next[r.celulaId];
+                            return next;
+                          });
+                        }}
+                        renderOption={(props, option) => {
+                          const score = scoreById.get(option.id);
+                          return (
                             <li {...props} key={option.id}>
                               <Stack direction="row" spacing={1} alignItems="center" sx={{ width: '100%' }}>
                                 <Typography variant="body2" sx={{ flex: 1 }}>{option.fullName}</Typography>
-                                <Chip
-                                  label={`${Math.round(option.score * 100)}%`}
-                                  size="small"
-                                  color={scoreColor(option.score)}
-                                  variant="outlined"
-                                />
+                                {typeof score === 'number' && (
+                                  <Chip
+                                    label={`${Math.round(score * 100)}%`}
+                                    size="small"
+                                    color={scoreColor(score)}
+                                    variant="outlined"
+                                  />
+                                )}
                               </Stack>
                             </li>
-                          )}
-                          renderInput={(params) => (
-                            <TextField {...params} placeholder="Selecione" />
-                          )}
-                        />
-                      ) : (
-                        <Tooltip title="Nenhum membro com Liderança Apostólica cujo primeiro nome bata">
-                          <Typography variant="caption" color="text.disabled">— sem match —</Typography>
-                        </Tooltip>
-                      )}
+                          );
+                        }}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            placeholder={r.matches?.length ? 'Selecione (sugestões com %)' : 'Selecione manualmente'}
+                          />
+                        )}
+                        noOptionsText="Nenhuma Liderança Apostólica cadastrada"
+                      />
                     </TableCell>
                     <TableCell>
                       <Stack spacing={0.25}>

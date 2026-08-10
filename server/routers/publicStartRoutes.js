@@ -13,8 +13,12 @@ router.post('/direcionamentos', ApeloDirecionadoCelulaController.criar);
 router.get('/direcionamentos/pendentes', ApeloDirecionadoCelulaController.listarPendentesDirecionamento);
 // Atualiza status de um apelo e registra movimentacao (sem autenticacao)
 router.patch('/direcionamentos/:id/status', ApeloDirecionadoCelulaController.atualizarStatusPublico);
+// Recebe o feedback cru do lider; o backend deriva a situacao (sem autenticacao)
+router.patch('/direcionamentos/:id/feedback', ApeloDirecionadoCelulaController.registrarFeedbackPublico);
 // Rota publica para cadastrar uma celula (sem autenticacao)
 router.post('/celulas', CelulaPublicController.criar);
+// Opcoes de hierarquia (Lideranca Apostolica + Pastores) para os selects do formulario
+router.get('/celulas/hierarquia-options', CelulaPublicController.listarHierarquiaOptions);
 // Rota publica de listagem de campus
 router.get('/campus', CampusController.listar);
 // Consulta publica de celula por email ou cel_lider

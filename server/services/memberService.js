@@ -1077,7 +1077,47 @@ class MemberService {
           ];
         }
       }
+      // Filtro por quantidade de células ativas que a pessoa lidera (>= N).
+      const minCelulas = parseInt(filters.minCelulas, 10);
+      if (Number.isFinite(minCelulas) && minCelulas > 0) {
+        where[Op.and] = [
+          ...(where[Op.and] || []),
+          sequelize.literal(`(SELECT COUNT(*) FROM "${schema}"."celulas" WHERE "liderMemberId" = "Member"."id" AND "ativo" = true) >= ${minCelulas}`)
+        ];
+      }
+
+      // Só carrega as células lideradas quando o contexto é de liderança
+      // (filtro de líder ou de nº de células) — evita peso nas listas grandes.
+      const incluiCelulasLideradas = Boolean(filters.isLider)
+        || (Number.isFinite(minCelulas) && minCelulas > 0);
+
       const count = await Member.count({ where });
+
+      const includes = [
+        { model: Campus, as: 'campus', attributes: ['id', 'nome'] },
+        { model: Celula, as: 'celula', attributes: ['id', 'celula'] },
+        { model: MemberJourney, as: 'journey', attributes: ['currentStage', 'engagementScore', 'healthStatus'] },
+        {
+          model: MemberCargo,
+          as: 'cargos',
+          attributes: ['id', 'cargo'],
+          where: { ativo: true },
+          required: false,
+          separate: true,
+          order: [['cargo', 'ASC']]
+        }
+      ];
+      if (incluiCelulasLideradas) {
+        includes.push({
+          model: Celula,
+          as: 'liderancaCelulas',
+          attributes: ['id', 'celula', 'rede', 'bairro', 'dia', 'horario'],
+          where: { ativo: true },
+          required: false,
+          separate: true,
+          order: [['celula', 'ASC']]
+        });
+      }
 
       const rows = await Member.findAll({
         where,
@@ -1086,23 +1126,14 @@ class MemberService {
             [
               sequelize.literal(`EXISTS (SELECT 1 FROM "${schema}"."celulas" WHERE "liderMemberId" = "Member"."id" AND "ativo" = true)`),
               'isLider'
+            ],
+            [
+              sequelize.literal(`(SELECT COUNT(*)::int FROM "${schema}"."celulas" WHERE "liderMemberId" = "Member"."id" AND "ativo" = true)`),
+              'qtdCelulasLideradas'
             ]
           ]
         },
-        include: [
-          { model: Campus, as: 'campus', attributes: ['id', 'nome'] },
-          { model: Celula, as: 'celula', attributes: ['id', 'celula'] },
-          { model: MemberJourney, as: 'journey', attributes: ['currentStage', 'engagementScore', 'healthStatus'] },
-          {
-            model: MemberCargo,
-            as: 'cargos',
-            attributes: ['id', 'cargo'],
-            where: { ativo: true },
-            required: false,
-            separate: true,
-            order: [['cargo', 'ASC']]
-          }
-        ],
+        include: includes,
         limit,
         offset,
         order: [['fullName', 'ASC']]

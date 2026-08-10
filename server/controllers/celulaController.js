@@ -121,6 +121,18 @@ class CelulaController {
           nome_esposo: u.nome_esposo || spouse?.name || null,
           userId: leader.userId,
           campusId: leader.campusId || null,
+          liderancaApostolicaMemberId: leader.liderancaApostolicaMemberId || null,
+          liderancaApostolica: leader.liderancaApostolica
+            ? { id: leader.liderancaApostolica.id, fullName: leader.liderancaApostolica.fullName }
+            : null,
+          pastorGeracaoMemberId: leader.pastorGeracaoMemberId || null,
+          pastorGeracao: leader.pastorGeracao
+            ? { id: leader.pastorGeracao.id, fullName: leader.pastorGeracao.fullName }
+            : null,
+          pastorCampusMemberId: leader.pastorCampusMemberId || null,
+          pastorCampus: leader.pastorCampus
+            ? { id: leader.pastorCampus.id, fullName: leader.pastorCampus.fullName }
+            : null,
           spouse
         },
         celulas
@@ -176,6 +188,7 @@ class CelulaController {
         pastorGeracaoMemberId,
         pastorCampusMemberId,
         semLiderMembro,
+        casal,
         novasDias,
         page = 1,
         limit = 10
@@ -197,6 +210,7 @@ class CelulaController {
           pastorGeracaoMemberId,
           pastorCampusMemberId,
           semLiderMembro,
+          casal,
           novasDias
         },
         parseInt(page, 10),
@@ -318,6 +332,44 @@ class CelulaController {
     } catch (error) {
       console.error('Erro ao aplicar liderança em lote:', error);
       return res.status(500).json({ erro: error.message });
+    }
+  }
+
+  async sugerirCasais(req, res) {
+    try {
+      const sugestoes = await CelulaService.sugerirCasais();
+      return res.status(200).json(sugestoes);
+    } catch (error) {
+      console.error('Erro ao sugerir células de casais:', error);
+      return res.status(500).json({ erro: error.message });
+    }
+  }
+
+  async vincularCasaisEmLote(req, res) {
+    try {
+      const { items } = req.body || {};
+      if (!Array.isArray(items)) {
+        return res.status(400).json({ erro: 'items deve ser um array de { celulaMulheresId, celulaHomensId }' });
+      }
+      const resultado = await CelulaService.vincularCasaisEmLote(items);
+      return res.status(200).json(resultado);
+    } catch (error) {
+      console.error('Erro ao vincular células de casais em lote:', error);
+      return res.status(500).json({ erro: error.message });
+    }
+  }
+
+  async desvincularCasal(req, res) {
+    try {
+      const celulaId = req.body?.celulaId || req.params?.id;
+      if (!celulaId) {
+        return res.status(400).json({ erro: 'celulaId é obrigatório' });
+      }
+      const resultado = await CelulaService.desvincularCasal(celulaId);
+      return res.status(200).json(resultado);
+    } catch (error) {
+      console.error('Erro ao desvincular célula de casal:', error);
+      return res.status(400).json({ erro: error.message });
     }
   }
 }
