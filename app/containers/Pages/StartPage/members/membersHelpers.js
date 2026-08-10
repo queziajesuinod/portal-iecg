@@ -20,6 +20,17 @@ export const GENDER_OPTIONS = ['MASCULINO', 'FEMININO'];
 export const STATUS_OPTIONS = ['VISITANTE', 'CONGREGADO', 'MEMBRO', 'INATIVO', 'MIA', 'TRANSFERIDO', 'FALECIDO'];
 export const INACTIVE_STATUSES = ['INATIVO', 'MIA', 'TRANSFERIDO', 'FALECIDO'];
 
+// Janela de "novo membro" (dias desde o cadastro).
+export const RECENT_MEMBER_DAYS = 7;
+
+export const isMemberRecent = (member, dias = RECENT_MEMBER_DAYS) => {
+  const raw = member?.createdAt;
+  if (!raw) return false;
+  const created = new Date(raw).getTime();
+  if (Number.isNaN(created)) return false;
+  return (Date.now() - created) <= dias * 24 * 60 * 60 * 1000;
+};
+
 export const CARGO_OPTIONS = [
   { value: 'lideranca_apostolica', label: 'Liderança Apostólica' },
   { value: 'pastor_geracao', label: 'Pastor de Geração' },

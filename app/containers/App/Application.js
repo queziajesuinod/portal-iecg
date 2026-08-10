@@ -83,6 +83,7 @@ import ReportsHome from '../Pages/Reports/ReportsHome';
 import MembersReport from '../Pages/Reports/MembersReport';
 import EventsFinanceReport from '../Pages/Reports/EventsFinanceReport';
 import CultosReport from '../Pages/Reports/CultosReport';
+import DirecionamentosReport from '../Pages/Reports/DirecionamentosReport';
 import { isStoredTokenValid, handleUnauthorized } from '../../utils/authSession';
 
 // Restaura dados do usuário no objeto dummy ao recarregar a página
@@ -200,6 +201,7 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/relatorios/membros" component={MembersReport} isAuthenticated={isAuthenticated} requiredPermission="RELATORIOS" />
             <ProtectedRoute exact path="/app/relatorios/eventos-financeiro" component={EventsFinanceReport} isAuthenticated={isAuthenticated} requiredPermission="RELATORIOS" />
             <ProtectedRoute exact path="/app/relatorios/cultos" component={CultosReport} isAuthenticated={isAuthenticated} requiredPermission="RELATORIOS" />
+            <ProtectedRoute exact path="/app/relatorios/direcionamentos" component={DirecionamentosReport} isAuthenticated={isAuthenticated} requiredPermission="RELATORIOS" />
             {/* ===== Módulo: Perguntas ao Vivo ===== */}
             <ProtectedRoute exact path="/app/perguntas-ao-vivo" component={LiveQaSessionsPage} isAuthenticated={isAuthenticated} requiredPermission={['PERGUNTAS_AO_VIVO_GERENCIAR', 'PERGUNTAS_AO_VIVO_MODERAR']} />
             <ProtectedRoute exact path="/app/perguntas-ao-vivo/:id" component={LiveQaModerationPage} isAuthenticated={isAuthenticated} requiredPermission={['PERGUNTAS_AO_VIVO_GERENCIAR', 'PERGUNTAS_AO_VIVO_MODERAR']} />

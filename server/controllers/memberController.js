@@ -165,7 +165,7 @@ async function list(req, res) {
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 5000);
     const filters = {};
-    ['status', 'campusId', 'celulaId', 'search', 'cargo', 'minCelulas'].forEach((key) => {
+    ['status', 'campusId', 'celulaId', 'search', 'cargo', 'minCelulas', 'novosDias'].forEach((key) => {
       const value = req.query[key];
       if (value && value !== 'undefined') {
         filters[key] = value;

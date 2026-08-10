@@ -27,3 +27,5 @@ export const buscarRelatorioMembros = (filtros = {}) => fetchWithAuth(`${BASE}/m
 export const buscarRelatorioEventosFinanceiro = (filtros = {}) => fetchWithAuth(`${BASE}/eventos-financeiro${buildQuery(filtros)}`);
 
 export const buscarRelatorioCultos = (filtros = {}) => fetchWithAuth(`${BASE}/cultos${buildQuery(filtros)}`);
+
+export const buscarRelatorioDirecionamentos = (filtros = {}) => fetchWithAuth(`${BASE}/direcionamentos${buildQuery(filtros)}`);

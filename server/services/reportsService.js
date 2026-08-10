@@ -7,6 +7,7 @@ const {
   RegistrationPayment,
   Event,
   FinancialExpense,
+  ApeloDirecionadoCelula,
 } = require('../models');
 const registroCultoService = require('./registroCultoService');
 const {
@@ -483,8 +484,134 @@ async function cultos(filtros = {}) {
   };
 }
 
+// ===== Relatório de Direcionamento (apelos direcionados) =====
+const DIRECIONAMENTO_STATUS_LABELS = {
+  APELO_CADASTRADO: 'Novo',
+  NAO_HAVERAR_DIRECIONAMENTO: 'Não direcionar',
+  DIRECIONADO_COM_SUCESSO: 'Direcionado',
+  PRIMEIRO_CONTATO: 'Primeiro Contato',
+  ENVIO_LIDER_PENDENTE: 'Líder ainda não fez contato',
+  ENVIO_LIDER_PENDENTE_WHATS_ERRADO: 'Pendência de envio (WhatsApp errado)',
+  CONTATO_LIDER_SEM_RETORNO: 'Líder sem retorno',
+  EM_CONSOLIDACAO: 'Em Consolidação',
+  CONSOLIDADO_CELULA: 'Consolidado na célula',
+  CONSOLIDACAO_INTERROMPIDA: 'Não Consolidado',
+  DIRECIONAMENTO_INCORRETO_REENVIO_PENDENTE: 'Direcionamento incorreto',
+  MOVIMENTACAO_CELULA: 'Em movimentação',
+};
+
+const DIRECIONAMENTO_STATUS_ORDER = Object.keys(DIRECIONAMENTO_STATUS_LABELS);
+
+const DIRECIONAMENTO_DECISAO_LABELS = {
+  apelo_decisao: 'Aceitar Jesus',
+  apelo_volta: 'Voltar para Jesus',
+  encaminhamento_celula: 'Encaminhamento de Célula',
+};
+
+async function direcionamentos(filtros = {}) {
+  const where = {};
+  const dateRange = buildDateRange(filtros.dateFrom, filtros.dateTo);
+  if (dateRange) where.createdAt = dateRange;
+  const rede = normalizeOptional(filtros.rede);
+  if (rede) where.rede = { [Op.iLike]: `%${rede}%` };
+  const campus = normalizeOptional(filtros.campus);
+  if (campus) where.campus_iecg = { [Op.iLike]: `%${campus}%` };
+  const decisao = normalizeOptional(filtros.decisao);
+  if (decisao) where.decisao = decisao;
+
+  const apelos = await ApeloDirecionadoCelula.findAll({
+    where,
+    attributes: ['id', 'status', 'decisao', 'celula_id', 'celula_casal', 'rede', 'campus_iecg', 'createdAt'],
+  });
+
+  const porStatus = {};
+  const porDecisao = {};
+  const porRede = {};
+  const serie = {};
+
+  let consolidados = 0;
+  let emConsolidacao = 0;
+  let naoConsolidados = 0;
+  let comCelula = 0;
+  let buscaramCelula = 0;
+  let buscaramEConsolidados = 0;
+  let aceitaramJesus = 0;
+  let voltaram = 0;
+
+  apelos.forEach((a) => {
+    const st = a.status || 'APELO_CADASTRADO';
+    porStatus[st] = (porStatus[st] || 0) + 1;
+
+    const dec = a.decisao || 'sem_decisao';
+    porDecisao[dec] = (porDecisao[dec] || 0) + 1;
+
+    const rd = (a.rede || 'Sem rede').trim() || 'Sem rede';
+    porRede[rd] = (porRede[rd] || 0) + 1;
+
+    if (st === 'CONSOLIDADO_CELULA') consolidados += 1;
+    if (st === 'EM_CONSOLIDACAO') emConsolidacao += 1;
+    if (st === 'CONSOLIDACAO_INTERROMPIDA') naoConsolidados += 1;
+    if (a.celula_id) comCelula += 1;
+
+    if (dec === 'encaminhamento_celula') {
+      buscaramCelula += 1;
+      if (st === 'CONSOLIDADO_CELULA') buscaramEConsolidados += 1;
+    }
+    if (dec === 'apelo_decisao') aceitaramJesus += 1;
+    if (dec === 'apelo_volta') voltaram += 1;
+
+    const mk = monthKey(a.createdAt ? new Date(a.createdAt).toISOString() : null);
+    if (mk) {
+      if (!serie[mk]) serie[mk] = { total: 0, consolidados: 0 };
+      serie[mk].total += 1;
+      if (st === 'CONSOLIDADO_CELULA') serie[mk].consolidados += 1;
+    }
+  });
+
+  const total = apelos.length;
+  const taxaConsolidacaoBusca = buscaramCelula > 0
+    ? Number(((buscaramEConsolidados / buscaramCelula) * 100).toFixed(1))
+    : 0;
+  const taxaConsolidacaoGeral = comCelula > 0
+    ? Number(((consolidados / comCelula) * 100).toFixed(1))
+    : 0;
+
+  const serieArray = Object.keys(serie)
+    .sort()
+    .map((mk) => ({
+      key: mk,
+      label: monthLabel(mk),
+      total: serie[mk].total,
+      consolidados: serie[mk].consolidados,
+    }));
+
+  return {
+    total,
+    resumo: {
+      consolidados,
+      emConsolidacao,
+      naoConsolidados,
+      comCelula,
+      buscaramCelula,
+      buscaramEConsolidados,
+      taxaConsolidacaoBusca,
+      taxaConsolidacaoGeral,
+      aceitaramJesus,
+      voltaram,
+    },
+    porStatus: toDistribution(porStatus, {
+      labels: DIRECIONAMENTO_STATUS_LABELS,
+      order: DIRECIONAMENTO_STATUS_ORDER,
+    }),
+    porDecisao: toDistribution(porDecisao, { labels: DIRECIONAMENTO_DECISAO_LABELS }),
+    porRede: toDistribution(porRede),
+    serie: serieArray,
+  };
+}
+
 module.exports = {
   membros,
   eventosFinanceiro,
   cultos,
+  direcionamentos,
 };

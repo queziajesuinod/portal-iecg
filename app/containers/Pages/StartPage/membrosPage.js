@@ -33,7 +33,8 @@ import {
   buildPayloadFromForm,
   isValidCpf,
   isValidEmail,
-  INACTIVE_STATUSES
+  INACTIVE_STATUSES,
+  RECENT_MEMBER_DAYS
 } from './members/membersHelpers';
 
 import MembersFiltersBar from './members/MembersFiltersBar';
@@ -45,7 +46,7 @@ import NotifyCelulasDialog from './members/NotifyCelulasDialog';
 
 // Fetcher paginado server-side: a UI passa page/limit/filters; o backend devolve a fatia.
 const fetchMembersPage = async ({
-  page, limit, search, status, isLider, cargo, minCelulas
+  page, limit, search, status, isLider, cargo, minCelulas, novosDias
 }) => {
   const params = { page, limit };
   if (search) params.search = search;
@@ -53,6 +54,7 @@ const fetchMembersPage = async ({
   if (isLider) params.isLider = 'true';
   if (Array.isArray(cargo) && cargo.length) params.cargo = cargo.join(',');
   if (minCelulas) params.minCelulas = String(minCelulas);
+  if (novosDias) params.novosDias = String(novosDias);
   const response = await listarMembros(params);
   return {
     members: Array.isArray(response?.members) ? response.members : [],
@@ -88,6 +90,7 @@ const MembrosPage = () => {
   const [isLiderFilter, setIsLiderFilter] = useState(false);
   const [cargoFilter, setCargoFilter] = useState([]);
   const [minCelulasFilter, setMinCelulasFilter] = useState('');
+  const [novosFilter, setNovosFilter] = useState(false);
   const [notificandoMembro, setNotificandoMembro] = useState({});
   const [notificandoCelulas, setNotificandoCelulas] = useState({});
   const [notifyCelulasTarget, setNotifyCelulasTarget] = useState(null);
@@ -124,7 +127,8 @@ const MembrosPage = () => {
     isLider: isLiderFilter || undefined,
     cargo: cargoFilter.length ? cargoFilter : undefined,
     minCelulas: minCelulasFilter || undefined,
-  }), [page, rowsPerPage, debouncedSearch, statusFilter, isLiderFilter, cargoFilter, minCelulasFilter]);
+    novosDias: novosFilter ? RECENT_MEMBER_DAYS : undefined,
+  }), [page, rowsPerPage, debouncedSearch, statusFilter, isLiderFilter, cargoFilter, minCelulasFilter, novosFilter]);
 
   // Pagina atual de membros — server-side. placeholderData mantem a anterior visivel durante refetch.
   const membersQuery = useQuery({
@@ -568,6 +572,8 @@ const MembrosPage = () => {
             onCargoFilterChange={(value) => { setCargoFilter(value); setPage(0); }}
             minCelulasFilter={minCelulasFilter}
             onMinCelulasFilterChange={(value) => { setMinCelulasFilter(value); setPage(0); }}
+            novosFilter={novosFilter}
+            onToggleNovosFilter={() => { setNovosFilter((v) => !v); setPage(0); }}
             onCreate={handleOpenCreate}
           />
           <MembersTable

@@ -92,6 +92,7 @@ const ApelosDirecionadosPage = () => {
   const [celulaDestinoId, setCelulaDestinoId] = useState('');
   const [filtroCelula, setFiltroCelula] = useState('');
   const [apenasCasal, setApenasCasal] = useState(false);
+  const [apenasMesmoDia, setApenasMesmoDia] = useState(false);
   const [motivo, setMotivo] = useState('');
   const [celulaDialogOpen, setCelulaDialogOpen] = useState(false);
   const [celulaDetalhe, setCelulaDetalhe] = useState(null);
@@ -242,6 +243,42 @@ const ApelosDirecionadosPage = () => {
     return base.replace(/[\u0300-\u036f]/g, '').toLowerCase();
   };
 
+  // Normaliza o dia da semana (ex.: "Ter\u00e7a", "ter\u00e7a-feira", "ter" -> "terca").
+  const normalizeDiaSemana = (value) => {
+    const s = (value || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/-feira/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const map = {
+      seg: 'segunda',
+      segunda: 'segunda',
+      ter: 'terca',
+      terca: 'terca',
+      qua: 'quarta',
+      quarta: 'quarta',
+      qui: 'quinta',
+      quinta: 'quinta',
+      sex: 'sexta',
+      sexta: 'sexta',
+      sab: 'sabado',
+      sabado: 'sabado',
+      dom: 'domingo',
+      domingo: 'domingo',
+    };
+    return map[s] || s;
+  };
+
+  // Dias de prefer\u00eancia do apelo, normalizados (aceita array JSONB ou string).
+  const apeloDiasNorm = (apelo) => {
+    let arr = apelo?.dias_semana;
+    if (typeof arr === 'string') {
+      try { arr = JSON.parse(arr); } catch (e) { arr = arr.split(','); }
+    }
+    if (!Array.isArray(arr)) arr = [];
+    return arr.map(normalizeDiaSemana).filter(Boolean);
+  };
+
   const haversine = (lat1, lon1, lat2, lon2) => {
     const toRad = (v) => (v * Math.PI) / 180;
     const R = 6371; // km
@@ -306,11 +343,17 @@ const ApelosDirecionadosPage = () => {
       const mesmaRede = normalizeRede(c.rede) === normalizeRede(apelo.rede);
       return mesmaRede && c.lat && c.lon;
     });
+    const diasApelo = apeloDiasNorm(apelo);
     const calculadas = celulasFiltradas.map((c) => ({
       ...c,
-      distancia: haversine(parseFloat(coords.lat), parseFloat(coords.lon), parseFloat(c.lat), parseFloat(c.lon))
+      distancia: haversine(parseFloat(coords.lat), parseFloat(coords.lon), parseFloat(c.lat), parseFloat(c.lon)),
+      mesmoDia: diasApelo.length > 0 && diasApelo.includes(normalizeDiaSemana(c.dia))
     }));
-    calculadas.sort((a, b) => a.distancia - b.distancia);
+    // Prioriza células no dia de preferência; depois por proximidade.
+    calculadas.sort((a, b) => {
+      if (a.mesmoDia !== b.mesmoDia) return a.mesmoDia ? -1 : 1;
+      return a.distancia - b.distancia;
+    });
     setSugestoes(calculadas);
     setLoadingSugestoes(false);
   };
@@ -322,6 +365,7 @@ const ApelosDirecionadosPage = () => {
     setFiltroCelula('');
     // Se o apelo é de casal, já abre filtrando por células de casal.
     setApenasCasal(Boolean(apelo?.celula_casal || apelo?.conjuge_apelo_id));
+    setApenasMesmoDia(false);
     setLimiteSugestoes(5);
     setMoveDialogOpen(true);
     sugerirCelulasProximas(apelo);
@@ -838,10 +882,12 @@ const ApelosDirecionadosPage = () => {
     });
     return base;
   }, [apeloSelecionado, celulasRedeSemFiltro, apeloCoords]);
-  const sugestoesBase = useMemo(
-    () => (apenasCasal ? sugestoes.filter((c) => c.casalCelulaId) : sugestoes),
-    [sugestoes, apenasCasal]
-  );
+  const sugestoesBase = useMemo(() => {
+    let base = sugestoes;
+    if (apenasCasal) base = base.filter((c) => c.casalCelulaId);
+    if (apenasMesmoDia) base = base.filter((c) => c.mesmoDia);
+    return base;
+  }, [sugestoes, apenasCasal, apenasMesmoDia]);
   const sugestoesFiltradas = useMemo(() => {
     const filtradas = filtroCelula
       ? sugestoesBase.filter((c) => normalizeSearchValue(c.celula).includes(normalizeSearchValue(filtroCelula)))
@@ -1148,7 +1194,9 @@ const ApelosDirecionadosPage = () => {
             value={filtroCelula}
             onChange={(e) => setFiltroCelula(e.target.value)}
           />
-          <Box sx={{ mt: 0.5, mb: 0.5 }}>
+          <Box sx={{
+            mt: 0.5, mb: 0.5, display: 'flex', gap: 1, flexWrap: 'wrap'
+          }}>
             <Chip
               label="Somente célula de casal"
               clickable
@@ -1157,6 +1205,20 @@ const ApelosDirecionadosPage = () => {
               variant={apenasCasal ? 'filled' : 'outlined'}
               onClick={() => { setApenasCasal((v) => !v); setLimiteSugestoes(5); }}
             />
+            <Chip
+              label="Mesmo dia da preferência"
+              clickable
+              size="small"
+              color={apenasMesmoDia ? 'primary' : 'default'}
+              variant={apenasMesmoDia ? 'filled' : 'outlined'}
+              onClick={() => { setApenasMesmoDia((v) => !v); setLimiteSugestoes(5); }}
+              disabled={apeloDiasNorm(apeloSelecionado).length === 0}
+            />
+            {apeloSelecionado && apeloDiasNorm(apeloSelecionado).length > 0 && (
+              <Typography variant="caption" color="text.secondary" sx={{ width: '100%' }}>
+                Preferência de dia: {(apeloSelecionado.dias_semana || []).join?.(', ') || '-'} — sugestões do mesmo dia aparecem primeiro.
+              </Typography>
+            )}
             {apenasCasal && apeloSelecionado?.conjuge_apelo_id && (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                 Ao selecionar uma célula de casal, o cônjuge será movido automaticamente para a célula vinculada (rede-espelho).
@@ -1226,6 +1288,9 @@ const ApelosDirecionadosPage = () => {
                         <Box display="flex" alignItems="center" gap={0.5} mb={0.5} flexWrap="wrap">
                           {isSelected && <CheckCircleIcon fontSize="small" color="primary" />}
                           <Typography variant="subtitle2">{c.celula}</Typography>
+                          {c.mesmoDia && (
+                            <Chip label="Mesmo dia" size="small" color="primary" sx={{ height: 18 }} />
+                          )}
                           {c.casalCelulaId && (
                             <Chip label="Casal" size="small" color="secondary" sx={{ height: 18 }} />
                           )}

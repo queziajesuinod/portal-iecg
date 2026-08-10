@@ -1029,7 +1029,7 @@ class ApeloDirecionadoCelulaService {
       const ano = parseInt(filtro.year, 10);
       if (!Number.isNaN(ano)) {
         const condition = Sequelize.where(
-          Sequelize.fn('date_part', 'year', Sequelize.col('data_direcionamento')),
+          Sequelize.fn('date_part', 'year', Sequelize.col('ApeloDirecionadoCelula.data_direcionamento')),
           ano
         );
         where[Op.and] = (where[Op.and] || []).concat(condition);

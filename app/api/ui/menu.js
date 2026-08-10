@@ -45,6 +45,13 @@ module.exports = [
         link: '/app/relatorios/cultos',
         icon: 'ion-ios-analytics-outline',
         permission: 'RELATORIOS'
+      },
+      {
+        key: 'reportsDirecionamentos',
+        name: 'Direcionamento',
+        link: '/app/relatorios/direcionamentos',
+        icon: 'ion-ios-git-network-outline',
+        permission: 'RELATORIOS'
       }
     ]
   },
