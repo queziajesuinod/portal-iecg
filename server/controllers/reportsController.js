@@ -45,8 +45,25 @@ async function cultos(req, res) {
   }
 }
 
+async function direcionamentos(req, res) {
+  try {
+    const data = await reportsService.direcionamentos({
+      dateFrom: req.query.dateFrom,
+      dateTo: req.query.dateTo,
+      rede: req.query.rede,
+      campus: req.query.campus,
+      decisao: req.query.decisao,
+    });
+    res.status(200).json(data);
+  } catch (error) {
+    console.error('Erro ao gerar relatório de direcionamentos:', error);
+    res.status(500).json({ message: error.message || 'Erro ao gerar relatório de direcionamentos' });
+  }
+}
+
 module.exports = {
   membros,
   eventosFinanceiro,
   cultos,
+  direcionamentos,
 };

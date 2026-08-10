@@ -7,6 +7,7 @@ import {
 import PeopleIcon from '@mui/icons-material/People';
 import PaidIcon from '@mui/icons-material/Paid';
 import InsightsIcon from '@mui/icons-material/Insights';
+import HubIcon from '@mui/icons-material/Hub';
 import { Helmet } from 'react-helmet';
 import PapperBlock from 'dan-components/PapperBlock/PapperBlock';
 
@@ -34,6 +35,14 @@ const RELATORIOS = [
     link: '/app/relatorios/cultos',
     icon: <InsightsIcon />,
     color: '#c97a16',
+  },
+  {
+    key: 'direcionamentos',
+    title: 'Direcionamento',
+    desc: 'Consolidação (consolidados, em consolidação, não consolidado), quem buscou célula e consolidou, aceitaram Jesus e voltaram para Cristo.',
+    link: '/app/relatorios/direcionamentos',
+    icon: <HubIcon />,
+    color: '#6a5acd',
   },
 ];
 

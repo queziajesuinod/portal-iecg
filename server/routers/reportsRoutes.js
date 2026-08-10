@@ -10,5 +10,6 @@ router.use(requireReportsAccess);
 router.get('/membros', reportsController.membros);
 router.get('/eventos-financeiro', reportsController.eventosFinanceiro);
 router.get('/cultos', reportsController.cultos);
+router.get('/direcionamentos', reportsController.direcionamentos);
 
 module.exports = router;

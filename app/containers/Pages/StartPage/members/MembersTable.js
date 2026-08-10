@@ -25,7 +25,7 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import SyncIcon from '@mui/icons-material/Sync';
-import { calcCompletude, INACTIVE_STATUSES } from './membersHelpers';
+import { calcCompletude, INACTIVE_STATUSES, isMemberRecent } from './membersHelpers';
 
 const MembersTable = ({
   pagedMembers,
@@ -77,8 +77,11 @@ const MembersTable = ({
                 />
               </TableCell>
               <TableCell>
-                <Stack direction="row" spacing={0.5} alignItems="center">
+                <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
                   <span>{member.fullName}</span>
+                  {isMemberRecent(member) && (
+                    <Chip label="Novo" size="small" color="success" sx={{ fontWeight: 700, height: 20 }} />
+                  )}
                   {incompleto && (
                     <Tooltip title={`Dados incompletos: ${completude}% preenchido`}>
                       <WarningAmberIcon fontSize="small" color="warning" />

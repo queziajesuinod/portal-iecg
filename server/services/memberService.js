@@ -1053,6 +1053,13 @@ class MemberService {
         ];
       }
 
+      // Membros cadastrados nos últimos N dias (ex.: novosDias=7).
+      const novosDias = parseInt(filters.novosDias, 10);
+      if (Number.isFinite(novosDias) && novosDias > 0) {
+        const desde = new Date(Date.now() - novosDias * 24 * 60 * 60 * 1000);
+        where.createdAt = { [Op.gte]: desde };
+      }
+
       const schema = process.env.DB_SCHEMA || 'dev_iecg';
 
       if (filters.isLider) {

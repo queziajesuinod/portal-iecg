@@ -713,9 +713,40 @@ class ApeloFilaService {
       return null;
     }
 
-    // 5. ESTRATÉGIA DE RAIOS EXPANDIDOS
+    // 5. PASSO 1 — prioriza células no(s) dia(s) de preferência do apelo + proximidade.
+    const diasPreferidos = this._diasPreferidosNormalizados(apelo);
+    if (diasPreferidos.length) {
+      const noDia = celulasComDistancia.filter((ci) => {
+        const d = normalizeDiaSemana(ci.celula.dia);
+        return d && diasPreferidos.includes(d);
+      });
+      if (noDia.length) {
+        console.log(`🗓️  ${noDia.length} célula(s) no(s) dia(s) de preferência (${diasPreferidos.join(', ')}) — priorizando`);
+        const resultadoDia = await this._selecionarPorRaio(noDia, apelo);
+        if (resultadoDia) return resultadoDia;
+        console.log('🗓️  Nenhuma no dia de preferência dentro do alcance — caindo para apenas localização');
+      } else {
+        console.log('🗓️  Nenhuma célula no dia de preferência — considerando apenas a localização');
+      }
+    }
+
+    // 6. PASSO 2 — apenas localização (raios expandidos), comportamento padrão.
+    const resultado = await this._selecionarPorRaio(celulasComDistancia, apelo);
+    if (!resultado) {
+      console.warn(`❌ Nenhuma célula adequada encontrada mesmo expandindo até ${CONFIG.raios.maximo}km`);
+    }
+    return resultado;
+  }
+
+  // Dias de preferência do apelo normalizados (ex.: ["segunda-feira", ...]).
+  _diasPreferidosNormalizados(apelo) {
+    const arr = Array.isArray(apelo?.dias_semana) ? apelo.dias_semana : [];
+    return arr.map((d) => normalizeDiaSemana(d)).filter(Boolean);
+  }
+
+  // Estratégia de raios expandidos sobre uma lista de células já com distância.
+  async _selecionarPorRaio(celulasComDistancia, apelo) {
     if (!CONFIG.raios.enabled) {
-      // Sem raios, avaliar todas as células
       return this.avaliarCelulas(celulasComDistancia, apelo, Infinity);
     }
 
@@ -724,29 +755,14 @@ class ApeloFilaService {
 
     while (raioAtual <= CONFIG.raios.maximo && tentativa < CONFIG.raios.tentativasMaximas) {
       tentativa += 1;
-
-      console.log(`\n🔍 Tentativa ${tentativa}: Buscando células em raio de ${raioAtual}km...`);
-
-      // Filtrar células dentro do raio atual
       const celulasNoRaio = this.filtrarPorRaio(celulasComDistancia, raioAtual);
-
-      console.log(`   📍 ${celulasNoRaio.length} células encontradas neste raio`);
-
       if (celulasNoRaio.length > 0) {
-        // Encontrou células - avaliar e retornar a melhor
         const resultado = await this.avaliarCelulas(celulasNoRaio, apelo, raioAtual);
-
-        if (resultado) {
-          console.log(`✅ Célula encontrada no raio de ${raioAtual}km!`);
-          return resultado;
-        }
+        if (resultado) return resultado;
       }
-
-      // Não encontrou - expandir raio
       raioAtual += CONFIG.raios.incremento;
     }
 
-    console.warn(`❌ Nenhuma célula adequada encontrada mesmo expandindo até ${CONFIG.raios.maximo}km`);
     return null;
   }
 

@@ -12,7 +12,8 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
 import GroupsIcon from '@mui/icons-material/Groups';
-import { STATUS_OPTIONS, CARGO_OPTIONS } from './membersHelpers';
+import FiberNewIcon from '@mui/icons-material/FiberNew';
+import { STATUS_OPTIONS, CARGO_OPTIONS, RECENT_MEMBER_DAYS } from './membersHelpers';
 
 const MembersFiltersBar = ({
   search,
@@ -25,6 +26,8 @@ const MembersFiltersBar = ({
   onCargoFilterChange,
   minCelulasFilter,
   onMinCelulasFilterChange,
+  novosFilter,
+  onToggleNovosFilter,
   onCreate
 }) => (
   <Box
@@ -129,6 +132,17 @@ const MembersFiltersBar = ({
           height: 40, borderRadius: 1, fontWeight: 600, px: 0.5
         }}
       />
+      <Chip
+        icon={<FiberNewIcon />}
+        label={`Novos (${RECENT_MEMBER_DAYS} dias)`}
+        clickable
+        color={novosFilter ? 'success' : 'default'}
+        variant={novosFilter ? 'filled' : 'outlined'}
+        onClick={onToggleNovosFilter}
+        sx={{
+          height: 40, borderRadius: 1, fontWeight: 600, px: 0.5
+        }}
+      />
     </Stack>
   </Box>
 );
@@ -144,12 +158,15 @@ MembersFiltersBar.propTypes = {
   onCargoFilterChange: PropTypes.func.isRequired,
   minCelulasFilter: PropTypes.string,
   onMinCelulasFilterChange: PropTypes.func.isRequired,
+  novosFilter: PropTypes.bool,
+  onToggleNovosFilter: PropTypes.func.isRequired,
   onCreate: PropTypes.func.isRequired,
 };
 
 MembersFiltersBar.defaultProps = {
   cargoFilter: [],
   minCelulasFilter: '',
+  novosFilter: false,
 };
 
 export default MembersFiltersBar;
