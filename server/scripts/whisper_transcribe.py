@@ -10,6 +10,8 @@ Ajustes via variaveis de ambiente (todos opcionais):
   WHISPER_BEAM_SIZE       1 = greedy (rapido)   (default: 1)
   WHISPER_BATCHED         true | false          (default: true)
   WHISPER_BATCH_SIZE      lote do modo batched  (default: 8)
+  WHISPER_VAD             true | false          (default: true)
+                          Desligue se a legenda derivar (fica adiantada e piora ao longo do audio).
 
 Saida (JSON):
   {
@@ -48,6 +50,10 @@ def main():
     beam_size = int(_env("WHISPER_BEAM_SIZE", "1"))
     use_batched = _env("WHISPER_BATCHED", "true").lower() in ("1", "true", "yes")
     batch_size = int(_env("WHISPER_BATCH_SIZE", "8"))
+    # VAD remove silencios e reposiciona os timestamps depois. No modo batched isso pode
+    # DERIVAR (timestamps cada vez mais adiantados ao longo do audio). Se a legenda dos
+    # recortes vier adiantada e piorando, desligue: WHISPER_VAD=false (e/ou WHISPER_BATCHED=false).
+    use_vad = _env("WHISPER_VAD", "true").lower() in ("1", "true", "yes")
 
     try:
         from faster_whisper import WhisperModel
@@ -57,7 +63,7 @@ def main():
 
     print(
         f"[whisper] carregando {model_name} em {device}/{compute_type} "
-        f"(threads={cpu_threads or 'auto'}, beam={beam_size}, batched={use_batched})...",
+        f"(threads={cpu_threads or 'auto'}, beam={beam_size}, batched={use_batched}, vad={use_vad})...",
         file=sys.stderr,
     )
     model = WhisperModel(
@@ -70,9 +76,10 @@ def main():
     transcribe_kwargs = dict(
         language=language_hint,
         beam_size=beam_size,
-        vad_filter=True,
-        vad_parameters=dict(min_silence_duration_ms=500),
+        vad_filter=use_vad,
     )
+    if use_vad:
+        transcribe_kwargs["vad_parameters"] = dict(min_silence_duration_ms=500)
 
     runner = model
     if use_batched:

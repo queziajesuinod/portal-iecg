@@ -28,6 +28,10 @@ const MAX_PAN_VEL_FRAC = envNum('CLIP_MAX_PAN_VEL_FRAC', 0.33);
 const MAX_PAN_ACCEL_FRAC = envNum('CLIP_MAX_PAN_ACCEL_FRAC', 1.1);
 const STATIC_RANGE_FRAC = 0.02; // se a camera anda menos que isso no clipe todo -> crop estatico
 const FACE_SAMPLE_FPS = envNum('FACE_TRACK_SAMPLE_FPS', 10); // amostragem da deteccao (Hz)
+// Enquadramento: por padrao a camera fica FIXA no orador (zero movimento). Para seguir
+// o orador com pans suaves, defina CLIP_CROP_MODE=auto (e dose o movimento com
+// CLIP_SAFE_ZONE_FRAC: maior = menos movimento).
+const CROP_FIXED = !['auto', 'follow', 'dynamic', 'smooth'].includes(String(process.env.CLIP_CROP_MODE || '').toLowerCase());
 const FACE_TRACK_SCRIPT = path.join(__dirname, '..', 'scripts', 'face_track.py');
 
 // Estilo da legenda queimada (ASS)
@@ -37,6 +41,9 @@ const CAPTION_MARGIN_V = 820; // MarginV (px)
 const CAPTION_FADE_MS = 130; // fade in/out (ms) -> transicao suave ao trocar de legenda
 const CAPTION_POP_MS = 150; // duracao do "pop" (zoom-in) de entrada
 const CAPTION_POP_SCALE = 82; // escala inicial (%) do pop -> anima ate 100
+// Desloca TODAS as legendas no tempo (segundos). Positivo = ATRASA a legenda
+// (use se ela estiver aparecendo adiantada em relacao a fala). Default 0.
+const CAPTION_OFFSET_SEC = Number(process.env.CLIP_CAPTION_OFFSET_SEC || 0);
 // Largura util e limite de caracteres por linha (Arial Bold MAIUSCULO ~0.66*fontsize por char).
 const CAPTION_AVAIL_W = TARGET_W - CAPTION_MARGIN_H * 2;
 const MAX_CHARS_PER_LINE = Math.max(1, Math.floor(CAPTION_AVAIL_W / (CAPTION_FONT_SIZE * 0.66)));
@@ -209,6 +216,17 @@ function buildCropPlan(meta, samples, duration) {
     };
   }
 
+  // Modo FIXO (padrao): enquadra o orador na posicao mediana do clipe e NAO mexe.
+  // Elimina qualquer "vai-e-volta" do rastreamento.
+  if (CROP_FIXED) {
+    const targetXs = focus
+      .map((f) => Math.max(0, Math.min(maxX, Math.round(f.cxPx - cropW / 2))))
+      .sort((a, b) => a - b);
+    return {
+      cropW, cropH, y, mode: 'static', x: targetXs[Math.floor(targetXs.length / 2)]
+    };
+  }
+
   // Caminho de camera: alvos de repouso (travados) -> perseguicao suave.
   const radius = cropW * SAFE_ZONE_FRAC;
   const rest = computeRestTargets(focus.map((f) => f.cxPx), radius);
@@ -344,7 +362,12 @@ function buildAss(segments, start, end) {
     chunks.forEach((chunk, idx) => {
       const ce = idx === chunks.length - 1 ? e : Math.min(e, cs + (e - s) * (weights[idx] / totalW));
       if (ce - cs >= 0.05) {
-        dialogues.push(`Dialogue: 0,${assTime(cs)},${assTime(ce)},Legenda,,0,0,0,,${intro}${chunk}`);
+        // Aplica o deslocamento global e mantem dentro dos limites do recorte.
+        const a = Math.max(0, Math.min(duration, cs + CAPTION_OFFSET_SEC));
+        const b = Math.max(0, Math.min(duration, ce + CAPTION_OFFSET_SEC));
+        if (b - a >= 0.05) {
+          dialogues.push(`Dialogue: 0,${assTime(a)},${assTime(b)},Legenda,,0,0,0,,${intro}${chunk}`);
+        }
       }
       cs = ce;
     });
