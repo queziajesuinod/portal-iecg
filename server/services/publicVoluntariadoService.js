@@ -1,8 +1,8 @@
-'use strict';
-
 const crypto = require('crypto');
 const { Op } = require('sequelize');
-const { sequelize, Member, MemberJourney, User, Voluntariado, AreaVoluntariado, Campus, Perfil } = require('../models');
+const {
+  sequelize, Member, MemberJourney, User, Voluntariado, AreaVoluntariado, Campus, Perfil
+} = require('../models');
 const CampusMinisterioService = require('./campusMinisterioService');
 const { normalizeCpf } = require('../utils/cpf');
 
@@ -40,6 +40,258 @@ const PublicVoluntariadoService = {
 
   async listarMinisteriosPorCampus(campusId) {
     return CampusMinisterioService.listarMinisteriosPorCampus(campusId);
+  },
+
+  /**
+   * Busca um membro por e-mail ou CPF (para pre-preencher o cadastro).
+   * Retorna dados basicos + os vinculos de voluntariado ja existentes.
+   */
+  async buscarMembro({ email, cpf } = {}) {
+    const emailNorm = email ? String(email).toLowerCase().trim() : null;
+    const cpfLimpo = normalizeCpf(cpf);
+
+    const conditions = [];
+    if (cpfLimpo) conditions.push({ cpf: cpfLimpo });
+    if (emailNorm) conditions.push({ email: emailNorm });
+    if (!conditions.length) return { exists: false };
+
+    const member = await Member.findOne({ where: { [Op.or]: conditions } });
+    if (!member) return { exists: false };
+
+    const vinculos = await Voluntariado.findAll({
+      where: { memberId: member.id },
+      attributes: ['id', 'areaVoluntariadoId', 'campusId', 'ministerioId', 'status']
+    });
+
+    return {
+      exists: true,
+      member: {
+        memberId: member.id,
+        fullName: member.fullName || '',
+        email: member.email || '',
+        cpf: member.cpf || '',
+        phone: member.phone || member.whatsapp || '',
+        birthDate: member.birthDate || ''
+      },
+      voluntariados: vinculos.map((v) => ({
+        id: v.id,
+        areaVoluntariadoId: v.areaVoluntariadoId,
+        campusId: v.campusId,
+        ministerioId: v.ministerioId,
+        status: v.status
+      }))
+    };
+  },
+
+  /**
+   * Cria ou atualiza a pessoa (Member + User) dentro de uma transacao.
+   * Nao vincula areas — usado tanto pela etapa 1 do fluxo publico
+   * quanto pelo cadastro completo (retrocompatibilidade).
+   * Retorna { member, user, senha }.
+   */
+  async _upsertPessoa(dados, transaction) {
+    const {
+      fullName, preferredName, email, cpf, phone, whatsapp, birthDate
+    } = dados;
+
+    const cpfLimpo = normalizeCpf(cpf);
+    const phoneLimpo = sanitizePhone(phone || whatsapp);
+    const senha = phoneLimpo || cpfLimpo || crypto.randomBytes(8).toString('hex');
+    const emailNorm = email ? email.toLowerCase().trim() : null;
+
+    const conditions = [];
+    if (cpfLimpo) conditions.push({ cpf: cpfLimpo });
+    if (emailNorm) conditions.push({ email: emailNorm });
+
+    let member = conditions.length
+      ? await Member.findOne({ where: { [Op.or]: conditions }, transaction })
+      : null;
+    let user = null;
+
+    if (member) {
+      await member.update({
+        fullName,
+        preferredName: preferredName || member.preferredName,
+        phone: phoneLimpo || member.phone,
+        whatsapp: phoneLimpo || member.whatsapp,
+        birthDate: birthDate || member.birthDate
+      }, { transaction });
+
+      if (member.userId) {
+        user = await User.findByPk(member.userId, { transaction });
+        if (user) {
+          await user.update({ active: true }, { transaction });
+        }
+      }
+
+      if (!user) {
+        const salt = crypto.randomBytes(16).toString('hex');
+        const passwordHash = hashSHA256WithSalt(senha, salt);
+        user = await User.create({
+          name: fullName,
+          email: emailNorm,
+          telefone: phoneLimpo,
+          username: buildUsername(fullName, email),
+          cpf: cpfLimpo,
+          active: true,
+          perfilId: DEFAULT_MEMBER_PERFIL_ID,
+          passwordHash,
+          salt
+        }, { transaction });
+        await member.update({ userId: user.id }, { transaction });
+      }
+    } else {
+      if (emailNorm) {
+        user = await User.findOne({ where: { email: emailNorm }, transaction });
+      }
+
+      if (user) {
+        await user.update({
+          name: fullName,
+          telefone: phoneLimpo || user.telefone,
+          cpf: cpfLimpo || user.cpf,
+          active: true
+        }, { transaction });
+      } else {
+        const salt = crypto.randomBytes(16).toString('hex');
+        const passwordHash = hashSHA256WithSalt(senha, salt);
+        user = await User.create({
+          name: fullName,
+          email: emailNorm,
+          telefone: phoneLimpo,
+          username: buildUsername(fullName, email),
+          cpf: cpfLimpo,
+          active: true,
+          perfilId: DEFAULT_MEMBER_PERFIL_ID,
+          passwordHash,
+          salt
+        }, { transaction });
+      }
+
+      member = await Member.create({
+        fullName,
+        preferredName: preferredName || null,
+        email: emailNorm,
+        cpf: cpfLimpo,
+        phone: phoneLimpo,
+        whatsapp: phoneLimpo,
+        birthDate: birthDate || null,
+        status: 'MEMBRO',
+        statusChangeDate: new Date(),
+        userId: user.id
+      }, { transaction });
+
+      await MemberJourney.create({
+        memberId: member.id,
+        currentStage: 'MEMBRO',
+        lastActivityDate: new Date()
+      }, { transaction });
+    }
+
+    return { member, user, senha };
+  },
+
+  /**
+   * ETAPA 1 do fluxo publico: cria/atualiza a pessoa e retorna o memberId.
+   * Operacao leve (sem vincular areas) — evita timeouts do cadastro unico.
+   */
+  async salvarPessoa(dados) {
+    const {
+      fullName, email, cpf, phone, whatsapp
+    } = dados || {};
+    if (!fullName) throw new Error('Campo obrigatorio ausente: fullName (nome completo)');
+    if (!cpf && !email && !(phone || whatsapp)) {
+      throw new Error('Informe ao menos um identificador: cpf, email ou telefone');
+    }
+
+    const transaction = await sequelize.transaction();
+    try {
+      const { member } = await this._upsertPessoa(dados, transaction);
+      await transaction.commit();
+      return { memberId: member.id, mensagem: 'Dados salvos com sucesso.' };
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+  },
+
+  /**
+   * ETAPA 2 do fluxo publico: vincula UMA area de voluntariado ao membro.
+   * Cada area e gravada individualmente (rapido) — evita o timeout do envio geral.
+   */
+  async adicionarVinculo({
+    memberId, areaVoluntariadoId, campusId, ministerioId, dataInicio, observacao
+  } = {}) {
+    if (!memberId) throw new Error('memberId obrigatorio');
+    const areaId = String(areaVoluntariadoId || '').trim();
+    if (!areaId) throw new Error('areaVoluntariadoId obrigatorio');
+    if (!dataInicio) throw new Error('dataInicio obrigatorio');
+
+    const transaction = await sequelize.transaction();
+    try {
+      const member = await Member.findByPk(memberId, { transaction });
+      if (!member) throw new Error('Membro nao encontrado');
+
+      const area = await AreaVoluntariado.findOne({
+        where: { id: areaId, ativo: true },
+        transaction
+      });
+      if (!area) throw new Error('Area de voluntariado nao encontrada ou inativa');
+
+      // Evita duplicar o mesmo vinculo (area+campus+ministerio) ainda ativo
+      const existente = await Voluntariado.findOne({
+        where: {
+          memberId,
+          areaVoluntariadoId: areaId,
+          campusId: campusId || null,
+          ministerioId: ministerioId || null,
+          status: { [Op.ne]: 'ENCERRADO' }
+        },
+        transaction
+      });
+      if (existente) {
+        await transaction.commit();
+        return {
+          voluntariadoId: existente.id,
+          area: area.nome,
+          status: existente.status,
+          jaExistia: true,
+          mensagem: 'Voce ja possui esse voluntariado.'
+        };
+      }
+
+      const voluntariado = await Voluntariado.create({
+        memberId,
+        areaVoluntariadoId: areaId,
+        campusId: campusId || null,
+        ministerioId: ministerioId || null,
+        dataInicio,
+        observacao: observacao || null,
+        status: 'PENDENTE'
+      }, { transaction });
+
+      // Se a area for BACKSTAGE, aplica o perfil BACKSTAGE (sem rebaixar quem ja tem mais)
+      if (String(area.nome || '').toUpperCase() === 'BACKSTAGE' && member.userId) {
+        const user = await User.findByPk(member.userId, { transaction });
+        if (user && user.perfilId === DEFAULT_MEMBER_PERFIL_ID) {
+          const perfilBackstage = await Perfil.findOne({ where: { descricao: 'BACKSTAGE' }, transaction });
+          if (perfilBackstage) {
+            await user.update({ perfilId: perfilBackstage.id }, { transaction });
+          }
+        }
+      }
+
+      await transaction.commit();
+      return {
+        voluntariadoId: voluntariado.id,
+        area: area.nome,
+        status: 'PENDENTE',
+        mensagem: 'Voluntariado adicionado. Aguardando aprovacao.'
+      };
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
   },
 
   /**
@@ -109,9 +361,9 @@ const PublicVoluntariadoService = {
     if (!dataInicioRaiz) throw new Error('Campo obrigatorio ausente: dataInicio (data de inicio) — informe na raiz ou dentro de cada item do array');
     if (!normalizedAreaIds.length) {
       throw new Error(
-        'Campo obrigatorio ausente: area de voluntariado. ' +
-        'Envie "vinculos": [{"areaVoluntariadoId": "uuid"}] ' +
-        'ou "areaVoluntariadoId": "uuid" no corpo da requisicao'
+        'Campo obrigatorio ausente: area de voluntariado. '
+        + 'Envie "vinculos": [{"areaVoluntariadoId": "uuid"}] '
+        + 'ou "areaVoluntariadoId": "uuid" no corpo da requisicao'
       );
     }
     if (!cpf && !email && !phone) {
@@ -242,7 +494,7 @@ const PublicVoluntariadoService = {
       }
 
       // -- 3. Vincular as areas de voluntariado --------------
-      const voluntariados = await Voluntariado.bulkCreate(
+      const voluntariadosCriados = await Voluntariado.bulkCreate(
         resolvedVinculos.map((v) => ({
           memberId: member.id,
           areaVoluntariadoId: v.areaVoluntariadoId,
@@ -268,8 +520,8 @@ const PublicVoluntariadoService = {
 
       return {
         memberId: member.id,
-        voluntariadoId: voluntariados[0]?.id || null,
-        voluntariadoIds: voluntariados.map((item) => item.id),
+        voluntariadoId: voluntariadosCriados[0]?.id || null,
+        voluntariadoIds: voluntariadosCriados.map((item) => item.id),
         status: 'PENDENTE',
         area: selectedAreas[0]?.nome || null,
         areas: selectedAreas.map((area) => area.nome),

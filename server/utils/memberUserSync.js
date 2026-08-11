@@ -157,6 +157,7 @@ async function syncMemberFromUserRecord(user, options = {}) {
   if (!user?.id) return;
 
   const models = options.models || {};
+  const transaction = options.transaction || null;
   const MemberModel = models.Member;
   if (!MemberModel) return;
 
@@ -165,7 +166,8 @@ async function syncMemberFromUserRecord(user, options = {}) {
     attributes: [
       'id', 'fullName', 'email', 'whatsapp', 'birthDate',
       'maritalStatus', 'street', 'neighborhood', 'number', 'zipCode', 'photoUrl'
-    ]
+    ],
+    transaction
   });
   if (!member) return;
 
@@ -196,7 +198,7 @@ async function syncMemberFromUserRecord(user, options = {}) {
   }, {});
 
   if (Object.keys(updates).length) {
-    await member.update(updates, { skipLinkedUserSync: true });
+    await member.update(updates, { skipLinkedUserSync: true, transaction });
   }
 }
 
