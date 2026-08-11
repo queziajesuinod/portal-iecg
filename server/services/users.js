@@ -9,6 +9,7 @@ const {
 } = require('../models');
 const { buildPermissionInclude } = require('./permissionResolver');
 const { normalizeCpf } = require('../utils/cpf');
+const { sendAccountNotification } = require('./userAccountEmailService');
 
 async function syncUserPerfis(user, perfilIds = []) {
   if (!user || !Array.isArray(perfilIds)) {
@@ -303,6 +304,7 @@ async function updateUser(id, updateData) {
     }
   });
 
+  let changedPassword = null;
   const passwordFromPayload = resolvePasswordForUpdate(updateData);
   if (typeof passwordFromPayload === 'string') {
     const nextPassword = passwordFromPayload.trim();
@@ -313,6 +315,7 @@ async function updateUser(id, updateData) {
     const nextSalt = crypto.randomBytes(16).toString('hex');
     user.salt = nextSalt;
     user.passwordHash = hashSHA256WithSalt(nextPassword, nextSalt);
+    changedPassword = nextPassword;
   }
 
   await user.save();
@@ -323,6 +326,15 @@ async function updateUser(id, updateData) {
   if (Array.isArray(updateData.permissaoIds)) {
     await syncUserPermissoes(user, updateData.permissaoIds);
   }
+
+  // Notifica o usuario por e-mail sobre a alteracao da conta (nao bloqueia o fluxo).
+  sendAccountNotification('updated', {
+    name: user.name,
+    email: user.email,
+    username: user.username,
+    telefone: user.telefone
+  }, changedPassword);
+
   return loadUserById(id);
 }
 
@@ -475,6 +487,16 @@ async function createUser(body) {
   if (Array.isArray(permissaoIds)) {
     await syncUserPermissoes(newUser, permissaoIds);
   }
+
+  // Notifica o usuario por e-mail sobre a criacao da conta, com a senha da
+  // plataforma (nao bloqueia o fluxo de criacao).
+  sendAccountNotification('created', {
+    name: newUser.name,
+    email: newUser.email,
+    username: newUser.username,
+    telefone: newUser.telefone
+  }, safePassword);
+
   return loadUserById(newUser.id);
 }
 

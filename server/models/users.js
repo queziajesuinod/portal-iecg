@@ -157,7 +157,12 @@ module.exports = (sequelize) => {
 
   User.addHook('afterSave', async (user, options = {}) => {
     if (options.skipLinkedMemberSync) return;
-    await syncMemberFromUserRecord(user, { models: sequelize.models });
+    // Propaga a transação para não travar (deadlock) quando o User é salvo
+    // dentro de uma transação que já segura o lock do Member vinculado.
+    await syncMemberFromUserRecord(user, {
+      models: sequelize.models,
+      transaction: options.transaction
+    });
   });
 
   return User;
