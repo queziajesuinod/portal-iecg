@@ -71,8 +71,8 @@ app.use(cors({
 app.options('*', cors());
 
 // Body parsers
-app.use(bodyParser.json({ limit: '10mb' }));
-app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
+app.use(bodyParser.json({ limit: '25mb' }));
+app.use(bodyParser.urlencoded({ limit: '25mb', extended: true }));
 app.use(express.json());
 
 // ============= SWAGGER UI =============

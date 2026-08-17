@@ -1,5 +1,8 @@
 const uuid = require('uuid');
+const { QueryTypes } = require('sequelize');
 const { Coupon, Event } = require('../models');
+
+const COUPONS_SCHEMA = process.env.DB_SCHEMA || 'dev_iecg';
 
 function normalizeMinimumQuantity(value) {
   if (value === undefined || value === null || value === '') {
@@ -10,6 +13,34 @@ function normalizeMinimumQuantity(value) {
     throw new Error('Quantidade mínima de ingressos deve ser um número inteiro maior que zero');
   }
   return parsed;
+}
+
+// Normaliza o mapa de precos por setor usado no discountType=fixed_price.
+// Ex: { "Frente": "220", "GALERIA": 140 } => { "FRENTE": 220, "GALERIA": 140 }
+function normalizeSectorPrices(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('sectorPrices deve ser um objeto no formato { SETOR: preco }');
+  }
+  const entries = Object.entries(value);
+  if (entries.length === 0) {
+    throw new Error('Cupom de preço fixo exige ao menos um preço por setor');
+  }
+  const normalized = {};
+  entries.forEach(([setor, preco]) => {
+    const chave = String(setor || '').toUpperCase().trim();
+    if (!chave) {
+      throw new Error('Setor inválido em sectorPrices');
+    }
+    const parsed = Number(preco);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      throw new Error(`Preço do setor "${chave}" deve ser um número maior que zero`);
+    }
+    normalized[chave] = parseFloat(parsed.toFixed(2));
+  });
+  return normalized;
 }
 
 async function listarCupons() {
@@ -49,23 +80,31 @@ const VALID_PAYMENT_TYPES = ['pix', 'credit_card', 'boleto', 'offline'];
 async function criarCupom(body) {
   const {
     eventId, code, discountType, discountValue, maxUses, validFrom, validUntil, description, minimumQuantity,
-    allowedPaymentTypes,
+    allowedPaymentTypes, sectorPrices,
   } = body;
 
   if (!code) {
     throw new Error('Código do cupom é obrigatório');
   }
 
-  if (!discountType || !['percentage', 'fixed'].includes(discountType)) {
-    throw new Error('Tipo de desconto inválido. Use "percentage" ou "fixed"');
+  if (!discountType || !['percentage', 'fixed', 'fixed_price'].includes(discountType)) {
+    throw new Error('Tipo de desconto inválido. Use "percentage", "fixed" ou "fixed_price"');
   }
 
-  if (!discountValue || discountValue <= 0) {
-    throw new Error('Valor do desconto deve ser maior que zero');
-  }
-
-  if (discountType === 'percentage' && discountValue > 100) {
-    throw new Error('Desconto percentual não pode ser maior que 100%');
+  let sectorPricesNormalizado = null;
+  if (discountType === 'fixed_price') {
+    // Preco fixo por setor so faz sentido amarrado a um evento (220/160/140 nao valem em outro evento).
+    if (!eventId) {
+      throw new Error('Cupom de preço fixo (fixed_price) deve estar vinculado a um evento');
+    }
+    sectorPricesNormalizado = normalizeSectorPrices(sectorPrices);
+  } else {
+    if (!discountValue || discountValue <= 0) {
+      throw new Error('Valor do desconto deve ser maior que zero');
+    }
+    if (discountType === 'percentage' && discountValue > 100) {
+      throw new Error('Desconto percentual não pode ser maior que 100%');
+    }
   }
 
   // Verificar se código já existe
@@ -91,7 +130,8 @@ async function criarCupom(body) {
     eventId: eventId || null,
     code: code.toUpperCase(),
     discountType,
-    discountValue,
+    discountValue: discountType === 'fixed_price' ? 0 : discountValue,
+    sectorPrices: sectorPricesNormalizado,
     minimumQuantity: normalizeMinimumQuantity(minimumQuantity),
     maxUses,
     currentUses: 0,
@@ -132,6 +172,20 @@ async function atualizarCupom(id, body) {
       ? tipos.filter(t => VALID_PAYMENT_TYPES.includes(t))
       : null;
   }
+  if (Object.prototype.hasOwnProperty.call(body, 'sectorPrices')) {
+    coupon.sectorPrices = normalizeSectorPrices(body.sectorPrices);
+  }
+
+  // Consistencia para fixed_price (vale tanto se o tipo mudou quanto se ja era)
+  if (coupon.discountType === 'fixed_price') {
+    if (!coupon.eventId) {
+      throw new Error('Cupom de preço fixo (fixed_price) deve estar vinculado a um evento');
+    }
+    if (!coupon.sectorPrices || Object.keys(coupon.sectorPrices).length === 0) {
+      throw new Error('Cupom de preço fixo (fixed_price) exige preços por setor (sectorPrices)');
+    }
+    coupon.discountValue = 0;
+  }
 
   await coupon.save();
   return coupon;
@@ -157,7 +211,7 @@ const PAYMENT_TYPE_LABELS = {
 };
 
 // Validar e aplicar cupom
-async function validarCupom(code, eventId, preco, quantity, paymentType = null) {
+async function validarCupom(code, eventId, preco, quantity, paymentType = null, items = null) {
   const normalizedCode = String(code || '').toUpperCase().trim();
   const coupon = await Coupon.findOne({
     where: {
@@ -213,40 +267,73 @@ async function validarCupom(code, eventId, preco, quantity, paymentType = null) 
     }
   }
 
-  // Calcular desconto
+  // Calcular preco final conforme o tipo de cupom
   let desconto = 0;
-  if (coupon.discountType === 'percentage') {
-    desconto = (preco * coupon.discountValue) / 100;
-  } else {
-    desconto = parseFloat(coupon.discountValue);
-  }
+  let precoFinal = preco;
 
-  // Garantir que desconto não seja maior que o preço
-  if (desconto > preco) {
-    desconto = preco;
+  if (coupon.discountType === 'fixed_price') {
+    // Precisa do detalhamento por ingresso para resolver o preco de cada setor
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new Error('Cupom de preço fixo requer o detalhamento dos ingressos por setor');
+    }
+    const precos = coupon.sectorPrices || {};
+    const somaFinal = items.reduce((sum, item) => {
+      const setor = (String(item.sector || 'DEFAULT').toUpperCase().trim()) || 'DEFAULT';
+      const precoLote = Number(item.price) || 0;
+      const precoCupomRaw = precos[setor] ?? precos.DEFAULT;
+      if (precoCupomRaw === undefined || precoCupomRaw === null) {
+        throw new Error(`Este cupom não define preço para o setor "${setor}"`);
+      }
+      // Nunca cobrar mais que o lote vigente por causa do cupom (protege promocoes futuras)
+      const precoItem = Math.min(Number(precoCupomRaw), precoLote);
+      return sum + precoItem;
+    }, 0);
+    precoFinal = parseFloat(somaFinal.toFixed(2));
+    desconto = parseFloat(Math.max(0, preco - precoFinal).toFixed(2));
+  } else {
+    if (coupon.discountType === 'percentage') {
+      desconto = (preco * coupon.discountValue) / 100;
+    } else {
+      desconto = parseFloat(coupon.discountValue);
+    }
+    // Garantir que desconto não seja maior que o preço
+    if (desconto > preco) {
+      desconto = preco;
+    }
+    desconto = parseFloat(desconto.toFixed(2));
+    precoFinal = parseFloat((preco - desconto).toFixed(2));
   }
 
   return {
     valido: true,
     coupon,
-    desconto: parseFloat(desconto.toFixed(2)),
-    precoFinal: parseFloat((preco - desconto).toFixed(2)),
+    desconto,
+    precoFinal,
     allowedPaymentTypes: coupon.allowedPaymentTypes || null,
   };
 }
 
-// Incrementar uso do cupom
+// Incrementar uso do cupom.
+// UPDATE condicional atomico: respeita maxUses mesmo com pedidos concorrentes,
+// evitando a corrida do antigo findByPk + save (dois pedidos passavam o limite juntos).
 async function incrementarUso(couponId) {
-  const coupon = await Coupon.findByPk(couponId);
+  const rows = await Coupon.sequelize.query(
+    `UPDATE "${COUPONS_SCHEMA}"."Coupons"
+        SET "currentUses" = "currentUses" + 1, "updatedAt" = NOW()
+      WHERE id = :id
+        AND ("maxUses" IS NULL OR "currentUses" < "maxUses")
+    RETURNING "currentUses"`,
+    { replacements: { id: couponId }, type: QueryTypes.SELECT }
+  );
 
-  if (!coupon) {
-    throw new Error('Cupom não encontrado');
+  if (!rows || rows.length === 0) {
+    // 0 linhas = cupom inexistente ou limite ja atingido. Nao lancamos aqui porque
+    // o pagamento normalmente ja foi capturado neste ponto; apenas registramos.
+    console.warn(`[couponService] incrementarUso nao aplicado (cupom ${couponId} inexistente ou limite atingido)`);
+    return { atualizado: false, currentUses: null };
   }
 
-  coupon.currentUses += 1;
-  await coupon.save();
-
-  return coupon;
+  return { atualizado: true, currentUses: rows[0].currentUses };
 }
 
 module.exports = {

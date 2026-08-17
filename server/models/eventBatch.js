@@ -1,4 +1,3 @@
-'use strict';
 const { Model, DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
@@ -28,6 +27,11 @@ module.exports = (sequelize) => {
       type: DataTypes.STRING,
       allowNull: false,
       comment: 'Ex: Lote 1 - Early Bird, Lote 2 - Regular'
+    },
+    sector: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'Setor do lote (ex: FRENTE, INTERMEDIARIO, GALERIA). Rotulo livre por evento; null = evento sem setores'
     },
     price: {
       type: DataTypes.DECIMAL(10, 2),

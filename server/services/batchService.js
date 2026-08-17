@@ -76,7 +76,7 @@ async function buscarLotePorId(id) {
 
 async function criarLote(body) {
   const {
-    eventId, name, price, maxQuantity, startDate, endDate, order
+    eventId, name, price, maxQuantity, startDate, endDate, order, sector
   } = body;
 
   if (!eventId) {
@@ -106,7 +106,8 @@ async function criarLote(body) {
     startDate,
     endDate,
     isActive: true,
-    order: order ?? 0
+    order: order ?? 0,
+    sector: sector ? String(sector).toUpperCase().trim() : null
   });
 }
 
@@ -133,6 +134,9 @@ async function atualizarLote(id, body) {
   batch.endDate = body.endDate ?? batch.endDate;
   batch.isActive = body.isActive ?? batch.isActive;
   batch.order = body.order ?? batch.order;
+  if (body.sector !== undefined) {
+    batch.sector = body.sector ? String(body.sector).toUpperCase().trim() : null;
+  }
 
   await batch.save();
   return batch;

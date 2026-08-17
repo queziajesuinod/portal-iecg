@@ -36,7 +36,8 @@ import {
   Stack,
   Alert,
   FormControlLabel,
-  Checkbox
+  Checkbox,
+  Autocomplete
 } from '@mui/material';
 import BackIcon from '@mui/icons-material/ArrowBack';
 import EditIcon from '@mui/icons-material/Edit';
@@ -250,6 +251,7 @@ function EventDetails() {
     startDate: '',
     endDate: '',
     order: '',
+    sector: '',
     isActive: true
   });
 
@@ -307,6 +309,7 @@ function EventDetails() {
         startDate: lote.startDate ? lote.startDate.substring(0, 16) : '',
         endDate: lote.endDate ? lote.endDate.substring(0, 16) : '',
         order: lote.order || '',
+        sector: lote.sector || '',
         isActive: lote.isActive
       });
     } else {
@@ -318,6 +321,7 @@ function EventDetails() {
         startDate: '',
         endDate: '',
         order: lotes.length + 1,
+        sector: '',
         isActive: true
       });
     }
@@ -349,7 +353,8 @@ function EventDetails() {
       eventId: id,
       price: evento?.requiresPayment === false ? 0 : parseFloat(formLote.price),
       maxQuantity: formLote.maxQuantity ? parseInt(formLote.maxQuantity, 10) : null,
-      order: formLote.order ? parseInt(formLote.order, 10) : 0
+      order: formLote.order ? parseInt(formLote.order, 10) : 0,
+      sector: formLote.sector ? formLote.sector.toUpperCase().trim() : null
     };
     salvarLoteMutation.mutate({ loteId: loteEdicao?.id || null, dados });
   };
@@ -1964,13 +1969,30 @@ function EventDetails() {
                 InputLabelProps={{ shrink: true }}
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 type="number"
                 label="Ordem de Exibição"
                 value={formLote.order}
                 onChange={(e) => setFormLote({ ...formLote, order: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Autocomplete
+                freeSolo
+                options={[...new Set(lotes.map((l) => l.sector).filter(Boolean))]}
+                value={formLote.sector}
+                onChange={(e, novo) => setFormLote({ ...formLote, sector: (novo || '').toUpperCase().trim() })}
+                onInputChange={(e, novo) => setFormLote({ ...formLote, sector: (novo || '').toUpperCase() })}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Setor"
+                    placeholder="Ex: FRENTE"
+                    helperText="Selecione um setor já usado ou digite um novo. Reutilize o mesmo nome nos lotes do mesmo setor."
+                  />
+                )}
               />
             </Grid>
           </Grid>

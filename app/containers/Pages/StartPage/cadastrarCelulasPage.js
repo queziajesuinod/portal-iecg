@@ -479,6 +479,13 @@ const CadastrarCelula = () => {
       lat: formData.lat ? parseFloat(formData.lat) : null,
       lon: formData.lon ? parseFloat(formData.lon) : null
     };
+    // Objetos aninhados/derivados que vem da API (nao sao colunas: o backend os ignora).
+    // Enviar isso so incha o corpo do PUT e pode estourar o limite do body-parser.
+    [
+      'leaderMember', 'leaderUser', 'liderMemberRef', 'liderancaMemberRef',
+      'campusRef', 'pastorCampusMemberRef', 'pastorGeracaoMemberRef', 'casalRef',
+      'createdAt', 'updatedAt'
+    ].forEach((chave) => delete payload[chave]);
     if (!isEdit) {
       delete payload.id;
     }
