@@ -874,11 +874,21 @@ async function processarInscricaoInterna(dadosInscricao) {
   if (couponCode && eventRequiresPayment) {
     const quantidadeIngressos = Number(quantity);
     const quantidadeParaValidacao = Number.isFinite(quantidadeIngressos) ? quantidadeIngressos : 0;
+    // Detalhamento por inscrito (setor + preco do lote) para cupons fixed_price
+    const itensCupom = attendeesData.map((att) => {
+      const lote = lotesData[att.batchId];
+      return {
+        sector: lote?.sector || null,
+        price: parseFloat(lote?.price) || 0,
+      };
+    });
     const resultadoCupom = await couponService.validarCupom(
       couponCode,
       eventId,
       precoOriginal,
-      quantidadeParaValidacao
+      quantidadeParaValidacao,
+      null,
+      itensCupom
     );
     desconto = resultadoCupom.desconto;
     precoFinal = resultadoCupom.precoFinal;

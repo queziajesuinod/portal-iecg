@@ -29,14 +29,20 @@ module.exports = (sequelize) => {
       unique: true,
     },
     discountType: {
-      type: DataTypes.ENUM('percentage', 'fixed'),
+      type: DataTypes.ENUM('percentage', 'fixed', 'fixed_price'),
       allowNull: false,
-      comment: 'percentage = porcentagem, fixed = valor fixo'
+      comment: 'percentage = porcentagem, fixed = valor fixo, fixed_price = preco final por setor'
     },
     discountValue: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
-      comment: 'Se percentage: 0-100, se fixed: valor em reais'
+      comment: 'Se percentage: 0-100, se fixed: valor em reais, se fixed_price: 0 (usa sectorPrices)'
+    },
+    sectorPrices: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Precos finais por setor para fixed_price. Ex: {"FRENTE":220,"GALERIA":140}. Chave "DEFAULT" para eventos sem setor'
     },
     minimumQuantity: {
       type: DataTypes.INTEGER,
