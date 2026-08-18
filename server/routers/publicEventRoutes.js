@@ -3,6 +3,7 @@ const router = express.Router();
 const eventController = require('../controllers/eventController');
 const couponController = require('../controllers/couponController');
 const registrationController = require('../controllers/registrationController');
+const registrationRuleController = require('../controllers/registrationRuleController');
 const batchController = require('../controllers/batchController');
 const paymentOptionController = require('../controllers/paymentOptionController');
 const financialController = require('../controllers/financialController');
@@ -21,6 +22,9 @@ router.post('/coupons/validate', couponController.validar);
 
 // ============= VERIFICAR DISPONIBILIDADE =============
 router.get('/batches/check-availability', batchController.verificarDisponibilidade);
+
+// ============= PRÉ-VALIDAR REGRAS DE BLOQUEIO =============
+router.post('/:eventId/registration-rules/validate', registrationRuleController.validarPublico);
 
 // ============= PROCESSAR INSCRIÇÃO =============
 router.post('/register', registrationController.processar);

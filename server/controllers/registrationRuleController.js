@@ -20,6 +20,27 @@ async function listarPorEvento(req, res) {
   }
 }
 
+// Pré-validação pública das regras de bloqueio (não cria inscrição).
+// Body: { buyerData?, attendeesData?, scope? }
+async function validarPublico(req, res) {
+  try {
+    const { eventId } = req.params;
+    if (!isValidUUID(eventId)) {
+      return res.status(400).json({ message: 'ID de evento inválido' });
+    }
+    const { buyerData, attendeesData, scope } = req.body || {};
+    const resultado = await registrationRuleService.validarRegras(eventId, {
+      buyerData,
+      attendeesData,
+      scope,
+    });
+    return res.status(200).json(resultado);
+  } catch (err) {
+    console.error('Erro ao validar regras de bloqueio:', err);
+    return res.status(500).json({ message: 'Erro ao validar regras de bloqueio' });
+  }
+}
+
 async function criar(req, res) {
   try {
     const regra = await registrationRuleService.criarRegra(req.body);
@@ -47,4 +68,6 @@ async function remover(req, res) {
   }
 }
 
-module.exports = { listarPorEvento, criar, atualizar, remover };
+module.exports = {
+  listarPorEvento, validarPublico, criar, atualizar, remover
+};
