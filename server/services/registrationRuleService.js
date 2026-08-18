@@ -1,5 +1,3 @@
-'use strict';
-
 const { EventRegistrationRule, FormField } = require('../models');
 
 // ─── Operadores suportados ────────────────────────────────────────────────────
@@ -28,7 +26,7 @@ function calcularIdade(valorData) {
     }
   }
 
-  if (!nascimento || isNaN(nascimento.getTime())) return null;
+  if (!nascimento || Number.isNaN(nascimento.getTime())) return null;
 
   const hoje = new Date();
   let idade = hoje.getFullYear() - nascimento.getFullYear();
@@ -126,10 +124,10 @@ async function avaliarRegrasDeBloquio(eventId, buyerData, attendeesData) {
 }
 
 /**
- * Lança erro se os dados não passarem em nenhum grupo de regras.
+ * Núcleo de avaliação (sem lançar). Retorna { ok, message }.
  * Grupos são avaliados com OR entre si; dentro de cada grupo, AND.
  */
-function _avaliarParaDados(regras, dados, contexto) {
+function _avaliarGrupos(regras, dados) {
   // Agrupar por ruleGroup
   const grupos = {};
   regras.forEach(r => {
@@ -139,19 +137,83 @@ function _avaliarParaDados(regras, dados, contexto) {
 
   const gruposArray = Object.values(grupos);
 
-  const passouAlgumGrupo = gruposArray.some(regrasDoGrupo =>
-    regrasDoGrupo.every(regra => {
-      const valorInformado = dados?.[regra.fieldKey];
-      return avaliarOperador(valorInformado, regra.operator, regra.value);
-    })
+  const passouAlgumGrupo = gruposArray.some(regrasDoGrupo => regrasDoGrupo.every(regra => {
+    const valorInformado = dados?.[regra.fieldKey];
+    return avaliarOperador(valorInformado, regra.operator, regra.value);
+  })
   );
 
-  if (!passouAlgumGrupo) {
-    // Usa a mensagem do primeiro grupo que bloqueou
-    const mensagem = gruposArray[0][0]?.errorMessage
-      || `Inscrição não permitida para o perfil do ${contexto}`;
-    throw new Error(mensagem);
+  if (passouAlgumGrupo) return { ok: true, message: null };
+
+  // Usa a mensagem do primeiro grupo que bloqueou
+  return { ok: false, message: gruposArray[0][0]?.errorMessage || null };
+}
+
+/**
+ * Lança erro se os dados não passarem em nenhum grupo de regras.
+ */
+function _avaliarParaDados(regras, dados, contexto) {
+  const { ok, message } = _avaliarGrupos(regras, dados);
+  if (!ok) {
+    throw new Error(message || `Inscrição não permitida para o perfil do ${contexto}`);
   }
+}
+
+/**
+ * Pré-validação NÃO-lançante das regras de bloqueio.
+ * Permite validar apenas o comprador, apenas os inscritos, ou ambos —
+ * útil para checar os dados dos inscritos antes de preencher o comprador.
+ *
+ * @param {string} eventId
+ * @param {object} opts
+ * @param {object} [opts.buyerData]        Dados do comprador
+ * @param {Array}  [opts.attendeesData]    Lista de inscritos ({ data } ou objeto plano)
+ * @param {'buyer'|'attendee'|'all'} [opts.scope]  Escopo explícito. Se omitido,
+ *        valida apenas o que foi enviado (buyerData e/ou attendeesData).
+ * @returns {Promise<{ ok: boolean, errors: Array<{ scope, index, message }> }>}
+ */
+async function validarRegras(eventId, { buyerData, attendeesData, scope } = {}) {
+  const errors = [];
+
+  const regras = await EventRegistrationRule.findAll({
+    where: { eventId, isActive: true },
+    order: [['ruleGroup', 'ASC']],
+  });
+
+  if (!regras.length) return { ok: true, errors };
+
+  const checarBuyer = scope === 'buyer' || scope === 'all' || (!scope && buyerData !== undefined);
+  const checarAttendee = scope === 'attendee' || scope === 'all' || (!scope && attendeesData !== undefined);
+
+  const regrasBuyer = regras.filter(r => r.appliesTo === 'buyer');
+  const regrasAttendee = regras.filter(r => r.appliesTo === 'attendee');
+
+  if (checarBuyer && regrasBuyer.length > 0 && buyerData) {
+    const { ok, message } = _avaliarGrupos(regrasBuyer, buyerData);
+    if (!ok) {
+      errors.push({
+        scope: 'buyer',
+        index: null,
+        message: message || 'Inscrição não permitida para o perfil do comprador',
+      });
+    }
+  }
+
+  if (checarAttendee && regrasAttendee.length > 0 && Array.isArray(attendeesData)) {
+    attendeesData.forEach((att, idx) => {
+      const dados = att?.data || att;
+      const { ok, message } = _avaliarGrupos(regrasAttendee, dados);
+      if (!ok) {
+        errors.push({
+          scope: 'attendee',
+          index: idx,
+          message: message || `Inscrição não permitida para o perfil do inscrito ${idx + 1}`,
+        });
+      }
+    });
+  }
+
+  return { ok: errors.length === 0, errors };
 }
 
 // ─── CRUD de regras ───────────────────────────────────────────────────────────
@@ -165,7 +227,9 @@ async function listarRegrasPorEvento(eventId) {
 }
 
 async function criarRegra(dados) {
-  const { eventId, formFieldId, fieldKey, operator, value, errorMessage, appliesTo, ruleGroup } = dados;
+  const {
+    eventId, formFieldId, fieldKey, operator, value, errorMessage, appliesTo, ruleGroup
+  } = dados;
 
   if (!eventId || !fieldKey || !operator || value === undefined || value === null || !errorMessage) {
     throw new Error('Campos obrigatórios: eventId, fieldKey, operator, value, errorMessage');
@@ -199,6 +263,7 @@ async function removerRegra(id) {
 
 module.exports = {
   avaliarRegrasDeBloquio,
+  validarRegras,
   listarRegrasPorEvento,
   criarRegra,
   atualizarRegra,

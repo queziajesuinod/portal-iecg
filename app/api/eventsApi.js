@@ -185,6 +185,14 @@ export const deletarRegraBloquio = (id) => fetchWithAuth(`${API_URL}/api/admin/e
   method: 'DELETE',
 });
 
+// Pré-validação pública das regras de bloqueio (não cria inscrição).
+// payload: { buyerData?, attendeesData?, scope? } — envie apenas o que quer validar.
+// Retorna { ok, errors: [{ scope, index, message }] }.
+export const validarRegrasBloquio = (eventId, payload) => fetchWithAuth(`${API_URL}/api/public/events/${eventId}/registration-rules/validate`, {
+  method: 'POST',
+  body: JSON.stringify(payload),
+});
+
 export const recalcularStatusInscricao = (id) => fetchWithAuth(`${API_URL}/api/admin/events/registrations/${id}/recalculate-status`, {
   method: 'POST'
 });

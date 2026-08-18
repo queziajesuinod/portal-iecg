@@ -544,6 +544,64 @@ const definition = {
         responses: { 200: { description: 'Resultado da validação' } }
       },
     },
+    '/api/public/events/{eventId}/registration-rules/validate': {
+      post: {
+        tags: ['Eventos (Público)'],
+        summary: 'Pré-validar regras de bloqueio (sem criar inscrição)',
+        description: 'Avalia as regras de bloqueio configuradas para o evento sem criar a inscrição. '
+          + 'Envie apenas o que deseja validar: `buyerData`, `attendeesData` ou ambos. '
+          + 'O parâmetro `scope` força o escopo (`buyer` | `attendee` | `all`); se omitido, valida apenas o que foi enviado.',
+        security: [],
+        parameters: [{
+          name: 'eventId', in: 'path', required: true, schema: { $ref: '#/components/schemas/UUID' }
+        }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  scope: { type: 'string', enum: ['buyer', 'attendee', 'all'] },
+                  buyerData: { type: 'object', additionalProperties: true },
+                  attendeesData: {
+                    type: 'array',
+                    items: { type: 'object', additionalProperties: true }
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          200: {
+            description: 'Resultado da validação (sempre 200; ver campo `ok`)',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    ok: { type: 'boolean' },
+                    errors: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          scope: { type: 'string', enum: ['buyer', 'attendee'] },
+                          index: { type: 'integer', nullable: true, description: 'Posição do inscrito (null para comprador)' },
+                          message: { type: 'string' }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          400: { description: 'ID de evento inválido', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
     '/api/public/events/register': {
       post: {
         tags: ['Eventos (Público)'],
