@@ -47,6 +47,11 @@ const SAFE_ZONE_FRAC = envNum('CLIP_SAFE_ZONE_FRAC', 0.1);
 // atingida; a leveza vem do cutoff, nao daqui). Alto o bastante p/ nao perder o rosto.
 const MAX_PAN_VEL_FRAC = envNum('CLIP_MAX_PAN_VEL_FRAC', 1);
 const STATIC_RANGE_FRAC = 0.02; // se a camera anda menos que isso no clipe todo -> crop estatico
+// Salto do rosto (fracao da largura do crop) que denuncia CORTE DE CENA (troca de plano
+// da transmissao, ex.: close-up <-> plano aberto). Acima disso a camera CORTA (pulo
+// instantaneo) em vez de fazer um pan atravessando o corte. Uma pessoa nao teleporta;
+// so um corte de camera move tanto de um quadro pro outro.
+const SCENE_CUT_FRAC = envNum('CLIP_SCENE_CUT_FRAC', 0.45);
 const FACE_SAMPLE_FPS = envNum('FACE_TRACK_SAMPLE_FPS', 10); // amostragem da deteccao (Hz)
 // Enquadramento: por padrao a camera fica FIXA no orador (zero movimento). Para seguir
 // o orador com pans suaves, defina CLIP_CROP_MODE=auto (e dose o movimento com
@@ -76,6 +81,11 @@ const CAPTION_MODE = CAPTION_MODES.includes(process.env.CLIP_CAPTION_MODE)
   ? process.env.CLIP_CAPTION_MODE : 'phrase';
 // Fator de tamanho das palavras-chave no modo 'word' (1.28 = 28% maiores).
 const CAPTION_EMPHASIS_SCALE = envNum('CLIP_CAPTION_EMPHASIS_SCALE', 1.28);
+// Pausa (segundos) entre palavras que conta como "respiracao": um silencio >= disso
+// FECHA o bloco de legenda ali, em vez de empacotar por largura. Assim cada bloco segue
+// o folego da fala (frase curta fica numa linha, sem forcar a segunda). So tem efeito
+// quando o transcript tem timestamp por palavra (WHISPER_WORD_TIMESTAMPS=true).
+const CAPTION_PAUSE_SEC = envNum('CLIP_CAPTION_PAUSE_SEC', 0.35);
 // Largura util e limite de caracteres por linha (Arial Bold MAIUSCULO ~0.66*fontsize por char).
 const CAPTION_AVAIL_W = TARGET_W - CAPTION_MARGIN_H * 2;
 const MAX_CHARS_PER_LINE = Math.max(1, Math.floor(CAPTION_AVAIL_W / (CAPTION_FONT_SIZE * 0.66)));
@@ -130,8 +140,10 @@ function medianFilter(arr, win) {
 
 // Interpola as amostras do centro do rosto sobre a grade fina e remove picos isolados
 // (mediana). NAO suaviza o movimento aqui -> quem da o ease e o seguidor de camera
-// (smoothCamera), que trabalha sobre este sinal ja limpo de outliers.
-function buildFocusTrack(samples, srcW, duration) {
+// (smoothCamera), que trabalha sobre este sinal ja limpo de outliers. Marca tambem os
+// CORTES DE CENA (saltos grandes e sustentados) para a camera cortar junto, em vez de
+// varrer a tela num pan atravessando a troca de plano.
+function buildFocusTrack(samples, srcW, duration, cropW) {
   const valid = (samples || [])
     .filter((s) => Number.isFinite(s.t) && Number.isFinite(s.cx))
     .sort((a, b) => a.t - b.t);
@@ -153,9 +165,15 @@ function buildFocusTrack(samples, srcW, duration) {
     return cx * srcW;
   });
 
-  // Mediana: descarta deteccoes fora da curva antes de planejar a camera.
+  // Mediana: descarta deteccoes fora da curva (o median PRESERVA degraus reais, entao um
+  // corte de cena continua nitido depois dela; so os picos isolados somem).
   const clean = medianFilter(interp, MEDIAN_WIN);
-  return times.map((t, i) => ({ t, cxPx: clean[i] }));
+  const cutPx = cropW * SCENE_CUT_FRAC;
+  return times.map((t, i) => ({
+    t,
+    cxPx: clean[i],
+    cut: i > 0 && Math.abs(clean[i] - clean[i - 1]) > cutPx,
+  }));
 }
 
 // Seguidor continuo criticamente amortecido (mola sem overshoot) com rigidez ADAPTATIVA
@@ -166,17 +184,20 @@ function buildFocusTrack(samples, srcW, duration) {
 //
 //   x'' = w^2 (alvo - x) - 2w x'   (w cresce com a "urgencia" = quao perto da borda)
 //
-// Roda na grade fina (~30 Hz) para o pan sair continuo, nao em degraus.
-function smoothCamera(focusPx, cropW) {
+// Roda na grade fina (~30 Hz) para o pan sair continuo, nao em degraus. Em CORTES DE CENA
+// (focus[i].cut) a camera nao faz pan: ela recompoe na hora (pulo instantaneo, como o
+// proprio corte da transmissao) e zera a inercia.
+function smoothCamera(focus, cropW) {
   const dt = GRID_STEP;
   const omega0 = 2 * Math.PI * SMOOTH_CUTOFF_HZ;
   const vMax = cropW * MAX_PAN_VEL_FRAC;
   const dead = cropW * SAFE_ZONE_FRAC;
   // Deslocamento maximo permitido entre o rosto e o centro do crop (deixa a margem de folga).
   const leash = cropW * Math.max(0.05, 0.5 - FRAME_MARGIN_FRAC);
-  let x = focusPx[0];
+  let x = focus[0].cxPx;
   let v = 0;
-  return focusPx.map((face) => {
+  return focus.map(({ cxPx: face, cut }) => {
+    if (cut) { x = face; v = 0; return x; } // corte de cena: recompoe instantaneamente
     const raw = face - x;
     const urgency = Math.min(1, Math.abs(raw) / leash); // 0 no centro, 1 na borda segura
     // Zona morta so vale quando esta calmo; perto da borda ela some (nao pode ignorar o rosto).
@@ -227,7 +248,7 @@ function buildCropPlan(meta, samples, duration) {
     };
   }
 
-  const focus = buildFocusTrack(samples, srcW, duration);
+  const focus = buildFocusTrack(samples, srcW, duration, cropW);
   if (!focus) {
     return {
       cropW, cropH, y, mode: 'static', x: centerX
@@ -245,8 +266,8 @@ function buildCropPlan(meta, samples, duration) {
     };
   }
 
-  // Caminho de camera: perseguicao continua e suave (mola criticamente amortecida).
-  const camCenter = smoothCamera(focus.map((f) => f.cxPx), cropW);
+  // Caminho de camera: perseguicao continua e suave (mola), cortando em cortes de cena.
+  const camCenter = smoothCamera(focus, cropW);
 
   // Centro da camera -> x (canto esquerdo do crop), dentro dos limites.
   const xs = camCenter.map((cc) => Math.max(0, Math.min(maxX, Math.round(cc - cropW / 2))));
@@ -510,6 +531,30 @@ function emitWordDialogues(seg, s, e, clipStart, duration, style) {
   return out;
 }
 
+// Agrupa as palavras da fala por RESPIRACAO: um silencio >= CAPTION_PAUSE_SEC entre duas
+// palavras fecha o bloco atual. Cada bloco vira uma legenda com o tempo REAL da fala, entao
+// uma frase curta cabe numa linha e nao e forcada a encher a segunda. Um teto de largura
+// (2 linhas) tambem fecha o bloco, como valvula de seguranca em falas longas sem pausa.
+// Sem timestamp por palavra (words estimadas sem lacunas) nao ha pausa detectavel -> o
+// segmento inteiro vira um unico grupo (comportamento antigo, quebrado so por largura).
+function groupByBreath(timed) {
+  const groups = [];
+  let cur = [];
+  for (let i = 0; i < timed.length; i += 1) {
+    cur.push(timed[i]);
+    const next = timed[i + 1];
+    if (!next) break;
+    const gap = next.start - timed[i].end;
+    const chars = cur.reduce((a, w) => a + w.word.length, 0) + (cur.length - 1);
+    if (gap >= CAPTION_PAUSE_SEC || chars >= 2 * MAX_CHARS_PER_LINE) {
+      groups.push(cur);
+      cur = [];
+    }
+  }
+  if (cur.length) groups.push(cur);
+  return groups;
+}
+
 function buildAss(segments, start, end, stylePlan) {
   const duration = end - start;
   const dialogues = [];
@@ -541,24 +586,28 @@ function buildAss(segments, start, end, stylePlan) {
       continue;
     }
 
-    const chunks = chunkCaption(toCaption(seg.text));
-    if (!chunks.length) continue;
-    // Reparte o tempo do segmento entre os blocos, proporcional ao tamanho de cada um.
-    const weights = chunks.map((c) => Math.max(1, c.replace(/\\N/g, ' ').length));
-    const totalW = weights.reduce((a, b) => a + b, 0);
-    let cs = s;
-    chunks.forEach((chunk, idx) => {
-      const ce = idx === chunks.length - 1 ? e : Math.min(e, cs + (e - s) * (weights[idx] / totalW));
-      if (ce - cs >= 0.05) {
+    // Agrupa por respiracao (pausas reais entre palavras) e mostra cada bloco no tempo
+    // exato da fala. So reparte por largura quando um folego for longo demais p/ 2 linhas.
+    const timed = segmentWords(seg, s, e, start);
+    for (const group of groupByBreath(timed)) {
+      const gStart = group[0].start;
+      const gEnd = group[group.length - 1].end;
+      const chunks = chunkCaption(group.map((w) => w.word).join(' '));
+      if (!chunks.length || !(gEnd > gStart)) continue;
+      const weights = chunks.map((c) => Math.max(1, c.replace(/\\N/g, ' ').length));
+      const totalW = weights.reduce((a, b) => a + b, 0);
+      let cs = gStart;
+      chunks.forEach((chunk, idx) => {
+        const ce = idx === chunks.length - 1 ? gEnd : Math.min(gEnd, cs + (gEnd - gStart) * (weights[idx] / totalW));
         // Aplica o deslocamento global e mantem dentro dos limites do recorte.
         const a = Math.max(0, Math.min(duration, cs + CAPTION_OFFSET_SEC));
         const b = Math.max(0, Math.min(duration, ce + CAPTION_OFFSET_SEC));
         if (b - a >= 0.05) {
           dialogues.push(`Dialogue: 0,${assTime(a)},${assTime(b)},Legenda,,0,0,0,,${intro}${highlightChunk(chunk, style)}`);
         }
-      }
-      cs = ce;
-    });
+        cs = ce;
+      });
+    }
   }
   if (!dialogues.length) return null;
 
