@@ -118,6 +118,7 @@ const DirecionamentosReport = () => {
     },
     { title: 'Aceitaram Jesus', value: fmtNumero(r.aceitaramJesus) },
     { title: 'Voltaram para Cristo', value: fmtNumero(r.voltaram) },
+    { title: 'Procuraram + de 1 vez', value: fmtNumero(r.procuraramMaisDeUmaVez), color: PDF.warning },
   ];
 
   const colQtd = [
@@ -176,6 +177,8 @@ const DirecionamentosReport = () => {
           { metrica: 'Taxa consolidação (geral) %', valor: r.taxaConsolidacaoGeral },
           { metrica: 'Aceitaram Jesus', valor: r.aceitaramJesus },
           { metrica: 'Voltaram para Cristo', valor: r.voltaram },
+          { metrica: 'Procuraram o Start + de 1 vez', valor: r.procuraramMaisDeUmaVez },
+          { metrica: 'Total de buscas ao Start', valor: r.totalBuscas },
         ]
       },
       { name: 'Por status', columns: [{ label: 'Status', key: 'label' }, { label: 'Qtd', key: 'value' }], rows: data.porStatus },
@@ -345,6 +348,9 @@ const DirecionamentosReport = () => {
             </Grid>
             <Grid item xs={6} md={3}>
               <KpiCard label="Voltaram para Cristo" value={resumo.voltaram} color="#2e86de" />
+            </Grid>
+            <Grid item xs={6} md={3}>
+              <KpiCard label="Procuraram o Start + de 1 vez" value={resumo.procuraramMaisDeUmaVez} color="#c97a16" />
             </Grid>
           </Grid>
 

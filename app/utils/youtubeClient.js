@@ -265,6 +265,20 @@ export const renderClip = async (clipId) => {
   return parseOrThrow(res, 'Falha ao renderizar recorte');
 };
 
+export const suggestClipStyle = async (clipId) => {
+  const res = await fetch(`${BASE}/clips/${clipId}/style/suggest`, { method: 'POST', headers: jsonHeaders() });
+  return parseOrThrow(res, 'Falha ao sugerir estilo da legenda');
+};
+
+export const setClipStyle = async (clipId, plan) => {
+  const res = await fetch(`${BASE}/clips/${clipId}/style`, {
+    method: 'PUT',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ plan }),
+  });
+  return parseOrThrow(res, 'Falha ao definir estilo da legenda');
+};
+
 export const previewClipFrames = async (clipId) => {
   const res = await fetch(`${BASE}/clips/${clipId}/preview-frames`, { method: 'POST', headers: jsonHeaders() });
   return parseOrThrow(res, 'Falha ao gerar prévia do enquadramento');

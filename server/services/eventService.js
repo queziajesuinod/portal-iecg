@@ -219,11 +219,6 @@ async function obterResumoInscricoesPorEvento(eventId) {
     ? `"${registrationTable.schema}"."${registrationTable.tableName}"`
     : `"${registrationTable}"`;
 
-  const paymentTable = RegistrationPayment.getTableName();
-  const quotedPaymentTable = typeof paymentTable === 'object'
-    ? `"${paymentTable.schema}"."${paymentTable.tableName}"`
-    : `"${paymentTable}"`;
-
   // Em eventos com sinal (BALANCE_DUE), parcial é considerado inscrito confirmado
   const confirmedFilter = isBalanceDue
     ? '"paymentStatus" IN (\'confirmed\', \'partial\')'
@@ -240,15 +235,7 @@ async function obterResumoInscricoesPorEvento(eventId) {
       COALESCE(SUM("quantity") FILTER (WHERE ${pendingFilter}), 0) AS "pendingCount",
       COALESCE(SUM("quantity") FILTER (WHERE "paymentStatus" IN ('denied', 'cancelled')), 0) AS "deniedCancelled",
       COALESCE(SUM("quantity") FILTER (WHERE ${confirmedFilter}), 0) AS "confirmedCount",
-      COALESCE(SUM("quantity") FILTER (WHERE "paymentStatus" = 'expired'), 0) AS "expiredCount",
-      (
-        SELECT COALESCE(SUM(rp."amount"), 0)
-        FROM ${quotedPaymentTable} rp
-        WHERE rp."registrationId" IN (
-          SELECT "id" FROM ${quotedTable} WHERE "eventId" = :eventId
-        )
-        AND rp."status" = 'confirmed'
-      ) AS "confirmedTotalValue"
+      COALESCE(SUM("quantity") FILTER (WHERE "paymentStatus" = 'expired'), 0) AS "expiredCount"
     FROM ${quotedTable}
     WHERE "eventId" = :eventId
     `,
@@ -258,10 +245,16 @@ async function obterResumoInscricoesPorEvento(eventId) {
     }
   );
 
+  // Valor líquido — mesma base do módulo Financeiro (amount + taxa − taxas da
+  // processadora). Require tardio para evitar dependência circular com financialService.
+  // eslint-disable-next-line global-require
+  const { computeEventTicketNet } = require('./financialService');
+  const confirmedTotalValue = await computeEventTicketNet(eventId);
+
   return {
     totalRegistrations: Number(summary.totalRegistrations || 0),
     confirmedCount: Number(summary.confirmedCount || 0),
-    confirmedTotalValue: Number(summary.confirmedTotalValue || 0),
+    confirmedTotalValue: Number(confirmedTotalValue || 0),
     deniedCancelled: Number(summary.deniedCancelled || 0),
     expiredCount: Number(summary.expiredCount || 0),
     pendingCount: Number(summary.pendingCount || 0),

@@ -34,6 +34,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import MovieCreationOutlinedIcon from '@mui/icons-material/MovieCreationOutlined';
 import CropPortraitIcon from '@mui/icons-material/CropPortrait';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import {
   fetchClips,
   suggestClips,
@@ -47,8 +48,14 @@ import {
   fetchClipBlobUrl,
   downloadClipFile,
   previewClipFrames,
+  suggestClipStyle,
+  setClipStyle,
   runWorkerOnce,
 } from '../../../utils/youtubeClient';
+
+const ANIM_LABEL = {
+  pop: 'cresce ao entrar', punch: 'impacto', fade: 'suave', none: 'seca',
+};
 
 const STATUS_MAP = {
   suggested: { color: 'default', label: 'Sugerido' },
@@ -486,6 +493,17 @@ function ClipsPanel({
 
   const doDownload = (clip) => run(`download-${clip.id}`, () => downloadClipFile(clip.id, `recorte-${clip.position + 1}.mp4`));
 
+  const doSuggestStyle = (clip) => run(
+    `style-${clip.id}`,
+    () => suggestClipStyle(clip.id),
+    'Estilo da legenda sugerido pela IA. Renderize para ver o resultado.'
+  );
+  const doClearStyle = (clip) => run(
+    `style-${clip.id}`,
+    () => setClipStyle(clip.id, null),
+    'Estilo removido — volta ao padrão.'
+  );
+
   const doFramePreview = async (clip) => {
     setBusyFor(`frames-${clip.id}`, true);
     setFeedback(null);
@@ -792,6 +810,52 @@ function ClipsPanel({
                       ))}
                     </Stack>
                   </Box>
+                )}
+              </Box>
+            )}
+
+            {/* Estilo da legenda (diretor de arte via IA) */}
+            {!locked && (
+              <Box sx={{ mt: 1 }}>
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                  <Button
+                    size="small"
+                    color="inherit"
+                    startIcon={busy[`style-${clip.id}`] ? <CircularProgress size={14} color="inherit" /> : <AutoFixHighIcon />}
+                    disabled={busy[`style-${clip.id}`]}
+                    onClick={() => doSuggestStyle(clip)}
+                  >
+                    {clip.stylePlan ? 'Refazer estilo da legenda (IA)' : 'Estilizar legenda com IA'}
+                  </Button>
+                  {clip.stylePlan && (
+                    <Button size="small" color="inherit" disabled={busy[`style-${clip.id}`]} onClick={() => doClearStyle(clip)}>
+                      Remover estilo
+                    </Button>
+                  )}
+                </Stack>
+                {clip.stylePlan && (
+                  <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mt: 0.75 }}>
+                    {clip.stylePlan.theme && <Chip size="small" variant="outlined" label={clip.stylePlan.theme} />}
+                    {clip.stylePlan.highlightColor && (
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        icon={(
+                          <Box sx={{
+                            width: 12, height: 12, borderRadius: '50%', bgcolor: clip.stylePlan.highlightColor, ml: 0.75,
+                          }}
+                          />
+                        )}
+                        label={clip.stylePlan.highlightColor}
+                      />
+                    )}
+                    {clip.stylePlan.animation && (
+                      <Chip size="small" variant="outlined" label={`entrada: ${ANIM_LABEL[clip.stylePlan.animation] || clip.stylePlan.animation}`} />
+                    )}
+                    {(clip.stylePlan.keywords || []).map((kw) => (
+                      <Chip key={kw} size="small" color="primary" variant="outlined" label={kw} />
+                    ))}
+                  </Stack>
                 )}
               </Box>
             )}

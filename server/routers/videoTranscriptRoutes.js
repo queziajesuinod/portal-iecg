@@ -71,6 +71,8 @@ router.put('/clips/:clipId', express.json(), controller.editarRecorte);
 router.post('/clips/:clipId/approve', express.json(), controller.aprovarRecorte);
 router.post('/clips/:clipId/discard', express.json(), controller.descartarRecorte);
 router.post('/clips/:clipId/render', express.json(), controller.renderizarRecorte);
+router.post('/clips/:clipId/style/suggest', express.json(), controller.sugerirEstiloRecorte);
+router.put('/clips/:clipId/style', express.json(), controller.definirEstiloRecorte);
 router.post('/clips/:clipId/preview-frames', express.json(), controller.previewRecorteFrames);
 router.get('/clips/:clipId/file', controller.servirRecorte);
 router.post('/clips/:clipId/publish', express.json(), controller.publicarRecorte);

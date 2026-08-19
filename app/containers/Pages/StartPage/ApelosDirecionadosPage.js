@@ -8,6 +8,7 @@ import {
   Accordion,
   AccordionDetails,
   AccordionSummary,
+  Alert,
   Badge,
   Box,
   Button,
@@ -82,6 +83,7 @@ const ApelosDirecionadosPage = () => {
   const [nomeFilter, setNomeFilter] = useState('');
   const [decisaoFilter, setDecisaoFilter] = useState('');
   const [celulaCasalFilter, setCelulaCasalFilter] = useState('');
+  const [apenasRepetidosFilter, setApenasRepetidosFilter] = useState('');
   const [yearFilter, setYearFilter] = useState(YEAR_OPTIONS[0]);
   const [page, setPage] = useState(1);
   const [notification, setNotification] = useState('');
@@ -135,9 +137,9 @@ const ApelosDirecionadosPage = () => {
 
   const apelosFilters = useMemo(
     () => ({
-      monthFilter, statusFilter, nomeFilter, decisaoFilter, celulaCasalFilter, yearFilter, page
+      monthFilter, statusFilter, nomeFilter, decisaoFilter, celulaCasalFilter, apenasRepetidosFilter, yearFilter, page
     }),
-    [monthFilter, statusFilter, nomeFilter, decisaoFilter, celulaCasalFilter, yearFilter, page]
+    [monthFilter, statusFilter, nomeFilter, decisaoFilter, celulaCasalFilter, apenasRepetidosFilter, yearFilter, page]
   );
 
   const apelosQuery = useQuery({
@@ -150,6 +152,7 @@ const ApelosDirecionadosPage = () => {
       if (apelosFilters.nomeFilter) params.append('nome', apelosFilters.nomeFilter);
       if (apelosFilters.decisaoFilter) params.append('decisao', apelosFilters.decisaoFilter);
       if (apelosFilters.celulaCasalFilter) params.append('celulaCasal', apelosFilters.celulaCasalFilter);
+      if (apelosFilters.apenasRepetidosFilter) params.append('apenasRepetidos', apelosFilters.apenasRepetidosFilter);
       if (apelosFilters.yearFilter) params.append('year', apelosFilters.yearFilter);
       params.append('page', apelosFilters.page);
       params.append('limit', 10);
@@ -195,7 +198,7 @@ const ApelosDirecionadosPage = () => {
   });
   const celulas = celulasQuery.data || [];
 
-  const activeFilterCount = [monthFilter, statusFilter, nomeFilter, decisaoFilter, celulaCasalFilter, yearFilter].filter(Boolean).length;
+  const activeFilterCount = [monthFilter, statusFilter, nomeFilter, decisaoFilter, celulaCasalFilter, apenasRepetidosFilter, yearFilter].filter(Boolean).length;
 
   const clearFilters = () => {
     setNomeFilter('');
@@ -204,6 +207,7 @@ const ApelosDirecionadosPage = () => {
     setDecisaoFilter('');
     setStatusFilter('');
     setCelulaCasalFilter('');
+    setApenasRepetidosFilter('');
     setPage(1);
   };
 
@@ -422,11 +426,57 @@ const ApelosDirecionadosPage = () => {
       const data = await res.json();
       return Array.isArray(data) ? data : [];
     },
-    enabled: Boolean(historicoDialogOpen && apeloSelecionado?.id),
+    enabled: Boolean((historicoDialogOpen || moveDialogOpen) && apeloSelecionado?.id),
     staleTime: 30_000,
   });
   const historicoList = historicoQuery.data || [];
   const loadingHistorico = historicoQuery.isLoading;
+
+  // Células para as quais este apelo já foi direcionado antes (útil quando a
+  // pessoa procurou o Start mais de uma vez). id -> { count, ultimaData, nome }.
+  const celulasJaDirecionadas = useMemo(() => {
+    const map = new Map();
+    (historicoList || []).forEach((h) => {
+      if (h.tipo_evento !== 'CELULA') return;
+      const cid = h.celulaDestino?.id || h.celula_id_destino;
+      if (!cid) return;
+      const data = h.data_movimento || null;
+      const existente = map.get(cid);
+      if (existente) {
+        existente.count += 1;
+        if (data && (!existente.ultimaData || new Date(data) > new Date(existente.ultimaData))) {
+          existente.ultimaData = data;
+        }
+      } else {
+        map.set(cid, { count: 1, ultimaData: data, nome: h.celulaDestino?.celula || null });
+      }
+    });
+    return map;
+  }, [historicoList]);
+
+  const nomesJaDirecionados = useMemo(
+    () => Array.from(celulasJaDirecionadas.values()).map((v) => v.nome).filter(Boolean),
+    [celulasJaDirecionadas]
+  );
+
+  const renderJaDirecionadoChip = (cellId) => {
+    const info = celulasJaDirecionadas.get(cellId);
+    if (!info) return null;
+    const quando = info.ultimaData ? formatDate(info.ultimaData) : null;
+    const titulo = `Este apelo já foi direcionado para esta célula${info.count > 1 ? ` ${info.count}x` : ''}${quando ? ` — último em ${quando}` : ''}`;
+    return (
+      <Tooltip title={titulo}>
+        <Chip
+          icon={<HistoryIcon sx={{ fontSize: 14 }} />}
+          label="Já direcionado"
+          size="small"
+          color="warning"
+          variant="outlined"
+          sx={{ height: 18 }}
+        />
+      </Tooltip>
+    );
+  };
   if (historicoQuery.error && historicoQuery.error._reported !== true) {
     historicoQuery.error._reported = true;
     setTimeout(() => setNotification(historicoQuery.error.message || 'Erro ao carregar histórico.'), 0);
@@ -997,6 +1047,17 @@ const ApelosDirecionadosPage = () => {
                   <MenuItem value="true">Somente casal</MenuItem>
                   <MenuItem value="false">Somente não-casal</MenuItem>
                 </TextField>
+                <TextField
+                  select
+                  label="Procurou o Start"
+                  size="small"
+                  value={apenasRepetidosFilter}
+                  onChange={(e) => { setApenasRepetidosFilter(e.target.value); setPage(1); }}
+                  sx={{ minWidth: 190 }}
+                >
+                  <MenuItem value="">Todos</MenuItem>
+                  <MenuItem value="true">Mais de uma vez</MenuItem>
+                </TextField>
                 {activeFilterCount > 0 && (
                   <Button size="small" onClick={clearFilters}>Limpar filtros</Button>
                 )}
@@ -1018,6 +1079,7 @@ const ApelosDirecionadosPage = () => {
             <TableHead>
               <TableRow>
                 <TableCell>Nome</TableCell>
+                <TableCell align="center">Buscas</TableCell>
                 <TableCell>Decisão</TableCell>
                 <TableCell>Data direcionamento</TableCell>
                 <TableCell>Célula atual</TableCell>
@@ -1030,7 +1092,7 @@ const ApelosDirecionadosPage = () => {
               {loading && apelos.length === 0 && (
                 Array.from({ length: 8 }).map((_, i) => (
                   <TableRow key={`skel-${i}`}>
-                    {Array.from({ length: 7 }).map((__, j) => (
+                    {Array.from({ length: 8 }).map((__, j) => (
                       <TableCell key={j}><Skeleton variant="text" /></TableCell>
                     ))}
                   </TableRow>
@@ -1038,7 +1100,7 @@ const ApelosDirecionadosPage = () => {
               )}
               {!loading && apelos.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+                  <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
                     <FilterListOffIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
                     <Typography variant="body2" color="text.secondary" gutterBottom>
                       Nenhum apelo encontrado com esse filtro.
@@ -1088,6 +1150,15 @@ const ApelosDirecionadosPage = () => {
                           </Tooltip>
                         )}
                       </Box>
+                    </TableCell>
+                    <TableCell align="center">
+                      {(apelo.total_buscas || 1) > 1 ? (
+                        <Tooltip title={`Procurou o Start ${apelo.total_buscas} vezes`}>
+                          <Chip size="small" color="warning" label={apelo.total_buscas} sx={{ height: 20, fontWeight: 700 }} />
+                        </Tooltip>
+                      ) : (
+                        <span>{apelo.total_buscas || 1}</span>
+                      )}
                     </TableCell>
                     <TableCell>{renderDecisaoChip(apelo.decisao)}</TableCell>
                     <TableCell>{formatDate(apelo.data_direcionamento)}</TableCell>
@@ -1185,6 +1256,11 @@ const ApelosDirecionadosPage = () => {
           <Typography variant="caption" color="textSecondary" display="block" gutterBottom>
             Rede: {apeloSelecionado?.rede || '-'} | CEP: {apeloSelecionado?.cep_apelo || '-'} | Cidade: {apeloSelecionado?.cidade_apelo || '-'} | Estado: {apeloSelecionado?.estado_apelo || '-'}
           </Typography>
+          {nomesJaDirecionados.length > 0 && (
+            <Alert severity="warning" icon={<HistoryIcon fontSize="inherit" />} sx={{ mb: 1 }}>
+              Este apelo já foi direcionado anteriormente para: <strong>{nomesJaDirecionados.join(', ')}</strong>. As células já usadas estão marcadas abaixo.
+            </Alert>
+          )}
           <TextField
             label="Buscar célula"
             fullWidth
@@ -1235,7 +1311,10 @@ const ApelosDirecionadosPage = () => {
           >
             {celulasDisponiveis.map((c) => (
               <MenuItem key={c.id} value={c.id}>
-                {c.celula} {c.rede ? `- ${c.rede}` : ''}
+                <Box component="span" display="flex" alignItems="center" gap={1} width="100%">
+                  <span>{c.celula} {c.rede ? `- ${c.rede}` : ''}</span>
+                  {renderJaDirecionadoChip(c.id)}
+                </Box>
               </MenuItem>
             ))}
           </TextField>
@@ -1294,6 +1373,7 @@ const ApelosDirecionadosPage = () => {
                           {c.casalCelulaId && (
                             <Chip label="Casal" size="small" color="secondary" sx={{ height: 18 }} />
                           )}
+                          {renderJaDirecionadoChip(c.id)}
                         </Box>
                         <Typography variant="caption" display="block">Rede: {c.rede}</Typography>
                         <Typography variant="caption" display="block">Bairro: {c.bairro || '-'}</Typography>
@@ -1340,9 +1420,10 @@ const ApelosDirecionadosPage = () => {
                           onClick={() => setCelulaDestinoId(c.id)}
                         >
                           <CardContent sx={{ pb: '12px !important' }}>
-                            <Box display="flex" alignItems="center" gap={0.5} mb={0.5}>
+                            <Box display="flex" alignItems="center" gap={0.5} mb={0.5} flexWrap="wrap">
                               {isSelected && <CheckCircleIcon fontSize="small" color="primary" />}
                               <Typography variant="subtitle2">{c.celula}</Typography>
+                              {renderJaDirecionadoChip(c.id)}
                             </Box>
                             <Typography variant="caption" display="block">Rede: {c.rede}</Typography>
                             <Typography variant="caption" display="block">Bairro: {c.bairro || '-'}</Typography>

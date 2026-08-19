@@ -5,6 +5,9 @@ const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { YoutubeVideo, VideoTranscript, VideoClip } = require('../models');
 const ffmpeg = require('./ffmpegService');
+const {
+  ANIMATIONS, CAPTION_MODES, normalizeWord, hexToAssColor, sanitizePlan,
+} = require('./captionStyle');
 
 const TARGET_W = 1080;
 const TARGET_H = 1920;
@@ -44,6 +47,18 @@ const CAPTION_POP_SCALE = 82; // escala inicial (%) do pop -> anima ate 100
 // Desloca TODAS as legendas no tempo (segundos). Positivo = ATRASA a legenda
 // (use se ela estiver aparecendo adiantada em relacao a fala). Default 0.
 const CAPTION_OFFSET_SEC = Number(process.env.CLIP_CAPTION_OFFSET_SEC || 0);
+// ── Estilo base da legenda (defaults por env; o plano de estilo do clip sobrepoe) ──
+// Fonte precisa estar instalada no VPS (fontconfig). Default Arial = comportamento atual.
+const CAPTION_FONT = process.env.CLIP_CAPTION_FONT || 'Arial';
+const CAPTION_PRIMARY_HEX = process.env.CLIP_CAPTION_COLOR || '#FFFFFF';
+const CAPTION_HIGHLIGHT_HEX = process.env.CLIP_CAPTION_HIGHLIGHT_COLOR || '#FFD24A';
+const CAPTION_ANIM = ANIMATIONS.includes(process.env.CLIP_CAPTION_ANIM)
+  ? process.env.CLIP_CAPTION_ANIM : 'pop';
+// Modo padrao da legenda: 'phrase' (frase por vez) ou 'word' (palavra por palavra).
+const CAPTION_MODE = CAPTION_MODES.includes(process.env.CLIP_CAPTION_MODE)
+  ? process.env.CLIP_CAPTION_MODE : 'phrase';
+// Fator de tamanho das palavras-chave no modo 'word' (1.28 = 28% maiores).
+const CAPTION_EMPHASIS_SCALE = envNum('CLIP_CAPTION_EMPHASIS_SCALE', 1.28);
 // Largura util e limite de caracteres por linha (Arial Bold MAIUSCULO ~0.66*fontsize por char).
 const CAPTION_AVAIL_W = TARGET_W - CAPTION_MARGIN_H * 2;
 const MAX_CHARS_PER_LINE = Math.max(1, Math.floor(CAPTION_AVAIL_W / (CAPTION_FONT_SIZE * 0.66)));
@@ -329,12 +344,176 @@ function chunkCaption(text) {
   return chunks;
 }
 
-function buildAss(segments, start, end) {
+// Resolve o estilo efetivo da legenda: defaults por env sobrepostos pelo plano do
+// clip (diretor de arte via IA). Sem plano e sem env => identico ao estilo atual.
+function resolveCaptionStyle(stylePlan) {
+  const plan = sanitizePlan(stylePlan) || {};
+  const animation = ANIMATIONS.includes(plan.animation) ? plan.animation : CAPTION_ANIM;
+  const mode = CAPTION_MODES.includes(plan.mode) ? plan.mode : CAPTION_MODE;
+  return {
+    font: plan.font || CAPTION_FONT,
+    primary: hexToAssColor(plan.primaryColor || CAPTION_PRIMARY_HEX),
+    highlight: hexToAssColor(plan.highlightColor || CAPTION_HIGHLIGHT_HEX),
+    animation,
+    mode,
+    emphasisScale: CAPTION_EMPHASIS_SCALE,
+    keywords: new Set((plan.keywords || []).map(normalizeWord).filter(Boolean)),
+  };
+}
+
+// Tag de override de ENTRADA por animacao (todas seguras quanto a posicao).
+function buildIntro(animation) {
+  const fadeOut = Math.round(CAPTION_FADE_MS / 2);
+  const fad = `\\fad(${CAPTION_FADE_MS},${fadeOut})`;
+  switch (animation) {
+    case 'none':
+      return '';
+    case 'fade':
+      return `{${fad}}`;
+    case 'punch':
+      return `{${fad}\\fscx115\\fscy115\\t(0,${CAPTION_POP_MS},\\fscx100\\fscy100)}`;
+    case 'pop':
+    default:
+      return `{${fad}\\fscx${CAPTION_POP_SCALE}\\fscy${CAPTION_POP_SCALE}\\t(0,${CAPTION_POP_MS},\\fscx100\\fscy100)}`;
+  }
+}
+
+// Destaca (troca de cor inline) as palavras-chave dentro de um bloco de legenda,
+// preservando as quebras de linha (\N). Sem palavras-chave => devolve o bloco intacto.
+function highlightChunk(chunk, style) {
+  if (!style.keywords.size) return chunk;
+  const open = `{\\c${style.highlight}}`;
+  const close = `{\\c${style.primary}}`;
+  return chunk
+    .split(/(\\N)/)
+    .map((part) => {
+      if (part === '\\N') return part;
+      return part
+        .split(' ')
+        .map((word) => (word && style.keywords.has(normalizeWord(word)) ? `${open}${word}${close}` : word))
+        .join(' ');
+    })
+    .join('');
+}
+
+// ── Modo "palavra por palavra" (as palavras APARECEM e acumulam numa unica linha) ──
+
+// Distribui o tempo do segmento [s,e] (relativos ao recorte) entre as palavras,
+// proporcional ao tamanho de cada uma. Usado quando nao ha timestamp por palavra.
+function estimateWordTimings(words, s, e) {
+  const weights = words.map((w) => Math.max(1, w.length));
+  const totalW = weights.reduce((a, b) => a + b, 0);
+  let t = s;
+  return words.map((w, i) => {
+    const dur = (e - s) * (weights[i] / totalW);
+    const ws = t;
+    const we = i === words.length - 1 ? e : t + dur;
+    t = we;
+    return { word: w, start: ws, end: we };
+  });
+}
+
+// Palavras + tempos do segmento (relativos ao recorte). Se o Whisper gravou
+// timestamp por palavra (seg.words, tempos ABSOLUTOS), usa o SINCRONISMO REAL —
+// derivando palavra e tempo da MESMA fonte (evita divergir da contagem do texto).
+// Senao, cai para a estimativa proporcional ao tamanho da palavra.
+function segmentWords(seg, s, e, clipStart) {
+  const real = Array.isArray(seg.words) ? seg.words : null;
+  if (real && real.length) {
+    const out = [];
+    for (const w of real) {
+      const token = toCaption(w.word); // normaliza igual a legenda (MAIUSCULA, sem pontuacao)
+      if (!token) continue; // token so de pontuacao
+      const rs = Number(w.start);
+      const re = Number(w.end);
+      out.push({
+        word: token,
+        start: Number.isFinite(rs) ? Math.max(s, Math.min(e, rs - clipStart)) : null,
+        end: Number.isFinite(re) ? Math.max(s, Math.min(e, re - clipStart)) : null,
+      });
+    }
+    // Garante tempos crescentes e sem buracos (preenche nulos/invertidos).
+    let prev = s;
+    for (let i = 0; i < out.length; i += 1) {
+      if (out[i].start == null || out[i].start < prev) out[i].start = prev;
+      if (out[i].end == null || out[i].end <= out[i].start) {
+        out[i].end = i === out.length - 1 ? e : out[i].start + 0.12;
+      }
+      prev = out[i].end;
+    }
+    if (out.length) return out;
+  }
+  const words = toCaption(seg.text).split(' ').filter(Boolean);
+  return estimateWordTimings(words, s, e);
+}
+
+// Renderiza uma palavra do modo 'word': keyword = maior + cor de destaque; a mais
+// nova ("isNewest") ganha um leve "pop" de entrada (aparecer com vida, sem karaoke).
+function renderWordToken(word, isNewest, style, baseFs, bigFs) {
+  const kw = style.keywords.has(normalizeWord(word));
+  const fontSize = kw ? bigFs : baseFs;
+  const color = kw ? style.highlight : style.primary;
+  let tags = `\\fs${fontSize}\\c${color}`;
+  if (isNewest) tags += '\\fscx112\\fscy112\\t(0,90,\\fscx100\\fscy100)';
+  return `{${tags}}${word}`;
+}
+
+// Agrupa as palavras em blocos que cabem em UMA linha (respeitando a largura util).
+// Palavra-chave conta como maior (emphasisScale) para o bloco nao estourar a linha.
+function groupWordsSingleLine(timed, style) {
+  const groups = [];
+  let cur = [];
+  let curLen = 0;
+  for (const tw of timed) {
+    const kw = style.keywords.has(normalizeWord(tw.word));
+    const eff = tw.word.length * (kw ? style.emphasisScale : 1);
+    const need = cur.length ? curLen + 1 + eff : eff;
+    if (cur.length && need > MAX_CHARS_PER_LINE) {
+      groups.push(cur);
+      cur = [tw];
+      curLen = eff;
+    } else {
+      cur.push(tw);
+      curLen = need;
+    }
+  }
+  if (cur.length) groups.push(cur);
+  return groups;
+}
+
+// Gera os Dialogue do segmento no modo 'word': para cada palavra, um evento que
+// mostra as palavras do bloco ate ela (acumulando). Uma linha por vez.
+function emitWordDialogues(seg, s, e, clipStart, duration, style) {
+  const words = toCaption(seg.text).split(' ').filter(Boolean);
+  if (!words.length) return [];
+  const baseFs = CAPTION_FONT_SIZE;
+  const bigFs = Math.round(CAPTION_FONT_SIZE * style.emphasisScale);
+  const timed = segmentWords(seg, s, e, clipStart);
+  const groups = groupWordsSingleLine(timed, style);
+
+  const out = [];
+  for (const group of groups) {
+    for (let i = 0; i < group.length; i += 1) {
+      const wsRaw = group[i].start;
+      const weRaw = i < group.length - 1 ? group[i + 1].start : group[group.length - 1].end;
+      const a = Math.max(0, Math.min(duration, wsRaw + CAPTION_OFFSET_SEC));
+      const b = Math.max(0, Math.min(duration, weRaw + CAPTION_OFFSET_SEC));
+      if (b - a < 0.04) continue;
+      const text = group
+        .slice(0, i + 1)
+        .map((tw, idx) => renderWordToken(tw.word, idx === i, style, baseFs, bigFs))
+        .join(' ');
+      out.push(`Dialogue: 0,${assTime(a)},${assTime(b)},Legenda,,0,0,0,,${text}`);
+    }
+  }
+  return out;
+}
+
+function buildAss(segments, start, end, stylePlan) {
   const duration = end - start;
   const dialogues = [];
-  const fadeOut = Math.round(CAPTION_FADE_MS / 2);
-  // Entrada: fade + "pop" (entra em CAPTION_POP_SCALE% e cresce ate 100% via \t).
-  const intro = `{\\fad(${CAPTION_FADE_MS},${fadeOut})\\fscx${CAPTION_POP_SCALE}\\fscy${CAPTION_POP_SCALE}\\t(0,${CAPTION_POP_MS},\\fscx100\\fscy100)}`;
+  const style = resolveCaptionStyle(stylePlan);
+  const intro = buildIntro(style.animation);
   for (const seg of segments || []) {
     const segStart = Number(seg.start);
     const segEnd = Number(seg.end);
@@ -353,6 +532,14 @@ function buildAss(segments, start, end) {
     const s = Math.max(0, segStart - start);
     const e = Math.min(duration, segEnd - start);
     if (e - s < 0.3) continue;
+
+    // Modo palavra por palavra: as palavras aparecem/acumulam numa unica linha.
+    if (style.mode === 'word') {
+      const wordLines = emitWordDialogues(seg, s, e, start, duration, style);
+      for (const line of wordLines) dialogues.push(line);
+      continue;
+    }
+
     const chunks = chunkCaption(toCaption(seg.text));
     if (!chunks.length) continue;
     // Reparte o tempo do segmento entre os blocos, proporcional ao tamanho de cada um.
@@ -366,7 +553,7 @@ function buildAss(segments, start, end) {
         const a = Math.max(0, Math.min(duration, cs + CAPTION_OFFSET_SEC));
         const b = Math.max(0, Math.min(duration, ce + CAPTION_OFFSET_SEC));
         if (b - a >= 0.05) {
-          dialogues.push(`Dialogue: 0,${assTime(a)},${assTime(b)},Legenda,,0,0,0,,${intro}${chunk}`);
+          dialogues.push(`Dialogue: 0,${assTime(a)},${assTime(b)},Legenda,,0,0,0,,${intro}${highlightChunk(chunk, style)}`);
         }
       }
       cs = ce;
@@ -382,7 +569,7 @@ WrapStyle: 2
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Legenda, Arial, ${CAPTION_FONT_SIZE}, &H00FFFFFF, &H00000000, &H00000000, 1, 0, 0, 0, 100, 100, 0, 0, 3, 6, 0, 2, ${CAPTION_MARGIN_H}, ${CAPTION_MARGIN_H}, ${CAPTION_MARGIN_V}, 1
+Style: Legenda, ${style.font}, ${CAPTION_FONT_SIZE}, ${style.primary}, &H00000000, &H00000000, 1, 0, 0, 0, 100, 100, 0, 0, 3, 6, 0, 2, ${CAPTION_MARGIN_H}, ${CAPTION_MARGIN_H}, ${CAPTION_MARGIN_V}, 1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -426,7 +613,7 @@ async function renderClip(clipId, { onProgress } = {}) {
 
     // 2) Legendas a partir dos segments.
     const transcript = await VideoTranscript.findOne({ where: { youtubeVideoId: video.id } });
-    const ass = buildAss(transcript?.segments, start, end);
+    const ass = buildAss(transcript?.segments, start, end, clip.stylePlan);
 
     // 3) Monta o filtergraph (arquivos por nome-base; ffmpeg roda com cwd=workDir).
     const parts = [];

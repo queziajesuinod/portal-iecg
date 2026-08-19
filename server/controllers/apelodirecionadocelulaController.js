@@ -35,10 +35,10 @@ class ApeloDirecionadoCelulaController {
   async listarTodos(req, res) {
     try {
       const {
-        month, status, page, limit, nome, decisao, year, celulaCasal
+        month, status, page, limit, nome, decisao, year, celulaCasal, apenasRepetidos
       } = req.query;
       const lista = await ApeloDirecionadoCelulaService.listarTodos({
-        month, status, page, limit, nome, decisao, year, celulaCasal
+        month, status, page, limit, nome, decisao, year, celulaCasal, apenasRepetidos
       });
       return res.status(200).json(lista);
     } catch (error) {
