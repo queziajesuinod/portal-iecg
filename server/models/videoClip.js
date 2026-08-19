@@ -63,6 +63,12 @@ module.exports = (sequelize) => {
         allowNull: false,
         defaultValue: 'suggested',
       },
+      // Plano de estilo da legenda (diretor de arte via IA): fonte, cores,
+      // animacao de entrada e palavras-chave a destacar. Consumido pelo buildAss.
+      stylePlan: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+      },
       // Progresso da renderizacao (0-100), atualizado pelo ffmpeg.
       renderProgress: {
         type: DataTypes.INTEGER,

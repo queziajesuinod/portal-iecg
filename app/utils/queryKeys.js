@@ -17,6 +17,7 @@ export const queryKeys = {
     formFields: (eventId) => ['events', 'form-fields', eventId],
     paymentOptions: (eventId) => ['events', 'payment-options', eventId],
     registrations: (eventId, params = {}) => ['events', 'registrations', eventId, params],
+    coupons: (eventId) => ['events', 'coupons', eventId],
     registrationRules: (eventId) => ['events', 'registration-rules', eventId],
     summary: (eventId) => ['events', 'summary', eventId],
   },

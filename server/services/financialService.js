@@ -1149,8 +1149,60 @@ async function deleteManualEntry(id) {
   await entry.destroy();
 }
 
+/**
+ * Calcula o valor líquido (mesma base do módulo Financeiro) das inscrições
+ * confirmadas de um único evento. Espelha o cálculo de `ticketNet` em
+ * listFinancialRecords: SUM(amount + taxa) − taxas da processadora, somando
+ * o finalPrice das inscrições confirmed/partial sem RegistrationPayment.
+ */
+async function computeEventTicketNet(eventId) {
+  if (!eventId) return 0;
+
+  const feeConfigModel = await getActiveFeeConfig();
+  const feeConfig = serializeFeeConfig(feeConfigModel);
+
+  const paymentsForSummary = await RegistrationPayment.findAll({
+    where: { status: 'confirmed' },
+    attributes: ['amount', 'taxa', 'provider', 'method', 'installments', 'cardBrand', 'providerPayload', 'registrationId'],
+    include: [
+      {
+        model: Registration,
+        as: 'registration',
+        attributes: ['id', 'eventId'],
+        where: { eventId },
+        required: true
+      }
+    ]
+  });
+
+  const confirmedRegistrationIds = new Set(paymentsForSummary.map((p) => p.registrationId));
+  const registrationsWithoutPayment = await Registration.findAll({
+    where: {
+      eventId,
+      paymentStatus: { [Op.in]: ['confirmed', 'partial'] },
+      ...(confirmedRegistrationIds.size
+        ? { id: { [Op.notIn]: [...confirmedRegistrationIds] } }
+        : {})
+    },
+    attributes: ['id', 'finalPrice']
+  });
+
+  let ticketGross = 0;
+  let processorFees = 0;
+  paymentsForSummary.forEach((payment) => {
+    ticketGross += toMoney(toMoney(payment.amount) + toMoney(payment.taxa || 0));
+    processorFees += toMoney(calculateConfiguredFee(payment, feeConfig).feeAmount);
+  });
+  registrationsWithoutPayment.forEach((reg) => {
+    ticketGross += toMoney(reg.finalPrice || 0);
+  });
+
+  return toMoney(toMoney(ticketGross) - toMoney(processorFees));
+}
+
 module.exports = {
   listFinancialRecords,
+  computeEventTicketNet,
   getExpensesForExport,
   getEntriesForExport,
   getFeeConfig,

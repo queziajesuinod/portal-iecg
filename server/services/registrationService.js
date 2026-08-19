@@ -1319,6 +1319,16 @@ async function listarInscricoesPorEvento(eventId, options = {}) {
       ? { [Op.in]: filters.paymentStatus }
       : filters.paymentStatus;
   }
+  // Filtro por cupom: 'with' = qualquer cupom, 'without' = sem cupom, ou um couponId específico.
+  if (filters.couponId) {
+    if (filters.couponId === 'with') {
+      where.couponId = { [Op.ne]: null };
+    } else if (filters.couponId === 'without') {
+      where.couponId = { [Op.is]: null };
+    } else {
+      where.couponId = filters.couponId;
+    }
+  }
   const dateConditions = [];
   const fromDate = buildDayRange(filters.dateFrom);
   if (fromDate) {

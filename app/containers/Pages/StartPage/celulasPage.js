@@ -26,13 +26,18 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import FiberNewIcon from '@mui/icons-material/FiberNew';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
+import TableChartIcon from '@mui/icons-material/TableChart';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import { alpha } from '@mui/material/styles';
 import { useHistory } from 'react-router-dom';
 import useStyles from 'dan-components/Tables/tableStyle-jss';
 import Notification from 'dan-components/Notification/Notification';
+import JsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   GoogleMap, Marker, InfoWindow, useLoadScript, Circle
 } from '@react-google-maps/api';
+import { exportarExcel } from '../Reports/utils/exportHelpers';
 import { useConfirm } from '../../../utils/useConfirm';
 import { fetchGeocode } from '../../../utils/googleGeocode';
 import { listarMembros } from '../../../api/membersApi';
@@ -151,6 +156,7 @@ const ListagemCelulasPage = () => {
   const [importSummary, setImportSummary] = useState(null);
   const [importProgress, setImportProgress] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const [exportingCompact, setExportingCompact] = useState(false);
   const [sortBy, setSortBy] = useState('celula');
   const [sortDirection, setSortDirection] = useState('asc');
   const [apeloCounts, setApeloCounts] = useState({});
@@ -933,6 +939,94 @@ const ListagemCelulasPage = () => {
     }
   };
 
+  // Colunas enxutas — refletem exatamente a tabela em tela.
+  const COMPACT_COLUMNS = [
+    { label: 'Célula', key: 'celula', width: 46 },
+    { label: 'Rede', key: 'rede', width: 34 },
+    { label: 'Líder', key: 'lider', width: 40 },
+    { label: 'Pastor de geração', key: 'pastorGeracao', width: 40 },
+    { label: 'Bairro', key: 'bairro', width: 34 },
+    { label: 'Campus', key: 'campus', width: 30 },
+  ];
+
+  // Busca as células com os filtros atuais e mapeia para as colunas exibidas na tabela.
+  const fetchCelulasCompactas = async () => {
+    const token = localStorage.getItem('token');
+    const exportLimit = totalRecords || 1000;
+    const queryParams = buildCelulaQueryParams({ page: 1, limit: exportLimit });
+    const res = await fetch(`${API_URL}/start/celula?${queryParams}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) {
+      throw new Error('Falha ao exportar células.');
+    }
+    const data = await res.json();
+    return (data.registros || []).map((c) => ({
+      celula: c.celula || '-',
+      rede: c.rede || '-',
+      lider: c.liderMemberRef?.fullName || c.lider || '-',
+      pastorGeracao: c.pastorGeracaoMemberRef?.fullName || c.pastor_geracao || '-',
+      bairro: c.bairro || '-',
+      campus: c.campusRef?.nome || c.campus || '-',
+    }));
+  };
+
+  const exportCelulasCompactExcel = async () => {
+    setExportingCompact(true);
+    try {
+      const rows = await fetchCelulasCompactas();
+      if (!rows.length) {
+        setNotification('Nenhuma célula encontrada para exportar.');
+        return;
+      }
+      exportarExcel(`celulas_${new Date().toISOString().slice(0, 10)}`, [
+        { name: 'Células', columns: COMPACT_COLUMNS, rows },
+      ]);
+    } catch (err) {
+      console.error(err);
+      setNotification(err.message || 'Erro ao exportar células.');
+    } finally {
+      setExportingCompact(false);
+    }
+  };
+
+  const exportCelulasCompactPDF = async () => {
+    setExportingCompact(true);
+    try {
+      const rows = await fetchCelulasCompactas();
+      if (!rows.length) {
+        setNotification('Nenhuma célula encontrada para exportar.');
+        return;
+      }
+      // Paisagem para caber todas as colunas com folga.
+      const doc = new JsPDF({ orientation: 'landscape' });
+      const geradoEm = new Date().toLocaleDateString('pt-BR');
+      doc.setFontSize(14);
+      doc.text('Listagem de Células', 14, 15);
+      doc.setFontSize(9);
+      doc.setTextColor(120);
+      doc.text(
+        `${rows.length} célula${rows.length > 1 ? 's' : ''} (conforme filtros) · Gerado em ${geradoEm}`,
+        14,
+        21
+      );
+      autoTable(doc, {
+        startY: 26,
+        head: [COMPACT_COLUMNS.map((c) => c.label)],
+        body: rows.map((row) => COMPACT_COLUMNS.map((c) => row[c.key])),
+        styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+        headStyles: { fillColor: [21, 101, 192], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+      });
+      doc.save(`celulas_${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (err) {
+      console.error(err);
+      setNotification(err.message || 'Erro ao exportar células.');
+    } finally {
+      setExportingCompact(false);
+    }
+  };
+
   useEffect(() => {
     fetchCelulas();
   }, [
@@ -1308,6 +1402,39 @@ const ListagemCelulasPage = () => {
           >
             Mais ações
           </Button>
+          <Box display="flex" alignItems="center" gap={0.75} sx={{ ml: 0.5 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+              Exportar tabela:
+            </Typography>
+            <Tooltip title="Exportar as colunas da tabela em PDF (paisagem), conforme os filtros aplicados">
+              <span>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="error"
+                  startIcon={<PictureAsPdfIcon />}
+                  onClick={exportCelulasCompactPDF}
+                  disabled={exportingCompact || exporting}
+                >
+                  PDF
+                </Button>
+              </span>
+            </Tooltip>
+            <Tooltip title="Exportar as colunas da tabela em Excel, conforme os filtros aplicados">
+              <span>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="success"
+                  startIcon={<TableChartIcon />}
+                  onClick={exportCelulasCompactExcel}
+                  disabled={exportingCompact || exporting}
+                >
+                  Excel
+                </Button>
+              </span>
+            </Tooltip>
+          </Box>
           <Menu
             anchorEl={actionsMenuAnchor}
             open={Boolean(actionsMenuAnchor)}
@@ -1327,7 +1454,7 @@ const ListagemCelulasPage = () => {
               disabled={exporting}
             >
               <ListItemIcon><FileDownloadIcon fontSize="small" /></ListItemIcon>
-              <ListItemText>{exporting ? 'Exportando...' : 'Exportar Excel'}</ListItemText>
+              <ListItemText>{exporting ? 'Exportando...' : 'Exportar Excel (completo)'}</ListItemText>
             </MenuItem>
             <MenuItem
               onClick={() => { setActionsMenuAnchor(null); migrateCelulaLeaders(); }}

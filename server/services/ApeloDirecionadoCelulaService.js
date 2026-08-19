@@ -930,7 +930,9 @@ class ApeloDirecionadoCelulaService {
       lider_direcionado: null,
       cel_lider: null,
       bairro_direcionado: null,
-      data_direcionamento: null
+      data_direcionamento: null,
+      // Pessoa já cadastrada procurou o Start novamente: contabiliza mais uma busca.
+      total_buscas: (existente.total_buscas || 1) + 1
     };
 
     await existente.update(payloadRecadastro, { transaction });
@@ -1043,6 +1045,11 @@ class ApeloDirecionadoCelulaService {
     }
     if (filtro.decisao) {
       where.decisao = filtro.decisao;
+    }
+    // Filtro "procurou o Start mais de uma vez" (contador > 1).
+    const repetidosFiltro = String(filtro.apenasRepetidos || '').toLowerCase().trim();
+    if (['true', '1', 'sim', 'yes'].includes(repetidosFiltro)) {
+      where.total_buscas = { [Op.gt]: 1 };
     }
 
     const page = parseInt(filtro.page, 10) || 1;

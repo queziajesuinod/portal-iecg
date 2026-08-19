@@ -18,7 +18,7 @@ async function listarPorEvento(req, res) {
     const perPage = Math.min(Math.max(parseInt(req.query.perPage, 10) || 20, 1), 100);
     const offset = (page - 1) * perPage;
     const filters = {};
-    ['orderCode', 'buyerName', 'buyerDocument', 'buyerData.buyer_name', 'buyerData.buyer_document', 'dateFrom', 'dateTo', 'checkinStatus'].forEach((key) => {
+    ['orderCode', 'buyerName', 'buyerDocument', 'buyerData.buyer_name', 'buyerData.buyer_document', 'dateFrom', 'dateTo', 'checkinStatus', 'couponId'].forEach((key) => {
       const value = req.query[key];
       if (value && value !== 'undefined') {
         filters[key] = value;

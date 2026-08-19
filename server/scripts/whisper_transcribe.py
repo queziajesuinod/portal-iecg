@@ -12,6 +12,10 @@ Ajustes via variaveis de ambiente (todos opcionais):
   WHISPER_BATCH_SIZE      lote do modo batched  (default: 8)
   WHISPER_VAD             true | false          (default: true)
                           Desligue se a legenda derivar (fica adiantada e piora ao longo do audio).
+  WHISPER_WORD_TIMESTAMPS true | false          (default: false)
+                          Liga o timestamp POR PALAVRA (para legenda palavra-por-palavra
+                          sincronizada). Custa um pouco mais de CPU. Cada segmento passa a
+                          incluir "words": [{"start","end","word"}, ...].
 
 Saida (JSON):
   {
@@ -54,6 +58,7 @@ def main():
     # DERIVAR (timestamps cada vez mais adiantados ao longo do audio). Se a legenda dos
     # recortes vier adiantada e piorando, desligue: WHISPER_VAD=false (e/ou WHISPER_BATCHED=false).
     use_vad = _env("WHISPER_VAD", "true").lower() in ("1", "true", "yes")
+    use_word_ts = _env("WHISPER_WORD_TIMESTAMPS", "false").lower() in ("1", "true", "yes")
 
     try:
         from faster_whisper import WhisperModel
@@ -77,6 +82,7 @@ def main():
         language=language_hint,
         beam_size=beam_size,
         vad_filter=use_vad,
+        word_timestamps=use_word_ts,
     )
     if use_vad:
         transcribe_kwargs["vad_parameters"] = dict(min_silence_duration_ms=500)
@@ -110,11 +116,23 @@ def main():
     for segment in segments_iter:
         seg_text = segment.text.strip()
         text_parts.append(seg_text)
-        segments.append({
+        seg_obj = {
             "start": round(float(segment.start), 3),
             "end": round(float(segment.end), 3),
             "text": seg_text,
-        })
+        }
+        # Timestamp por palavra (quando ligado) -> legenda palavra-por-palavra sincronizada.
+        if use_word_ts and getattr(segment, "words", None):
+            seg_obj["words"] = [
+                {
+                    "start": round(float(w.start), 3),
+                    "end": round(float(w.end), 3),
+                    "word": w.word.strip(),
+                }
+                for w in segment.words
+                if w.start is not None and w.end is not None
+            ]
+        segments.append(seg_obj)
         if total_duration > 0:
             pct = (float(segment.end) / total_duration) * 100.0
             if pct - last_emit_pct >= 1.0 or pct >= 99.5:

@@ -77,7 +77,8 @@ import {
   deletarFormaPagamento,
   cancelarInscricao,
   obterInfoCancelamentoInscricao,
-  reenviarTicket
+  reenviarTicket,
+  listarCupons
 } from '../../../api/eventsApi';
 import { EVENT_TYPE_LABELS } from '../../../constants/eventTypes';
 import { getPaymentStatusChipSx, getPaymentStatusLabel } from '../../../constants/paymentStatus';
@@ -113,6 +114,7 @@ function EventDetails() {
     buyerName: '',
     buyerDocument: '',
     paymentStatus: [],
+    couponId: '',
     dateFrom: '',
     dateTo: ''
   });
@@ -169,10 +171,19 @@ function EventDetails() {
       buyerName: filters.buyerName || undefined,
       buyerDocument: filters.buyerDocument || undefined,
       paymentStatus: statusParam,
+      couponId: filters.couponId || undefined,
       dateFrom: filters.dateFrom || undefined,
       dateTo: filters.dateTo || undefined
     };
   })();
+
+  // Cupons do evento — para popular o filtro por cupom na aba Vendas.
+  const cuponsQuery = useQuery({
+    queryKey: queryKeys.events.coupons(id),
+    queryFn: listarCupons,
+    enabled: Boolean(id) && tabAtiva === 1,
+  });
+  const cuponsDoEvento = (cuponsQuery.data || []).filter((c) => c.eventId === id);
 
   const inscricoesQuery = useQuery({
     queryKey: queryKeys.events.registrations(id, inscricoesParams),
@@ -665,6 +676,7 @@ function EventDetails() {
           paymentStatus: Array.isArray(filters.paymentStatus)
             ? filters.paymentStatus.join(',') || undefined
             : filters.paymentStatus || undefined,
+          couponId: filters.couponId || undefined,
           dateFrom: filters.dateFrom || undefined,
           dateTo: filters.dateTo || undefined
         });
@@ -1472,6 +1484,24 @@ function EventDetails() {
               </FormControl>
             </Grid>
             <Grid item xs={12} sm={6} md={2}>
+              <FormControl fullWidth>
+                <InputLabel id="coupon-filter-label">Cupom</InputLabel>
+                <Select
+                  labelId="coupon-filter-label"
+                  value={filters.couponId}
+                  label="Cupom"
+                  onChange={(event) => handleFilterChange('couponId', event.target.value)}
+                >
+                  <MenuItem value="">Todos</MenuItem>
+                  <MenuItem value="with">Com cupom</MenuItem>
+                  <MenuItem value="without">Sem cupom</MenuItem>
+                  {cuponsDoEvento.map((cupom) => (
+                    <MenuItem key={cupom.id} value={cupom.id}>{cupom.code}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6} md={2}>
               <TextField
                 label="Data de início"
                 type="date"
@@ -1530,6 +1560,7 @@ function EventDetails() {
                       <TableCell>Documento</TableCell>
                       <TableCell>Quantidade</TableCell>
                       <TableCell>Valor</TableCell>
+                      <TableCell align="center">Cupom</TableCell>
                       <TableCell>Forma de Pagamento</TableCell>
                       <TableCell>Parcelas</TableCell>
                       <TableCell>Data</TableCell>
@@ -1548,6 +1579,13 @@ function EventDetails() {
                         <TableCell>{getBuyerDocument(inscricao)}</TableCell>
                         <TableCell>{inscricao.quantity}</TableCell>
                         <TableCell>{formatarPreco(inscricao.finalPrice)}</TableCell>
+                        <TableCell align="center">
+                          {inscricao.coupon ? (
+                            <Chip label={inscricao.coupon.code} size="small" color="secondary" variant="outlined" />
+                          ) : (
+                            '—'
+                          )}
+                        </TableCell>
                         <TableCell>{renderFormaPagamento(inscricao.paymentMethod)}</TableCell>
                         <TableCell>{getInstallmentsLabel(inscricao)}</TableCell>
                         <TableCell>{formatarDataHora(inscricao.createdAt)}</TableCell>

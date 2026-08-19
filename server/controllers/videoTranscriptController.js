@@ -6,6 +6,7 @@ const transcriptionService = require('../services/transcriptionService');
 const videoTranscriptWorker = require('../services/videoTranscriptWorker');
 const clipSelectionService = require('../services/clipSelectionService');
 const clipRenderService = require('../services/clipRenderService');
+const captionStyleService = require('../services/captionStyleService');
 const clipPublishService = require('../services/clipPublishService');
 const audioStorage = require('../services/audioStorageService');
 const webhookEmitter = require('../services/webhookEmitter');
@@ -634,6 +635,31 @@ async function excluirMidia(req, res) {
   }
 }
 
+async function sugerirEstiloRecorte(req, res) {
+  try {
+    const {
+      clip, plan, provider, model
+    } = await captionStyleService.suggestStylePlan(req.params.clipId);
+    res.status(200).json({
+      clip, plan, provider, model
+    });
+  } catch (err) {
+    console.error('[videoTranscript] Erro ao sugerir estilo da legenda:', err.message);
+    res.status(400).json({ message: err.message });
+  }
+}
+
+async function definirEstiloRecorte(req, res) {
+  try {
+    const raw = req.body && req.body.plan !== undefined ? req.body.plan : req.body;
+    const clip = await captionStyleService.setStylePlan(req.params.clipId, raw);
+    res.status(200).json(clip);
+  } catch (err) {
+    console.error('[videoTranscript] Erro ao definir estilo da legenda:', err.message);
+    res.status(400).json({ message: err.message });
+  }
+}
+
 async function previewRecorteFrames(req, res) {
   try {
     const result = await clipRenderService.generatePreviewFrames(req.params.clipId, {
@@ -775,6 +801,8 @@ module.exports = {
   aprovarRecorte,
   descartarRecorte,
   renderizarRecorte,
+  sugerirEstiloRecorte,
+  definirEstiloRecorte,
   previewRecorteFrames,
   servirRecorte,
   publicarRecorte,

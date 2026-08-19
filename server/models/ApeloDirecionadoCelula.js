@@ -117,6 +117,12 @@ module.exports = (sequelize) => {
       type: DataTypes.UUID,
       allowNull: true
     },
+    // Quantas vezes a pessoa procurou o Start (1 = cadastro inicial; incrementa a cada recadastro).
+    total_buscas: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 1
+    },
     createdAt: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW

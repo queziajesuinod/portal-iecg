@@ -521,7 +521,7 @@ async function direcionamentos(filtros = {}) {
 
   const apelos = await ApeloDirecionadoCelula.findAll({
     where,
-    attributes: ['id', 'status', 'decisao', 'celula_id', 'celula_casal', 'rede', 'campus_iecg', 'createdAt'],
+    attributes: ['id', 'status', 'decisao', 'celula_id', 'celula_casal', 'rede', 'campus_iecg', 'createdAt', 'total_buscas'],
   });
 
   const porStatus = {};
@@ -537,10 +537,16 @@ async function direcionamentos(filtros = {}) {
   let buscaramEConsolidados = 0;
   let aceitaramJesus = 0;
   let voltaram = 0;
+  let procuraramMaisDeUmaVez = 0;
+  let totalBuscas = 0;
 
   apelos.forEach((a) => {
     const st = a.status || 'APELO_CADASTRADO';
     porStatus[st] = (porStatus[st] || 0) + 1;
+
+    const buscas = Number(a.total_buscas) || 1;
+    totalBuscas += buscas;
+    if (buscas > 1) procuraramMaisDeUmaVez += 1;
 
     const dec = a.decisao || 'sem_decisao';
     porDecisao[dec] = (porDecisao[dec] || 0) + 1;
@@ -598,6 +604,8 @@ async function direcionamentos(filtros = {}) {
       taxaConsolidacaoGeral,
       aceitaramJesus,
       voltaram,
+      procuraramMaisDeUmaVez,
+      totalBuscas,
     },
     porStatus: toDistribution(porStatus, {
       labels: DIRECIONAMENTO_STATUS_LABELS,
