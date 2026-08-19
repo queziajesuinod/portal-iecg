@@ -68,8 +68,17 @@ import {
   duplicarEvento,
   atualizarEvento
 } from '../../../api/eventsApi';
-import { EVENT_TYPE_LABELS } from '../../../constants/eventTypes';
+import { EVENT_TYPE_LABELS, EVENT_TYPE_OPTIONS } from '../../../constants/eventTypes';
 import { queryKeys } from '../../../utils/queryKeys';
+
+// Evento finalizado = já passou. Sem flag no banco: derivado das datas (mesma
+// regra do backend buildUnfinishedEventWhere — endDate, ou startDate se não houver fim).
+function eventoFinalizado(evento) {
+  const now = new Date();
+  if (evento.endDate) return new Date(evento.endDate) < now;
+  if (evento.startDate) return new Date(evento.startDate) < now;
+  return false;
+}
 
 function EventList() {
   const { confirm, ConfirmDialog } = useConfirm();
@@ -79,6 +88,7 @@ function EventList() {
   const [filtros, setFiltros] = useState({
     busca: '',
     status: 'todos',
+    tipo: 'todos',
     finalizados: false
   });
   const [expandedEvents, setExpandedEvents] = useState({});
@@ -203,6 +213,10 @@ function EventList() {
       resultado = resultado.filter((evento) => (filtros.status === 'ativos' ? evento.isActive : !evento.isActive));
     }
 
+    if (filtros.tipo !== 'todos') {
+      resultado = resultado.filter((evento) => evento.eventType === filtros.tipo);
+    }
+
     if (!filtros.finalizados) {
       const now = new Date();
       resultado = resultado.filter((evento) => !evento.endDate || new Date(evento.endDate) >= now);
@@ -217,10 +231,13 @@ function EventList() {
 
   const activeFilterCount = (filtros.busca ? 1 : 0)
     + (filtros.status !== 'todos' ? 1 : 0)
+    + (filtros.tipo !== 'todos' ? 1 : 0)
     + (filtros.finalizados ? 1 : 0);
 
   const clearFilters = () => {
-    setFiltros({ busca: '', status: 'todos', finalizados: false });
+    setFiltros({
+      busca: '', status: 'todos', tipo: 'todos', finalizados: false
+    });
   };
 
   const handleDeletar = async (id, titulo) => {
@@ -468,7 +485,7 @@ function EventList() {
                     placeholder="Título, descrição ou local"
                   />
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid item xs={12} sm={6} md={2}>
                   <FormControl fullWidth size="small">
                     <InputLabel>Status</InputLabel>
                     <Select
@@ -482,6 +499,21 @@ function EventList() {
                     </Select>
                   </FormControl>
                 </Grid>
+                <Grid item xs={12} sm={6} md={2}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Tipo</InputLabel>
+                    <Select
+                      value={filtros.tipo}
+                      label="Tipo"
+                      onChange={(e) => handleChangeFiltro('tipo', e.target.value)}
+                    >
+                      <MenuItem value="todos">Todos</MenuItem>
+                      {EVENT_TYPE_OPTIONS.map((opt) => (
+                        <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
                 <Grid item xs="auto">
                   <Button
                     variant={filtros.finalizados ? 'contained' : 'outlined'}
@@ -489,7 +521,7 @@ function EventList() {
                     size="small"
                     onClick={() => handleChangeFiltro('finalizados', !filtros.finalizados)}
                   >
-                    {filtros.finalizados ? 'Ocultando futuros' : 'Ver finalizados'}
+                    {filtros.finalizados ? 'Ocultando finalizados' : 'Ver finalizados'}
                   </Button>
                 </Grid>
                 {activeFilterCount > 0 && (
@@ -558,12 +590,28 @@ function EventList() {
                       </TableCell>
                       <TableCell>
                         <Typography variant="subtitle2" style={{ marginBottom: 4 }}>{evento.title}</Typography>
-                        <Chip
-                          label={evento.requiresPayment === false ? 'Gratuito' : 'Pago'}
-                          size="small"
-                          color={evento.requiresPayment === false ? 'success' : 'primary'}
-                          variant={evento.requiresPayment === false ? 'outlined' : 'filled'}
-                        />
+                        <Box display="flex" gap={0.5} flexWrap="wrap" alignItems="center">
+                          <Chip
+                            label={evento.requiresPayment === false ? 'Gratuito' : 'Pago'}
+                            size="small"
+                            color={evento.requiresPayment === false ? 'success' : 'primary'}
+                            variant={evento.requiresPayment === false ? 'outlined' : 'filled'}
+                          />
+                          {eventoFinalizado(evento) && (
+                            <Chip
+                              label="Finalizado"
+                              size="small"
+                              variant="outlined"
+                              sx={{
+                                height: 22,
+                                color: 'text.secondary',
+                                borderColor: 'divider',
+                                bgcolor: 'action.hover',
+                                fontWeight: 500,
+                              }}
+                            />
+                          )}
+                        </Box>
                       </TableCell>
                       <TableCell>{formatarData(evento.startDate)}</TableCell>
                       <TableCell>{evento.location || '-'}</TableCell>
@@ -602,7 +650,7 @@ function EventList() {
                             margin: '12px 0 16px 0', padding: 12, background: '#fafafa', borderRadius: 8
                           }}>
                             <Typography variant="subtitle2" style={{ marginBottom: 10 }}>
-                            Ingressos
+                              Ingressos
                             </Typography>
                             {renderResumoIngressos(evento.id)}
                           </div>

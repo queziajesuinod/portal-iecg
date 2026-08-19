@@ -31,11 +31,48 @@ const YTDLP_COOKIES_FROM_BROWSER = process.env.YTDLP_COOKIES_FROM_BROWSER || '';
 // Formato: http://user:pass@host:porta  ou  socks5://host:porta
 const YTDLP_PROXY = process.env.YTDLP_PROXY || '';
 
+// Verifica se o arquivo de cookies parece um cookies.txt no formato Netscape.
+// Pega os casos comuns de arquivo quebrado: inexistente, vazio, cheio de bytes
+// nulos (escrita/exportacao interrompida) ou sem a cara de Netscape.
+function cookiesFileLooksValid(filePath) {
+  try {
+    const buf = fs.readFileSync(filePath);
+    if (!buf.length) return false;
+    if (buf.every((b) => b === 0)) return false; // arquivo so com \x00 (corrompido)
+    const text = Buffer.from(buf.filter((b) => b !== 0)).toString('utf8').trim();
+    if (!text) return false;
+    const primeiraLinha = text.split(/\r?\n/).find((l) => l.trim());
+    // Netscape: cabecalho comentado (# Netscape/# HTTP Cookie File) ou linhas dominio<TAB>...
+    return Boolean(primeiraLinha) && (primeiraLinha.startsWith('#') || primeiraLinha.includes('\t'));
+  } catch {
+    return false;
+  }
+}
+
+let cookiesWarned = false;
+let cookiesFileValidCache = null;
+function cookiesFileValido() {
+  if (cookiesFileValidCache === null) {
+    cookiesFileValidCache = cookiesFileLooksValid(YTDLP_COOKIES_FILE);
+    if (!cookiesFileValidCache && !cookiesWarned) {
+      cookiesWarned = true;
+      const fallback = YTDLP_COOKIES_FROM_BROWSER
+        ? ` Usando cookies do navegador (${YTDLP_COOKIES_FROM_BROWSER}) como fallback.`
+        : ' Downloads podem falhar no anti-bot ate corrigir.';
+      console.warn(`⚠ cookies invalido: ${YTDLP_COOKIES_FILE} nao parece um cookies.txt no formato Netscape (arquivo vazio/corrompido?). Reexporte com a extensao "Get cookies.txt LOCALLY" no youtube.com logado.${fallback}`);
+    }
+  }
+  return cookiesFileValidCache;
+}
+
 // Opcoes de rede/autenticacao aplicadas a cada download do yt-dlp.
 function cookieOptions() {
   const opts = {};
-  if (YTDLP_COOKIES_FILE) opts.cookies = YTDLP_COOKIES_FILE;
-  else if (YTDLP_COOKIES_FROM_BROWSER) opts.cookiesFromBrowser = YTDLP_COOKIES_FROM_BROWSER;
+  if (YTDLP_COOKIES_FILE && cookiesFileValido()) {
+    opts.cookies = YTDLP_COOKIES_FILE;
+  } else if (YTDLP_COOKIES_FROM_BROWSER) {
+    opts.cookiesFromBrowser = YTDLP_COOKIES_FROM_BROWSER;
+  }
   if (YTDLP_PROXY) opts.proxy = YTDLP_PROXY;
   return opts;
 }
