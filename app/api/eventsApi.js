@@ -31,6 +31,7 @@ export const listarEventos = (params = {}) => {
 
 export const listarEstatisticas = () => fetchWithAuth(`${API_URL}/api/admin/events/stats`);
 export const listarResumoIngressosEvento = (eventId) => fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/tickets-summary`);
+export const obterEstatisticasInscricoesEvento = (eventId) => fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/registration-stats`);
 
 export const buscarEvento = (id) => fetchWithAuth(`${API_URL}/api/admin/events/${id}`);
 

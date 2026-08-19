@@ -78,7 +78,8 @@ import {
   cancelarInscricao,
   obterInfoCancelamentoInscricao,
   reenviarTicket,
-  listarCupons
+  listarCupons,
+  obterEstatisticasInscricoesEvento
 } from '../../../api/eventsApi';
 import { EVENT_TYPE_LABELS } from '../../../constants/eventTypes';
 import { getPaymentStatusChipSx, getPaymentStatusLabel } from '../../../constants/paymentStatus';
@@ -143,6 +144,16 @@ function EventDetails() {
   });
   const evento = eventoQuery.data || null;
   const loading = eventoQuery.isLoading;
+
+  // Estatísticas de inscrições (inclui o valor líquido, mais pesado) — carregadas
+  // separadamente para não atrasar o primeiro paint do detalhe do evento.
+  const statsQuery = useQuery({
+    queryKey: queryKeys.events.registrationStats(id),
+    queryFn: () => obterEstatisticasInscricoesEvento(id),
+    enabled: Boolean(id),
+  });
+  const registrationStats = statsQuery.data || null;
+  const statsLoading = statsQuery.isLoading;
 
   const lotesQuery = useQuery({
     queryKey: queryKeys.events.batches(id),
@@ -213,7 +224,10 @@ function EventDetails() {
   const confirmedAttendeesLoading = confirmedQuery.isFetching;
 
   // Helpers de invalidacao usados pelas mutations (mantem nomes das funcoes antigas).
-  const carregarDados = () => queryClient.invalidateQueries({ queryKey: queryKeys.events.detail(id) });
+  const carregarDados = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.events.detail(id) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.events.registrationStats(id) });
+  };
   const carregarLotes = () => queryClient.invalidateQueries({ queryKey: queryKeys.events.batches(id) });
   const carregarFormas = () => queryClient.invalidateQueries({ queryKey: queryKeys.events.paymentOptions(id) });
   const carregarInscricoes = () => queryClient.invalidateQueries({ queryKey: ['events', 'registrations', id] });
@@ -1027,7 +1041,7 @@ function EventDetails() {
 
   const title = brand.name + ' - ' + (evento?.title || 'Evento');
   const headerSkeleton = loading || !evento;
-  const resumoInscricoes = evento?.registrationStats || {};
+  const resumoInscricoes = registrationStats || evento?.registrationStats || {};
   const totalInscritos = resumoInscricoes.confirmedCount ?? 0;
   const totalValorConfirmado = resumoInscricoes.confirmedTotalValue ?? 0;
   const negadoCancelado = resumoInscricoes.deniedCancelled ?? 0;
@@ -1215,7 +1229,7 @@ function EventDetails() {
 
         <Card style={{ marginTop: 16, padding: 16 }} variant="outlined">
           <Grid container spacing={1} alignItems="center" justifyContent="space-between">
-            {headerSkeleton ? skeletonKpiCards : kpiItems.map((item) => (
+            {(headerSkeleton || statsLoading || !registrationStats) ? skeletonKpiCards : kpiItems.map((item) => (
               <Grid item key={item.label} style={{ flexGrow: 1 }}>
                 <Card
                   variant="outlined"
@@ -1668,13 +1682,11 @@ function EventDetails() {
                   onChange={(event) => handleConfirmedFilterChange('lote', event.target.value)}
                 >
                   <MenuItem value="">Todos</MenuItem>
-                  {lotes
-                    .filter((lote) => lote.isActive)
-                    .map((lote) => (
-                      <MenuItem key={lote.id} value={lote.name}>
-                        {lote.name}
-                      </MenuItem>
-                    ))}
+                  {lotes.map((lote) => (
+                    <MenuItem key={lote.id} value={lote.name}>
+                      {lote.name}{!lote.isActive && ' (inativo)'}
+                    </MenuItem>
+                  ))}
                 </Select>
               </FormControl>
             </Grid>

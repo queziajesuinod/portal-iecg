@@ -80,6 +80,7 @@ router.post('/:eventId/payment-options', paymentOptionController.criar);
 router.get('/:eventId/registrations', registrationController.listarPorEvento);
 router.get('/:eventId/registration-attendees/confirmed', registrationController.listarInscritosConfirmadosPorEvento);
 router.get('/:eventId/tickets-summary', eventController.resumoIngressos);
+router.get('/:eventId/registration-stats', eventController.estatisticasInscricoes);
 
 // ============= HOSPEDAGEM =============
 router.get('/:eventId/housing/config', housingController.getConfig);
