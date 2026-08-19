@@ -18,17 +18,26 @@ function envNum(name, def) {
   return Number.isFinite(v) && v > 0 ? v : def;
 }
 
-// Reenquadramento estilo AutoFlip: a camera fica TRAVADA e so se move em pans
-// suaves (velocidade/aceleracao limitadas) quando o rosto sai da zona segura.
-// Os 3 parametros de pan sao tunaveis por env (ver tabela no README/.env.example).
-const GRID_STEP = 0.1; // s entre keyframes de crop (grade fina -> pan continuo)
-const MEDIAN_WIN = 7; // janela impar do filtro de mediana (rejeita deteccoes outliers)
-// Zona morta: rosto pode variar +-18% da largura do crop antes da camera mover.
-const SAFE_ZONE_FRAC = envNum('CLIP_SAFE_ZONE_FRAC', 0.18);
-// Teto de velocidade do pan (fracao da largura do crop / s).
-const MAX_PAN_VEL_FRAC = envNum('CLIP_MAX_PAN_VEL_FRAC', 0.33);
-// Teto de aceleracao do pan (fracao da largura do crop / s^2).
-const MAX_PAN_ACCEL_FRAC = envNum('CLIP_MAX_PAN_ACCEL_FRAC', 1.1);
+// Reenquadramento com camera "operada a mao": ela persegue o rosto de forma
+// CONTINUA e suave, com uma mola criticamente amortecida (sem overshoot, sem
+// start-stop). O segredo do resultado fluido e (1) grade FINA de keyframes
+// (~30 Hz) para o sendcmd nao dar teletransportes visiveis e (2) um seguidor
+// continuo no lugar do antigo "trava-e-salta". Tunavel por env (ver .env.example).
+const CAM_FPS = envNum('CLIP_CAM_FPS', 30); // Hz da grade do caminho de camera (keyframes finos)
+const GRID_STEP = 1 / CAM_FPS; // s entre keyframes de crop (grade fina -> pan continuo)
+// Janela do filtro de mediana ~0.7s (rejeita deteccoes outliers sem borrar o sinal).
+const MEDIAN_WIN = (() => {
+  const w = Math.round(0.7 / GRID_STEP);
+  return w % 2 === 0 ? w + 1 : w;
+})();
+// Frequencia de corte (Hz) do seguidor: MENOR = mais suave/preguicoso, MAIOR = mais
+// grudado no rosto. ~0.45 Hz da um movimento BEM leve, que desliza sem pressa.
+const SMOOTH_CUTOFF_HZ = envNum('CLIP_SMOOTH_CUTOFF_HZ', 0.45);
+// Zona morta: micro-movimentos do rosto dentro de +-X da largura do crop nao movem a
+// camera (evita "respiracao" nervosa). MAIOR = camera mais parada.
+const SAFE_ZONE_FRAC = envNum('CLIP_SAFE_ZONE_FRAC', 0.1);
+// Teto de velocidade do pan (fracao da largura do crop / s) -> mantem o pan lento e leve.
+const MAX_PAN_VEL_FRAC = envNum('CLIP_MAX_PAN_VEL_FRAC', 0.28);
 const STATIC_RANGE_FRAC = 0.02; // se a camera anda menos que isso no clipe todo -> crop estatico
 const FACE_SAMPLE_FPS = envNum('FACE_TRACK_SAMPLE_FPS', 10); // amostragem da deteccao (Hz)
 // Enquadramento: por padrao a camera fica FIXA no orador (zero movimento). Para seguir
@@ -111,9 +120,9 @@ function medianFilter(arr, win) {
   });
 }
 
-// Interpola as amostras do centro do rosto sobre uma grade regular e remove picos
-// isolados (mediana). NAO suaviza o movimento aqui -> quem faz isso e o caminho de
-// camera (computeRestTargets + followTargets), no estilo AutoFlip.
+// Interpola as amostras do centro do rosto sobre a grade fina e remove picos isolados
+// (mediana). NAO suaviza o movimento aqui -> quem da o ease e o seguidor de camera
+// (smoothCamera), que trabalha sobre este sinal ja limpo de outliers.
 function buildFocusTrack(samples, srcW, duration) {
   const valid = (samples || [])
     .filter((s) => Number.isFinite(s.t) && Number.isFinite(s.cx))
@@ -141,56 +150,32 @@ function buildFocusTrack(samples, srcW, duration) {
   return times.map((t, i) => ({ t, cxPx: clean[i] }));
 }
 
-// Passo 1 do AutoFlip: segmenta o tempo em trechos onde uma camera PARADA mantem o
-// rosto dentro da zona segura (+-radius). Cada trecho vira uma "tomada travada" e o
-// alvo de repouso e o centro do trecho (folga maxima nas duas bordas).
-function computeRestTargets(focusPx, radius) {
-  const n = focusPx.length;
-  const rest = new Array(n);
-  let i = 0;
-  while (i < n) {
-    let lo = focusPx[i];
-    let hi = focusPx[i];
-    let j = i;
-    while (j < n) {
-      const nlo = Math.min(lo, focusPx[j]);
-      const nhi = Math.max(hi, focusPx[j]);
-      if (nhi - nlo > 2 * radius) break; // camera parada nao conteria mais o rosto
-      lo = nlo; hi = nhi; j += 1;
-    }
-    const center = (lo + hi) / 2;
-    for (let k = i; k < j; k += 1) rest[k] = center;
-    i = j;
-  }
-  return rest;
-}
-
-// Passo 2 do AutoFlip: segue o alvo de repouso com velocidade e aceleracao limitadas
-// (perfil trapezoidal). Como o alvo e constante por trecho, cada mudanca vira UM pan
-// suave -> sem o micro-tremor do modelo reativo.
-function followTargets(targets, cropW) {
+// Seguidor continuo criticamente amortecido (mola sem overshoot). A camera persegue
+// o centro do rosto o tempo todo, com ease natural de partida e chegada -> em vez do
+// antigo "trava-e-salta" (start-stop), o movimento e fluido como uma camera na mao.
+//
+//   x'' = w^2 (alvo - x) - 2w x'      (w = 2*pi*fc; fc = frequencia de corte)
+//
+// Uma zona morta suave ignora o micro-jitter do rosto (rosto parado -> camera parada),
+// e um teto de velocidade evita solavancos em saltos grandes de deteccao. Roda na
+// grade fina (~30 Hz) para o pan sair continuo, nao em degraus.
+function smoothCamera(focusPx, cropW) {
   const dt = GRID_STEP;
+  const omega = 2 * Math.PI * SMOOTH_CUTOFF_HZ;
   const vMax = cropW * MAX_PAN_VEL_FRAC;
-  const aMax = cropW * MAX_PAN_ACCEL_FRAC;
-  let cc = targets[0];
+  const dead = cropW * SAFE_ZONE_FRAC;
+  let x = focusPx[0];
   let v = 0;
-  return targets.map((target) => {
-    const err = target - cc;
-    const dir = Math.sign(err);
-    const stopDist = (v * v) / (2 * aMax); // distancia p/ frear a partir da velocidade atual
-    let a;
-    if (Math.abs(err) <= 0.5 && Math.abs(v) <= aMax * dt) {
-      v = 0; a = 0; // repouso: trava a camera
-    } else if (v !== 0 && Math.sign(v) !== dir) {
-      a = -Math.sign(v) * aMax; // indo pro lado errado -> freia
-    } else if (Math.abs(err) > stopDist) {
-      a = dir * aMax; // acelera em direcao ao alvo
-    } else {
-      a = -Math.sign(v) * aMax; // ja da pra parar no alvo -> desacelera
-    }
+  return focusPx.map((target) => {
+    let err = target - x;
+    // Zona morta: dentro de +-dead nao ha erro (camera fica quieta). Fora dela, o alvo
+    // e o proprio rosto (subtraimos 'dead' para a transicao entrar sem tranco).
+    if (Math.abs(err) <= dead) err = 0;
+    else err -= Math.sign(err) * dead;
+    const a = omega * omega * err - 2 * omega * v; // mola criticamente amortecida
     v = Math.max(-vMax, Math.min(vMax, v + a * dt));
-    cc += v * dt;
-    return cc;
+    x += v * dt;
+    return x;
   });
 }
 
@@ -242,10 +227,8 @@ function buildCropPlan(meta, samples, duration) {
     };
   }
 
-  // Caminho de camera: alvos de repouso (travados) -> perseguicao suave.
-  const radius = cropW * SAFE_ZONE_FRAC;
-  const rest = computeRestTargets(focus.map((f) => f.cxPx), radius);
-  const camCenter = followTargets(rest, cropW);
+  // Caminho de camera: perseguicao continua e suave (mola criticamente amortecida).
+  const camCenter = smoothCamera(focus.map((f) => f.cxPx), cropW);
 
   // Centro da camera -> x (canto esquerdo do crop), dentro dos limites.
   const xs = camCenter.map((cc) => Math.max(0, Math.min(maxX, Math.round(cc - cropW / 2))));
