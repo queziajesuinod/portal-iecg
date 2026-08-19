@@ -30,14 +30,22 @@ const MEDIAN_WIN = (() => {
   const w = Math.round(0.7 / GRID_STEP);
   return w % 2 === 0 ? w + 1 : w;
 })();
-// Frequencia de corte (Hz) do seguidor: MENOR = mais suave/preguicoso, MAIOR = mais
-// grudado no rosto. ~0.45 Hz da um movimento BEM leve, que desliza sem pressa.
+// Frequencia de corte (Hz) do seguidor no CENTRO: MENOR = mais leve/preguicoso.
+// ~0.45 Hz da um deslize sem pressa quando o rosto esta bem enquadrado.
 const SMOOTH_CUTOFF_HZ = envNum('CLIP_SMOOTH_CUTOFF_HZ', 0.45);
+// Quanto a mola ENRIJECE quando o rosto se aproxima da borda (multiplicador da rigidez).
+// Mantem o movimento leve no centro mas ALCANCA rapido nos movimentos grandes -> nunca
+// deixa a pessoa fugir do quadro. MAIOR = catch-up mais agressivo.
+const SMOOTH_CATCHUP = envNum('CLIP_SMOOTH_CATCHUP', 5);
+// Margem de seguranca: fracao da largura do crop que fica de folga entre o rosto e a
+// borda. O rosto NUNCA passa disso (trava dura). MAIOR = rosto mais centralizado.
+const FRAME_MARGIN_FRAC = envNum('CLIP_FRAME_MARGIN_FRAC', 0.14);
 // Zona morta: micro-movimentos do rosto dentro de +-X da largura do crop nao movem a
 // camera (evita "respiracao" nervosa). MAIOR = camera mais parada.
 const SAFE_ZONE_FRAC = envNum('CLIP_SAFE_ZONE_FRAC', 0.1);
-// Teto de velocidade do pan (fracao da largura do crop / s) -> mantem o pan lento e leve.
-const MAX_PAN_VEL_FRAC = envNum('CLIP_MAX_PAN_VEL_FRAC', 0.28);
+// Teto de velocidade do pan (fracao da largura do crop / s) -> trava de seguranca (raramente
+// atingida; a leveza vem do cutoff, nao daqui). Alto o bastante p/ nao perder o rosto.
+const MAX_PAN_VEL_FRAC = envNum('CLIP_MAX_PAN_VEL_FRAC', 1);
 const STATIC_RANGE_FRAC = 0.02; // se a camera anda menos que isso no clipe todo -> crop estatico
 const FACE_SAMPLE_FPS = envNum('FACE_TRACK_SAMPLE_FPS', 10); // amostragem da deteccao (Hz)
 // Enquadramento: por padrao a camera fica FIXA no orador (zero movimento). Para seguir
@@ -150,31 +158,41 @@ function buildFocusTrack(samples, srcW, duration) {
   return times.map((t, i) => ({ t, cxPx: clean[i] }));
 }
 
-// Seguidor continuo criticamente amortecido (mola sem overshoot). A camera persegue
-// o centro do rosto o tempo todo, com ease natural de partida e chegada -> em vez do
-// antigo "trava-e-salta" (start-stop), o movimento e fluido como uma camera na mao.
+// Seguidor continuo criticamente amortecido (mola sem overshoot) com rigidez ADAPTATIVA
+// e trava de enquadramento. A camera persegue o rosto com ease natural; a rigidez e
+// baixa perto do centro (movimento leve) e sobe conforme o rosto se aproxima da borda
+// (alcanca rapido) -> leve quando calmo, firme quando a pessoa se move. Uma trava dura
+// garante que o rosto NUNCA saia da margem segura: impossivel perder a pessoa.
 //
-//   x'' = w^2 (alvo - x) - 2w x'      (w = 2*pi*fc; fc = frequencia de corte)
+//   x'' = w^2 (alvo - x) - 2w x'   (w cresce com a "urgencia" = quao perto da borda)
 //
-// Uma zona morta suave ignora o micro-jitter do rosto (rosto parado -> camera parada),
-// e um teto de velocidade evita solavancos em saltos grandes de deteccao. Roda na
-// grade fina (~30 Hz) para o pan sair continuo, nao em degraus.
+// Roda na grade fina (~30 Hz) para o pan sair continuo, nao em degraus.
 function smoothCamera(focusPx, cropW) {
   const dt = GRID_STEP;
-  const omega = 2 * Math.PI * SMOOTH_CUTOFF_HZ;
+  const omega0 = 2 * Math.PI * SMOOTH_CUTOFF_HZ;
   const vMax = cropW * MAX_PAN_VEL_FRAC;
   const dead = cropW * SAFE_ZONE_FRAC;
+  // Deslocamento maximo permitido entre o rosto e o centro do crop (deixa a margem de folga).
+  const leash = cropW * Math.max(0.05, 0.5 - FRAME_MARGIN_FRAC);
   let x = focusPx[0];
   let v = 0;
-  return focusPx.map((target) => {
-    let err = target - x;
-    // Zona morta: dentro de +-dead nao ha erro (camera fica quieta). Fora dela, o alvo
-    // e o proprio rosto (subtraimos 'dead' para a transicao entrar sem tranco).
-    if (Math.abs(err) <= dead) err = 0;
-    else err -= Math.sign(err) * dead;
-    const a = omega * omega * err - 2 * omega * v; // mola criticamente amortecida
+  return focusPx.map((face) => {
+    const raw = face - x;
+    const urgency = Math.min(1, Math.abs(raw) / leash); // 0 no centro, 1 na borda segura
+    // Zona morta so vale quando esta calmo; perto da borda ela some (nao pode ignorar o rosto).
+    let err = raw;
+    if (Math.abs(raw) <= dead && urgency < 0.9) err = 0;
+    else if (err !== 0) err -= Math.sign(err) * Math.min(dead, Math.abs(err));
+    // Rigidez adaptativa: leve no centro, firme perto da borda (cresce com urgency^2).
+    const omega = omega0 * (1 + (SMOOTH_CATCHUP - 1) * urgency * urgency);
+    const a = omega * omega * err - 2 * omega * v; // criticamente amortecido na rigidez atual
     v = Math.max(-vMax, Math.min(vMax, v + a * dt));
+    const prev = x;
     x += v * dt;
+    // Trava dura: o rosto nunca ultrapassa a margem segura.
+    if (x < face - leash) x = face - leash;
+    else if (x > face + leash) x = face + leash;
+    v = (x - prev) / dt; // mantem v coerente com o movimento real (evita windup na trava)
     return x;
   });
 }
