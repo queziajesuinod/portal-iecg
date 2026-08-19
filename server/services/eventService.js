@@ -139,6 +139,8 @@ async function _listarEventosUncached(includeFinished) {
         'requiresPayment',
         'maxRegistrations',
         'createdAt',
+        'location',
+        'eventType',
       ],
       include: [
         {
