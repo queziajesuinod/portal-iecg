@@ -85,6 +85,11 @@ async function callGemini(systemPrompt, userMessage, maxTokens) {
   const candidate = data?.candidates?.[0];
   const text = candidate?.content?.parts?.map((p) => p.text).join('') || '';
   if (!text) throw new Error(`Gemini retornou vazio (finishReason: ${candidate?.finishReason || 'desconhecido'})`);
+  // JSON truncado por estourar o teto de tokens: o parse quebraria com um erro
+  // criptico ("Expected ',' or '}'..."). Melhor falhar aqui com causa clara.
+  if (candidate?.finishReason === 'MAX_TOKENS') {
+    throw new Error('Gemini truncou a resposta (MAX_TOKENS) — aumente maxTokens do chamador');
+  }
   return { parsed: extractJson(text), model };
 }
 
