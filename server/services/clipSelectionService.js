@@ -157,7 +157,10 @@ async function suggestClips(youtubeVideoId, options = {}) {
   const systemPrompt = buildSystemPrompt(promptCfg);
   const userMessage = buildUserMessage(video.title, segments, blockedRanges);
 
-  const { data, provider, model } = await llmChain.chatJson(systemPrompt, userMessage, { maxTokens: 1500 });
+  // Teto generoso: cada recorte gasta ~150 tokens (titulo+legenda+motivo em PT) e
+  // pedimos ate maxClips. 1500 truncava o JSON no meio (MAX_TOKENS) e o parse quebrava.
+  const clipTokens = Number(process.env.CLIP_LLM_MAX_TOKENS || 4096);
+  const { data, provider, model } = await llmChain.chatJson(systemPrompt, userMessage, { maxTokens: clipTokens });
   const clips = normalizeClips(data?.clips, segments, promptCfg, blockedRanges);
 
   if (!clips.length) {
