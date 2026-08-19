@@ -269,6 +269,10 @@ async function buscarEventoPorId(id) {
   // order no nível superior para ordenar relacionamentos
   // Ganho estimado: 30-50% de redução no tempo de query
   // ============================================
+  // IMPORTANTE: batches e formFields usam `separate: true` (uma query por relação).
+  // Um JOIN único (separate:false) faz o produto cartesiano batches × formFields e
+  // duplica a coluna JSONB pesada `formFields.options` por lote — medido em ~22s
+  // contra ~0,3s com queries separadas. Cada `separate` ordena internamente.
   const event = await Event.findByPk(id, {
     include: [
       {
@@ -290,7 +294,8 @@ async function buscarEventoPorId(id) {
           'order',
         ],
         required: false,
-        separate: false, // Força JOIN ao invés de query separada
+        separate: true,
+        order: [['order', 'ASC']],
       },
       {
         model: FormField,
@@ -307,13 +312,9 @@ async function buscarEventoPorId(id) {
           'section',
         ],
         required: false,
-        separate: false, // Força JOIN ao invés de query separada
+        separate: true,
+        order: [['order', 'ASC']],
       },
-    ],
-    // Ordenação correta no nível superior
-    order: [
-      [{ model: EventBatch, as: 'batches' }, 'order', 'ASC'],
-      [{ model: FormField, as: 'formFields' }, 'order', 'ASC'],
     ],
   });
 
@@ -321,9 +322,9 @@ async function buscarEventoPorId(id) {
     throw new Error('Evento não encontrado');
   }
 
-  const stats = await obterResumoInscricoesPorEvento(id);
-  event.setDataValue('registrationStats', stats);
-
+  // As estatísticas de inscrições (que incluem o cálculo de valor líquido, mais pesado)
+  // são servidas por um endpoint dedicado (/registration-stats) e carregadas de forma
+  // assíncrona no detalhe, para não atrasar o primeiro paint da tela.
   return event;
 }
 
@@ -955,5 +956,6 @@ module.exports = {
   obterEstatisticasGerais,
   buildUnfinishedEventWhere,
   obterResumoIngressosPorEvento,
+  obterResumoInscricoesPorEvento,
   duplicarEvento,
 };

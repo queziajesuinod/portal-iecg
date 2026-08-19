@@ -21,6 +21,16 @@ async function estatisticas(req, res) {
   }
 }
 
+async function estatisticasInscricoes(req, res) {
+  try {
+    const stats = await eventService.obterResumoInscricoesPorEvento(req.params.eventId);
+    res.status(200).json(stats);
+  } catch (err) {
+    console.error('Erro ao obter estatísticas de inscrições:', err);
+    res.status(500).json({ message: 'Erro ao obter estatísticas de inscrições' });
+  }
+}
+
 async function resumoIngressos(req, res) {
   try {
     const summary = await eventService.obterResumoIngressosPorEvento(req.params.eventId);
@@ -115,6 +125,7 @@ module.exports = {
   listarPublicos,
   buscarPublicoPorId,
   estatisticas,
+  estatisticasInscricoes,
   resumoIngressos,
   duplicar
 };

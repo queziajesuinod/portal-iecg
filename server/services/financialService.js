@@ -1176,16 +1176,17 @@ async function computeEventTicketNet(eventId) {
   });
 
   const confirmedRegistrationIds = new Set(paymentsForSummary.map((p) => p.registrationId));
-  const registrationsWithoutPayment = await Registration.findAll({
+  // Busca todas as inscrições confirmed/partial do evento (query indexada por eventId+status)
+  // e exclui em memória as que já têm pagamento confirmado — evita um NOT IN com milhares de UUIDs.
+  const confirmedRegistrations = await Registration.findAll({
     where: {
       eventId,
-      paymentStatus: { [Op.in]: ['confirmed', 'partial'] },
-      ...(confirmedRegistrationIds.size
-        ? { id: { [Op.notIn]: [...confirmedRegistrationIds] } }
-        : {})
+      paymentStatus: { [Op.in]: ['confirmed', 'partial'] }
     },
     attributes: ['id', 'finalPrice']
   });
+  const registrationsWithoutPayment = confirmedRegistrations
+    .filter((reg) => !confirmedRegistrationIds.has(reg.id));
 
   let ticketGross = 0;
   let processorFees = 0;
