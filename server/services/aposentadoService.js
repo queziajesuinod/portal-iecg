@@ -1,19 +1,17 @@
-const { Aposentado, User, Member, sequelize } = require('../models');
 const crypto = require('crypto');
 const { Op } = require('sequelize');
+const {
+  Aposentado, User, Member, sequelize
+} = require('../models');
+const { hashPassword } = require('./passwordService');
 
 function gerarUsernamePorNome(nomeCompleto) {
   if (!nomeCompleto) return null;
-  const removerAcentos = (str) =>
-    str.normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const removerAcentos = (str) => str.normalize('NFD').replace(/[̀-ͯ]/g, '');
   const partes = removerAcentos(nomeCompleto.trim().toLowerCase()).split(/\s+/);
   const primeiro = partes[0];
   const ultimo = partes.length > 1 ? partes[partes.length - 1] : '';
   return `${primeiro}.${ultimo}`;
-}
-
-function hashSHA256WithSalt(password, salt) {
-  return crypto.createHmac('sha256', salt).update(password).digest('hex');
 }
 
 // Converte string vazia em null para campos opcionais
@@ -83,7 +81,7 @@ class AposentadoService {
       });
 
       const salt = crypto.randomBytes(16).toString('hex');
-      const passwordHash = hashSHA256WithSalt(cpfLimpo || 'senha123', salt);
+      const passwordHash = await hashPassword(cpfLimpo || 'senha123');
 
       const dadosUser = {
         name: dados.name,
@@ -177,7 +175,6 @@ class AposentadoService {
 
       await t.commit();
       return aposentado;
-
     } catch (error) {
       if (!t.finished) await t.rollback();
       throw new Error('Erro ao atualizar aposentado: ' + error.message);
@@ -261,7 +258,7 @@ class AposentadoService {
     const memberFields = member ? mapMemberToUserFields(member) : {};
 
     // Monta resultado: User tem prioridade, Member complementa o que está vazio
-    const pick = (userVal, memberVal) => (userVal !== null && userVal !== undefined && userVal !== '') ? userVal : (memberVal || null);
+    const pick = (userVal, memberVal) => ((userVal !== null && userVal !== undefined && userVal !== '') ? userVal : (memberVal || null));
 
     return {
       fonte: member ? 'member' : 'user',

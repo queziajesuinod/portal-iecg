@@ -30,10 +30,15 @@ function _htmlAccount({
   action, name, email, username, telefone, password, loginUrl,
 }) {
   const isCreate = action === 'created';
-  const title = isCreate ? 'Conta criada' : 'Conta atualizada';
+  const isReset = action === 'reset';
+  // eslint-disable-next-line no-nested-ternary
+  const title = isCreate ? 'Conta criada' : (isReset ? 'Senha redefinida' : 'Conta atualizada');
+  // eslint-disable-next-line no-nested-ternary
   const intro = isCreate
     ? `Sua conta no ${PORTAL_NAME} foi criada. Abaixo estão seus dados de acesso à plataforma.`
-    : `Seus dados de acesso ao ${PORTAL_NAME} foram atualizados. Confira as informações abaixo.`;
+    : (isReset
+      ? `Você solicitou a redefinição da sua senha no ${PORTAL_NAME}. Use a senha temporária abaixo para entrar e, em seguida, altere-a no seu perfil.`
+      : `Seus dados de acesso ao ${PORTAL_NAME} foram atualizados. Confira as informações abaixo.`);
 
   const passwordBlock = password
     ? `<tr><td colspan="2" style="padding:16px 0 0;">
@@ -104,9 +109,12 @@ async function sendAccountNotification(action, user, password) {
     }
 
     const loginUrl = resolveLoginUrl();
+    // eslint-disable-next-line no-nested-ternary
     const subject = action === 'created'
       ? `${PORTAL_NAME} - Sua conta foi criada`
-      : `${PORTAL_NAME} - Sua conta foi atualizada`;
+      : (action === 'reset'
+        ? `${PORTAL_NAME} - Redefinição de senha`
+        : `${PORTAL_NAME} - Sua conta foi atualizada`);
 
     const html = _htmlAccount({
       action,
@@ -118,8 +126,12 @@ async function sendAccountNotification(action, user, password) {
       loginUrl,
     });
 
+    const introText = {
+      created: 'Sua conta no Portal IECG foi criada.',
+      reset: 'Você solicitou a redefinição da sua senha no Portal IECG. Use a senha temporária abaixo para entrar e depois altere-a.'
+    }[action] || 'Seus dados de acesso ao Portal IECG foram atualizados.';
     const textLines = [
-      action === 'created' ? 'Sua conta no Portal IECG foi criada.' : 'Seus dados de acesso ao Portal IECG foram atualizados.',
+      introText,
       '',
       user.name ? `Nome: ${user.name}` : '',
       `E-mail: ${user.email}`,
@@ -142,6 +154,15 @@ async function sendAccountNotification(action, user, password) {
   }
 }
 
+/**
+ * Envia o e-mail de redefinição de senha com a senha temporária gerada.
+ * Reaproveita o template de conta (variante 'reset'). Nunca lança.
+ */
+async function sendPasswordResetEmail(user, password) {
+  return sendAccountNotification('reset', user, password);
+}
+
 module.exports = {
   sendAccountNotification,
+  sendPasswordResetEmail,
 };

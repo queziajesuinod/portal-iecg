@@ -32,6 +32,12 @@ const disablePaymentJobs = process.env.DISABLE_PAYMENT_JOBS === 'true';
 // Evita respostas 304 em endpoints de API (alguns browsers tratam como erro de rede em cenários com cache inconsistente)
 app.set('etag', false);
 
+// Traefik está na frente: confia no primeiro proxy para obter o IP real do cliente
+// (necessário para o rate limit funcionar por IP e não agrupar tudo no IP do proxy).
+app.set('trust proxy', 1);
+
+const { loginRateLimiter, publicRateLimiter } = require('./middlewares/rateLimiters');
+
 // Middleware de autenticação JWT (protege as APIs)
 const authMiddleware = (req, res, next) => {
   if (req.path.startsWith('/auth')) return next(); // permite login
@@ -49,6 +55,8 @@ const authMiddleware = (req, res, next) => {
     return res.status(401).json({ message: 'Token inválido.' });
   }
 };
+
+const requirePermission = require('./middlewares/requirePermission');
 
 // CORS
 app.use(cors({
@@ -96,13 +104,14 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
 }));
 
 // ============= ROTAS PÚBLICAS =============
-app.use('/auth', require('./routers/auth'));
+app.use('/auth', loginRateLimiter, require('./routers/auth'));
 app.post('/webhooks/events', WebhookController.sendEvent);
 // Rotas protegidas
 app.use('/users', authMiddleware, require('./routers/users'));
-app.use('/perfil', authMiddleware, require('./routers/perfis'));
-app.use('/permissoes', authMiddleware, require('./routers/permissao'));
-app.use('/mia', authMiddleware, require('./routers/aposentadoRoutes'));
+app.use('/perfil', authMiddleware, requirePermission(['ADMIN_PERFIS']), require('./routers/perfis'));
+app.use('/permissoes', authMiddleware, requirePermission(['ADMIN_PERFIS']), require('./routers/permissao'));
+app.use('/mia', authMiddleware, requirePermission(['MIA_LISTAR', 'MIA_CADASTRAR']), require('./routers/aposentadoRoutes'));
+// /start protege tudo exceto /campus (carve-out feito dentro de startRoutes.js — usado como fallback pelo checkin-app)
 app.use('/start', authMiddleware, require('./routers/startRoutes'));
 app.use('/webhooks', authMiddleware, require('./routers/webhooks'));
 
@@ -116,7 +125,7 @@ app.use('/api/public/checkin', require('./routers/publicCheckInRoutes'));
 // Rotas públicas de Q&A ao vivo (perguntas do público)
 app.use('/api/public/qa', require('./routers/publicLiveQaRoutes'));
 // Rota pública para apelos direcionados
-app.use('/public', require('./routers/publicStartRoutes'));
+app.use('/public', publicRateLimiter, require('./routers/publicStartRoutes'));
 // Rotas públicas de voluntariado (sem autenticação)
 app.use('/api/public/voluntariado', require('./routers/publicVoluntariadoRoutes'));
 // Rotas públicas do Diário de Bordo (sem autenticação)
@@ -129,19 +138,18 @@ app.use('/api/public/videos', require('./routers/publicVideoRoutes'));
 app.use('/api/public/notificacoes', require('./routers/publicNotificacoesRoutes'));
 // Rotas administrativas de eventos (protegidas)
 app.use('/api/admin/events', authMiddleware, require('./routers/eventRoutes'));
-app.use('/api/admin/event-import', authMiddleware, require('./routers/eventImportRoutes'));
+app.use('/api/admin/event-import', authMiddleware, requirePermission(['EVENTS_ACESS', 'EVENTS_ACCESS', 'EVENTOS_LISTAR']), require('./routers/eventImportRoutes'));
 // Rotas administrativas de membros (protegidas)
 app.use('/api/admin/members', authMiddleware, require('./routers/memberRoutes'));
 // Rotas administrativas de check-in (protegidas)
 app.use('/api/admin/checkin', authMiddleware, require('./routers/checkInRoutes'));
 // Rotas administrativas de Q&A ao vivo (protegidas)
 app.use('/api/admin/qa', authMiddleware, require('./routers/liveQaRoutes'));
-const requirePermission = require('./middlewares/requirePermission');
 const requireVideosAdmin = requirePermission(['VIDEOS_ADMIN']);
 // Módulo Bíblia — busca de versículos por instrução (protegido, requer permissão BIBLE)
 app.use('/api/admin/bible', authMiddleware, requirePermission(['BIBLE']), require('./routers/bibleRoutes'));
 // Rotas administrativas de notificações de eventos (protegidas)
-app.use('/api/admin/notifications', authMiddleware, require('./routers/notificationRoutes'));
+app.use('/api/admin/notifications', authMiddleware, requirePermission(['NOTIFICACOES_VIEW']), require('./routers/notificationRoutes'));
 // Módulo de notificações global (grupos, templates, campanhas)
 app.use('/api/admin/notificacoes', authMiddleware, require('./routers/notificacoesRoutes'));
 // Rotas administrativas financeiras (protegidas)
@@ -150,7 +158,7 @@ app.use('/api/admin/diario-bordo', authMiddleware, require('./routers/boardJourn
 app.use('/api/admin/cultos', authMiddleware, require('./routers/cultosRoutes'));
 // Módulo de Relatórios (hub central — agregações read-only)
 app.use('/api/admin/reports', authMiddleware, require('./routers/reportsRoutes'));
-app.use('/api/admin/voluntariado', authMiddleware, require('./routers/voluntariadoRoutes'));
+app.use('/api/admin/voluntariado', authMiddleware, requirePermission(['ADMIN_FULL_ACCESS']), require('./routers/voluntariadoRoutes'));
 // Módulo CFM — Centro de Formação (escolas, turmas, alunos)
 app.use('/api/admin/cfm', authMiddleware, requirePermission(['CFM_ADMIN']), require('./routers/cfmRoutes'));
 app.use('/api/cfm/checkin', authMiddleware, require('./routers/cfmCheckinRoutes'));

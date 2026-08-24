@@ -18,6 +18,7 @@ const {
   CelulaMembroVinculo
 } = require('../models');
 const cache = require('../utils/cache');
+const { hashPassword } = require('./passwordService');
 const { syncUserFromMemberRecord } = require('../utils/memberUserSync');
 const { normalizeCpf } = require('../utils/cpf');
 const { parseLegacyNotes } = require('../utils/memberUserSync');
@@ -95,8 +96,6 @@ const pickLongerString = (currentValue, candidateValue) => {
   if (!current) return next;
   return next.length > current.length ? next : current;
 };
-
-const hashSHA256WithSalt = (password, salt) => crypto.createHmac('sha256', salt).update(password).digest('hex');
 
 const buildUsername = (fullName, email) => {
   if (email && email.includes('@')) {
@@ -914,7 +913,7 @@ class MemberService {
       try {
         const salt = crypto.randomBytes(16).toString('hex');
         const defaultPassword = (payload.cpf || '').replace(/\D/g, '') || crypto.randomBytes(8).toString('hex');
-        const passwordHash = hashSHA256WithSalt(defaultPassword, salt);
+        const passwordHash = await hashPassword(defaultPassword);
 
         const user = await User.create({
           name: payload.fullName,

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import DOMPurify from 'dompurify';
 import PropTypes from 'prop-types';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
@@ -741,7 +742,7 @@ function PaperPreview({
           <Box
             component="div"
             sx={{ fontSize: '0.875rem', color: 'text.secondary' }}
-            dangerouslySetInnerHTML={{ __html: descriptionHtml }}
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(descriptionHtml) }}
           />
         ) : (
           <Typography variant="body2" color="textSecondary">

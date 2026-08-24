@@ -5,12 +5,9 @@ const {
 } = require('../models');
 const CampusMinisterioService = require('./campusMinisterioService');
 const { normalizeCpf } = require('../utils/cpf');
+const { hashPassword } = require('./passwordService');
 
 const DEFAULT_MEMBER_PERFIL_ID = process.env.DEFAULT_MEMBER_PERFIL_ID || '7d47d03a-a7aa-4907-b8b9-8fcf87bd52dc';
-
-function hashSHA256WithSalt(password, salt) {
-  return crypto.createHmac('sha256', salt).update(password).digest('hex');
-}
 
 function sanitizePhone(value) {
   if (!value) return null;
@@ -126,7 +123,7 @@ const PublicVoluntariadoService = {
 
       if (!user) {
         const salt = crypto.randomBytes(16).toString('hex');
-        const passwordHash = hashSHA256WithSalt(senha, salt);
+        const passwordHash = await hashPassword(senha);
         user = await User.create({
           name: fullName,
           email: emailNorm,
@@ -154,7 +151,7 @@ const PublicVoluntariadoService = {
         }, { transaction });
       } else {
         const salt = crypto.randomBytes(16).toString('hex');
-        const passwordHash = hashSHA256WithSalt(senha, salt);
+        const passwordHash = await hashPassword(senha);
         user = await User.create({
           name: fullName,
           email: emailNorm,
@@ -423,7 +420,7 @@ const PublicVoluntariadoService = {
         // Se ainda nao tem usuario, cria agora
         if (!user) {
           const salt = crypto.randomBytes(16).toString('hex');
-          const passwordHash = hashSHA256WithSalt(senha, salt);
+          const passwordHash = await hashPassword(senha);
 
           user = await User.create({
             name: fullName,
@@ -458,7 +455,7 @@ const PublicVoluntariadoService = {
         } else {
           // Cria novo User
           const salt = crypto.randomBytes(16).toString('hex');
-          const passwordHash = hashSHA256WithSalt(senha, salt);
+          const passwordHash = await hashPassword(senha);
 
           user = await User.create({
             name: fullName,

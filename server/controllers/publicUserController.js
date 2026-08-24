@@ -1,6 +1,9 @@
-const { getUserWithSpouse, updateUser, findUserWithSpouseByContact } = require('../services/users');
-const { Member } = require('../models');
+const { getUserWithSpouse, findUserWithSpouseByContact } = require('../services/users');
 
+// ATENÇÃO: esta resposta é servida por rotas PÚBLICAS (sem autenticação). Nunca exponha
+// aqui identificadores sensíveis (CPF, data de nascimento) — são vetores de roubo de
+// identidade e enumeração (LGPD). Campos de endereço permanecem porque o formulário
+// público de atualização de célula depende deles para pré-preencher os dados do líder.
 const buildLeaderResponse = ({ user, spouse }) => ({
   leader: {
     id: user.id,
@@ -10,8 +13,6 @@ const buildLeaderResponse = ({ user, spouse }) => ({
     image: user.image,
     username: user.username,
     perfilId: user.perfilId,
-    data_nascimento: user.data_nascimento,
-    cpf: user.cpf,
     endereco: user.endereco,
     bairro: user.bairro,
     numero: user.numero,
@@ -32,7 +33,6 @@ const buildLeaderResponse = ({ user, spouse }) => ({
       email: spouse.email,
       telefone: spouse.telefone,
       image: spouse.image,
-      cpf: spouse.cpf,
       estado_civil: spouse.estado_civil,
       profissao: spouse.profissao
     }
@@ -72,53 +72,10 @@ class PublicUserController {
   }
 
   async updateLeaderById(req, res) {
-    const allowedFields = ['endereco', 'bairro', 'numero', 'cep', 'telefone', 'escolaridade', 'nome_esposo', 'cpf'];
-    const payload = {};
-    allowedFields.forEach((field) => {
-      if (Object.prototype.hasOwnProperty.call(req.body, field)) {
-        payload[field] = req.body[field];
-      }
-    });
-
-    if (!Object.keys(payload).length) {
-      return res.status(400).json({ message: 'Nenhum campo permitido informado.' });
-    }
-
-    try {
-      // Remove CPF do payload do User antes de atualizar (CPF só existe no Member)
-      const { cpf: cpfRaw, ...userPayload } = payload;
-      const user = await updateUser(req.params.id, userPayload);
-
-      // Salva CPF diretamente no Member vinculado
-      if (cpfRaw) {
-        const normalizedCpf = String(cpfRaw).replace(/\D/g, '');
-        if (normalizedCpf.length === 11) {
-          const member = await Member.findOne({ where: { userId: user.id } });
-          if (member) {
-            await member.update({ cpf: normalizedCpf }, { skipLinkedUserSync: true });
-          }
-        }
-      }
-
-      return res.status(200).json({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        telefone: user.telefone,
-        endereco: user.endereco,
-        bairro: user.bairro,
-        numero: user.numero,
-        cep: user.cep,
-        escolaridade: user.escolaridade,
-        nome_esposo: user.nome_esposo
-      });
-    } catch (error) {
-      console.error('Erro ao atualizar usuário público:', error);
-      const isNotFound = /não encontrado/i.test(error.message);
-      return res.status(isNotFound ? 404 : 500).json({
-        message: isNotFound ? 'Usuário não encontrado' : 'Erro interno do servidor'
-      });
-    }
+    // DESATIVADO: este endpoint permitia edição anônima de qualquer usuário por ID (IDOR de
+    // escrita). Nenhum front-end o utiliza (atualizações de líder passam por
+    // POST /public/celulas/leader). Mantido como 403 para não reintroduzir a falha.
+    return res.status(403).json({ message: 'Operação não permitida.' });
   }
 }
 

@@ -1,7 +1,18 @@
 const express = require('express');
 const memberController = require('../controllers/memberController');
+const requirePermission = require('../middlewares/requirePermission');
 
 const router = express.Router();
+
+// Autorização: as rotas /me* são autosserviço (qualquer usuário autenticado edita o
+// próprio perfil). Todo o resto (listar/ler/editar/apagar membros = PII) exige ADMIN_USUARIOS.
+const requireMembersAdmin = requirePermission(['ADMIN_USUARIOS']);
+router.use((req, res, next) => {
+  if (req.path === '/me' || req.path.startsWith('/me/')) {
+    return next();
+  }
+  return requireMembersAdmin(req, res, next);
+});
 
 router.get('/stats', memberController.stats);
 router.get('/duplicates', memberController.listPossibleDuplicates);

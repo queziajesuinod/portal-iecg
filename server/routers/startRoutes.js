@@ -2,7 +2,18 @@ const express = require('express');
 const CelulaController = require('../controllers/celulaController');
 const ApeloDirecionadoCelulaController = require('../controllers/apelodirecionadocelulaController');
 const CelulaLeaderController = require('../controllers/celulaLeaderController');
+const requirePermission = require('../middlewares/requirePermission');
 const router = express.Router();
+
+// Autorização: /campus é liberado (lista pública de campi, usada como fallback pelo
+// checkin-app). Todo o resto (CRUD de células/direcionamentos = PII) exige permissão de célula.
+const requireCelulaAdmin = requirePermission(['CELULA_LISTAR', 'CELULA_CADASTRAR']);
+router.use((req, res, next) => {
+  if (req.path === '/campus' || req.path.startsWith('/campus/')) {
+    return next();
+  }
+  return requireCelulaAdmin(req, res, next);
+});
 
 router.post('/celula/', CelulaController.criar);
 router.get('/celula/listagemgeral', CelulaController.listarTodas);

@@ -8,6 +8,7 @@ const {
   Member
 } = require('../models');
 const { buildPermissionInclude } = require('./permissionResolver');
+const { hashPassword } = require('./passwordService');
 const { normalizeCpf } = require('../utils/cpf');
 const { sendAccountNotification } = require('./userAccountEmailService');
 
@@ -49,10 +50,6 @@ const sanitizePhone = (value) => {
   if (!value) return '';
   return String(value).replace(/\D/g, '');
 };
-
-function hashSHA256WithSalt(password, salt) {
-  return crypto.createHmac('sha256', salt).update(password).digest('hex');
-}
 
 function resolvePasswordForUpdate(updateData = {}) {
   if (typeof updateData.password === 'string') {
@@ -312,9 +309,7 @@ async function updateUser(id, updateData) {
       throw new Error('Senha informada e invalida');
     }
 
-    const nextSalt = crypto.randomBytes(16).toString('hex');
-    user.salt = nextSalt;
-    user.passwordHash = hashSHA256WithSalt(nextPassword, nextSalt);
+    user.passwordHash = await hashPassword(nextPassword);
     changedPassword = nextPassword;
   }
 
@@ -460,8 +455,9 @@ async function createUser(body) {
     permissaoIds = []
   } = body;
   const safePassword = password || crypto.randomBytes(8).toString('hex');
+  // salt mantido apenas para compatibilidade da coluna; bcrypt embute o próprio salt no hash.
   const salt = crypto.randomBytes(16).toString('hex');
-  const passwordHash = hashSHA256WithSalt(safePassword, salt);
+  const passwordHash = await hashPassword(safePassword);
   const safeUsername = username || (email ? email.split('@')[0] : `membro-${Date.now()}`);
   const newUser = await User.create({
     id: uuid.v4(),

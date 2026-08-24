@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import DOMPurify from 'dompurify';
 import { Helmet } from 'react-helmet';
 import {
   ContentState,
@@ -227,13 +228,8 @@ function serializeFormFields(fields = []) {
 }
 
 function sanitizeRichHtml(value) {
-  const html = String(value || '')
-    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
-    .replace(/\son\w+="[^"]*"/gi, '')
-    .replace(/\son\w+='[^']*'/gi, '')
-    .replace(/javascript:/gi, '');
-
-  return { __html: html };
+  // DOMPurify remove scripts, handlers on* (com ou sem aspas), javascript:, etc.
+  return { __html: DOMPurify.sanitize(String(value || '')) };
 }
 
 function createEditorStateFromHtml(value) {

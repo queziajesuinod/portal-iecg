@@ -7,6 +7,11 @@ const {
   syncUserLinkedMember,
   syncAllUsersLinkedMembers
 } = require('../services/users');
+const { hasUserPermission } = require('../services/permissionResolver');
+
+// Campos que só um admin de usuários pode alterar. Em autosserviço (usuário editando o
+// próprio registro) esses campos são removidos para impedir escalonamento de privilégio.
+const PRIVILEGED_USER_FIELDS = ['perfilId', 'perfilIds', 'permissaoIds', 'active'];
 
 async function getUsers(req, res) {
   try {
@@ -31,7 +36,17 @@ async function getUserDetalhe(req, res) {
 async function putUser(req, res) {
   try {
     const { id } = req.params;
-    const user = await updateUser(id, req.body);
+    const callerId = req.user?.userId;
+    const isAdmin = await hasUserPermission(callerId, ['ADMIN_USUARIOS']);
+
+    const body = { ...req.body };
+    // Sem permissão de admin, remove campos privilegiados: impede que o usuário
+    // se promova a admin (perfilId/perfilIds/permissaoIds) ou reative a conta.
+    if (!isAdmin) {
+      PRIVILEGED_USER_FIELDS.forEach((field) => delete body[field]);
+    }
+
+    const user = await updateUser(id, body);
     res.status(200).json(user);
   } catch (error) {
     console.error('Erro ao atualizar usuario:', error);
