@@ -47,6 +47,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import FilterListOffIcon from '@mui/icons-material/FilterListOff';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import SyncIcon from '@mui/icons-material/Sync';
+import LockResetIcon from '@mui/icons-material/LockReset';
 import ToggleOnIcon from '@mui/icons-material/ToggleOn';
 import ToggleOffIcon from '@mui/icons-material/ToggleOff';
 
@@ -222,6 +223,34 @@ const UsersListPage = () => {
       setMessage(err.message || 'Erro ao sincronizar membro do usuario');
     } finally {
       setSyncingUserId('');
+      setLoading(false);
+    }
+  };
+
+  const handleSendPasswordReset = async (user) => {
+    if (!user?.email) {
+      setMessage('Este usuário não possui e-mail cadastrado. Não é possível enviar a redefinição de senha.');
+      return;
+    }
+    // eslint-disable-next-line no-alert
+    const confirmar = window.confirm(
+      `Redefinir a senha de ${user.name || user.email} e enviar a nova senha para ${user.email}?`
+    );
+    if (!confirmar) return;
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_URL}/users/${user.id}/send-password-reset`, {
+        method: 'POST',
+        headers: headersAuth,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.message || 'Erro ao enviar e-mail de redefinição de senha');
+      }
+      setMessage(payload.message || `E-mail de redefinição enviado para ${user.email}.`);
+    } catch (err) {
+      setMessage(err.message || 'Erro ao enviar e-mail de redefinição de senha');
+    } finally {
       setLoading(false);
     }
   };
@@ -512,6 +541,14 @@ const UsersListPage = () => {
             >
               <ListItemIcon><SyncIcon fontSize="small" /></ListItemIcon>
               <ListItemText>Sincronizar membro</ListItemText>
+            </MenuItem>,
+            <MenuItem
+              key="reset-senha"
+              disabled={!u.email}
+              onClick={() => { setRowMenuAnchor(null); handleSendPasswordReset(u); }}
+            >
+              <ListItemIcon><LockResetIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Enviar redefinição de senha</ListItemText>
             </MenuItem>,
             <Divider key="div" />,
             <MenuItem

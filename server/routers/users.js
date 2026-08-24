@@ -8,7 +8,8 @@ const {
   putUser,
   getUserComConjuge,
   postSyncUserMember,
-  postSyncAllUserMembers
+  postSyncAllUserMembers,
+  postSendPasswordReset
 } = require('../controllers/users');
 
 const { hasUserPermission } = require('../services/permissionResolver');
@@ -40,6 +41,7 @@ async function requireSelfOrUsersAdmin(req, res, next) {
 router.get('/', requireUsersAdmin, getUsers);
 router.post('/sync-members', requireUsersAdmin, postSyncAllUserMembers);
 router.post('/:id/sync-member', requireUsersAdmin, postSyncUserMember);
+router.post('/:id/send-password-reset', requireUsersAdmin, postSendPasswordReset);
 router.get('/:id/spouse', requireSelfOrUsersAdmin, getUserComConjuge);
 router.get('/:id', requireSelfOrUsersAdmin, getUserDetalhe);
 router.post('/', requireUsersAdmin, postUsers);

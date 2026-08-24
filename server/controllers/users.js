@@ -8,6 +8,9 @@ const {
   syncAllUsersLinkedMembers
 } = require('../services/users');
 const { hasUserPermission } = require('../services/permissionResolver');
+const AuthService = require('../services/auth');
+
+const authService = new AuthService();
 
 // Campos que só um admin de usuários pode alterar. Em autosserviço (usuário editando o
 // próprio registro) esses campos são removidos para impedir escalonamento de privilégio.
@@ -97,6 +100,16 @@ async function postSyncAllUserMembers(req, res) {
   }
 }
 
+async function postSendPasswordReset(req, res) {
+  try {
+    const result = await authService.resetPasswordByUserId(req.params.id);
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Erro ao enviar redefinicao de senha:', error.message);
+    res.status(error.status || 500).json({ message: error.message || 'Erro interno do servidor' });
+  }
+}
+
 module.exports = {
   getUsers,
   postUsers,
@@ -104,5 +117,6 @@ module.exports = {
   putUser,
   getUserComConjuge,
   postSyncUserMember,
-  postSyncAllUserMembers
+  postSyncAllUserMembers,
+  postSendPasswordReset
 };

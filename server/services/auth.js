@@ -137,6 +137,57 @@ class AuthService {
 
     return resultadoGenerico;
   }
+
+  /**
+   * Redefinição de senha acionada por um admin a partir do id do usuário
+   * (tela admin/usuarios). Gera uma senha temporária, grava em bcrypt e envia
+   * por e-mail. Diferente do forgotPassword self-service, aqui retornamos um
+   * resultado concreto (e lançamos erro com status) para que o admin saiba se
+   * o envio realmente ocorreu.
+   */
+  async resetPasswordByUserId(userId) {
+    const usuario = await User.findOne({
+      attributes: ['id', 'name', 'email', 'username', 'telefone'],
+      where: { id: userId }
+    });
+    if (!usuario) {
+      const err = new Error('Usuário não encontrado.');
+      err.status = 404;
+      throw err;
+    }
+    if (!usuario.email) {
+      const err = new Error('Usuário não possui e-mail cadastrado.');
+      err.status = 400;
+      throw err;
+    }
+
+    const novaSenha = gerarSenhaTemporaria();
+    const passwordHash = await hashPassword(novaSenha);
+    await User.update({ passwordHash }, { where: { id: usuario.id } });
+
+    const envio = await sendPasswordResetEmail(
+      {
+        name: usuario.name,
+        email: usuario.email,
+        username: usuario.username,
+        telefone: usuario.telefone
+      },
+      novaSenha
+    );
+
+    if (!envio || !envio.sent) {
+      console.error(`[resetPasswordByUserId] Senha redefinida para userId=${usuario.id} (${usuario.email}) mas o e-mail NÃO foi enviado — motivo=${envio && envio.reason}${envio && envio.error ? ` erro=${envio.error}` : ''}`);
+      const err = new Error('A senha foi redefinida, mas o e-mail não pôde ser enviado. Verifique a configuração de SMTP.');
+      err.status = 502;
+      throw err;
+    }
+
+    console.log(`[resetPasswordByUserId] Nova senha enviada para userId=${usuario.id} (${usuario.email}) — messageId=${envio.messageId}`);
+    return {
+      message: `E-mail de redefinição de senha enviado para ${usuario.email}.`,
+      email: usuario.email
+    };
+  }
 }
 
 module.exports = AuthService;
