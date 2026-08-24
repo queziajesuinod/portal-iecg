@@ -11,7 +11,7 @@ import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import InputAdornment from '@mui/material/InputAdornment';
 import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
-import Collapse from '@mui/material/Collapse';
+import Alert from '@mui/material/Alert';
 import FormControl from '@mui/material/FormControl';
 import ArrowForward from '@mui/icons-material/ArrowForward';
 import Paper from '@mui/material/Paper';
@@ -90,6 +90,7 @@ function LoginForm(props) {
     pristine,
     submitting,
     deco,
+    error,
   } = props;
   return (
     <Fragment>
@@ -115,91 +116,112 @@ function LoginForm(props) {
          Painel de controle IECG
         </Typography>
         <section className={classes.formWrap}>
-          <form onSubmit={handleSubmit}>
-            <div>
-              <FormControl variant="standard" className={classes.formControl}>
-                <Field
-                  name="email"
-                  component={TextFieldRedux}
-                  placeholder="Your Email"
-                  label="Your Email"
-                  required
-                  validate={[required, email]}
-                  className={classes.field}
-                />
-              </FormControl>
-            </div>
-            <div>
-              <FormControl variant="standard" className={classes.formControl}>
-                <Field
-                  name="password"
-                  component={TextFieldRedux}
-                  type={showPassword ? 'text' : 'password'}
-                  label="Your Password"
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton
-                          aria-label="Toggle password visibility"
-                          onClick={handleClickShowPassword}
-                          onMouseDown={handleMouseDownPassword}
-                          size="large">
-                          {showPassword ? <VisibilityOff /> : <Visibility />}
-                        </IconButton>
-                      </InputAdornment>
-                    )
-                  }}
-                  required
-                  validate={required}
-                  className={classes.field}
-                />
-              </FormControl>
-            </div>
-            <div className={classes.btnArea}>
-              <Button variant="contained" color="primary" size="large" type="submit">
-                Continue
-                <ArrowForward className={cx(classes.rightIcon, classes.iconSmall)} disabled={submitting || pristine} />
-              </Button>
-            </div>
-          </form>
+          {error && (
+            <Alert severity="error" style={{ marginBottom: 16 }}>
+              {error}
+            </Alert>
+          )}
 
-          {/* Esqueci a senha — dentro do card para ficar visível sobre o fundo branco */}
-          <div style={{ textAlign: 'center', marginTop: 8 }}>
-            <Button
-              size="small"
-              onClick={() => setShowRecover(v => !v)}
-              style={{ textTransform: 'none' }}
-            >
-              Esqueci minha senha
-            </Button>
-            <Collapse in={showRecover}>
-              <div style={{ marginTop: 8, textAlign: 'left' }}>
-                <TextField
-                  fullWidth
-                  size="small"
-                  type="email"
-                  label="Seu e-mail"
-                  value={recoverEmail}
-                  onChange={e => setRecoverEmail(e.target.value)}
-                />
+          {!showRecover ? (
+            <Fragment>
+              <form onSubmit={handleSubmit}>
+                <div>
+                  <FormControl variant="standard" className={classes.formControl}>
+                    <Field
+                      name="email"
+                      component={TextFieldRedux}
+                      placeholder="Your Email"
+                      label="Your Email"
+                      required
+                      validate={[required, email]}
+                      className={classes.field}
+                    />
+                  </FormControl>
+                </div>
+                <div>
+                  <FormControl variant="standard" className={classes.formControl}>
+                    <Field
+                      name="password"
+                      component={TextFieldRedux}
+                      type={showPassword ? 'text' : 'password'}
+                      label="Your Password"
+                      InputProps={{
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <IconButton
+                              aria-label="Toggle password visibility"
+                              onClick={handleClickShowPassword}
+                              onMouseDown={handleMouseDownPassword}
+                              size="large">
+                              {showPassword ? <VisibilityOff /> : <Visibility />}
+                            </IconButton>
+                          </InputAdornment>
+                        )
+                      }}
+                      required
+                      validate={required}
+                      className={classes.field}
+                    />
+                  </FormControl>
+                </div>
+                <div className={classes.btnArea}>
+                  <Button variant="contained" color="primary" size="large" type="submit">
+                    Continue
+                    <ArrowForward className={cx(classes.rightIcon, classes.iconSmall)} disabled={submitting || pristine} />
+                  </Button>
+                </div>
+              </form>
+
+              <div style={{ textAlign: 'center', marginTop: 8 }}>
                 <Button
-                  fullWidth
+                  size="small"
+                  onClick={() => { setRecoverMsg(''); setShowRecover(true); }}
+                  style={{ textTransform: 'none' }}
+                >
+                  Esqueci minha senha
+                </Button>
+              </div>
+            </Fragment>
+          ) : (
+            <div>
+              <Typography variant="body2" gutterBottom>
+                Informe seu e-mail e enviaremos uma nova senha.
+              </Typography>
+              <TextField
+                fullWidth
+                type="email"
+                label="Seu e-mail"
+                value={recoverEmail}
+                onChange={e => setRecoverEmail(e.target.value)}
+                style={{ marginBottom: 8 }}
+              />
+              <div className={classes.btnArea}>
+                <Button
                   variant="contained"
                   color="primary"
+                  size="large"
                   disabled={recoverLoading}
                   onClick={handleForgotPassword}
-                  style={{ marginTop: 8 }}
                 >
                   {recoverLoading ? 'Enviando...' : 'Enviar nova senha'}
                 </Button>
-                {recoverMsg && (
-                  <Typography variant="body2" style={{ marginTop: 8 }}>
-                    {recoverMsg}
-                  </Typography>
-                )}
               </div>
-            </Collapse>
-          </div>
+              {recoverMsg && (
+                <Typography variant="body2" style={{ marginTop: 8 }}>
+                  {recoverMsg}
+                </Typography>
+              )}
+              <div style={{ textAlign: 'center', marginTop: 8 }}>
+                <Button
+                  size="small"
+                  onClick={() => { setRecoverMsg(''); setShowRecover(false); }}
+                  style={{ textTransform: 'none' }}
+                >
+                  Voltar ao login
+                </Button>
+              </div>
+            </div>
+          )}
         </section>
       </Paper>
     </Fragment>
@@ -212,6 +234,11 @@ LoginForm.propTypes = {
   pristine: PropTypes.bool.isRequired,
   submitting: PropTypes.bool.isRequired,
   deco: PropTypes.bool.isRequired,
+  error: PropTypes.string,
+};
+
+LoginForm.defaultProps = {
+  error: null,
 };
 
 const LoginFormReduxed = reduxForm({

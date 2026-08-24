@@ -2,6 +2,7 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import { Helmet } from 'react-helmet';
 import { useHistory } from 'react-router-dom';
+import { SubmissionError } from 'redux-form';
 import brand from 'dan-api/dummy/brand';
 import { LoginForm } from 'dan-components';
 import useStyles from 'dan-components/Forms/user-jss';
@@ -41,19 +42,47 @@ function Login({ setIsAuthenticated = () => {} }) {
   const API_URL = (process.env.REACT_APP_API_URL && process.env.REACT_APP_API_URL.replace(/\/$/, '')) || fallbackHost || 'https://portal.iecg.com.br';
 
   const submitForm = async (values) => {
+    let response;
     try {
-      const response = await fetch(`${API_URL}/auth/login`, {
+      response = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(values),
       });
-
-      if (!response.ok) {
-        throw new Error('Falha na autenticacao');
+    } catch (networkError) {
+      // Sem conexão: tenta sessão offline salva; senão, mostra erro de conexão.
+      if (isStoredTokenValid()) {
+        try {
+          const storedUser = localStorage.getItem('user');
+          if (storedUser) {
+            dummyContents.user = JSON.parse(storedUser);
+          }
+        } catch (e) {
+          console.warn('Falha ao carregar usuario salvo para login offline', e);
+        }
+        localStorage.setItem('isAuthenticated', 'true');
+        setIsAuthenticated(true);
+        history.push('/app');
+        return;
       }
+      localStorage.setItem('isAuthenticated', 'false');
+      setIsAuthenticated(false);
+      throw new SubmissionError({ _error: 'Não foi possível conectar ao servidor. Verifique sua internet.' });
+    }
 
+    if (!response.ok) {
+      // Mensagem genérica (não revela se o usuário existe — evita enumeração).
+      const msg = response.status >= 500
+        ? 'Erro no servidor. Tente novamente em instantes.'
+        : 'Usuário ou senha inválidos.';
+      localStorage.setItem('isAuthenticated', 'false');
+      setIsAuthenticated(false);
+      throw new SubmissionError({ _error: msg });
+    }
+
+    try {
       const data = await response.json();
       const { accessToken: token, permissoes: loginPermissions = [] } = data;
       localStorage.setItem('token', token);
@@ -118,28 +147,13 @@ function Login({ setIsAuthenticated = () => {} }) {
 
       history.push('/app');
     } catch (error) {
-      console.error('Erro ao fazer login:', error);
-      const isOfflineError = !navigator.onLine
-        || /failed to fetch|networkerror|load failed/i.test(String(error?.message || ''));
-
-      if (isOfflineError && isStoredTokenValid()) {
-        try {
-          const storedUser = localStorage.getItem('user');
-          if (storedUser) {
-            dummyContents.user = JSON.parse(storedUser);
-          }
-        } catch (e) {
-          console.warn('Falha ao carregar usuario salvo para login offline', e);
-        }
-
-        localStorage.setItem('isAuthenticated', 'true');
-        setIsAuthenticated(true);
-        history.push('/app');
-        return;
+      if (error instanceof SubmissionError) {
+        throw error;
       }
-
+      console.error('Erro ao processar login:', error);
       localStorage.setItem('isAuthenticated', 'false');
       setIsAuthenticated(false);
+      throw new SubmissionError({ _error: 'Erro ao processar o login. Tente novamente.' });
     }
   };
 
