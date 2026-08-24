@@ -1,11 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import PropTypes from 'prop-types';
 import { Helmet } from 'react-helmet';
 import { useHistory } from 'react-router-dom';
-import Button from '@mui/material/Button';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
-import Collapse from '@mui/material/Collapse';
 import brand from 'dan-api/dummy/brand';
 import { LoginForm } from 'dan-components';
 import useStyles from 'dan-components/Forms/user-jss';
@@ -43,40 +39,6 @@ function Login({ setIsAuthenticated = () => {} }) {
   const history = useHistory();
   const fallbackHost = `${window.location.protocol}//${window.location.host}`;
   const API_URL = (process.env.REACT_APP_API_URL && process.env.REACT_APP_API_URL.replace(/\/$/, '')) || fallbackHost || 'https://portal.iecg.com.br';
-
-  const [showRecover, setShowRecover] = useState(false);
-  const [recoverEmail, setRecoverEmail] = useState('');
-  const [recoverMsg, setRecoverMsg] = useState('');
-  const [recoverLoading, setRecoverLoading] = useState(false);
-
-  const handleForgotPassword = async () => {
-    setRecoverMsg('');
-    const email = recoverEmail.trim();
-    if (!email) {
-      setRecoverMsg('Informe seu e-mail para receber uma nova senha.');
-      return;
-    }
-    setRecoverLoading(true);
-    // Mensagem genérica sempre (não revela se o e-mail existe)
-    const genericMsg = 'Se o e-mail estiver cadastrado, enviaremos uma nova senha em instantes.';
-    try {
-      const resp = await fetch(`${API_URL}/auth/forgot-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      let msg = genericMsg;
-      try {
-        const d = await resp.json();
-        if (d && d.message) msg = d.message;
-      } catch (e) { /* mantém mensagem genérica */ }
-      setRecoverMsg(msg);
-    } catch (e) {
-      setRecoverMsg(genericMsg);
-    } finally {
-      setRecoverLoading(false);
-    }
-  };
 
   const submitForm = async (values) => {
     try {
@@ -193,43 +155,6 @@ function Login({ setIsAuthenticated = () => {} }) {
       <div className={classes.container}>
         <div className={classes.userFormWrap}>
           <LoginForm onSubmit={(values) => submitForm(values)} />
-
-          <div style={{ marginTop: 16, textAlign: 'center' }}>
-            <Button
-              size="small"
-              onClick={() => setShowRecover((v) => !v)}
-              style={{ textTransform: 'none' }}
-            >
-              Esqueci minha senha
-            </Button>
-            <Collapse in={showRecover}>
-              <div style={{ marginTop: 8, textAlign: 'left' }}>
-                <TextField
-                  fullWidth
-                  size="small"
-                  type="email"
-                  label="Seu e-mail"
-                  value={recoverEmail}
-                  onChange={(e) => setRecoverEmail(e.target.value)}
-                />
-                <Button
-                  fullWidth
-                  variant="contained"
-                  color="primary"
-                  disabled={recoverLoading}
-                  onClick={handleForgotPassword}
-                  style={{ marginTop: 8 }}
-                >
-                  {recoverLoading ? 'Enviando...' : 'Enviar nova senha'}
-                </Button>
-                {recoverMsg && (
-                  <Typography variant="body2" style={{ marginTop: 8 }}>
-                    {recoverMsg}
-                  </Typography>
-                )}
-              </div>
-            </Collapse>
-          </div>
         </div>
       </div>
     </div>

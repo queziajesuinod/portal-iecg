@@ -10,20 +10,16 @@ import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import InputAdornment from '@mui/material/InputAdornment';
 import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import Collapse from '@mui/material/Collapse';
 import FormControl from '@mui/material/FormControl';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import AllInclusive from '@mui/icons-material/AllInclusive';
-import Brightness5 from '@mui/icons-material/Brightness5';
-import People from '@mui/icons-material/People';
 import ArrowForward from '@mui/icons-material/ArrowForward';
 import Paper from '@mui/material/Paper';
-import Icon from '@mui/material/Icon';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import brand from 'dan-api/dummy/brand';
 import logo from 'dan-images/logo.png';
-import { TextFieldRedux, CheckboxRedux } from './ReduxFormMUI';
+import { TextFieldRedux } from './ReduxFormMUI';
 import useStyles from './user-jss';
-import { ContentDivider } from '../Divider';
 
 // validation functions
 const required = value => (value === null ? 'Required' : undefined);
@@ -41,12 +37,49 @@ function LoginForm(props) {
   const { classes, cx } = useStyles();
   const [showPassword, setShowPassword] = useState(false);
 
+  // Recuperação de senha ("Esqueci a senha")
+  const [showRecover, setShowRecover] = useState(false);
+  const [recoverEmail, setRecoverEmail] = useState('');
+  const [recoverMsg, setRecoverMsg] = useState('');
+  const [recoverLoading, setRecoverLoading] = useState(false);
+  const API_URL = (process.env.REACT_APP_API_URL && process.env.REACT_APP_API_URL.replace(/\/$/, ''))
+    || 'https://portal.iecg.com.br';
+
   const handleClickShowPassword = () => {
     setShowPassword(show => !show);
   };
 
   const handleMouseDownPassword = event => {
     event.preventDefault();
+  };
+
+  const handleForgotPassword = async () => {
+    setRecoverMsg('');
+    const emailVal = recoverEmail.trim();
+    if (!emailVal) {
+      setRecoverMsg('Informe seu e-mail para receber uma nova senha.');
+      return;
+    }
+    setRecoverLoading(true);
+    // Mensagem genérica sempre (não revela se o e-mail existe)
+    const genericMsg = 'Se o e-mail estiver cadastrado, enviaremos uma nova senha em instantes.';
+    try {
+      const resp = await fetch(`${API_URL}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailVal }),
+      });
+      let msg = genericMsg;
+      try {
+        const d = await resp.json();
+        if (d && d.message) msg = d.message;
+      } catch (e) { /* mantém mensagem genérica */ }
+      setRecoverMsg(msg);
+    } catch (e) {
+      setRecoverMsg(genericMsg);
+    } finally {
+      setRecoverLoading(false);
+    }
   };
 
   const mdUp = useMediaQuery(theme => theme.breakpoints.up('md'));
@@ -129,6 +162,44 @@ function LoginForm(props) {
               </Button>
             </div>
           </form>
+
+          {/* Esqueci a senha — dentro do card para ficar visível sobre o fundo branco */}
+          <div style={{ textAlign: 'center', marginTop: 8 }}>
+            <Button
+              size="small"
+              onClick={() => setShowRecover(v => !v)}
+              style={{ textTransform: 'none' }}
+            >
+              Esqueci minha senha
+            </Button>
+            <Collapse in={showRecover}>
+              <div style={{ marginTop: 8, textAlign: 'left' }}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  type="email"
+                  label="Seu e-mail"
+                  value={recoverEmail}
+                  onChange={e => setRecoverEmail(e.target.value)}
+                />
+                <Button
+                  fullWidth
+                  variant="contained"
+                  color="primary"
+                  disabled={recoverLoading}
+                  onClick={handleForgotPassword}
+                  style={{ marginTop: 8 }}
+                >
+                  {recoverLoading ? 'Enviando...' : 'Enviar nova senha'}
+                </Button>
+                {recoverMsg && (
+                  <Typography variant="body2" style={{ marginTop: 8 }}>
+                    {recoverMsg}
+                  </Typography>
+                )}
+              </div>
+            </Collapse>
+          </div>
         </section>
       </Paper>
     </Fragment>
