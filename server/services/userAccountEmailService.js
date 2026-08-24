@@ -51,7 +51,9 @@ function _htmlAccount({
           <p style="margin:0;color:#666;font-size:12px;">A senha da plataforma não foi alterada nesta atualização.</p>
         </td></tr>`;
 
-  const loginButton = loginUrl
+  // No e-mail de redefinição não mostramos o botão "Acessar o Portal": há usuários que
+  // acessam apenas pelo app de check-in e não têm acesso direto ao portal.
+  const loginButton = (loginUrl && !isReset)
     ? `<tr><td style="padding:24px 32px 8px;text-align:center;">
           <a href="${escapeHtml(loginUrl)}" style="display:inline-block;background:#0d0d0d;color:#d4a017;text-decoration:none;font-size:14px;font-weight:700;padding:12px 28px;border-radius:8px;">Acessar o Portal</a>
         </td></tr>`
@@ -137,7 +139,7 @@ async function sendAccountNotification(action, user, password) {
       `E-mail: ${user.email}`,
       user.username ? `Usuario: ${user.username}` : '',
       password ? `Senha da plataforma: ${password}` : 'A senha da plataforma nao foi alterada nesta atualizacao.',
-      loginUrl ? `\nAcesse: ${loginUrl}` : '',
+      (loginUrl && action !== 'reset') ? `\nAcesse: ${loginUrl}` : '',
     ].filter((line) => line !== '');
 
     await emailService.sendMail({
