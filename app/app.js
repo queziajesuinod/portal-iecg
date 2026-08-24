@@ -18,6 +18,10 @@ import 'utils/authSession';
 import queryClient from 'utils/queryClient';
 import 'react-18-image-lightbox/style.css';
 import 'sanitize.css/sanitize.css';
+// Fontes de ícone auto-hospedadas (bundladas pelo webpack) — evitam a corrida/falha
+// de CDN que fazia os ícones do menu sumirem no mobile/tablet.
+import 'ionicons/dist/css/ionicons.min.css';
+import 'material-icons/iconfont/filled.css';
 
 // Import root app
 import App from 'containers/App';
