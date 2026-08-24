@@ -142,14 +142,15 @@ async function sendAccountNotification(action, user, password) {
       (loginUrl && action !== 'reset') ? `\nAcesse: ${loginUrl}` : '',
     ].filter((line) => line !== '');
 
-    await emailService.sendMail({
+    const info = await emailService.sendMail({
       to: user.email,
       subject,
       html,
       text: textLines.join('\n'),
     });
 
-    return { sent: true };
+    console.log(`[userAccountEmail] E-mail de conta (${action}) enviado para ${user.email} — messageId=${info.messageId}, accepted=${JSON.stringify(info.accepted)}`);
+    return { sent: true, messageId: info.messageId, accepted: info.accepted };
   } catch (error) {
     console.error(`[userAccountEmail] Falha ao enviar e-mail de conta (${action}):`, error.message);
     return { sent: false, reason: 'erro', error: error.message };

@@ -119,7 +119,7 @@ class AuthService {
     await User.update({ passwordHash }, { where: { id: usuario.id } });
 
     // Envio não bloqueia a resposta genérica; sendPasswordResetEmail nunca lança.
-    await sendPasswordResetEmail(
+    const envio = await sendPasswordResetEmail(
       {
         name: usuario.name,
         email: usuario.email,
@@ -128,6 +128,12 @@ class AuthService {
       },
       novaSenha
     );
+
+    if (envio && envio.sent) {
+      console.log(`[forgotPassword] Nova senha enviada para userId=${usuario.id} (${usuario.email}) — messageId=${envio.messageId}`);
+    } else {
+      console.error(`[forgotPassword] Senha redefinida para userId=${usuario.id} (${usuario.email}) mas o e-mail NÃO foi enviado — motivo=${envio && envio.reason}${envio && envio.error ? ` erro=${envio.error}` : ''}`);
+    }
 
     return resultadoGenerico;
   }
