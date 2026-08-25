@@ -49,6 +49,7 @@ import {
 import SectionCard from '../../../components/Jornada/SectionCard';
 import JornadaTimeline from '../../../components/Jornada/JornadaTimeline';
 import { formatDateInAppTimezone, formatDateTimeInAppTimezone } from '../../../utils/dateTime';
+import { hasAnyPermission } from '../../../utils/permissions';
 import { useConfirm } from '../../../utils/useConfirm';
 import {
   atualizarJornadaMembro,
@@ -183,6 +184,9 @@ const emptyActivityTypeForm = {
 
 const MembroDetailsPage = () => {
   const { confirm, ConfirmDialog } = useConfirm();
+  // Perfis somente-leitura (ex.: START) apenas visualizam os detalhes. Ações de escrita
+  // (jornada, atividades, marcos, transferência) exigem ADMIN_USUARIOS ou ADMIN_FULL_ACCESS.
+  const canManage = useMemo(() => hasAnyPermission(['ADMIN_USUARIOS']), []);
   const [member, setMember] = useState(null);
   const [activityTypes, setActivityTypes] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -626,101 +630,103 @@ const MembroDetailsPage = () => {
           <Button variant="outlined" onClick={() => history.push('/app/start/membros')}>
             Voltar
           </Button>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Button
-              variant="contained"
-              onClick={() => openJourneyDialog(2)}
-              disabled={!member}
-            >
+          {canManage && (
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Button
+                variant="contained"
+                onClick={() => openJourneyDialog(2)}
+                disabled={!member}
+              >
               Atualizar jornada
-            </Button>
-            <Tooltip title="Mais ações">
-              <span>
-                <IconButton
-                  id="membro-actions-button"
-                  onClick={(event) => setActionMenuAnchor(event.currentTarget)}
-                  aria-label="Mais ações do membro"
-                  aria-haspopup="menu"
-                  aria-controls={actionMenuAnchor ? 'membro-actions-menu' : undefined}
-                  aria-expanded={Boolean(actionMenuAnchor)}
-                >
-                  <MoreVert />
-                </IconButton>
-              </span>
-            </Tooltip>
-            <Menu
-              id="membro-actions-menu"
-              anchorEl={actionMenuAnchor}
-              open={Boolean(actionMenuAnchor)}
-              onClose={() => setActionMenuAnchor(null)}
-              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-              transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-              MenuListProps={{
-                'aria-labelledby': 'membro-actions-button',
-                dense: false
-              }}
-              disableScrollLock
-              slotProps={{
-                paper: {
-                  elevation: 4,
-                  sx: {
-                    mt: 0.5,
-                    minWidth: 260,
-                    borderRadius: 2,
-                    overflow: 'hidden'
+              </Button>
+              <Tooltip title="Mais ações">
+                <span>
+                  <IconButton
+                    id="membro-actions-button"
+                    onClick={(event) => setActionMenuAnchor(event.currentTarget)}
+                    aria-label="Mais ações do membro"
+                    aria-haspopup="menu"
+                    aria-controls={actionMenuAnchor ? 'membro-actions-menu' : undefined}
+                    aria-expanded={Boolean(actionMenuAnchor)}
+                  >
+                    <MoreVert />
+                  </IconButton>
+                </span>
+              </Tooltip>
+              <Menu
+                id="membro-actions-menu"
+                anchorEl={actionMenuAnchor}
+                open={Boolean(actionMenuAnchor)}
+                onClose={() => setActionMenuAnchor(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                MenuListProps={{
+                  'aria-labelledby': 'membro-actions-button',
+                  dense: false
+                }}
+                disableScrollLock
+                slotProps={{
+                  paper: {
+                    elevation: 4,
+                    sx: {
+                      mt: 0.5,
+                      minWidth: 260,
+                      borderRadius: 2,
+                      overflow: 'hidden'
+                    }
                   }
-                }
-              }}
-            >
-              {member && (
-                <Box sx={{ px: 2, py: 1.25, bgcolor: 'action.hover' }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                }}
+              >
+                {member && (
+                  <Box sx={{ px: 2, py: 1.25, bgcolor: 'action.hover' }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                     Ações para
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
-                    {member.fullName}
-                  </Typography>
-                </Box>
-              )}
-              {member && <Divider />}
-              <MenuItem
-                onClick={runAndCloseActionMenu(() => openJourneyDialog(0))}
-                disabled={!member}
-              >
-                <ListItemIcon>
-                  <EventNote fontSize="small" />
-                </ListItemIcon>
-                <ListItemText
-                  primary="Registrar atividade"
-                  secondary="Adicionar nova atividade ao histórico"
-                />
-              </MenuItem>
-              <MenuItem
-                onClick={runAndCloseActionMenu(() => openJourneyDialog(1))}
-                disabled={!member}
-              >
-                <ListItemIcon>
-                  <EmojiEvents fontSize="small" />
-                </ListItemIcon>
-                <ListItemText
-                  primary="Registrar marco"
-                  secondary="Conquista ou etapa importante"
-                />
-              </MenuItem>
-              <Divider sx={{ my: 0.5 }} />
-              <MenuItem
-                onClick={runAndCloseActionMenu(() => handleOpenActivityTypesDialog())}
-              >
-                <ListItemIcon>
-                  <Category fontSize="small" />
-                </ListItemIcon>
-                <ListItemText
-                  primary="Gerenciar tipos"
-                  secondary="Cadastros de atividades e marcos"
-                />
-              </MenuItem>
-            </Menu>
-          </Stack>
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                      {member.fullName}
+                    </Typography>
+                  </Box>
+                )}
+                {member && <Divider />}
+                <MenuItem
+                  onClick={runAndCloseActionMenu(() => openJourneyDialog(0))}
+                  disabled={!member}
+                >
+                  <ListItemIcon>
+                    <EventNote fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary="Registrar atividade"
+                    secondary="Adicionar nova atividade ao histórico"
+                  />
+                </MenuItem>
+                <MenuItem
+                  onClick={runAndCloseActionMenu(() => openJourneyDialog(1))}
+                  disabled={!member}
+                >
+                  <ListItemIcon>
+                    <EmojiEvents fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary="Registrar marco"
+                    secondary="Conquista ou etapa importante"
+                  />
+                </MenuItem>
+                <Divider sx={{ my: 0.5 }} />
+                <MenuItem
+                  onClick={runAndCloseActionMenu(() => handleOpenActivityTypesDialog())}
+                >
+                  <ListItemIcon>
+                    <Category fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary="Gerenciar tipos"
+                    secondary="Cadastros de atividades e marcos"
+                  />
+                </MenuItem>
+              </Menu>
+            </Stack>
+          )}
         </Box>
 
         <Notification message={feedback} close={() => setFeedback('')} />
@@ -943,20 +949,22 @@ const MembroDetailsPage = () => {
                               >
                                 Ver presença
                               </Button>
-                              <Tooltip title={vinculo.celula?.ativo === false ? 'Célula inativa' : 'Transferir para outra célula'}>
-                                <span>
-                                  <Button
-                                    size="small"
-                                    variant="outlined"
-                                    color="warning"
-                                    startIcon={<SwapHoriz fontSize="small" />}
-                                    disabled={vinculo.celula?.ativo === false}
-                                    onClick={() => openTransferDialog(vinculo)}
-                                  >
-                                    Transferir
-                                  </Button>
-                                </span>
-                              </Tooltip>
+                              {canManage && (
+                                <Tooltip title={vinculo.celula?.ativo === false ? 'Célula inativa' : 'Transferir para outra célula'}>
+                                  <span>
+                                    <Button
+                                      size="small"
+                                      variant="outlined"
+                                      color="warning"
+                                      startIcon={<SwapHoriz fontSize="small" />}
+                                      disabled={vinculo.celula?.ativo === false}
+                                      onClick={() => openTransferDialog(vinculo)}
+                                    >
+                                      Transferir
+                                    </Button>
+                                  </span>
+                                </Tooltip>
+                              )}
                             </Stack>
                           </Box>
                         ))}
@@ -1001,7 +1009,7 @@ const MembroDetailsPage = () => {
                       ? activity.metadata.eventName
                       : activityTypeNameByCode[activity.activityType] || ACTIVITY_CODE_LABELS[activity.activityType] || activity.activityType,
                     description: getActivityObservation(activity) || null,
-                    action: (
+                    action: canManage ? (
                       <Tooltip title="Excluir atividade">
                         <span>
                           <IconButton
@@ -1015,7 +1023,7 @@ const MembroDetailsPage = () => {
                           </IconButton>
                         </span>
                       </Tooltip>
-                    )
+                    ) : null
                   }))}
                 />
               </SectionCard>

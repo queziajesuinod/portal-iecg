@@ -25,6 +25,7 @@ import {
 } from '../../../api/membersApi';
 import { listarCampus } from '../../../api/campusApi';
 import { queryKeys } from '../../../utils/queryKeys';
+import { hasAnyPermission } from '../../../utils/permissions';
 import useDebouncedValue from '../../../utils/useDebouncedValue';
 
 import {
@@ -84,6 +85,9 @@ const fetchDuplicates = async () => {
 const MembrosPage = () => {
   const history = useHistory();
   const queryClient = useQueryClient();
+  // Perfis somente-leitura (ex.: START) apenas visualizam/pesquisam. Ações de escrita
+  // (cadastrar/editar/excluir/status/duplicados) exigem ADMIN_USUARIOS ou ADMIN_FULL_ACCESS.
+  const canManage = useMemo(() => hasAnyPermission(['ADMIN_USUARIOS']), []);
   const [activeTab, setActiveTab] = useState(0);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -555,7 +559,7 @@ const MembrosPage = () => {
           variant="fullWidth"
         >
           <Tab label={`Lista de membros (${totalMembers})`} />
-          <Tab label={`Possiveis duplicados (${duplicateSuggestions.length})`} />
+          {canManage && <Tab label={`Possiveis duplicados (${duplicateSuggestions.length})`} />}
         </Tabs>
       </Paper>
 
@@ -575,6 +579,7 @@ const MembrosPage = () => {
             novosFilter={novosFilter}
             onToggleNovosFilter={() => { setNovosFilter((v) => !v); setPage(0); }}
             onCreate={handleOpenCreate}
+            canManage={canManage}
           />
           <MembersTable
             pagedMembers={pagedMembers}
@@ -596,11 +601,12 @@ const MembrosPage = () => {
             onOpenDetails={handleOpenDetails}
             onOpenEdit={handleOpenEdit}
             onDeleteMember={handleDeleteMember}
+            canManage={canManage}
           />
         </>
       )}
 
-      {activeTab === 1 && (
+      {canManage && activeTab === 1 && (
         <DuplicatesPanel
           suggestions={duplicateSuggestions}
           loading={duplicatesLoading}

@@ -14,6 +14,7 @@ const PERMISSOES = [
   { nome: 'EVENTS_ACESS', descricao: 'Acessar o módulo de eventos (API)' },
   { nome: 'ADMIN_PERFIS', descricao: 'Gerenciar perfis e permissoes' },
   { nome: 'ADMIN_USUARIOS', descricao: 'Cadastrar usuarios' },
+  { nome: 'MEMBROS_VIEW', descricao: 'Visualizar e pesquisar membros (somente leitura)' },
   { nome: 'DIARIO_BORDO_ADMIN', descricao: 'Gerenciar o modulo Diario de Bordo' },
   { nome: 'DIARIO_BORDO_MANAGER', descricao: 'Gerenciar o diario atribuido como gestor' },
   { nome: 'ADMIN_FULL_ACCESS', descricao: 'Acesso total ao menu e rotas' },

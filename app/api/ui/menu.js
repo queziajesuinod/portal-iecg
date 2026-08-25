@@ -93,7 +93,7 @@ module.exports = [
         name: 'Membros',
         link: '/app/start/membros',
         icon: 'ion-ios-people',
-        permission: 'CELULA_LISTAR'
+        permission: ['MEMBROS_VIEW', 'ADMIN_USUARIOS', 'CELULA_LISTAR']
       },
       {
         key: 'minhaCelula',

@@ -149,8 +149,8 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/start/campus" component={CampusPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
             <ProtectedRoute exact path="/app/start/direcionamentos" component={ApelosDirecionadosPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
             <ProtectedRoute exact path="/app/start/fila-apelos" component={FilaApelosPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
-            <ProtectedRoute exact path="/app/start/membros" component={MembrosPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
-            <ProtectedRoute exact path="/app/start/membros/detalhes" component={MembroDetailsPage} isAuthenticated={isAuthenticated} requiredPermission="CELULA_LISTAR" />
+            <ProtectedRoute exact path="/app/start/membros" component={MembrosPage} isAuthenticated={isAuthenticated} requiredPermission={['MEMBROS_VIEW', 'ADMIN_USUARIOS', 'CELULA_LISTAR']} />
+            <ProtectedRoute exact path="/app/start/membros/detalhes" component={MembroDetailsPage} isAuthenticated={isAuthenticated} requiredPermission={['MEMBROS_VIEW', 'ADMIN_USUARIOS', 'CELULA_LISTAR']} />
             <ProtectedRoute exact path="/app/admin/perfis" component={PerfilPermissaoPage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_PERFIS" />
             {/* MÓDULO INATIVO: <ProtectedRoute exact path="/app/admin/diario-bordo" component={BoardJournalAdminPage} isAuthenticated={isAuthenticated} requiredPermission={['DIARIO_BORDO_ADMIN', 'DIARIO_BORDO_MANAGER']} /> */}
             <ProtectedRoute exact path="/app/admin/usuarios/novo" component={UserCreatePage} isAuthenticated={isAuthenticated} requiredPermission="ADMIN_USUARIOS" />

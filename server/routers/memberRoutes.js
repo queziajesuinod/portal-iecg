@@ -4,12 +4,19 @@ const requirePermission = require('../middlewares/requirePermission');
 
 const router = express.Router();
 
-// Autorização: as rotas /me* são autosserviço (qualquer usuário autenticado edita o
-// próprio perfil). Todo o resto (listar/ler/editar/apagar membros = PII) exige ADMIN_USUARIOS.
+// Autorização em camadas:
+// - Rotas /me* são autosserviço (qualquer usuário autenticado edita o próprio perfil).
+// - Leitura (GET: listagem, pesquisa, detalhes e KPIs) exige MEMBROS_VIEW ou ADMIN_USUARIOS.
+//   Isso permite o perfil START apenas visualizar/pesquisar membros.
+// - Escrita (criar/editar/apagar/fundir membros = mutações em PII) exige ADMIN_USUARIOS.
 const requireMembersAdmin = requirePermission(['ADMIN_USUARIOS']);
+const requireMembersRead = requirePermission(['MEMBROS_VIEW', 'ADMIN_USUARIOS']);
 router.use((req, res, next) => {
   if (req.path === '/me' || req.path.startsWith('/me/')) {
     return next();
+  }
+  if (req.method === 'GET') {
+    return requireMembersRead(req, res, next);
   }
   return requireMembersAdmin(req, res, next);
 });

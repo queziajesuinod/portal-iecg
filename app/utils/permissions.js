@@ -9,6 +9,15 @@ export const getStoredPermissions = () => {
   }
 };
 
+// Checa se o usuário logado tem ao menos uma das permissões exigidas.
+// ADMIN_FULL_ACCESS libera tudo. Usado para condicionar ações de escrita na UI.
+export const hasAnyPermission = (required = []) => {
+  const stored = getStoredPermissions();
+  if (stored.includes('ADMIN_FULL_ACCESS')) return true;
+  const list = Array.isArray(required) ? required : [required];
+  return list.some((permission) => stored.includes(permission));
+};
+
 export const filterMenuByPermissions = (menu = [], permissions = []) => {
   if (!Array.isArray(menu)) return [];
   const allowed = new Set(permissions || []);

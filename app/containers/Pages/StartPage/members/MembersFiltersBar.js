@@ -28,7 +28,8 @@ const MembersFiltersBar = ({
   onMinCelulasFilterChange,
   novosFilter,
   onToggleNovosFilter,
-  onCreate
+  onCreate,
+  canManage
 }) => (
   <Box
     sx={{
@@ -56,15 +57,17 @@ const MembersFiltersBar = ({
           )
         }}
       />
-      <Button
-        variant="contained"
-        color="primary"
-        startIcon={<AddIcon />}
-        onClick={onCreate}
-        sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
-      >
-        Cadastrar membro
-      </Button>
+      {canManage && (
+        <Button
+          variant="contained"
+          color="primary"
+          startIcon={<AddIcon />}
+          onClick={onCreate}
+          sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+        >
+          Cadastrar membro
+        </Button>
+      )}
     </Stack>
 
     {/* Linha 2: filtros */}
@@ -161,12 +164,14 @@ MembersFiltersBar.propTypes = {
   novosFilter: PropTypes.bool,
   onToggleNovosFilter: PropTypes.func.isRequired,
   onCreate: PropTypes.func.isRequired,
+  canManage: PropTypes.bool,
 };
 
 MembersFiltersBar.defaultProps = {
   cargoFilter: [],
   minCelulasFilter: '',
   novosFilter: false,
+  canManage: true,
 };
 
 export default MembersFiltersBar;

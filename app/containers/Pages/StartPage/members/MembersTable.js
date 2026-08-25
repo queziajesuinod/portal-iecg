@@ -46,7 +46,8 @@ const MembersTable = ({
   onOpenDetails,
   onOpenEdit,
   onDeleteMember,
-  showLeaderColumns
+  showLeaderColumns,
+  canManage
 }) => (
   <>
     <Table size="small">
@@ -108,7 +109,7 @@ const MembersTable = ({
                             label={`${qtd} ${qtd === 1 ? 'célula' : 'células'}`}
                             sx={{ width: 'fit-content' }}
                           />
-                          {qtd > 0 && (
+                          {canManage && qtd > 0 && (
                             <Tooltip title={qtd > 1
                               ? 'Notificar líder: confirmar/atualizar e inativar células que não lidera mais'
                               : 'Notificar líder no WhatsApp para conferir/atualizar a célula'}
@@ -141,20 +142,22 @@ const MembersTable = ({
               )}
               <TableCell>
                 <Stack direction="row" spacing={1} alignItems="center">
-                  <FormControlLabel
-                    sx={{ m: 0 }}
-                    control={(
-                      <Switch
-                        size="small"
-                        color="primary"
-                        checked={isActive}
-                        disabled={updatingMemberId === member.id}
-                        onChange={(event) => onToggleStatus(member, event.target.checked)}
-                      />
-                    )}
-                    label={updatingMemberId === member.id ? 'Salvando...' : isActive ? 'Ativo' : 'Inativo'}
-                  />
-                  {incompleto && (
+                  {canManage && (
+                    <FormControlLabel
+                      sx={{ m: 0 }}
+                      control={(
+                        <Switch
+                          size="small"
+                          color="primary"
+                          checked={isActive}
+                          disabled={updatingMemberId === member.id}
+                          onChange={(event) => onToggleStatus(member, event.target.checked)}
+                        />
+                      )}
+                      label={updatingMemberId === member.id ? 'Salvando...' : isActive ? 'Ativo' : 'Inativo'}
+                    />
+                  )}
+                  {canManage && incompleto && (
                     <Tooltip title={temContato ? `Notificar para atualizar dados (${completude}%)` : 'Sem telefone para notificar'}>
                       <span>
                         <IconButton
@@ -168,7 +171,7 @@ const MembersTable = ({
                       </span>
                     </Tooltip>
                   )}
-                  {member.userId && (
+                  {canManage && member.userId && (
                     <Tooltip title="Sincronizar dados do usuário vinculado">
                       <span>
                         <IconButton
@@ -189,16 +192,20 @@ const MembersTable = ({
                       <VisibilityIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
-                  <Tooltip title="Editar membro">
-                    <IconButton size="small" onClick={() => onOpenEdit(member)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="Excluir membro">
-                    <IconButton size="small" color="error" onClick={() => onDeleteMember(member)}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
+                  {canManage && (
+                    <Tooltip title="Editar membro">
+                      <IconButton size="small" onClick={() => onOpenEdit(member)}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  {canManage && (
+                    <Tooltip title="Excluir membro">
+                      <IconButton size="small" color="error" onClick={() => onDeleteMember(member)}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                 </Stack>
               </TableCell>
             </TableRow>
@@ -254,6 +261,7 @@ MembersTable.propTypes = {
   onOpenEdit: PropTypes.func.isRequired,
   onDeleteMember: PropTypes.func.isRequired,
   showLeaderColumns: PropTypes.bool,
+  canManage: PropTypes.bool,
 };
 
 MembersTable.defaultProps = {
@@ -264,6 +272,7 @@ MembersTable.defaultProps = {
   sincronizandoMembro: {},
   onNotifyLeaderCells: () => {},
   showLeaderColumns: false,
+  canManage: true,
 };
 
 export default MembersTable;
