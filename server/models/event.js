@@ -12,6 +12,7 @@ module.exports = (sequelize) => {
       Event.hasMany(models.EventHousingAllocation, { foreignKey: 'eventId', as: 'housingAllocations' });
       Event.hasOne(models.EventTeamsConfig, { foreignKey: 'eventId', as: 'teamsConfig' });
       Event.hasMany(models.EventTeamsAllocation, { foreignKey: 'eventId', as: 'teamsAllocations' });
+      Event.hasMany(models.EventCoordinator, { foreignKey: 'eventId', as: 'coordinators' });
     }
   }
 

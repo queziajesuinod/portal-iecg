@@ -9,8 +9,10 @@ const registrationRuleController = require('../controllers/registrationRuleContr
 const paymentOptionController = require('../controllers/paymentOptionController');
 const housingController = require('../controllers/housingController');
 const teamsController = require('../controllers/teamsController');
+const eventCoordinatorController = require('../controllers/eventCoordinatorController');
 const requirePermission = require('../middlewares/requirePermission');
 const requireEventAccess = requirePermission(['EVENTS_ACESS', 'EVENTS_ACCESS', 'EVENTOS_LISTAR']);
+const requireCoordinatorManage = requirePermission(['EVENTS_COORDINATOR_MANAGE', 'ADMIN_FULL_ACCESS']);
 
 // Middleware de autenticação (assumindo que já existe)
 // const { authenticate } = require('../middlewares/auth');
@@ -45,6 +47,15 @@ router.delete('/registration-rules/:id', registrationRuleController.remover);
 // ============= FORMAS DE PAGAMENTO (ANTES DE /:id) =============
 router.put('/payment-options/:id', paymentOptionController.atualizar);
 router.delete('/payment-options/:id', paymentOptionController.deletar);
+
+// ============= COORDENADORES DE EVENTO (ANTES DE /:id) =============
+router.get('/coordinators/:id', requireCoordinatorManage, eventCoordinatorController.buscarPorId);
+router.put('/coordinators/:id', requireCoordinatorManage, eventCoordinatorController.atualizar);
+router.delete('/coordinators/:id', requireCoordinatorManage, eventCoordinatorController.remover);
+router.get('/coordinators/:id/logs', requireCoordinatorManage, eventCoordinatorController.listarLogs);
+router.post('/coordinators/:id/validate', requireCoordinatorManage, eventCoordinatorController.validar);
+router.post('/coordinators/:id/send', requireCoordinatorManage, eventCoordinatorController.enviar);
+router.post('/coordinators/:id/test', requireCoordinatorManage, eventCoordinatorController.enviarTeste);
 
 // ============= INSCRIÇÕES (ADMIN) (ANTES DE /:id) =============
 router.get('/registrations', registrationController.listar);
@@ -99,5 +110,10 @@ router.post('/:eventId/teams/config', teamsController.saveConfig);
 router.post('/:eventId/teams/generate', teamsController.generate);
 router.get('/:eventId/teams/allocation', teamsController.getAllocation);
 router.put('/:eventId/teams/allocation', teamsController.saveAllocation);
+
+// ============= COORDENADORES DE EVENTO (:eventId) =============
+router.get('/:eventId/coordinators', requireCoordinatorManage, eventCoordinatorController.listarPorEvento);
+router.post('/:eventId/coordinators', requireCoordinatorManage, eventCoordinatorController.criar);
+router.get('/:eventId/coordinators/field-options', requireCoordinatorManage, eventCoordinatorController.opcoesCampos);
 
 module.exports = router;

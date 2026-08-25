@@ -212,6 +212,39 @@ class EvolutionApiService {
   }
 
   /**
+   * Enviar documento (PDF, CSV, etc) via base64 — sem precisar hospedar o
+   * arquivo publicamente. Evolution API v2: sendMedia com mediatype 'document'.
+   */
+  async enviarDocumentoBase64(phone, base64, fileName, caption = '', mimetype = 'text/csv', instanceName = null) {
+    try {
+      const client = this.getClient();
+      const formattedPhone = this.formatPhoneNumber(phone);
+      const instance = this.resolveInstance(instanceName);
+
+      const response = await client.post(`/message/sendMedia/${instance}`, {
+        number: formattedPhone,
+        mediatype: 'document',
+        mimetype,
+        caption,
+        media: base64,
+        fileName: fileName || 'documento'
+      });
+
+      return {
+        sucesso: true,
+        externalId: response.data?.key?.id || null,
+        dados: response.data
+      };
+    } catch (error) {
+      console.error('Erro ao enviar documento base64 via Evolution API:', error.response?.data || error.message);
+      return {
+        sucesso: false,
+        erro: error.response?.data?.message || error.message
+      };
+    }
+  }
+
+  /**
    * Verificar status da instância
    * @returns {Promise<Object>}
    */

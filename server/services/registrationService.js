@@ -2325,6 +2325,7 @@ module.exports = {
   ajustarContadoresDeStatus,
   atualizarStatusPagamentoPorPagamentos,
   anexarResumoPagamentos,
+  calcularResumoPagamentos,
   emitirWebhookRegistroAtualizado,
   montarPayloadWebhookInscricao
 };

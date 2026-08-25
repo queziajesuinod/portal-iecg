@@ -215,3 +215,37 @@ export const atualizarFormaPagamento = (id, dados) => fetchWithAuth(`${API_URL}/
 export const deletarFormaPagamento = (id) => fetchWithAuth(`${API_URL}/api/admin/events/payment-options/${id}`, {
   method: 'DELETE',
 });
+
+// ===== COORDENADORES DE EVENTO =====
+
+export const listarCoordenadoresEvento = (eventId) => fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/coordinators`);
+
+export const obterOpcoesCamposCoordenador = (eventId) => fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/coordinators/field-options`);
+
+export const criarCoordenadorEvento = (eventId, dados) => fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/coordinators`, {
+  method: 'POST',
+  body: JSON.stringify(dados),
+});
+
+export const atualizarCoordenadorEvento = (id, dados) => fetchWithAuth(`${API_URL}/api/admin/events/coordinators/${id}`, {
+  method: 'PUT',
+  body: JSON.stringify(dados),
+});
+
+export const deletarCoordenadorEvento = (id) => fetchWithAuth(`${API_URL}/api/admin/events/coordinators/${id}`, {
+  method: 'DELETE',
+});
+
+export const validarCoordenadorEvento = (id) => fetchWithAuth(`${API_URL}/api/admin/events/coordinators/${id}/validate`, {
+  method: 'POST',
+});
+
+export const enviarRelatorioCoordenador = (id) => fetchWithAuth(`${API_URL}/api/admin/events/coordinators/${id}/send`, {
+  method: 'POST',
+});
+
+export const enviarTesteCoordenador = (id) => fetchWithAuth(`${API_URL}/api/admin/events/coordinators/${id}/test`, {
+  method: 'POST',
+});
+
+export const listarLogsCoordenador = (id) => fetchWithAuth(`${API_URL}/api/admin/events/coordinators/${id}/logs`);
