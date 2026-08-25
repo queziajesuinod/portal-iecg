@@ -24,6 +24,7 @@ import GetAppIcon from '@mui/icons-material/GetApp';
 import SyncIcon from '@mui/icons-material/Sync';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import FiberNewIcon from '@mui/icons-material/FiberNew';
+import UpdateIcon from '@mui/icons-material/Update';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import TableChartIcon from '@mui/icons-material/TableChart';
@@ -143,6 +144,7 @@ const ListagemCelulasPage = () => {
   const [filterDia, setFilterDia] = useState('');
   const [filterSemLiderMembro, setFilterSemLiderMembro] = useState(false);
   const [filterNovas, setFilterNovas] = useState(false);
+  const [filterAtualizadas, setFilterAtualizadas] = useState(false);
   const [filterCasal, setFilterCasal] = useState(false);
   const [mapCelulas, setMapCelulas] = useState([]);
   const [hoveredMarkerId, setHoveredMarkerId] = useState(null);
@@ -239,6 +241,9 @@ const ListagemCelulasPage = () => {
     }
     if (filterNovas) {
       params.append('novasDias', String(RECENT_WINDOW_DAYS));
+    }
+    if (filterAtualizadas) {
+      params.append('atualizadasDias', String(RECENT_WINDOW_DAYS));
     }
     if (filterCasal) {
       params.append('casal', 'true');
@@ -800,6 +805,7 @@ const ListagemCelulasPage = () => {
     filterStatus !== 'true' ? filterStatus : null,
     filterSemLiderMembro ? true : null,
     filterNovas ? true : null,
+    filterAtualizadas ? true : null,
     filterCasal ? true : null
   ].filter(Boolean).length;
 
@@ -814,6 +820,7 @@ const ListagemCelulasPage = () => {
     setFilterStatus('true');
     setFilterSemLiderMembro(false);
     setFilterNovas(false);
+    setFilterAtualizadas(false);
     setFilterCasal(false);
     setPage(1);
   };
@@ -1041,6 +1048,7 @@ const ListagemCelulasPage = () => {
     filterStatus,
     filterSemLiderMembro,
     filterNovas,
+    filterAtualizadas,
     filterCasal,
     API_URL
   ]);
@@ -1058,6 +1066,7 @@ const ListagemCelulasPage = () => {
     filterStatus,
     filterSemLiderMembro,
     filterNovas,
+    filterAtualizadas,
     filterCasal,
     API_URL
   ]);
@@ -1129,18 +1138,20 @@ const ListagemCelulasPage = () => {
 
   const pagedCelulas = sortedCelulas;
 
-  // ----- Destaque de células recém-criadas (últimos 7 dias) -----
-  const diasDesdeCriacao = (celula) => {
-    const ref = celula?.createdAt || celula?.updatedAt;
+  // ----- Destaque de células recém-criadas / atualizadas (últimos 7 dias) -----
+  const diasDesde = (ref) => {
     if (!ref) return null;
     const ts = new Date(ref).getTime();
     if (!Number.isFinite(ts)) return null;
     return Math.floor((Date.now() - ts) / DAY_MS);
   };
-  const isCelulaRecente = (celula) => {
-    const dias = diasDesdeCriacao(celula);
-    return dias !== null && dias >= 0 && dias < RECENT_WINDOW_DAYS;
-  };
+  const dentroDaJanela = (dias) => dias !== null && dias >= 0 && dias < RECENT_WINDOW_DAYS;
+  // Nova: criada nos últimos 7 dias (baseia-se só em createdAt).
+  const isCelulaRecente = (celula) => dentroDaJanela(diasDesde(celula?.createdAt));
+  // Atualizada: alterada nos últimos 7 dias, mas NÃO recém-criada (evita dupla etiqueta).
+  const isCelulaAtualizada = (celula) => (
+    !isCelulaRecente(celula) && dentroDaJanela(diasDesde(celula?.updatedAt))
+  );
   // Usa a base já carregada para o mapa (todas as células do filtro atual, com createdAt),
   // assim as recém-criadas aparecem mesmo que estejam em outra página da tabela.
   const recentCelulas = useMemo(
@@ -1626,7 +1637,18 @@ const ListagemCelulasPage = () => {
                   clickable
                   color={filterNovas ? 'success' : 'default'}
                   variant={filterNovas ? 'filled' : 'outlined'}
-                  onClick={() => { setFilterNovas((v) => !v); setPage(1); }}
+                  onClick={() => { setFilterNovas((v) => !v); setFilterAtualizadas(false); setPage(1); }}
+                  sx={{ height: 40, borderRadius: 1, fontWeight: 600 }}
+                />
+              </Tooltip>
+              <Tooltip title={`Mostra apenas células atualizadas nos últimos ${RECENT_WINDOW_DAYS} dias (sem contar as recém-criadas)`}>
+                <Chip
+                  icon={<UpdateIcon />}
+                  label={`Atualizadas (${RECENT_WINDOW_DAYS} dias)`}
+                  clickable
+                  color={filterAtualizadas ? 'info' : 'default'}
+                  variant={filterAtualizadas ? 'filled' : 'outlined'}
+                  onClick={() => { setFilterAtualizadas((v) => !v); setFilterNovas(false); setPage(1); }}
                   sx={{ height: 40, borderRadius: 1, fontWeight: 600 }}
                 />
               </Tooltip>
@@ -1973,6 +1995,7 @@ const ListagemCelulasPage = () => {
             ) : pagedCelulas.length > 0 ? (
               pagedCelulas.map((c) => {
                 const recente = isCelulaRecente(c);
+                const atualizada = isCelulaAtualizada(c);
                 return (
                   <TableRow
                     key={c.id}
@@ -1987,6 +2010,9 @@ const ListagemCelulasPage = () => {
                         <span>{c.celula}</span>
                         {recente && (
                           <Chip size="small" color="success" label="Nova" sx={{ fontWeight: 700, height: 20 }} />
+                        )}
+                        {atualizada && (
+                          <Chip size="small" color="info" label="Atualizada" sx={{ fontWeight: 700, height: 20 }} />
                         )}
                         {c.casalCelulaId && (
                           <Tooltip title={c.casalRef?.celula ? `Célula de casal — vinculada com ${c.casalRef.celula}` : 'Célula de casal'}>

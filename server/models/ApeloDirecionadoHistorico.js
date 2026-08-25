@@ -1,4 +1,3 @@
-'use strict';
 const { Model, DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
@@ -51,6 +50,14 @@ module.exports = (sequelize) => {
       defaultValue: DataTypes.NOW
     },
     motivo: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    usuario_id: {
+      type: DataTypes.UUID,
+      allowNull: true
+    },
+    usuario_nome: {
       type: DataTypes.STRING,
       allowNull: true
     }

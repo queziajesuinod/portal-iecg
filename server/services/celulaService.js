@@ -273,6 +273,17 @@ const CelulaService = {
         where.createdAt = { [Op.gte]: desde };
       }
     }
+
+    // Células atualizadas nos últimos N dias, mas NÃO criadas nesse período
+    // (ex.: atualizadasDias=7). Espelha a etiqueta "Atualizada" da listagem.
+    if (filtros.atualizadasDias) {
+      const dias = parseInt(filtros.atualizadasDias, 10);
+      if (Number.isFinite(dias) && dias > 0) {
+        const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000);
+        where.updatedAt = { [Op.gte]: desde };
+        where.createdAt = { [Op.lt]: desde };
+      }
+    }
     {
       const ativoValorRaw = filtros.ativo;
       const ativoValor = typeof ativoValorRaw !== 'undefined' && ativoValorRaw !== null

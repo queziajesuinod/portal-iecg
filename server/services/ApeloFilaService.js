@@ -904,7 +904,12 @@ class ApeloFilaService {
       status: 'MOVIMENTACAO_CELULA'
     };
 
-    await ApeloDirecionadoCelulaService.atualizar(apelo.id, payloadAtualizar);
+    // A fila registra o ator como sistema e desliga o auto-encaminhamento do
+    // service (ela já agenda a própria transição via scheduleStatusTransition abaixo).
+    await ApeloDirecionadoCelulaService.atualizar(apelo.id, payloadAtualizar, {
+      usuario: { userId: null, nome: 'Sistema (fila)' },
+      skipAutoTransition: true
+    });
 
     WebhookService.sendEvent('apelo.moved', {
       apeloId: apelo.id,

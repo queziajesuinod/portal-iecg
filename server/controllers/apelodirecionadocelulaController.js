@@ -57,7 +57,7 @@ class ApeloDirecionadoCelulaController {
 
   async atualizar(req, res) {
     try {
-      const item = await ApeloDirecionadoCelulaService.atualizar(req.params.id, req.body);
+      const item = await ApeloDirecionadoCelulaService.atualizar(req.params.id, req.body, { usuario: req.user });
       return res.status(200).json(item);
     } catch (error) {
       return res.status(400).json({ erro: error.message });
@@ -99,7 +99,10 @@ class ApeloDirecionadoCelulaController {
       if (!celulaDestinoId) {
         return res.status(400).json({ erro: 'celulaDestinoId é obrigatório' });
       }
-      const item = await ApeloDirecionadoCelulaService.moverApelo(id, celulaDestinoId, motivo);
+      if (!motivo || !String(motivo).trim()) {
+        return res.status(400).json({ erro: 'O motivo do direcionamento é obrigatório' });
+      }
+      const item = await ApeloDirecionadoCelulaService.moverApelo(id, celulaDestinoId, String(motivo).trim(), req.user);
       return res.status(200).json(item);
     } catch (error) {
       return res.status(400).json({ erro: error.message });

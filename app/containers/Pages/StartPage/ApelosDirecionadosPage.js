@@ -393,10 +393,13 @@ const ApelosDirecionadosPage = () => {
       return res.json().catch(() => ({}));
     },
     onSuccess: (_data, vars) => {
-      setNotification('Apelo movido com sucesso.');
+      setNotification('Apelo movido com sucesso. Será encaminhado (Direcionado) em alguns segundos.');
       sendWebhookEvent('apelo.moved', { apeloId: vars.apeloId, destinoCelulaId: vars.destinoId });
       setMoveDialogOpen(false);
       invalidateApelos();
+      // O backend agenda a transição automática para "Direcionado" ~10s após mover.
+      // Recarrega depois disso para a lista refletir o novo status sem F5.
+      setTimeout(() => invalidateApelos(), 11000);
     },
     onError: (err) => setNotification(err.message || 'Erro ao mover apelo.'),
   });
@@ -410,7 +413,11 @@ const ApelosDirecionadosPage = () => {
       setNotification('Não é possível direcionar para a mesma célula.');
       return;
     }
-    moverApeloMutation.mutate({ apeloId: apeloSelecionado.id, destinoId: celulaDestinoId, motivoTexto: motivo });
+    if (!motivo.trim()) {
+      setNotification('Informe o motivo do direcionamento para registrar no histórico.');
+      return;
+    }
+    moverApeloMutation.mutate({ apeloId: apeloSelecionado.id, destinoId: celulaDestinoId, motivoTexto: motivo.trim() });
   };
 
   // Historico do apelo selecionado — so busca quando o dialog esta aberto.
@@ -682,6 +689,10 @@ const ApelosDirecionadosPage = () => {
   };
 
   const statusLabel = (status) => statusConfig[status]?.label || status || '-';
+
+  // Status controlados pelo sistema (fila/movimentação) — não devem ser escolhidos
+  // manualmente no dialog "Alterar status".
+  const STATUS_NAO_SELECIONAVEL = ['APELO_CADASTRADO', 'MOVIMENTACAO_CELULA'];
 
   const DECISAO_OPTIONS = [
     { value: 'apelo_decisao', label: 'Aceitar Jesus como meu Senhor e Salvador', color: 'success' },
@@ -1223,7 +1234,7 @@ const ApelosDirecionadosPage = () => {
               <ListItemIcon><HistoryIcon fontSize="small" /></ListItemIcon>
               <ListItemText>Histórico</ListItemText>
             </MenuItem>,
-            <MenuItem key="status" onClick={() => { setRowMenuAnchor(null); if (apelo) { setApeloSelecionado(apelo); setNovoStatus(apelo.status || ''); setMotivoStatus(''); setStatusDialogOpen(true); } }}>
+            <MenuItem key="status" onClick={() => { setRowMenuAnchor(null); if (apelo) { setApeloSelecionado(apelo); setNovoStatus(STATUS_NAO_SELECIONAVEL.includes(apelo.status) ? '' : (apelo.status || '')); setMotivoStatus(''); setStatusDialogOpen(true); } }}>
               <ListItemIcon><AutorenewIcon fontSize="small" /></ListItemIcon>
               <ListItemText>Alterar status</ListItemText>
             </MenuItem>,
@@ -1326,9 +1337,12 @@ const ApelosDirecionadosPage = () => {
           <TextField
             label="Motivo do direcionamento"
             fullWidth
+            required
             margin="normal"
             value={motivo}
             onChange={(e) => setMotivo(e.target.value)}
+            error={!motivo.trim()}
+            helperText={!motivo.trim() ? 'Obrigatório — registra no histórico o porquê do direcionamento.' : ' '}
             multiline
             minRows={2}
           />
@@ -1444,7 +1458,13 @@ const ApelosDirecionadosPage = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setMoveDialogOpen(false)}>Cancelar</Button>
-          <Button variant="contained" onClick={moverApelo}>Mover</Button>
+          <Button
+            variant="contained"
+            onClick={moverApelo}
+            disabled={!celulaDestinoId || !motivo.trim() || moverApeloMutation.isPending}
+          >
+            Mover
+          </Button>
         </DialogActions>
       </Dialog>
 
@@ -1649,12 +1669,14 @@ const ApelosDirecionadosPage = () => {
                   if (item.status_anterior) partes.push(`De: ${statusLabel(item.status_anterior)}`);
                   if (item.status_novo) partes.push(`Para: ${statusLabel(item.status_novo)}`);
                   if (item.motivo) partes.push(`Motivo: ${item.motivo}`);
+                  if (item.usuario_nome) partes.push(`Por: ${item.usuario_nome}`);
                   description = partes.join(' · ');
                 } else {
                   const partes = [];
                   partes.push(`Origem: ${item.celulaOrigem?.celula || '-'}`);
                   partes.push(`Destino: ${item.celulaDestino?.celula || '-'}`);
                   if (item.motivo) partes.push(`Motivo: ${item.motivo}`);
+                  if (item.usuario_nome) partes.push(`Por: ${item.usuario_nome}`);
                   description = partes.join(' · ');
                 }
                 return {
@@ -1687,9 +1709,11 @@ const ApelosDirecionadosPage = () => {
             value={novoStatus}
             onChange={(e) => setNovoStatus(e.target.value)}
           >
-            {Object.keys(statusConfig).map((key) => (
-              <MenuItem key={key} value={key}>{statusConfig[key].label}</MenuItem>
-            ))}
+            {Object.keys(statusConfig)
+              .filter((key) => !STATUS_NAO_SELECIONAVEL.includes(key))
+              .map((key) => (
+                <MenuItem key={key} value={key}>{statusConfig[key].label}</MenuItem>
+              ))}
           </TextField>
           <TextField
             fullWidth

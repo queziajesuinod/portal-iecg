@@ -17,6 +17,13 @@ const {
 
 const { parseLegacyNotes } = require('../utils/memberUserSync');
 const celulaPresencaService = require('./celulaPresencaService');
+const WebhookService = require('./WebhookService');
+
+// Ao mover/mudar manualmente o status para MOVIMENTACAO_CELULA com célula vinculada,
+// agenda o encaminhamento automático para DIRECIONADO_COM_SUCESSO após este delay.
+const AUTO_DIRECIONADO_DELAY_MS = 10 * 1000;
+// Ator registrado no histórico quando a transição é feita pelo próprio sistema.
+const USUARIO_SISTEMA = { userId: null, nome: 'Sistema' };
 
 const { GOOGLE_GEOCODE_KEY } = process.env;
 const GEO_TIMEOUT_MS = 5000;
@@ -1104,7 +1111,28 @@ class ApeloDirecionadoCelulaService {
     return item;
   }
 
-  async atualizar(id, dados = {}) {
+  // Agenda (em memória) a transição de MOVIMENTACAO_CELULA para DIRECIONADO_COM_SUCESSO
+  // após AUTO_DIRECIONADO_DELAY_MS. Registra a transição como ação do sistema.
+  // Observação: usa setTimeout no processo Node — se reiniciar durante o delay, perde-se.
+  _agendarTransicaoDirecionado(apeloId) {
+    setTimeout(async () => {
+      try {
+        await this.atualizar(apeloId, { status: 'DIRECIONADO_COM_SUCESSO' }, {
+          usuario: USUARIO_SISTEMA,
+          skipAutoTransition: true
+        });
+        WebhookService.sendEvent('apelo.status_changed', {
+          apeloId,
+          status: 'DIRECIONADO_COM_SUCESSO'
+        }).catch(() => {});
+      } catch (err) {
+        console.error('Erro ao encaminhar apelo automaticamente para DIRECIONADO_COM_SUCESSO:', err);
+      }
+    }, AUTO_DIRECIONADO_DELAY_MS);
+  }
+
+  async atualizar(id, dados = {}, options = {}) {
+    const { usuario = null, skipAutoTransition = false } = options;
     const item = await this.buscarPorId(id);
     const payloadEntrada = this._extrairPayloadEntrada(dados);
     const { motivo_status: motivoStatus, ...dadosNormalizados } = this._normalizarCampos(payloadEntrada);
@@ -1113,8 +1141,8 @@ class ApeloDirecionadoCelulaService {
     const statusAnterior = item.status;
     const statusNovo = dadosAtualizar.status;
 
-    return ApeloDirecionadoCelula.sequelize.transaction(async (transaction) => {
-      const atualizado = await item.update(dadosAtualizar, { transaction });
+    const atualizado = await ApeloDirecionadoCelula.sequelize.transaction(async (transaction) => {
+      const registro = await item.update(dadosAtualizar, { transaction });
 
       if (statusEnviado && (statusNovo !== statusAnterior || motivoStatus)) {
         await ApeloDirecionadoHistorico.create({
@@ -1123,16 +1151,27 @@ class ApeloDirecionadoCelulaService {
           status_novo: statusNovo || null,
           data_movimento: new Date(),
           tipo_evento: 'STATUS',
-          motivo: motivoStatus || null
+          motivo: motivoStatus || null,
+          usuario_id: usuario?.userId || usuario?.id || null,
+          usuario_nome: usuario?.nome || usuario?.username || null
         }, { transaction });
 
         if (statusNovo === 'CONSOLIDADO_CELULA') {
-          await this._processarConsolidacaoDoApelo(atualizado, transaction);
+          await this._processarConsolidacaoDoApelo(registro, transaction);
         }
       }
 
-      return atualizado;
+      return registro;
     });
+
+    // Encaminhamento automático: mudança manual para MOVIMENTACAO_CELULA com célula
+    // vinculada agenda a transição para DIRECIONADO_COM_SUCESSO. A fila passa
+    // skipAutoTransition=true (ela já agenda a própria transição).
+    if (!skipAutoTransition && statusEnviado && statusNovo === 'MOVIMENTACAO_CELULA' && atualizado.celula_id) {
+      this._agendarTransicaoDirecionado(atualizado.id);
+    }
+
+    return atualizado;
   }
 
   async deletar(id) {
@@ -1168,10 +1207,11 @@ class ApeloDirecionadoCelulaService {
   // Aplica a movimentação de um apelo para uma célula (campos + histórico).
   // Não move o cônjuge (isso é orquestrado por moverApelo). Se já estiver na
   // célula, apenas retorna (evita erro ao cascatear para o cônjuge).
-  async _aplicarMovimentacao(apelo, celulaDestino, motivo, transaction) {
+  // Retorna true se a movimentação foi aplicada; false se o apelo já estava na célula.
+  async _aplicarMovimentacao(apelo, celulaDestino, motivo, transaction, usuario = null) {
     const origem = apelo.celula_id;
     if (origem && String(origem) === String(celulaDestino.id)) {
-      return apelo;
+      return false;
     }
 
     const novoStatus = 'MOVIMENTACAO_CELULA';
@@ -1186,6 +1226,9 @@ class ApeloDirecionadoCelulaService {
     apelo.data_direcionamento = new Date();
     await apelo.save({ transaction });
 
+    const usuarioId = usuario?.userId || usuario?.id || null;
+    const usuarioNome = usuario?.nome || usuario?.username || null;
+
     if (statusAnterior !== novoStatus) {
       await ApeloDirecionadoHistorico.create({
         apelo_id: apelo.id,
@@ -1193,7 +1236,9 @@ class ApeloDirecionadoCelulaService {
         status_novo: novoStatus,
         data_movimento: new Date(),
         tipo_evento: 'STATUS',
-        motivo: motivo || null
+        motivo: motivo || null,
+        usuario_id: usuarioId,
+        usuario_nome: usuarioNome
       }, { transaction });
     }
 
@@ -1203,13 +1248,20 @@ class ApeloDirecionadoCelulaService {
       celula_id_destino: celulaDestino.id,
       motivo: motivo || null,
       data_movimento: new Date(),
-      tipo_evento: 'CELULA'
+      tipo_evento: 'CELULA',
+      usuario_id: usuarioId,
+      usuario_nome: usuarioNome
     }, { transaction });
 
-    return apelo;
+    return true;
   }
 
-  async moverApelo(apeloId, celulaDestinoId, motivo = '') {
+  async moverApelo(apeloId, celulaDestinoId, motivo = '', usuario = null) {
+    const motivoLimpo = String(motivo || '').trim();
+    if (!motivoLimpo) {
+      throw new Error('O motivo do direcionamento é obrigatório.');
+    }
+
     const apelo = await this.buscarPorId(apeloId);
     const celulaDestino = await Celula.findByPk(celulaDestinoId);
 
@@ -1222,8 +1274,11 @@ class ApeloDirecionadoCelulaService {
       throw new Error('Não é possível direcionar para a mesma célula.');
     }
 
-    return ApeloDirecionadoCelula.sequelize.transaction(async (transaction) => {
-      await this._aplicarMovimentacao(apelo, celulaDestino, motivo, transaction);
+    const idsParaEncaminhar = [];
+
+    await ApeloDirecionadoCelula.sequelize.transaction(async (transaction) => {
+      const moveu = await this._aplicarMovimentacao(apelo, celulaDestino, motivoLimpo, transaction, usuario);
+      if (moveu) idsParaEncaminhar.push(apelo.id);
 
       // Célula de casal: ao mover o apelo principal para uma célula de casal,
       // move automaticamente o cônjuge para a célula par (casalCelulaId), que
@@ -1234,17 +1289,25 @@ class ApeloDirecionadoCelulaService {
           Celula.findByPk(celulaDestino.casalCelulaId, { transaction })
         ]);
         if (conjuge && celulaPar) {
-          await this._aplicarMovimentacao(
+          const moveuConjuge = await this._aplicarMovimentacao(
             conjuge,
             celulaPar,
-            motivo || 'Movimentação automática (cônjuge de célula de casal)',
-            transaction
+            motivoLimpo || 'Movimentação automática (cônjuge de célula de casal)',
+            transaction,
+            usuario
           );
+          if (moveuConjuge) idsParaEncaminhar.push(conjuge.id);
         }
       }
 
       return apelo;
     });
+
+    // Movimentação manual (fora da fila): agenda o encaminhamento automático para
+    // DIRECIONADO_COM_SUCESSO após o delay, para o apelo (e cônjuge, se movido).
+    idsParaEncaminhar.forEach((id) => this._agendarTransicaoDirecionado(id));
+
+    return apelo;
   }
 
   async historico(apeloId) {
