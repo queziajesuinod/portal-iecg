@@ -11,20 +11,28 @@ const housingController = require('../controllers/housingController');
 const teamsController = require('../controllers/teamsController');
 const eventCoordinatorController = require('../controllers/eventCoordinatorController');
 const requirePermission = require('../middlewares/requirePermission');
+const { eventVisibilityGuard } = require('../services/eventVisibility');
 const requireEventAccess = requirePermission(['EVENTS_ACESS', 'EVENTS_ACCESS', 'EVENTOS_LISTAR']);
 const requireCoordinatorManage = requirePermission(['EVENTS_COORDINATOR_MANAGE', 'ADMIN_FULL_ACCESS']);
+const requireCouponsManage = requirePermission(['COUPONS_MANAGE']);
+const requireEventVisibilityById = eventVisibilityGuard('id');
 
 // Middleware de autenticação (assumindo que já existe)
 // const { authenticate } = require('../middlewares/auth');
 
 router.use(requireEventAccess);
 
+// Visibilidade por perfil: qualquer rota com :eventId so passa se o usuario
+// puder ver aquele evento (admin/EVENTS_VIEW_ALL veem todos; coordenador so os seus).
+router.param('eventId', (req, res, next) => eventVisibilityGuard('eventId')(req, res, next));
+
 // ============= CUPONS (ANTES DE /:id) =============
 router.get('/coupons', couponController.listar);
 router.get('/coupons/:id', couponController.buscarPorId);
-router.post('/coupons', couponController.criar);
-router.put('/coupons/:id', couponController.atualizar);
-router.delete('/coupons/:id', couponController.remover);
+// Criar/editar/remover cupom: somente admin (ADMIN_FULL_ACCESS) ou perfil com COUPONS_MANAGE.
+router.post('/coupons', requireCouponsManage, couponController.criar);
+router.put('/coupons/:id', requireCouponsManage, couponController.atualizar);
+router.delete('/coupons/:id', requireCouponsManage, couponController.remover);
 
 // ============= LOTES (ANTES DE /:id) =============
 router.get('/batches/:id', batchController.buscarPorId);
@@ -77,10 +85,10 @@ router.get('/stats', eventController.estatisticas);
 // ============= EVENTOS (/:id DEVE VIR POR ÚLTIMO) =============
 router.get('/', eventController.listar);
 router.post('/', eventController.criar);
-router.post('/:id/duplicate', eventController.duplicar);
-router.get('/:id', eventController.buscarPorId);
-router.put('/:id', eventController.atualizar);
-router.delete('/:id', eventController.remover);
+router.post('/:id/duplicate', requireEventVisibilityById, eventController.duplicar);
+router.get('/:id', requireEventVisibilityById, eventController.buscarPorId);
+router.put('/:id', requireEventVisibilityById, eventController.atualizar);
+router.delete('/:id', requireEventVisibilityById, eventController.remover);
 
 // ============= ROTAS COM :eventId (DEPOIS DE /:id) =============
 router.get('/:eventId/batches', batchController.listarPorEvento);

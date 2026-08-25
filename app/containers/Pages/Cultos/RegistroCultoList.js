@@ -19,6 +19,7 @@ import {
   listarRegistros, deletarRegistro, listarMinisterios,
   listarTiposEvento, listarMinistros,
 } from '../../../api/cultosApi';
+import { hasAnyPermission } from '../../../utils/permissions';
 
 const resolveApiUrl = () => {
   if (process.env.REACT_APP_API_URL) return process.env.REACT_APP_API_URL.replace(/\/$/, '');
@@ -34,8 +35,7 @@ const formatarData = (data) => {
   return `${d}/${m}/${y}`;
 };
 
-const presencaTotal = (r) =>
-  (r.qtdHomens || 0) + (r.qtdMulheres || 0) + (r.qtdCriancas || 0) + (r.qtdBebes || 0);
+const presencaTotal = (r) => (r.qtdHomens || 0) + (r.qtdMulheres || 0) + (r.qtdCriancas || 0) + (r.qtdBebes || 0);
 
 // Agrupa por data + campus + ministério + tipo de evento + horário
 const detectarDuplicatas = (registros) => {
@@ -56,6 +56,8 @@ const MESES = [
 
 const RegistroCultoList = () => {
   const history = useHistory();
+  // Backstage (CULTOS_REGISTRO) so ve/cria; editar/excluir exige CULTOS_GESTAO.
+  const canGerirCultos = hasAnyPermission(['CULTOS_GESTAO']);
 
   const [registros, setRegistros] = useState([]);
   const [total, setTotal] = useState(0);
@@ -67,8 +69,12 @@ const RegistroCultoList = () => {
   const [ministros, setMinistros] = useState([]);
   const [mesSelecionado, setMesSelecionado] = useState(''); // "YYYY-MM"
   const [filtros, setFiltros] = useState({
-    campusId: '', ministerioId: '', tipoEventoId: '', ministroId: '',
-    dataInicio: '', dataFim: '',
+    campusId: '',
+    ministerioId: '',
+    tipoEventoId: '',
+    ministroId: '',
+    dataInicio: '',
+    dataFim: '',
   });
   const [notification, setNotification] = useState('');
   const [deleteDialog, setDeleteDialog] = useState({ open: false, id: null });
@@ -203,16 +209,20 @@ const RegistroCultoList = () => {
             <VisibilityIcon fontSize="small" />
           </IconButton>
         </Tooltip>
-        <Tooltip title="Editar">
-          <IconButton size="small" onClick={() => history.push(`/app/cultos/registros/${r.id}/editar`)}>
-            <EditIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="Excluir">
-          <IconButton size="small" color="error" onClick={() => setDeleteDialog({ open: true, id: r.id })}>
-            <DeleteIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
+        {canGerirCultos && (
+          <Tooltip title="Editar">
+            <IconButton size="small" onClick={() => history.push(`/app/cultos/registros/${r.id}/editar`)}>
+              <EditIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
+        {canGerirCultos && (
+          <Tooltip title="Excluir">
+            <IconButton size="small" color="error" onClick={() => setDeleteDialog({ open: true, id: r.id })}>
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
       </TableCell>
     </TableRow>
   );
@@ -341,7 +351,7 @@ const RegistroCultoList = () => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {grupo.map((r, ri) => renderLinha(r, cores[gi % cores.length]))}
+                      {grupo.map((r) => renderLinha(r, cores[gi % cores.length]))}
                     </TableBody>
                   </Table>
                 </TableContainer>
@@ -427,10 +437,12 @@ const RegistroCultoList = () => {
                 </DialogContent>
                 <DialogActions>
                   <Button onClick={() => setDetalheDialog({ open: false, registro: null })}>Fechar</Button>
-                  <Button variant="contained" onClick={() => {
-                    setDetalheDialog({ open: false, registro: null });
-                    history.push(`/app/cultos/registros/${r.id}/editar`);
-                  }}>Editar</Button>
+                  {canGerirCultos && (
+                    <Button variant="contained" onClick={() => {
+                      setDetalheDialog({ open: false, registro: null });
+                      history.push(`/app/cultos/registros/${r.id}/editar`);
+                    }}>Editar</Button>
+                  )}
                 </DialogActions>
               </>
             );

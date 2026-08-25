@@ -39,6 +39,7 @@ import brand from 'dan-api/dummy/brand';
 import { formatDateInAppTimezone } from '../../../utils/dateTime';
 import { useConfirm } from '../../../utils/useConfirm';
 import { TableSkeleton } from '../../../components/Skeleton';
+import { hasAnyPermission } from '../../../utils/permissions';
 import {
   listarCupons,
   criarCupom,
@@ -53,6 +54,8 @@ const METODOS_OPTIONS = Object.entries(METODOS_LABEL);
 
 function CouponsPage() {
   const { confirm, ConfirmDialog } = useConfirm();
+  // Cupom: apenas admin (ou perfil com COUPONS_MANAGE) pode criar/editar/remover.
+  const canManageCoupons = hasAnyPermission(['COUPONS_MANAGE']);
   const [cupons, setCupons] = useState([]);
   const [eventos, setEventos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -306,16 +309,18 @@ function CouponsPage() {
         desc="Gerenciar cupons promocionais"
         overflowX
       >
-        <div style={{ marginBottom: 16 }}>
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<AddIcon />}
-            onClick={() => handleAbrirDialog()}
-          >
-            Novo Cupom
-          </Button>
-        </div>
+        {canManageCoupons && (
+          <div style={{ marginBottom: 16 }}>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={() => handleAbrirDialog()}
+            >
+              Novo Cupom
+            </Button>
+          </div>
+        )}
 
         {loading ? (
           <TableSkeleton cols={5} showToolbar={false} />
@@ -367,30 +372,36 @@ function CouponsPage() {
                     />
                   </TableCell>
                   <TableCell align="center">
-                    <Tooltip title="Editar">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleAbrirDialog(cupom)}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Deletar">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDeletar(cupom.id, cupom.code)}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title={cupom.isActive ? 'Inativar cupom' : 'Reativar cupom'}>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleAlternarStatus(cupom)}
-                      >
-                        {cupom.isActive ? <BlockIcon /> : <CheckCircleIcon />}
-                      </IconButton>
-                    </Tooltip>
+                    {canManageCoupons ? (
+                      <>
+                        <Tooltip title="Editar">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleAbrirDialog(cupom)}
+                          >
+                            <EditIcon />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Deletar">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleDeletar(cupom.id, cupom.code)}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title={cupom.isActive ? 'Inativar cupom' : 'Reativar cupom'}>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleAlternarStatus(cupom)}
+                          >
+                            {cupom.isActive ? <BlockIcon /> : <CheckCircleIcon />}
+                          </IconButton>
+                        </Tooltip>
+                      </>
+                    ) : (
+                      <Typography variant="caption" color="text.secondary">—</Typography>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

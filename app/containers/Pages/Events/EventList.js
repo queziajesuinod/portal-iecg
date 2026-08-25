@@ -70,6 +70,7 @@ import {
 } from '../../../api/eventsApi';
 import { EVENT_TYPE_LABELS, EVENT_TYPE_OPTIONS } from '../../../constants/eventTypes';
 import { queryKeys } from '../../../utils/queryKeys';
+import { hasAnyPermission } from '../../../utils/permissions';
 
 // Evento finalizado = já passou. Sem flag no banco: derivado das datas (mesma
 // regra do backend buildUnfinishedEventWhere — endDate, ou startDate se não houver fim).
@@ -83,6 +84,8 @@ function eventoFinalizado(evento) {
 function EventList() {
   const { confirm, ConfirmDialog } = useConfirm();
   const history = useHistory();
+  // Coordenador (sem EVENTS_VIEW_ALL) so visualiza; acoes de escrita ficam ocultas.
+  const canManageEvents = hasAnyPermission(['EVENTS_VIEW_ALL']);
   const queryClient = useQueryClient();
   const [notification, setNotification] = useState('');
   const [filtros, setFiltros] = useState({
@@ -532,16 +535,18 @@ function EventList() {
               </Grid>
             </AccordionDetails>
           </Accordion>
-          <Box flexShrink={0} mt={0.5}>
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<AddIcon />}
-              onClick={() => history.push('/app/events/novo')}
-            >
-              Novo Evento
-            </Button>
-          </Box>
+          {canManageEvents && (
+            <Box flexShrink={0} mt={0.5}>
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<AddIcon />}
+                onClick={() => history.push('/app/events/novo')}
+              >
+                Novo Evento
+              </Button>
+            </Box>
+          )}
         </Box>
 
         {/* Tabela */}
@@ -623,14 +628,22 @@ function EventList() {
                         {evento.maxRegistrations && ` / ${evento.maxRegistrations}`}
                       </TableCell>
                       <TableCell align="center">
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          color={evento.isActive ? 'primary' : 'inherit'}
-                          onClick={() => handleToggleStatus(evento)}
-                        >
-                          {evento.isActive ? 'Ativo' : 'Inativo'}
-                        </Button>
+                        {canManageEvents ? (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color={evento.isActive ? 'primary' : 'inherit'}
+                            onClick={() => handleToggleStatus(evento)}
+                          >
+                            {evento.isActive ? 'Ativo' : 'Inativo'}
+                          </Button>
+                        ) : (
+                          <Chip
+                            size="small"
+                            label={evento.isActive ? 'Ativo' : 'Inativo'}
+                            color={evento.isActive ? 'primary' : 'default'}
+                          />
+                        )}
                       </TableCell>
                       <TableCell align="center">
                         <Tooltip title="Ações">
@@ -686,7 +699,7 @@ function EventList() {
               <ListItemIcon><ViewIcon fontSize="small" /></ListItemIcon>
               <ListItemText>Ver detalhes</ListItemText>
             </MenuItem>,
-            <MenuItem
+            canManageEvents && <MenuItem
               key="editar"
               onClick={() => {
                 setRowMenuAnchor(null);
@@ -696,7 +709,7 @@ function EventList() {
               <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
               <ListItemText>Editar</ListItemText>
             </MenuItem>,
-            <MenuItem
+            canManageEvents && <MenuItem
               key="duplicar"
               onClick={() => {
                 setRowMenuAnchor(null);
@@ -706,7 +719,7 @@ function EventList() {
               <ListItemIcon><DuplicateIcon fontSize="small" /></ListItemIcon>
               <ListItemText>Duplicar</ListItemText>
             </MenuItem>,
-            <MenuItem
+            canManageEvents && <MenuItem
               key="importar"
               onClick={() => {
                 setRowMenuAnchor(null);
@@ -716,8 +729,8 @@ function EventList() {
               <ListItemIcon><UploadIcon fontSize="small" sx={{ color: 'info.main' }} /></ListItemIcon>
               <ListItemText>Importar inscritos como membros</ListItemText>
             </MenuItem>,
-            <Divider key="div" />,
-            <MenuItem
+            canManageEvents && <Divider key="div" />,
+            canManageEvents && <MenuItem
               key="deletar"
               onClick={() => {
                 setRowMenuAnchor(null);

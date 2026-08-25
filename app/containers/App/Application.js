@@ -185,16 +185,16 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/events/:id/housing" component={EventHousing} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/:id/teams" component={EventTeams} isAuthenticated={isAuthenticated} />
             {/* ===== Módulo: Saúde e Fluxo de Cultos ===== */}
-            <ProtectedRoute exact path="/app/cultos/dashboard" component={CultosDashboard} isAuthenticated={isAuthenticated} />
-            <ProtectedRoute exact path="/app/cultos/relatorio-fluxo" component={RelatorioFluxoMensalPage} isAuthenticated={isAuthenticated} />
-            <ProtectedRoute exact path="/app/cultos/registros" component={RegistroCultoList} isAuthenticated={isAuthenticated} />
-            <ProtectedRoute exact path="/app/cultos/registros/novo" component={RegistroCultoForm} isAuthenticated={isAuthenticated} />
-            <ProtectedRoute exact path="/app/cultos/registros/:id/editar" component={RegistroCultoForm} isAuthenticated={isAuthenticated} />
-            <ProtectedRoute exact path="/app/cultos/admin/ministerios" component={MinisteriosPage} isAuthenticated={isAuthenticated} />
-            <ProtectedRoute exact path="/app/cultos/admin/tipos-evento" component={TiposEventoPage} isAuthenticated={isAuthenticated} />
-            <ProtectedRoute exact path="/app/cultos/admin/campus-ministerios" component={CampusMinisteriosPage} isAuthenticated={isAuthenticated} />
-            <ProtectedRoute exact path="/app/cultos/admin/ministros" component={MinistrosPage} isAuthenticated={isAuthenticated} />
-            <ProtectedRoute exact path="/app/cultos/validacao" component={ValidacaoMinisterioPage} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/cultos/dashboard" component={CultosDashboard} isAuthenticated={isAuthenticated} requiredPermission="CULTOS_GESTAO" />
+            <ProtectedRoute exact path="/app/cultos/relatorio-fluxo" component={RelatorioFluxoMensalPage} isAuthenticated={isAuthenticated} requiredPermission="CULTOS_GESTAO" />
+            <ProtectedRoute exact path="/app/cultos/registros" component={RegistroCultoList} isAuthenticated={isAuthenticated} requiredPermission={['CULTOS_REGISTRO', 'CULTOS_GESTAO']} />
+            <ProtectedRoute exact path="/app/cultos/registros/novo" component={RegistroCultoForm} isAuthenticated={isAuthenticated} requiredPermission={['CULTOS_REGISTRO', 'CULTOS_GESTAO']} />
+            <ProtectedRoute exact path="/app/cultos/registros/:id/editar" component={RegistroCultoForm} isAuthenticated={isAuthenticated} requiredPermission="CULTOS_GESTAO" />
+            <ProtectedRoute exact path="/app/cultos/admin/ministerios" component={MinisteriosPage} isAuthenticated={isAuthenticated} requiredPermission="CULTOS_GESTAO" />
+            <ProtectedRoute exact path="/app/cultos/admin/tipos-evento" component={TiposEventoPage} isAuthenticated={isAuthenticated} requiredPermission="CULTOS_GESTAO" />
+            <ProtectedRoute exact path="/app/cultos/admin/campus-ministerios" component={CampusMinisteriosPage} isAuthenticated={isAuthenticated} requiredPermission="CULTOS_GESTAO" />
+            <ProtectedRoute exact path="/app/cultos/admin/ministros" component={MinistrosPage} isAuthenticated={isAuthenticated} requiredPermission="CULTOS_GESTAO" />
+            <ProtectedRoute exact path="/app/cultos/validacao" component={ValidacaoMinisterioPage} isAuthenticated={isAuthenticated} requiredPermission="CULTOS_GESTAO" />
             {/* ===== Módulo: Voluntariado ===== */}
             <ProtectedRoute exact path="/app/voluntariado/areas" component={AreaVoluntariadoPage} isAuthenticated={isAuthenticated} requiredPermission="VOLUNTARIADO" />
             <ProtectedRoute exact path="/app/voluntariado" component={VoluntariadoPage} isAuthenticated={isAuthenticated} requiredPermission="VOLUNTARIADO" />

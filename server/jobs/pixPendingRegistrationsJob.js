@@ -108,6 +108,34 @@ async function checkPixPendingRegistrations() {
       }
     });
 
+    // Pagamentos PIX pendentes de inscricoes PARCIAIS (BALANCE_DUE): o pagamento
+    // do saldo costuma ocorrer bem depois do sinal, entao NAO aplicamos a janela
+    // de lookback aqui — garante que o 2o pagamento seja validado automaticamente
+    // e a inscricao vire "confirmed" ao quitar o total.
+    const partialPixPending = await RegistrationPayment.findAll({
+      where: {
+        method: 'pix',
+        providerPaymentId: { [Op.ne]: null },
+        status: { [Op.in]: ['pending', 'authorized'] }
+      },
+      include: [
+        {
+          model: Registration,
+          as: 'registration',
+          required: true,
+          where: { paymentStatus: 'partial' }
+        }
+      ],
+      order: [['updatedAt', 'DESC']],
+      limit: PIX_PENDING_JOB_BATCH_SIZE
+    });
+
+    partialPixPending.forEach((payment) => {
+      if (payment.registration) {
+        registrationsById.set(payment.registration.id, payment.registration);
+      }
+    });
+
     const expirable = await Registration.findAll({
       where: {
         paymentMethod: 'pix',

@@ -1,10 +1,16 @@
 const eventService = require('../services/eventService');
+const { resolveEventVisibility } = require('../services/eventVisibility');
 
 async function listar(req, res) {
   try {
     const includeFinished = String(req.query.includeFinished || '').toLowerCase() === 'true';
     const eventos = await eventService.listarEventos({ includeFinished });
-    res.status(200).json(eventos);
+    // Coordenador (sem EVENTS_VIEW_ALL) so ve os eventos em que e coordenador.
+    const vis = await resolveEventVisibility(req);
+    const visiveis = vis.seeAll
+      ? eventos
+      : eventos.filter((ev) => vis.allowedEventIds.includes(ev.id));
+    res.status(200).json(visiveis);
   } catch (err) {
     console.error('Erro ao listar eventos:', err);
     res.status(500).json({ message: 'Erro ao listar eventos' });
@@ -13,7 +19,11 @@ async function listar(req, res) {
 
 async function estatisticas(req, res) {
   try {
-    const stats = await eventService.obterEstatisticasGerais();
+    // Coordenador (sem EVENTS_VIEW_ALL): KPIs so dos eventos que ele pode ver.
+    const vis = await resolveEventVisibility(req);
+    const stats = await eventService.obterEstatisticasGerais(
+      vis.seeAll ? {} : { allowedEventIds: vis.allowedEventIds }
+    );
     res.status(200).json(stats);
   } catch (err) {
     console.error('Erro ao obter estatísticas:', err);

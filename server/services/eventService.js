@@ -431,18 +431,29 @@ async function buscarEventoPublicoPorId(id, options = {}) {
   return result;
 }
 
-async function obterEstatisticasGerais() {
+async function obterEstatisticasGerais(options = {}) {
+  const { allowedEventIds } = options;
+  // Usuario restrito (coordenador) sem eventos visiveis -> tudo zerado.
+  if (Array.isArray(allowedEventIds) && allowedEventIds.length === 0) {
+    return {
+      totalEventos: 0, eventosAtivos: 0, totalInscricoes: 0, receitaTotal: 0
+    };
+  }
   const unfinishedEventWhere = buildUnfinishedEventWhere();
+  // Quando ha restricao de visibilidade, limita as KPIs aos eventos permitidos.
+  const eventWhere = Array.isArray(allowedEventIds)
+    ? { ...unfinishedEventWhere, id: { [Op.in]: allowedEventIds } }
+    : unfinishedEventWhere;
   const [totalEventos, eventosAtivos, totalInscricoes, receitaTotalRaw] = await Promise.all([
-    Event.count({ where: unfinishedEventWhere }),
-    Event.count({ where: { isActive: true, ...unfinishedEventWhere } }),
+    Event.count({ where: eventWhere }),
+    Event.count({ where: { isActive: true, ...eventWhere } }),
     Registration.sum('quantity', {
       where: { paymentStatus: { [Op.in]: COUNTABLE_PAYMENT_STATUSES } },
       include: [{
         model: Event,
         as: 'event',
         attributes: [],
-        where: unfinishedEventWhere,
+        where: eventWhere,
         required: true
       }]
     }),
@@ -457,7 +468,7 @@ async function obterEstatisticasGerais() {
           model: Event,
           as: 'event',
           attributes: [],
-          where: unfinishedEventWhere,
+          where: eventWhere,
           required: true
         }]
       }]

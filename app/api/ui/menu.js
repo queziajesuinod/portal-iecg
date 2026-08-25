@@ -165,60 +165,60 @@ module.exports = [
     icon: 'ion-ios-microphone-outline',
     child: [
       {
+        key: 'cultosRegistros',
+        name: 'Registros de Culto',
+        link: '/app/cultos/registros',
+        icon: 'ion-ios-list-box-outline',
+        permission: 'CULTOS_REGISTRO'
+      },
+      {
         key: 'cultosDashboard',
         name: 'Dashboard',
         link: '/app/cultos/dashboard',
         icon: 'ion-ios-analytics-outline',
-        permission: 'SAUDE_CULTOS'
+        permission: 'CULTOS_GESTAO'
       },
       {
         key: 'cultosRelatorioFluxo',
         name: 'Relatorio de Fluxo',
         link: '/app/cultos/relatorio-fluxo',
         icon: 'ion-ios-paper-outline',
-        permission: 'SAUDE_CULTOS'
-      },
-      {
-        key: 'cultosRegistros',
-        name: 'Registros de Culto',
-        link: '/app/cultos/registros',
-        icon: 'ion-ios-list-box-outline',
-        permission: 'SAUDE_CULTOS'
+        permission: 'CULTOS_GESTAO'
       },
       {
         key: 'cultosMinisterios',
         name: 'Ministérios',
         link: '/app/cultos/admin/ministerios',
         icon: 'ion-ios-people-outline',
-        permission: 'SAUDE_CULTOS'
+        permission: 'CULTOS_GESTAO'
       },
       {
         key: 'cultosTiposEvento',
         name: 'Tipos de Evento',
         link: '/app/cultos/admin/tipos-evento',
         icon: 'ion-ios-pricetag-outline',
-        permission: 'SAUDE_CULTOS'
+        permission: 'CULTOS_GESTAO'
       },
       {
         key: 'cultosCampusMinisterios',
         name: 'Campus × Ministérios',
         link: '/app/cultos/admin/campus-ministerios',
         icon: 'ion-ios-git-network-outline',
-        permission: 'SAUDE_CULTOS'
+        permission: 'CULTOS_GESTAO'
       },
       {
         key: 'cultosMinistros',
         name: 'Ministros',
         link: '/app/cultos/admin/ministros',
         icon: 'ion-ios-mic-outline',
-        permission: 'SAUDE_CULTOS'
+        permission: 'CULTOS_GESTAO'
       },
       {
         key: 'cultosValidacao',
         name: 'Validação de Cultos',
         link: '/app/cultos/validacao',
         icon: 'ion-ios-checkmark-circle-outline',
-        permission: 'SAUDE_CULTOS'
+        permission: 'CULTOS_GESTAO'
       }
     ]
   },

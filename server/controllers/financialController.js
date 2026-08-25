@@ -1,4 +1,5 @@
 const financialService = require('../services/financialService');
+const { resolveEventVisibility } = require('../services/eventVisibility');
 const { listarHistoricoFeeConfig } = financialService;
 
 function normalizeQueryValue(value) {
@@ -39,6 +40,12 @@ async function listRecords(req, res) {
       manualEntryEventId: normalizeQueryValue(req.query.manualEntryEventId),
       manualEntryIsSettled: normalizeQueryValue(req.query.manualEntryIsSettled)
     };
+
+    // Coordenador (sem EVENTS_VIEW_ALL): financeiro so dos eventos que ele ve.
+    const vis = await resolveEventVisibility(req);
+    if (!vis.seeAll) {
+      filters.allowedEventIds = vis.allowedEventIds;
+    }
 
     const result = await financialService.listFinancialRecords(filters);
     res.status(200).json(result);

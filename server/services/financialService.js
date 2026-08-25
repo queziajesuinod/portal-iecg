@@ -553,10 +553,16 @@ async function listFinancialRecords(filters = {}) {
     })
     : [];
   const unfinishedEventIds = unfinishedEvents.map(event => event.id);
+  // Restricao de visibilidade (coordenador): quando presente, limita todos os
+  // recortes por evento a esses IDs. Nulo = admin/gestor (comportamento original).
+  const allowedEventIds = Array.isArray(filters.allowedEventIds) ? filters.allowedEventIds : null;
+  const intersectAllowed = (ids) => (allowedEventIds ? ids.filter((id) => allowedEventIds.includes(id)) : ids);
+  const eventIdAllowed = (id) => !allowedEventIds || allowedEventIds.includes(id);
   if (normalizedEventId) {
-    registrationWhere.eventId = normalizedEventId;
+    registrationWhere.eventId = eventIdAllowed(normalizedEventId) ? normalizedEventId : null;
   } else {
-    registrationWhere.eventId = unfinishedEventIds.length ? { [Op.in]: unfinishedEventIds } : null;
+    const ids = intersectAllowed(unfinishedEventIds);
+    registrationWhere.eventId = ids.length ? { [Op.in]: ids } : null;
   }
   const normalizedPaymentMethod = normalizeOptionalValue(filters.paymentMethod);
   const normalizedExpenseEventId = normalizeOptionalValue(filters.expenseEventId) || normalizedEventId;
@@ -585,12 +591,17 @@ async function listFinancialRecords(filters = {}) {
     manualEntryWhere.paymentMethod = normalizedPaymentMethod;
   }
   if (normalizedExpenseEventId) {
-    expenseWhere.eventId = normalizedExpenseEventId;
+    expenseWhere.eventId = eventIdAllowed(normalizedExpenseEventId) ? normalizedExpenseEventId : null;
   } else {
-    expenseWhere.eventId = unfinishedEventIds.length ? { [Op.in]: unfinishedEventIds } : null;
+    const ids = intersectAllowed(unfinishedEventIds);
+    expenseWhere.eventId = ids.length ? { [Op.in]: ids } : null;
   }
   if (normalizedManualEntryEventId) {
-    manualEntryWhere.eventId = normalizedManualEntryEventId;
+    manualEntryWhere.eventId = eventIdAllowed(normalizedManualEntryEventId) ? normalizedManualEntryEventId : null;
+  } else if (allowedEventIds) {
+    // Coordenador nao ve entradas gerais (sem evento) — apenas dos seus eventos.
+    const ids = intersectAllowed(unfinishedEventIds);
+    manualEntryWhere.eventId = ids.length ? { [Op.in]: ids } : null;
   } else {
     manualEntryWhere[Op.or] = [
       { eventId: null },

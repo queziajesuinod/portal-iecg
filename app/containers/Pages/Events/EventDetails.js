@@ -82,6 +82,7 @@ import {
   obterEstatisticasInscricoesEvento
 } from '../../../api/eventsApi';
 import { EVENT_TYPE_LABELS } from '../../../constants/eventTypes';
+import { hasAnyPermission } from '../../../utils/permissions';
 import { getPaymentStatusChipSx, getPaymentStatusLabel } from '../../../constants/paymentStatus';
 import {
   formatDateInAppTimezone,
@@ -109,6 +110,8 @@ function EventDetails() {
   const history = useHistory();
   const queryClient = useQueryClient();
   const { id } = useParams();
+  // Coordenador (sem EVENTS_VIEW_ALL) so visualiza: oculta acoes de gestao.
+  const canManageEvents = hasAnyPermission(['EVENTS_VIEW_ALL']);
   const [tabAtiva, setTabAtiva] = useState(0);
   const [filters, setFilters] = useState({
     orderCode: '',
@@ -1267,17 +1270,19 @@ function EventDetails() {
               Voltar
             </Button>
           </Grid>
-          <Grid item xs={12} sm={6} md="auto">
-            <Button
-              fullWidth
-              variant="contained"
-              color="primary"
-              startIcon={<EditIcon />}
-              onClick={() => history.push(`/app/events/${id}/editar`)}
-            >
-              Editar Evento
-            </Button>
-          </Grid>
+          {canManageEvents && (
+            <Grid item xs={12} sm={6} md="auto">
+              <Button
+                fullWidth
+                variant="contained"
+                color="primary"
+                startIcon={<EditIcon />}
+                onClick={() => history.push(`/app/events/${id}/editar`)}
+              >
+                Editar Evento
+              </Button>
+            </Grid>
+          )}
           <Grid item xs={12} sm={6} md="auto">
             <Button
               fullWidth
