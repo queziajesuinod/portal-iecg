@@ -8,6 +8,7 @@ const {
   Registration,
   RegistrationPayment,
   RegistrationAttendee,
+  EventLiabilityTerm,
   User,
   sequelize,
 } = require('../models');
@@ -370,6 +371,14 @@ async function invalidateEventListsCache() {
   ]);
 }
 
+// Invalida o cache do evento publico (usado quando sub-recursos mudam, ex.: termo).
+async function invalidateEventPublicCache(id) {
+  await Promise.all([
+    cache.del(cache.CACHE_KEYS.event(id)),
+    cache.del(cache.CACHE_KEYS.eventPublic(id)),
+  ]);
+}
+
 async function buscarEventoPublicoPorId(id, options = {}) {
   const startTime = Date.now();
   const { useCache = true } = options;
@@ -406,6 +415,17 @@ async function buscarEventoPublicoPorId(id, options = {}) {
           as: 'formFields',
           required: false,
           separate: false, // Força JOIN ao invés de query separada
+        },
+        {
+          model: EventLiabilityTerm,
+          as: 'liabilityTerm',
+          required: false,
+          where: { isActive: true },
+          attributes: [
+            'id', 'title', 'contentHtml', 'backgroundImageUrl', 'contentTopOffset', 'contentBottomOffset',
+            'signatureMode', 'requireDocument', 'version',
+            'participantNameField', 'signerNameField', 'signerDocumentField', 'collectFields',
+          ],
         },
       ],
       // Ordenação no nível superior
@@ -998,4 +1018,5 @@ module.exports = {
   obterResumoInscricoesPorEvento,
   duplicarEvento,
   listarTiposEvento,
+  invalidateEventPublicCache,
 };

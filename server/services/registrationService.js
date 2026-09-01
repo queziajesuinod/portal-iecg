@@ -21,6 +21,7 @@ const batchService = require('./batchService');
 const couponService = require('./couponService');
 const formFieldService = require('./formFieldService');
 const registrationRuleService = require('./registrationRuleService');
+const liabilityTermService = require('./liabilityTermService');
 const paymentService = require('./paymentService');
 const financialService = require('./financialService');
 const efiService = require('./efiService');
@@ -772,7 +773,9 @@ async function processarInscricaoInterna(dadosInscricao) {
     buyerData,
     attendeesData,
     paymentData,
-    paymentOptionId // ID da forma de pagamento selecionada
+    paymentOptionId, // ID da forma de pagamento selecionada
+    termAcceptances, // aceites do termo de responsabilidade (1 por participante)
+    clientMeta // { ip, userAgent } — para auditoria do aceite
   } = dadosInscricao;
 
   // 0. Verificar duplicidade: PIX pendente do mesmo CPF no mesmo evento dentro da janela de expiração
@@ -895,7 +898,7 @@ async function processarInscricaoInterna(dadosInscricao) {
     couponId = resultadoCupom.coupon.id;
   }
 
-  // 5. Validar dados do comprador
+  // 5. Validar dados do comprador / responsavel pelo ingresso (usado no envio do ticket)
   await formFieldService.validarDadosFormulario(eventId, buyerData, 'buyer');
 
   // 6. Validar dados dos inscritos (paralelo)
@@ -905,6 +908,10 @@ async function processarInscricaoInterna(dadosInscricao) {
 
   // 6.1. Avaliar regras de bloqueio configuradas pelo organizador
   await registrationRuleService.avaliarRegrasDeBloquio(eventId, buyerData, attendeesData);
+
+  // 6.2. Termo de responsabilidade: se o evento exige, garantir aceite/assinatura
+  //      de cada participante ANTES de qualquer cobranca.
+  liabilityTermService.validateAcceptances({ event: evento, attendeesData, termAcceptances });
 
   // 7. Gerar código único de pedido
   const orderCode = await orderCodeService.gerarCodigoUnico();
@@ -958,11 +965,18 @@ async function processarInscricaoInterna(dadosInscricao) {
     registration.attendees = attendees;
     await prepararRegistroComCampos(registration);
 
+    // Registrar aceites do termo (auditoria) — evento gratuito/desconto total.
+    await liabilityTermService.persistAcceptances({
+      event: evento, registration, attendees, buyerData, attendeesData, termAcceptances, clientMeta,
+    });
+
     await RegistrationPayment.create({
       id: uuid.v4(),
       registrationId: registration.id,
       channel: 'ONLINE',
-      method: paymentMethod,
+      // RegistrationPayments.method e' ENUM sem 'free'; usamos 'manual' (o carater
+      // gratuito fica em provider='free_event'). Registration.paymentMethod mantem 'free'.
+      method: paymentMethod === 'free' ? 'manual' : paymentMethod,
       amount: 0,
       status: 'confirmed',
       provider: eventRequiresPayment ? 'discount' : 'free_event',
@@ -1134,6 +1148,11 @@ async function processarInscricaoInterna(dadosInscricao) {
 
   registration.attendees = attendees;
   await prepararRegistroComCampos(registration);
+
+  // Registrar aceites do termo (auditoria) — inscricao paga.
+  await liabilityTermService.persistAcceptances({
+    event: evento, registration, attendees, buyerData, attendeesData, termAcceptances, clientMeta,
+  });
 
   const taxaPagamento = normalizarValor(valorFinalComJuros - valorBasePagamento);
 

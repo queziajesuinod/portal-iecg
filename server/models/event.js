@@ -13,6 +13,9 @@ module.exports = (sequelize) => {
       Event.hasOne(models.EventTeamsConfig, { foreignKey: 'eventId', as: 'teamsConfig' });
       Event.hasMany(models.EventTeamsAllocation, { foreignKey: 'eventId', as: 'teamsAllocations' });
       Event.hasMany(models.EventCoordinator, { foreignKey: 'eventId', as: 'coordinators' });
+      if (models.EventLiabilityTerm) {
+        Event.hasOne(models.EventLiabilityTerm, { foreignKey: 'eventId', as: 'liabilityTerm' });
+      }
     }
   }
 
@@ -114,6 +117,12 @@ module.exports = (sequelize) => {
       allowNull: false,
       defaultValue: true,
       comment: 'Quando falso, a inscricao e gratuita e nao exige pagamento'
+    },
+    requiresLiabilityTerm: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: 'Quando true, exige aceite/assinatura do termo antes de confirmar a inscricao'
     },
     createdBy: {
       type: DataTypes.UUID,

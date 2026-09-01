@@ -7,6 +7,7 @@ const registrationRuleController = require('../controllers/registrationRuleContr
 const batchController = require('../controllers/batchController');
 const paymentOptionController = require('../controllers/paymentOptionController');
 const financialController = require('../controllers/financialController');
+const liabilityTermController = require('../controllers/liabilityTermController');
 
 // ============= EVENTOS PÚBLICOS =============
 router.get('/', eventController.listarPublicos);
@@ -31,6 +32,9 @@ router.post('/register', registrationController.processar);
 
 // ============= CONSULTAR INSCRIÇÃO POR CÓDIGO =============
 router.get('/registrations/:orderCode', registrationController.buscarPorCodigo);
+
+// ============= PDF DO TERMO ASSINADO =============
+router.get('/registrations/:orderCode/term-pdf', liabilityTermController.downloadPdf);
 
 // ============= PAGAMENTOS PARCIAIS =============
 router.post('/registrations/:id/payments', registrationController.criarPagamento);

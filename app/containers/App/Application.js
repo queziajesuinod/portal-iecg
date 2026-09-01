@@ -54,6 +54,7 @@ import EventImportPage from '../Pages/Events/EventImportPage';
 import EventHousing from '../Pages/Events/EventHousing';
 import EventTeams from '../Pages/Events/EventTeams';
 import RegistrationRules from '../Pages/Events/RegistrationRules';
+import LiabilityTerm from '../Pages/Events/LiabilityTerm';
 import FinancialPage from '../Pages/Financial/FinancialPage';
 import NotificacoesGruposPage from '../Pages/Notificacoes/NotificacoesGruposPage';
 import NotificacoesTemplatesPage from '../Pages/Notificacoes/NotificacoesTemplatesPage';
@@ -181,6 +182,7 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/notificacoes/sequencias" component={NotificacoesSequenciasPage} isAuthenticated={isAuthenticated} requiredPermission="NOTIFICACOES_VIEW" />
             <ProtectedRoute exact path="/app/events/:id/formulario" component={FormBuilder} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/:id/regras-inscricao" component={RegistrationRules} isAuthenticated={isAuthenticated} />
+            <ProtectedRoute exact path="/app/events/:id/termo" component={LiabilityTerm} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/registrations/:id" component={RegistrationDetails} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/:id/housing" component={EventHousing} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/events/:id/teams" component={EventTeams} isAuthenticated={isAuthenticated} />

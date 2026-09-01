@@ -217,6 +217,17 @@ export const deletarFormaPagamento = (id) => fetchWithAuth(`${API_URL}/api/admin
   method: 'DELETE',
 });
 
+// ===== TERMO DE RESPONSABILIDADE =====
+
+export const obterTermoEvento = (eventId) => fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/liability-term`);
+
+export const salvarTermoEvento = (eventId, dados) => fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/liability-term`, {
+  method: 'PUT',
+  body: JSON.stringify(dados),
+});
+
+export const listarAceitesTermo = (eventId) => fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/liability-term/acceptances`);
+
 // ===== COORDENADORES DE EVENTO =====
 
 export const listarCoordenadoresEvento = (eventId) => fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/coordinators`);

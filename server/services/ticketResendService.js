@@ -2,6 +2,20 @@ const moment = require('moment-timezone');
 const { Registration, Event } = require('../models');
 const evolutionApiService = require('./evolutionApiService');
 const emailService = require('./emailService');
+const liabilityTermPdfService = require('./liabilityTermPdfService');
+
+// Gera o anexo PDF do termo assinado (se houver). Tolerante a falha: nunca bloqueia o e-mail.
+async function buildTermAttachment(registrationId, orderCode) {
+  try {
+    if (!(await liabilityTermPdfService.registrationHasSignedTerm(registrationId))) return null;
+    const pdf = await liabilityTermPdfService.generateForRegistration(registrationId);
+    if (!pdf) return null;
+    return [{ filename: `termo-${orderCode}.pdf`, content: pdf, contentType: 'application/pdf' }];
+  } catch (err) {
+    console.error(`[ticket] falha ao gerar PDF do termo (${orderCode}): ${err.message}`);
+    return null;
+  }
+}
 
 const TIMEZONE = 'America/Campo_Grande';
 let ticketEmailColumnsCheck = null;
@@ -206,12 +220,14 @@ async function resendByEmail(registrationId) {
   const html = buildEmailHtml(ctx);
   const text = buildEmailText(ctx);
   const subject = `🎟️ Seu ingresso — ${ctx.eventName}`;
+  const attachments = await buildTermAttachment(registration.id, registration.orderCode);
 
   const result = await emailService.sendMail({
     to: recipient,
     subject,
     html,
     text,
+    attachments,
   });
 
   return {
@@ -278,11 +294,13 @@ async function autoSendTicketEmailOnConfirmed(registrationId, { force = false } 
   };
 
   try {
+    const attachments = await buildTermAttachment(registration.id, registration.orderCode);
     const result = await emailService.sendMail({
       to: recipient,
       subject: `🎟️ Seu ingresso — ${ctx.eventName}`,
       html: buildEmailHtml(ctx),
       text: buildEmailText(ctx),
+      attachments,
     });
     await registration.update({
       ticketEmailSentAt: new Date(),

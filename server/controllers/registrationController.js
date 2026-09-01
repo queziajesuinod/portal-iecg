@@ -1,5 +1,6 @@
 const registrationService = require('../services/registrationService');
 const ticketResendService = require('../services/ticketResendService');
+const liabilityTermPdfService = require('../services/liabilityTermPdfService');
 
 // Rotas administrativas
 async function listar(req, res) {
@@ -100,7 +101,12 @@ async function cancelar(req, res) {
 // Rotas públicas
 async function processar(req, res) {
   try {
-    const resultado = await registrationService.processarInscricao(req.body);
+    // Metadados do cliente para auditoria do aceite do termo (IP/User-Agent).
+    const clientMeta = {
+      ip: req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || req.connection?.remoteAddress || null,
+      userAgent: req.headers['user-agent'] || null,
+    };
+    const resultado = await registrationService.processarInscricao({ ...req.body, clientMeta });
 
     // Inscrição duplicada: PIX pendente do mesmo comprador ainda dentro da janela de expiração
     if (resultado.duplicata) {
@@ -174,7 +180,12 @@ async function processar(req, res) {
 async function buscarPorCodigo(req, res) {
   try {
     const inscricao = await registrationService.buscarInscricaoPorCodigo(req.params.orderCode);
-    res.status(200).json(inscricao);
+    const plain = inscricao && inscricao.toJSON ? inscricao.toJSON() : inscricao;
+    const id = plain && plain.id;
+    if (id) {
+      plain.hasSignedTerm = await liabilityTermPdfService.registrationHasSignedTerm(id).catch(() => false);
+    }
+    res.status(200).json(plain);
   } catch (err) {
     res.status(404).json({ message: err.message });
   }

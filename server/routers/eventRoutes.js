@@ -10,6 +10,7 @@ const paymentOptionController = require('../controllers/paymentOptionController'
 const housingController = require('../controllers/housingController');
 const teamsController = require('../controllers/teamsController');
 const eventCoordinatorController = require('../controllers/eventCoordinatorController');
+const liabilityTermController = require('../controllers/liabilityTermController');
 const requirePermission = require('../middlewares/requirePermission');
 const { eventVisibilityGuard } = require('../services/eventVisibility');
 const requireEventAccess = requirePermission(['EVENTS_ACESS', 'EVENTS_ACCESS', 'EVENTOS_LISTAR']);
@@ -121,6 +122,11 @@ router.post('/:eventId/teams/config', teamsController.saveConfig);
 router.post('/:eventId/teams/generate', teamsController.generate);
 router.get('/:eventId/teams/allocation', teamsController.getAllocation);
 router.put('/:eventId/teams/allocation', teamsController.saveAllocation);
+
+// ============= TERMO DE RESPONSABILIDADE (:eventId) =============
+router.get('/:eventId/liability-term', liabilityTermController.obterConfig);
+router.put('/:eventId/liability-term', liabilityTermController.salvarConfig);
+router.get('/:eventId/liability-term/acceptances', liabilityTermController.listarAceites);
 
 // ============= COORDENADORES DE EVENTO (:eventId) =============
 router.get('/:eventId/coordinators', requireCoordinatorManage, eventCoordinatorController.listarPorEvento);
