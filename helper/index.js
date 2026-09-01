@@ -223,6 +223,8 @@ async function downloadAudio(youtubeUrl, videoId) {
     noWarnings: true,
     retries: 3,
     fragmentRetries: 3,
+    // Mesma protecao do downloadVideo: evita o rename por fragmento no Windows.
+    downloader: 'dash,m3u8:ffmpeg',
     ...cookieOptions(),
   });
 
@@ -278,6 +280,12 @@ async function downloadVideo(youtubeUrl, videoId) {
     noWarnings: true,
     retries: 3,
     fragmentRetries: 3,
+    // No Windows, o downloader nativo do yt-dlp baixa cada fragmento como
+    // "...part-FragN.part" e o renomeia; o Defender (real-time protection)
+    // escaneando o %TEMP% chega a remover o .part antes do rename, causando
+    // "[Errno 2] No such file or directory: ...part-FragN". Deixar o ffmpeg
+    // baixar os streams DASH/HLS num processo so elimina esse rename por fragmento.
+    downloader: 'dash,m3u8:ffmpeg',
     ...cookieOptions(),
   });
 

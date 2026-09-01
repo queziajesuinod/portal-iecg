@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import PropTypes from 'prop-types';
 import { Helmet } from 'react-helmet';
@@ -79,7 +79,8 @@ import {
   obterInfoCancelamentoInscricao,
   reenviarTicket,
   listarCupons,
-  obterEstatisticasInscricoesEvento
+  obterEstatisticasInscricoesEvento,
+  listarTiposEvento
 } from '../../../api/eventsApi';
 import { EVENT_TYPE_LABELS } from '../../../constants/eventTypes';
 import { hasAnyPermission } from '../../../utils/permissions';
@@ -147,6 +148,18 @@ function EventDetails() {
   });
   const evento = eventoQuery.data || null;
   const loading = eventoQuery.isLoading;
+
+  // Rótulos dos tipos de evento vindos do enum do banco (fallback: constante).
+  const tiposEventoQuery = useQuery({
+    queryKey: queryKeys.events.tipos,
+    queryFn: listarTiposEvento,
+  });
+  const tiposEventoLabels = useMemo(
+    () => (Array.isArray(tiposEventoQuery.data) && tiposEventoQuery.data.length
+      ? tiposEventoQuery.data.reduce((acc, opt) => { acc[opt.value] = opt.label; return acc; }, {})
+      : EVENT_TYPE_LABELS),
+    [tiposEventoQuery.data]
+  );
 
   // Estatísticas de inscrições (inclui o valor líquido, mais pesado) — carregadas
   // separadamente para não atrasar o primeiro paint do detalhe do evento.
@@ -1155,7 +1168,7 @@ function EventDetails() {
                   <Skeleton width="75%" />
                 ) : (
                   <Typography variant="body2" color="textSecondary">
-                    <strong>Tipo de Evento:</strong> {EVENT_TYPE_LABELS[evento.eventType] || evento.eventType || '-'}
+                    <strong>Tipo de Evento:</strong> {tiposEventoLabels[evento.eventType] || evento.eventType || '-'}
                   </Typography>
                 )}
               </Grid>

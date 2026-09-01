@@ -66,9 +66,10 @@ import {
   listarResumoIngressosEvento,
   deletarEvento,
   duplicarEvento,
-  atualizarEvento
+  atualizarEvento,
+  listarTiposEvento
 } from '../../../api/eventsApi';
-import { EVENT_TYPE_LABELS, EVENT_TYPE_OPTIONS } from '../../../constants/eventTypes';
+import { EVENT_TYPE_OPTIONS } from '../../../constants/eventTypes';
 import { queryKeys } from '../../../utils/queryKeys';
 import { hasAnyPermission } from '../../../utils/permissions';
 
@@ -115,6 +116,19 @@ function EventList() {
     queryKey: queryKeys.events.stats,
     queryFn: listarEstatisticas,
   });
+
+  // Tipos de evento vindos do enum do banco; EVENT_TYPE_OPTIONS é apenas fallback.
+  const tiposEventoQuery = useQuery({
+    queryKey: queryKeys.events.tipos,
+    queryFn: listarTiposEvento,
+  });
+  const tiposEventoOptions = (Array.isArray(tiposEventoQuery.data) && tiposEventoQuery.data.length)
+    ? tiposEventoQuery.data
+    : EVENT_TYPE_OPTIONS;
+  const tiposEventoLabels = useMemo(
+    () => tiposEventoOptions.reduce((acc, opt) => { acc[opt.value] = opt.label; return acc; }, {}),
+    [tiposEventoOptions]
+  );
 
   const stats = useMemo(() => ({
     totalEventos: Number(statsQuery.data?.totalEventos ?? eventos.length),
@@ -206,7 +220,7 @@ function EventList() {
           evento.city,
           evento.neighborhood,
           evento.cep,
-          EVENT_TYPE_LABELS[evento.eventType]
+          tiposEventoLabels[evento.eventType]
         ];
         return valores.some((valor) => valor && valor.toString().toLowerCase().includes(busca));
       });
@@ -226,7 +240,7 @@ function EventList() {
     }
 
     return resultado;
-  }, [eventos, filtros]);
+  }, [eventos, filtros, tiposEventoLabels]);
 
   const handleChangeFiltro = (campo, valor) => {
     setFiltros((prev) => ({ ...prev, [campo]: valor }));
@@ -511,7 +525,7 @@ function EventList() {
                       onChange={(e) => handleChangeFiltro('tipo', e.target.value)}
                     >
                       <MenuItem value="todos">Todos</MenuItem>
-                      {EVENT_TYPE_OPTIONS.map((opt) => (
+                      {tiposEventoOptions.map((opt) => (
                         <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
                       ))}
                     </Select>
@@ -621,7 +635,7 @@ function EventList() {
                       <TableCell>{formatarData(evento.startDate)}</TableCell>
                       <TableCell>{evento.location || '-'}</TableCell>
                       <TableCell>
-                        {EVENT_TYPE_LABELS[evento.eventType] || evento.eventType || '-'}
+                        {tiposEventoLabels[evento.eventType] || evento.eventType || '-'}
                       </TableCell>
                       <TableCell align="center">
                         {evento.currentRegistrations || 0}

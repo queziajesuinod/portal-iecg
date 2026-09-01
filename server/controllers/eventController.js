@@ -17,6 +17,16 @@ async function listar(req, res) {
   }
 }
 
+async function tiposEvento(req, res) {
+  try {
+    const tipos = await eventService.listarTiposEvento();
+    res.status(200).json(tipos);
+  } catch (err) {
+    console.error('Erro ao listar tipos de evento:', err);
+    res.status(500).json({ message: 'Erro ao listar tipos de evento' });
+  }
+}
+
 async function estatisticas(req, res) {
   try {
     // Coordenador (sem EVENTS_VIEW_ALL): KPIs so dos eventos que ele pode ver.
@@ -137,5 +147,6 @@ module.exports = {
   estatisticas,
   estatisticasInscricoes,
   resumoIngressos,
-  duplicar
+  duplicar,
+  tiposEvento
 };

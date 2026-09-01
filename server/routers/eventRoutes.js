@@ -82,6 +82,9 @@ router.delete('/registrations/:id/payments/:paymentId', registrationController.r
 // ============= ESTATÍSTICAS =============
 router.get('/stats', eventController.estatisticas);
 
+// ============= TIPOS DE EVENTO (enum do banco) =============
+router.get('/event-types', eventController.tiposEvento);
+
 // ============= EVENTOS (/:id DEVE VIR POR ÚLTIMO) =============
 router.get('/', eventController.listar);
 router.post('/', eventController.criar);

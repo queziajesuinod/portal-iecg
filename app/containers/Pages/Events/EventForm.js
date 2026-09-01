@@ -29,7 +29,9 @@ import BackIcon from '@mui/icons-material/ArrowBack';
 import useTheme from '@mui/material/styles/useTheme';
 import { useHistory, useParams } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
-import { criarEvento, atualizarEvento, buscarEvento } from '../../../api/eventsApi';
+import {
+  criarEvento, atualizarEvento, buscarEvento, listarTiposEvento
+} from '../../../api/eventsApi';
 import { fetchGeocode } from '../../../utils/googleGeocode';
 import { EVENT_TYPE_OPTIONS } from '../../../constants/eventTypes';
 
@@ -51,6 +53,8 @@ function EventForm() {
   const [geoLoading, setGeoLoading] = useState(false);
   const [coverPreview, setCoverPreview] = useState('');
   const [editorState, setEditorState] = useState(EditorState.createEmpty());
+  // Tipos de evento vêm do enum do banco; EVENT_TYPE_OPTIONS é apenas fallback.
+  const [tiposEvento, setTiposEvento] = useState(EVENT_TYPE_OPTIONS);
 
   const htmlToEditorState = (html) => {
     if (!html) return EditorState.createEmpty();
@@ -130,6 +134,14 @@ function EventForm() {
       carregarEvento();
     }
   }, [id]);
+
+  useEffect(() => {
+    listarTiposEvento()
+      .then((res) => {
+        if (Array.isArray(res) && res.length) setTiposEvento(res);
+      })
+      .catch(() => { /* mantém o fallback EVENT_TYPE_OPTIONS */ });
+  }, []);
 
   const handleChange = (e) => {
     const {
@@ -361,7 +373,7 @@ function EventForm() {
                               value={formData.eventType}
                               onChange={handleChange}
                             >
-                              {EVENT_TYPE_OPTIONS.map((option) => (
+                              {tiposEvento.map((option) => (
                                 <MenuItem key={option.value} value={option.value}>
                                   {option.label}
                                 </MenuItem>

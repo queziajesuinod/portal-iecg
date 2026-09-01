@@ -12,7 +12,12 @@ import {
   CardContent,
   LinearProgress,
   Stack,
-  Divider
+  Divider,
+  FormControl,
+  InputLabel,
+  Select,
+  OutlinedInput,
+  Chip
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
@@ -57,9 +62,9 @@ const DECISAO_OPTIONS = [
 const DirecionamentosReport = () => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [rede, setRede] = useState('');
+  const [rede, setRede] = useState([]);
   const [decisao, setDecisao] = useState('');
-  const [campus, setCampus] = useState('');
+  const [campus, setCampus] = useState([]);
   const [campi, setCampi] = useState([]);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -70,7 +75,11 @@ const DirecionamentosReport = () => {
     setError('');
     try {
       const res = await buscarRelatorioDirecionamentos({
-        dateFrom, dateTo, rede, campus, decisao
+        dateFrom,
+        dateTo,
+        rede: rede.length ? rede.join(',') : undefined,
+        campus: campus.length ? campus.join(',') : undefined,
+        decisao
       });
       setData(res);
     } catch (e) {
@@ -96,8 +105,8 @@ const DirecionamentosReport = () => {
   const metaFiltros = () => {
     const parts = [];
     if (dateFrom || dateTo) parts.push(`Periodo: ${dateFrom || '...'} a ${dateTo || '...'}`);
-    if (campus) parts.push(`Campus: ${campus}`);
-    if (rede) parts.push(`Rede: ${rede}`);
+    if (campus.length) parts.push(`Campus: ${campus.join(', ')}`);
+    if (rede.length) parts.push(`Rede: ${rede.join(', ')}`);
     if (decisao) {
       const dlabel = DECISAO_OPTIONS.find((o) => o.value === decisao)?.label || decisao;
       parts.push(`Tipo: ${dlabel}`);
@@ -110,11 +119,11 @@ const DirecionamentosReport = () => {
     {
       title: 'Consolidados', value: fmtNumero(r.consolidados), subtitle: `${r.taxaConsolidacaoGeral}% dos com celula`, color: PDF.accent
     },
-    { title: 'Em consolidacao', value: fmtNumero(r.emConsolidacao) },
-    { title: 'Nao consolidados', value: fmtNumero(r.naoConsolidados), color: PDF.danger },
-    { title: 'Buscaram celula', value: fmtNumero(r.buscaramCelula), color: PDF.warning },
+    { title: 'Em consolidação', value: fmtNumero(r.emConsolidacao) },
+    { title: 'Não consolidados', value: fmtNumero(r.naoConsolidados), color: PDF.danger },
+    { title: 'Buscaram célula', value: fmtNumero(r.buscaramCelula), color: PDF.warning },
     {
-      title: 'Buscaram e consolidaram', value: fmtNumero(r.buscaramEConsolidados), subtitle: `${r.taxaConsolidacaoBusca}% conversao`, color: PDF.accent
+      title: 'consolidados Em célula', value: fmtNumero(r.buscaramEConsolidados), subtitle: `${r.taxaConsolidacaoBusca}% conversão`, color: PDF.accent
     },
     { title: 'Aceitaram Jesus', value: fmtNumero(r.aceitaramJesus) },
     { title: 'Voltaram para Cristo', value: fmtNumero(r.voltaram) },
@@ -172,7 +181,7 @@ const DirecionamentosReport = () => {
           { metrica: 'Não consolidados', valor: r.naoConsolidados },
           { metrica: 'Com célula', valor: r.comCelula },
           { metrica: 'Buscaram célula', valor: r.buscaramCelula },
-          { metrica: 'Buscaram e consolidaram', valor: r.buscaramEConsolidados },
+          { metrica: 'Consolidados em célula', valor: r.buscaramEConsolidados },
           { metrica: 'Taxa consolidação (buscaram) %', valor: r.taxaConsolidacaoBusca },
           { metrica: 'Taxa consolidação (geral) %', valor: r.taxaConsolidacaoGeral },
           { metrica: 'Aceitaram Jesus', valor: r.aceitaramJesus },
@@ -224,34 +233,44 @@ const DirecionamentosReport = () => {
           />
         </Grid>
         <Grid item xs={6} sm={3}>
-          <TextField
-            select
-            label="Campus"
-            size="small"
-            fullWidth
-            value={campus}
-            onChange={(e) => setCampus(e.target.value)}
-          >
-            <MenuItem value="">Todos</MenuItem>
-            {campi.map((c) => (
-              <MenuItem key={c.id || c.nome} value={c.nome}>{c.nome}</MenuItem>
-            ))}
-          </TextField>
+          <FormControl fullWidth size="small">
+            <InputLabel>Campus</InputLabel>
+            <Select
+              multiple
+              value={campus}
+              onChange={(e) => setCampus(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
+              input={<OutlinedInput label="Campus" />}
+              renderValue={(selected) => (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {selected.map((nome) => <Chip key={nome} label={nome} size="small" />)}
+                </Box>
+              )}
+            >
+              {campi.map((c) => (
+                <MenuItem key={c.id || c.nome} value={c.nome}>{c.nome}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         </Grid>
         <Grid item xs={6} sm={3}>
-          <TextField
-            select
-            label="Rede"
-            size="small"
-            fullWidth
-            value={rede}
-            onChange={(e) => setRede(e.target.value)}
-          >
-            <MenuItem value="">Todas</MenuItem>
-            {REDE_OPTIONS.map((opt) => (
-              <MenuItem key={opt} value={opt}>{opt}</MenuItem>
-            ))}
-          </TextField>
+          <FormControl fullWidth size="small">
+            <InputLabel>Rede</InputLabel>
+            <Select
+              multiple
+              value={rede}
+              onChange={(e) => setRede(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
+              input={<OutlinedInput label="Rede" />}
+              renderValue={(selected) => (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {selected.map((opt) => <Chip key={opt} label={opt} size="small" />)}
+                </Box>
+              )}
+            >
+              {REDE_OPTIONS.map((opt) => (
+                <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         </Grid>
         <Grid item xs={6} sm={3}>
           <TextField
@@ -337,7 +356,7 @@ const DirecionamentosReport = () => {
             </Grid>
             <Grid item xs={6} md={3}>
               <KpiCard
-                label="Buscaram e consolidaram"
+                label="Consolidados em Célula"
                 value={resumo.buscaramEConsolidados}
                 color="#1e8449"
                 subtitle={`${resumo.taxaConsolidacaoBusca}% de conversão`}

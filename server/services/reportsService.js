@@ -65,6 +65,12 @@ const normalizeOptional = (value) => {
   return normalized;
 };
 
+// Aceita array ou string CSV (ex.: "A,B,C") e devolve lista de valores limpos.
+const toList = (value) => {
+  const raw = Array.isArray(value) ? value : String(value ?? '').split(',');
+  return raw.map((v) => normalizeOptional(v)).filter(Boolean);
+};
+
 const monthKey = (dateLike) => {
   if (!dateLike) return null;
   const iso = String(dateLike).slice(0, 7); // YYYY-MM
@@ -110,8 +116,18 @@ const buildDateRange = (dateFrom, dateTo) => {
   const from = normalizeOptional(dateFrom);
   const to = normalizeOptional(dateTo);
   if (from) range[Op.gte] = from;
-  if (to) range[Op.lte] = to;
-  return Object.keys(range).length ? range : null;
+  // createdAt é timestamp; para incluir o dia inteiro da data final usamos "< dia seguinte".
+  if (to) {
+    const toDate = new Date(`${to}T00:00:00`);
+    if (!Number.isNaN(toDate.getTime())) {
+      toDate.setDate(toDate.getDate() + 1);
+      range[Op.lt] = toDate.toISOString().slice(0, 10);
+    } else {
+      range[Op.lte] = to;
+    }
+  }
+  // Op.gte/Op.lt são Symbols — Object.keys() não os enxerga, então usamos Reflect.ownKeys.
+  return Reflect.ownKeys(range).length ? range : null;
 };
 
 // Converte um objeto { chave: valor } em array ordenado para gráficos.
@@ -512,10 +528,10 @@ async function direcionamentos(filtros = {}) {
   const where = {};
   const dateRange = buildDateRange(filtros.dateFrom, filtros.dateTo);
   if (dateRange) where.createdAt = dateRange;
-  const rede = normalizeOptional(filtros.rede);
-  if (rede) where.rede = { [Op.iLike]: `%${rede}%` };
-  const campus = normalizeOptional(filtros.campus);
-  if (campus) where.campus_iecg = { [Op.iLike]: `%${campus}%` };
+  const redes = toList(filtros.rede);
+  if (redes.length) where.rede = { [Op.or]: redes.map((r) => ({ [Op.iLike]: `%${r}%` })) };
+  const campi = toList(filtros.campus);
+  if (campi.length) where.campus_iecg = { [Op.or]: campi.map((c) => ({ [Op.iLike]: `%${c}%` })) };
   const decisao = normalizeOptional(filtros.decisao);
   if (decisao) where.decisao = decisao;
 

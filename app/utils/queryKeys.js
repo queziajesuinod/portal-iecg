@@ -12,6 +12,7 @@ export const queryKeys = {
     list: (params = {}) => ['events', 'list', params],
     detail: (id) => ['events', 'detail', id],
     stats: ['events', 'stats'],
+    tipos: ['events', 'event-types'],
     ticketsSummary: (id) => ['events', 'tickets-summary', id],
     batches: (eventId) => ['events', 'batches', eventId],
     formFields: (eventId) => ['events', 'form-fields', eventId],

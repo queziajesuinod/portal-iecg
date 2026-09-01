@@ -14,6 +14,7 @@ const {
 const webhookEmitter = require('./webhookEmitter');
 const cache = require('../utils/cache');
 const { COUNTABLE_PAYMENT_STATUSES } = require('../constants/registrationStatuses');
+const { labelEventType } = require('../constants/eventTypes');
 const { toStartOfDay, todayDateOnly } = require('../utils/dateTime');
 
 const camposPadraoComprador = [
@@ -958,6 +959,31 @@ async function duplicarEvento(eventId, userId) {
   });
 }
 
+// Lista os tipos de evento a partir do enum do banco (pg_enum), com fallback
+// para os valores definidos no model. Rótulos vêm de constants/eventTypes.
+async function listarTiposEvento() {
+  const schema = process.env.DB_SCHEMA || 'dev_iecg';
+  let valores = [];
+  try {
+    const rows = await sequelize.query(
+      `SELECT e.enumlabel AS value
+       FROM pg_enum e
+       JOIN pg_type t ON t.oid = e.enumtypid
+       JOIN pg_namespace n ON n.oid = t.typnamespace
+       WHERE t.typname = :typeName AND n.nspname = :schema
+       ORDER BY e.enumsortorder`,
+      { replacements: { typeName: 'enum_Events_eventType', schema }, type: QueryTypes.SELECT }
+    );
+    valores = rows.map((r) => r.value).filter(Boolean);
+  } catch (err) {
+    console.error('Erro ao consultar enum de tipos de evento:', err);
+  }
+  if (!valores.length) {
+    valores = (Event.rawAttributes.eventType.values || []).slice();
+  }
+  return valores.map((value) => ({ value, label: labelEventType(value) }));
+}
+
 module.exports = {
   listarEventos,
   buscarEventoPorId,
@@ -971,4 +997,5 @@ module.exports = {
   obterResumoIngressosPorEvento,
   obterResumoInscricoesPorEvento,
   duplicarEvento,
+  listarTiposEvento,
 };
