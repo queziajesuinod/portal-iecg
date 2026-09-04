@@ -2,6 +2,60 @@ const uuid = require('uuid');
 const { FormField, Event } = require('../models');
 const cache = require('../utils/cache');
 
+const somenteDigitos = (valor) => String(valor || '').replace(/\D/g, '');
+
+// Valida CPF pelos dígitos verificadores (11 dígitos).
+function validarCPF(valor) {
+  const digitos = somenteDigitos(valor);
+  if (digitos.length !== 11) return false;
+  if (/^(\d)\1{10}$/.test(digitos)) return false;
+
+  let soma = 0;
+  for (let i = 0; i < 9; i += 1) soma += parseInt(digitos.charAt(i), 10) * (10 - i);
+  let dig = 11 - (soma % 11);
+  if (dig >= 10) dig = 0;
+  if (dig !== parseInt(digitos.charAt(9), 10)) return false;
+
+  soma = 0;
+  for (let i = 0; i < 10; i += 1) soma += parseInt(digitos.charAt(i), 10) * (11 - i);
+  dig = 11 - (soma % 11);
+  if (dig >= 10) dig = 0;
+  return dig === parseInt(digitos.charAt(10), 10);
+}
+
+// Valida CNPJ pelos dígitos verificadores (14 dígitos).
+function validarCNPJ(valor) {
+  const digitos = somenteDigitos(valor);
+  if (digitos.length !== 14) return false;
+  if (/^(\d)\1{13}$/.test(digitos)) return false;
+
+  let soma = 0;
+  let peso = 5;
+  for (let i = 0; i < 12; i += 1) {
+    soma += parseInt(digitos.charAt(i), 10) * peso;
+    peso = peso === 2 ? 9 : peso - 1;
+  }
+  let dig = soma % 11 < 2 ? 0 : 11 - (soma % 11);
+  if (dig !== parseInt(digitos.charAt(12), 10)) return false;
+
+  soma = 0;
+  peso = 6;
+  for (let i = 0; i < 13; i += 1) {
+    soma += parseInt(digitos.charAt(i), 10) * peso;
+    peso = peso === 2 ? 9 : peso - 1;
+  }
+  dig = soma % 11 < 2 ? 0 : 11 - (soma % 11);
+  return dig === parseInt(digitos.charAt(13), 10);
+}
+
+// Aceita CPF (11 dígitos) ou CNPJ (14 dígitos).
+function validarCPFouCNPJ(valor) {
+  const digitos = somenteDigitos(valor);
+  if (digitos.length === 11) return validarCPF(valor);
+  if (digitos.length === 14) return validarCNPJ(valor);
+  return false;
+}
+
 const FIELD_ATTRIBUTES = [
   'id',
   'eventId',
@@ -18,7 +72,7 @@ const FIELD_ATTRIBUTES = [
 
 async function listarCamposPorEvento(eventId) {
   const cacheKey = cache.CACHE_KEYS.formFields(eventId);
-  
+
   // ============================================
   // OTIMIZAÇÃO: Cache Redis para campos de formulário
   // ============================================
@@ -116,10 +170,10 @@ async function criarCampo(body) {
     section: section ?? 'attendee',
     validationRules
   });
-  
+
   // Invalidar cache de campos do formulário
   await cache.del(cache.CACHE_KEYS.formFields(eventId));
-  
+
   return newField;
 }
 
@@ -141,10 +195,10 @@ async function atualizarCampo(id, body) {
   field.validationRules = body.validationRules ?? field.validationRules;
 
   await field.save();
-  
+
   // Invalidar cache de campos do formulário
   await cache.del(cache.CACHE_KEYS.formFields(field.eventId));
-  
+
   return field;
 }
 
@@ -154,10 +208,10 @@ async function deletarCampo(id) {
   if (!field) {
     throw new Error('Campo não encontrado');
   }
-  
-  const eventId = field.eventId;
+
+  const { eventId } = field;
   await field.destroy();
-  
+
   // Invalidar cache de campos do formulário
   await cache.del(cache.CACHE_KEYS.formFields(eventId));
 }
@@ -189,10 +243,10 @@ async function criarCamposEmLote(eventId, campos) {
   }));
 
   const newFields = await FormField.bulkCreate(camposParaCriar);
-  
+
   // Invalidar cache de campos do formulário
   await cache.del(cache.CACHE_KEYS.formFields(eventId));
-  
+
   return newFields;
 }
 
@@ -228,9 +282,9 @@ async function validarDadosFormulario(eventId, dados, section = 'attendee') {
           erros.push(`Campo "${campo.fieldLabel}" deve ser um telefone válido`);
         }
       } else if (campo.fieldType === 'cpf') {
-        const cpfRegex = /^\d{3}\.\d{3}\.\d{3}-\d{2}$/;
-        if (!cpfRegex.test(valor)) {
-          erros.push(`Campo "${campo.fieldLabel}" deve ser um CPF válido (formato: 000.000.000-00)`);
+        // O campo "cpf" aceita CPF (000.000.000-00) ou CNPJ (00.000.000/0000-00).
+        if (!validarCPFouCNPJ(valor)) {
+          erros.push(`Campo "${campo.fieldLabel}" deve ser um CPF ou CNPJ válido`);
         }
       } else if (campo.fieldType === 'number') {
         if (Number.isNaN(Number(valor))) {
