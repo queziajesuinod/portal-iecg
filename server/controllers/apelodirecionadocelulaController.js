@@ -35,10 +35,10 @@ class ApeloDirecionadoCelulaController {
   async listarTodos(req, res) {
     try {
       const {
-        month, status, page, limit, nome, decisao, year, celulaCasal, apenasRepetidos
+        month, status, page, limit, nome, decisao, year, celulaCasal, apenasRepetidos, dataInicio, dataFim
       } = req.query;
       const lista = await ApeloDirecionadoCelulaService.listarTodos({
-        month, status, page, limit, nome, decisao, year, celulaCasal, apenasRepetidos
+        month, status, page, limit, nome, decisao, year, celulaCasal, apenasRepetidos, dataInicio, dataFim
       });
       return res.status(200).json(lista);
     } catch (error) {
@@ -109,6 +109,23 @@ class ApeloDirecionadoCelulaController {
     }
   }
 
+  async consolidar(req, res) {
+    try {
+      const { id } = req.params;
+      const { celulaDestinoId, motivo } = req.body;
+      if (!celulaDestinoId) {
+        return res.status(400).json({ erro: 'celulaDestinoId é obrigatório' });
+      }
+      if (!motivo || !String(motivo).trim()) {
+        return res.status(400).json({ erro: 'O motivo do direcionamento é obrigatório' });
+      }
+      const item = await ApeloDirecionadoCelulaService.consolidarNaCelula(id, celulaDestinoId, String(motivo).trim(), req.user);
+      return res.status(200).json(item);
+    } catch (error) {
+      return res.status(400).json({ erro: error.message });
+    }
+  }
+
   async historico(req, res) {
     try {
       const { id } = req.params;
@@ -123,6 +140,33 @@ class ApeloDirecionadoCelulaController {
     try {
       const resultado = await ApeloFilaService.processarFila();
       return res.status(200).json(resultado);
+    } catch (error) {
+      return res.status(400).json({ erro: error.message });
+    }
+  }
+
+  // Inicia (em background) o processamento em lote: fileiras de N apelos, com
+  // delay entre cada direcionamento e uma pausa maior entre as fileiras.
+  async processarFilaLote(req, res) {
+    try {
+      const resultado = await ApeloFilaService.iniciarProcessamentoEmLote();
+      return res.status(202).json(resultado);
+    } catch (error) {
+      return res.status(400).json({ erro: error.message });
+    }
+  }
+
+  async statusFilaLote(req, res) {
+    try {
+      return res.status(200).json(ApeloFilaService.getLoteStatus());
+    } catch (error) {
+      return res.status(400).json({ erro: error.message });
+    }
+  }
+
+  async cancelarFilaLote(req, res) {
+    try {
+      return res.status(200).json(ApeloFilaService.cancelarLote());
     } catch (error) {
       return res.status(400).json({ erro: error.message });
     }

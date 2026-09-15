@@ -15,6 +15,12 @@ router.use((req, res, next) => {
   if (req.path === '/me' || req.path.startsWith('/me/')) {
     return next();
   }
+  // "Notificar para atualizar dados" não altera PII — apenas dispara a notificação
+  // pedindo que o próprio membro atualize os dados. Liberado para perfis de leitura
+  // (ex.: START), assim como a visualização da lista de membros.
+  if (req.method === 'POST' && /\/notificar-dados$/.test(req.path)) {
+    return requireMembersRead(req, res, next);
+  }
   if (req.method === 'GET') {
     return requireMembersRead(req, res, next);
   }

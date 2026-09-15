@@ -1044,6 +1044,24 @@ class ApeloDirecionadoCelulaService {
         where[Op.and] = (where[Op.and] || []).concat(condition);
       }
     }
+    // Range por data de direcionamento (início/fim). O fim é inclusivo (dia inteiro).
+    if (filtro.dataInicio || filtro.dataFim) {
+      const range = {};
+      if (filtro.dataInicio) {
+        const inicio = new Date(`${filtro.dataInicio}T00:00:00.000Z`);
+        if (!Number.isNaN(inicio.getTime())) range[Op.gte] = inicio;
+      }
+      if (filtro.dataFim) {
+        const fim = new Date(`${filtro.dataFim}T00:00:00.000Z`);
+        if (!Number.isNaN(fim.getTime())) {
+          fim.setUTCDate(fim.getUTCDate() + 1);
+          range[Op.lt] = fim;
+        }
+      }
+      if (Object.getOwnPropertySymbols(range).length) {
+        where.data_direcionamento = { ...(where.data_direcionamento || {}), ...range };
+      }
+    }
     if (filtro.status) {
       where.status = filtro.status;
     }
@@ -1205,16 +1223,22 @@ class ApeloDirecionadoCelulaService {
   }
 
   // Aplica a movimentação de um apelo para uma célula (campos + histórico).
-  // Não move o cônjuge (isso é orquestrado por moverApelo). Se já estiver na
-  // célula, apenas retorna (evita erro ao cascatear para o cônjuge).
-  // Retorna true se a movimentação foi aplicada; false se o apelo já estava na célula.
-  async _aplicarMovimentacao(apelo, celulaDestino, motivo, transaction, usuario = null) {
+  // Não move o cônjuge (isso é orquestrado por moverApelo/consolidarNaCelula).
+  // opts.novoStatus define o status a aplicar (default MOVIMENTACAO_CELULA);
+  // opts.consolidar dispara a rotina de consolidação (membro/jornada/vínculo) e
+  // permite registrar mesmo quando o apelo já está na célula (caso de célula
+  // externa em que o direcionamento foi feito fora do sistema).
+  // Retorna true se algo foi aplicado; false se nada mudou.
+  async _aplicarMovimentacao(apelo, celulaDestino, motivo, transaction, usuario = null, opts = {}) {
+    const { novoStatus = 'MOVIMENTACAO_CELULA', consolidar = false } = opts;
     const origem = apelo.celula_id;
-    if (origem && String(origem) === String(celulaDestino.id)) {
+    const mesmaCelula = origem && String(origem) === String(celulaDestino.id);
+    // Numa movimentação comum, estar já na célula é no-op. Na consolidação
+    // manual queremos registrar mesmo assim (só não duplicamos o evento CELULA).
+    if (mesmaCelula && !consolidar) {
       return false;
     }
 
-    const novoStatus = 'MOVIMENTACAO_CELULA';
     const statusAnterior = apelo.status;
     apelo.status = novoStatus;
     apelo.celula_id = celulaDestino.id;
@@ -1242,18 +1266,69 @@ class ApeloDirecionadoCelulaService {
       }, { transaction });
     }
 
-    await ApeloDirecionadoHistorico.create({
-      apelo_id: apelo.id,
-      celula_id_origem: origem,
-      celula_id_destino: celulaDestino.id,
-      motivo: motivo || null,
-      data_movimento: new Date(),
-      tipo_evento: 'CELULA',
-      usuario_id: usuarioId,
-      usuario_nome: usuarioNome
-    }, { transaction });
+    if (!mesmaCelula) {
+      await ApeloDirecionadoHistorico.create({
+        apelo_id: apelo.id,
+        celula_id_origem: origem,
+        celula_id_destino: celulaDestino.id,
+        motivo: motivo || null,
+        data_movimento: new Date(),
+        tipo_evento: 'CELULA',
+        usuario_id: usuarioId,
+        usuario_nome: usuarioNome
+      }, { transaction });
+    }
+
+    if (consolidar) {
+      await this._processarConsolidacaoDoApelo(apelo, transaction);
+    }
 
     return true;
+  }
+
+  // Direciona um apelo para uma célula e já marca como CONSOLIDADO_CELULA.
+  // Usado quando a movimentação para a célula ocorreu fora do sistema e o apelo
+  // já está, de fato, consolidado — pula o fluxo de "em movimentação".
+  async consolidarNaCelula(apeloId, celulaDestinoId, motivo = '', usuario = null) {
+    const motivoLimpo = String(motivo || '').trim();
+    if (!motivoLimpo) {
+      throw new Error('O motivo do direcionamento é obrigatório.');
+    }
+
+    const apelo = await this.buscarPorId(apeloId);
+    const celulaDestino = await Celula.findByPk(celulaDestinoId);
+    if (!celulaDestino) {
+      throw new Error('Celula de destino nao encontrada.');
+    }
+
+    await ApeloDirecionadoCelula.sequelize.transaction(async (transaction) => {
+      await this._aplicarMovimentacao(apelo, celulaDestino, motivoLimpo, transaction, usuario, {
+        novoStatus: 'CONSOLIDADO_CELULA',
+        consolidar: true
+      });
+
+      // Célula de casal: consolida o cônjuge na célula-par, em paralelo ao principal.
+      if (celulaDestino.casalCelulaId && apelo.conjuge_apelo_id) {
+        const [conjuge, celulaPar] = await Promise.all([
+          ApeloDirecionadoCelula.findByPk(apelo.conjuge_apelo_id, { transaction }),
+          Celula.findByPk(celulaDestino.casalCelulaId, { transaction })
+        ]);
+        if (conjuge && celulaPar) {
+          await this._aplicarMovimentacao(
+            conjuge,
+            celulaPar,
+            motivoLimpo || 'Consolidação automática (cônjuge de célula de casal)',
+            transaction,
+            usuario,
+            { novoStatus: 'CONSOLIDADO_CELULA', consolidar: true }
+          );
+        }
+      }
+
+      return apelo;
+    });
+
+    return apelo;
   }
 
   async moverApelo(apeloId, celulaDestinoId, motivo = '', usuario = null) {

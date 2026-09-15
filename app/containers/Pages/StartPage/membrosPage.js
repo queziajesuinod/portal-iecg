@@ -88,6 +88,9 @@ const MembrosPage = () => {
   // Perfis somente-leitura (ex.: START) apenas visualizam/pesquisam. Ações de escrita
   // (cadastrar/editar/excluir/status/duplicados) exigem ADMIN_USUARIOS ou ADMIN_FULL_ACCESS.
   const canManage = useMemo(() => hasAnyPermission(['ADMIN_USUARIOS']), []);
+  // "Notificar para atualizar dados" é liberado também para perfis de leitura
+  // (ex.: START), pois não altera PII — só dispara a notificação ao membro.
+  const canNotify = useMemo(() => hasAnyPermission(['ADMIN_USUARIOS', 'MEMBROS_VIEW']), []);
   const [activeTab, setActiveTab] = useState(0);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -602,6 +605,7 @@ const MembrosPage = () => {
             onOpenEdit={handleOpenEdit}
             onDeleteMember={handleDeleteMember}
             canManage={canManage}
+            canNotify={canNotify}
           />
         </>
       )}

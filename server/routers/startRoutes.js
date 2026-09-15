@@ -38,12 +38,16 @@ router.get('/direcionamentos/por-celula/:celulaId', ApeloDirecionadoCelulaContro
 router.get('/direcionamentos/resumo-por-celula', ApeloDirecionadoCelulaController.resumoPorCelula);
 router.get('/direcionamentos/:id/historico', ApeloDirecionadoCelulaController.historico);
 router.post('/direcionamentos/:id/mover', ApeloDirecionadoCelulaController.mover);
+router.post('/direcionamentos/:id/consolidar', ApeloDirecionadoCelulaController.consolidar);
 router.get('/direcionamentos/templates-whatsapp', (req, res) => ApeloDirecionadoCelulaController.listarTemplatesWhatsapp(req, res));
 router.post('/direcionamentos/:id/notificar-lider', (req, res) => ApeloDirecionadoCelulaController.notificarLider(req, res));
 router.get('/direcionamentos/:id', ApeloDirecionadoCelulaController.buscarPorId);
 router.put('/direcionamentos/:id', ApeloDirecionadoCelulaController.atualizar);
 router.delete('/direcionamentos/:id', ApeloDirecionadoCelulaController.deletar);
 router.post('/direcionamentos/processar-fila', ApeloDirecionadoCelulaController.processarFila);
+router.post('/direcionamentos/processar-fila-lote', ApeloDirecionadoCelulaController.processarFilaLote);
+router.get('/direcionamentos/fila-lote/status', ApeloDirecionadoCelulaController.statusFilaLote);
+router.post('/direcionamentos/fila-lote/cancelar', ApeloDirecionadoCelulaController.cancelarFilaLote);
 router.use('/campus', require('./campus'));
 router.get('/direcionamentos/health', ApeloDirecionadoCelulaController.healthCheck);
 

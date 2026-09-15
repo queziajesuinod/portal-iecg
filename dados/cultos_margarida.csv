@@ -1,22 +1,34 @@
-Carimbo de data/hora,DATA,HORÁRIO,TIPO DE EVENTO,Tipo de Culto,QUEM MINISTROU:,TÍTULO DA MENSAGEM,O CULTO FOI DE UMA SÉRIE?,"SE FOR SÉRIE, QUAL NOME?",QUANTIDADE DE HOMENS,QUANTIDADE DE MULHERES,QUANTIDADE DE CRIANÇAS,QUANTIDADE DE BEBÊS,QUANTIDADE DE VOLUNTÁRIOS,COMENTÁRIOS ADICIONAIS
-05/07/2026 09:35:38,05/07/2026,08:30:00,Culto,Culto de Celebração,Bp Clodoilson ,Fazei isto em memoria de Mim - Santa Ceia,NÃO,,67,131,40,10,32,
-05/07/2026 11:39:18,05/07/2026,10:30:00,Culto,Culto de Celebração,Bispo Clodoilson ,Fazei isto em nome de mim (santa ceia),NÃO,,49,84,32,6,35,
-01/07/2026 19:58:22,01/07/2026,19:00:00,Culto,Culto de Quarta,Pra Marli,Como Acessar as Riquesas Encobertas de Deus,SIM,Riquesas encobertas Tesouros Escondidos,28,38,22,3,21,
-28/06/2026 09:31:38,28/06/2026,08:30:00,Culto,Culto de Celebração,Pastroa Ana Lucia ,O caminho da prosperidade,SIM,40 dias de prosperidade biblica ,32,57,11,6,29,
-28/06/2026 11:26:58,28/06/2026,10:30:00,Culto,Culto de Celebração,Pra Ana Lucia,O Caminho da Prosperidade ,SIM,40 Dias de Prosperidade Bíblica ,36,61,24,7,27,
-28/06/2026 17:49:09,28/06/2026,17:00:00,Culto,Culto de Celebração,Pra. Ana Lúcia ,O Caminho da Prosperidade ,SIM,40 dias de Prosperidade Bíblica ,29,50,11,8,24,
-28/06/2026 19:48:34,28/06/2026,19:00:00,Culto,Culto de Celebração,Pastora Ana ,O caminho da prosperidade ,SIM,40 dias de prosperidade bíblica ,18,31,13,0,20,
-21/06/2026 09:25:52,21/06/2026,08:30:00,Culto,Culto de Celebração,Bispo Clodoilson ,Praticando a espiritualidade que abençoa ,SIM,40 dias de prosperidade bíblica ,34,59,14,5,25,
-21/06/2026 11:33:52,21/06/2026,10:30:00,Culto,Culto de Celebração,Bp Clodoilson ,Praticando a espiritualidade que abencoa,SIM,40 dias de prosperidade bíblica ,39,60,23,5,23,Entre adultos e pastores baby e kidis 155
-21/06/2026 17:56:33,21/06/2026,17:00:00,Culto,Outros,Bispo Clodoilson,Praticando a Espiritualidade que Abençoa ,SIM,40 dias de prosperidade bíblica ,44,73,20,4,25,
-21/06/2026 19:55:34,21/06/2026,19:00:00,Culto,Outros,Bispo Clodoilson ,Praticando a espiritualidade que abençoa ,SIM,40 dias de prosperidade bíblica ,27,34,6,3,23,
-17/06/2026 20:02:07,17/06/2026,19:00:00,Culto,Culto de Quarta,Pra Marli,Quando a igreja ora,SIM,Por essa causa me coloco de joelhos,24,31,20,1,23,
-14/06/2026 09:56:45,14/06/2026,08:30:00,Culto,Culto de Celebração,Pra Janister,Consagração e Multiplicação: Princípios que ativam a provisão de Deus,SIM,40 Dias de Prosperidade Bíblica ,32,44,10,1,16,
-14/06/2026 11:26:10,14/06/2026,10:30:00,Culto,Culto de Celebração,Pastora Janister,Princípios que ativam a provisão de Deus,SIM,40 dias de prosperidade bíblica ,27,50,7,6,24,
-14/06/2026 18:58:57,14/06/2026,17:00:00,Culto,Culto de Celebração,Elisa clea,Consagração e Multiplicação:Princípios que ativam a provisão de Deus,SIM,40 dia prosperidade biblia,35,51,26,03,27,Entre adultos e pastores baby e kidis e teens 161
-14/06/2026 20:01:42,14/06/2026,19:00:00,Culto,Culto de Celebração,Rafael Fernandes,Consagração e Multiplicação: Princípios que ativam a Provisão de Deus ,SIM,40 dias de Prosperidade Bíblica ,18,21,11,8,24,
-10/06/2026 21:51:26,10/06/2026,19:30:00,Culto,Culto de Quarta,Pastora Ana Lucia ,Deus é poderoso pra fazer infinitamente mais,SIM,Por essa causa me coloco de joelhos ,32,44,16,2,17,
-07/06/2026 09:37:54,07/06/2026,08:30:00,Culto,Culto de Celebração,Bispo clodoilson ,Generosidade e contentamento :vitoria contra avareza ,SIM,40 dias de prosperidade bíblica ,39,71,21,3,29,
-07/06/2026 11:41:18,07/06/2026,10:30:00,Culto,Culto de Celebração,Bispo Clodoilson,Generosidade e contentamento: vitória contra a avareza,SIM,40 dias de prosperidade biblica,40,62,24,6,27,
-07/06/2026 17:56:00,07/06/2026,17:00:00,Culto,Culto de Celebração,Bispo  Clodoilson ,Vitória contra a Avareza ,SIM,40 dias de prosperidade Bíblica ,47,73,27,3,29,Relevanteen 25
-07/06/2026 19:54:42,07/06/2026,19:00:00,Culto,Outros,Pastor Clodoilson ,Generosidade e contentamento Vitória contra avareza ,SIM,40 dias de prosperidade bíblica ,21,33,12,2,28,
+"Carimbo de data/hora,DATA,HORÁRIO,TIPO DE EVENTO,Tipo de Culto,QUEM MINISTROU:,TÍTULO DA MENSAGEM,O CULTO FOI DE UMA SÉRIE?,""SE FOR SÉRIE, QUAL NOME?"",QUANTIDADE DE HOMENS,QUANTIDADE DE MULHERES,QUANTIDADE DE CRIANÇAS,QUANTIDADE DE BEBÊS,QUANTIDADE DE VOLUNTÁRIOS,COMENTÁRIOS ADICIONAIS"
+12/07/2026 09:52:54,12/07/2026,08:30:00,Culto,Culto de Celebração,Bispo Clodoilson,O Princípio  da Honra,SIM,A Recompensa da Honra,50,64,15,5,24,
+12/07/2026 11:22:06,12/07/2026,10:30:00,Culto,Culto de Celebração,Bispo Clodoilson ,O Princípio da Honra ,SIM,A Recompensa da Honra,21,37,15,5,26,
+12/07/2026 17:47:15,12/07/2026,17:00:00,Culto,Culto de Celebração,Bispo Clodoilson ,O princípio da honra ,SIM,A recompensa da honra ,29,60,20,2,25,
+12/07/2026 19:49:39,12/07/2026,19:00:00,Culto,Culto de Celebração,Bp Clodoilson ,O Princípio da Honra,SIM,A Recompensa da Honra,24,27,11,1,24,
+19/07/2026 09:41:56,19/07/2026,08:30:00,Culto,Culto de Celebração,Pastora Janister,A chave mestra,SIM,A recompensa da honra ,36,61,15,4,27,
+19/07/2026 13:23:26,19/07/2026,10:30:00,Culto,Culto de Celebração,Pastora janister ,Chave mestra ,SIM,A recompensa da honra ,25,47,18,03,25,Entre adultos e pastores baby e kidis 115
+19/07/2026 19:30:50,19/07/2026,19:00:00,Culto,Outros,Pastora Marmi Chaia ,A Chave-mestra ,SIM,A recompensa da Honra,32,33,8,3,19,
+26/07/2026 09:35:30,26/07/2026,08:30:00,Culto,Culto de Celebração,Bispo Clodoilson ,A Cultura da Honra ,SIM,A Recompensa da Honra ,28,53,16,4,23,
+26/07/2026 11:28:45,26/07/2026,10:30:00,Culto,Culto de Celebração,Bispo Clodoilson ,A cultura da honra,SIM,A recompensa da honra ,49,64,12,3,23,
+26/07/2026 17:55:32,26/07/2026,17:00:00,Culto,Culto de Celebração,Bp Clodoilson ,A Cultura da Honra,SIM,A Recompensa da Honra,30,54,12,3,21,Relevanteens: 17 teens e 2 voluntários 
+26/07/2026 19:58:39,26/07/2026,19:00:00,Culto,Culto de Celebração,Bispo Clodoilson,A Cultura da Hora,SIM,A Reconpensa da Honra,25,36,18,5,25,
+31/07/2026 19:41:21,31/07/2026,19:00:00,Culto,Outros,Pastora Ana Lúcia ,Sexta free - libertação e cura interior ,NÃO,,25,41,0,0,18,4 crianças no templo
+02/08/2026 09:38:29,02/08/2026,08:30:00,Culto,Culto de Celebração,Pastora Ana lucia,Os frutos da Honra,SIM,A recompensa da Honra,37,77,22,03,27,Entre adultos e pastores baby e kidis  163
+02/08/2026 17:44:34,02/08/2026,17:00:00,Culto,Outros,Pastora Ana ,Os frutos da honra ,SIM,A recompensa da honra ,30,52,14,5,30,
+02/08/2026 20:08:19,02/08/2026,19:00:00,Culto,Culto de Celebração,Pra Ana Lúcia ,Os Frutos da Honra,SIM,A Recompensa da Honra ,40,46,20,2,24,
+05/08/2026 19:55:12,05/08/2026,19:00:00,Culto,Culto de Quarta,Pra Ana Lucia,Firmados na Rocha,SIM,Minha fé tem fundamento,25,41,12,2,22,
+09/08/2026 09:47:53,09/08/2026,08:30:00,Culto,Culto de Celebração,Pastora Ana Lucia,Deus pai,SIM,Paternidade Orfandade ,46,76,16,3,21,
+09/08/2026 11:31:27,09/08/2026,10:30:00,Culto,Culto de Celebração,Pra Ana Lucia,Deus Pai,SIM,Paternidade e Orfandade,27,41,17,5,20,
+09/08/2026 18:11:24,09/08/2026,17:00:00,Culto Especial,Culto de Celebração,Pastora Ana Lucia ,DEUS PAI,SIM,Paternidade orfandade ,25,49,12,5,30,
+09/08/2026 19:58:53,09/08/2026,19:00:00,Culto,Culto de Celebração,Pastora Ana lucia ,Pai Deua,SIM,Paternidade orfandade ,25,27,15,03,21,Entre adultos e pastores baby e kidis de 93
+12/08/2026 20:03:19,12/08/2026,19:00:00,Culto,Culto de Celebração,Bispo Clodoilson,Transformado pela Fé ,SIM,Minha Fé tem Fundamento,17,38,18,4,18,
+16/08/2026 11:25:10,16/08/2026,10:30:00,Culto,Outros,Bispo Clodoilson ,Família biológica ,SIM,Paternidade e orfandade,31,56,8,6,23,
+16/08/2026 18:06:51,16/08/2026,17:00:00,Culto,Culto de Celebração,Bispo Clodoilson ,Família Biológica ,SIM,Paternidade Orfandade,29,47,16,5,25,
+16/08/2026 19:53:36,16/08/2026,19:00:00,Culto,Culto de Celebração,Bispo Clodoilson,Família Biológica ,SIM,Paternidade e orfandade ,27,39,18,3,24,
+19/08/2026 19:53:35,19/08/2026,19:00:00,Culto,Culto de Quarta,Pastora Ana Lucia ,Minha fe tem fundamento,SIM,Minha fe tem fundamento ,27,48,14,3,38,
+19/08/2026 20:14:04,19/08/2026,19:00:00,Culto,Culto de Quarta,Pastora ana lucia ,Minha fe tem fundamento ,SIM,Minha fe tem fundamento ,27,48,14,5,26,
+23/08/2026 09:37:04,23/08/2026,08:30:00,Culto,Culto de Celebração,Pra Ana Lucia,Igreja Familia,SIM,Paternidade e Orfandade,34,77,10,6,21,
+23/08/2026 11:37:05,23/08/2026,10:30:00,Culto,Culto de Celebração,Pra Ana Lucia,Igreja Família ,SIM,Paternidade Orfandade,34,60,28,9,28,
+23/08/2026 19:07:58,23/08/2026,17:00:00,Culto,Culto de Celebração,Ap. Ronaldo ,Deus famllia,SIM,Paternidade orfandade ,45,68,31,03,28,
+28/08/2026 19:41:00,28/08/2026,19:00:00,Culto Especial,Outros,Bispo Clodoilson ,Sexta free libertacao e cura interior ,NÃO,,20,43,5,0,32,
+30/08/2026 09:25:59,30/08/2026,08:30:00,Culto,Culto de Celebração,BISPO CLODOILSON,A CASA DO PAI,SIM,PATERNIDADE/ORFANDADE,42,62,11,5,17,
+30/08/2026 11:41:08,30/08/2026,10:30:00,Culto,Culto de Celebração,Bispo Clodoilson ,A casa do Pai ,SIM,Paternidade e orfandade ,26,43,20,7,26,
+30/08/2026 19:55:53,30/08/2026,19:00:00,Culto,Culto de Celebração,Pra Janister,A Casa do Pai,SIM,Paternidade e Orfandade,34,42,22,4,25,

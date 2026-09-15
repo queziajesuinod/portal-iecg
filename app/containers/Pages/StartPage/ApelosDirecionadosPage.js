@@ -48,6 +48,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import FilterListOffIcon from '@mui/icons-material/FilterListOff';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import AltRouteIcon from '@mui/icons-material/AltRoute';
 import HistoryIcon from '@mui/icons-material/History';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
@@ -75,6 +76,9 @@ const resolveApiUrl = () => {
 
 const YEAR_OPTIONS = ['', '2026', '2025'];
 
+// Mesmos rótulos usados no formulário público de apelo (o backend normaliza acento/caixa).
+const DIAS_PREFERENCIA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+
 const ApelosDirecionadosPage = () => {
   const history = useHistory();
   const queryClient = useQueryClient();
@@ -85,10 +89,13 @@ const ApelosDirecionadosPage = () => {
   const [celulaCasalFilter, setCelulaCasalFilter] = useState('');
   const [apenasRepetidosFilter, setApenasRepetidosFilter] = useState('');
   const [yearFilter, setYearFilter] = useState(YEAR_OPTIONS[0]);
+  const [dataInicioFilter, setDataInicioFilter] = useState('');
+  const [dataFimFilter, setDataFimFilter] = useState('');
   const [page, setPage] = useState(1);
   const [notification, setNotification] = useState('');
 
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [moveDialogMode, setMoveDialogMode] = useState('mover'); // 'mover' | 'consolidar'
   const [historicoDialogOpen, setHistoricoDialogOpen] = useState(false);
   const [apeloSelecionado, setApeloSelecionado] = useState(null);
   const [celulaDestinoId, setCelulaDestinoId] = useState('');
@@ -123,12 +130,20 @@ const ApelosDirecionadosPage = () => {
   const [detailGeoLoading, setDetailGeoLoading] = useState(false);
   const [rowMenuAnchor, setRowMenuAnchor] = useState(null);
   const [apeloCoords, setApeloCoords] = useState(null);
+  const [habilitarDialogOpen, setHabilitarDialogOpen] = useState(false);
+  const [apeloHabilitar, setApeloHabilitar] = useState(null);
+  const [habilitarForm, setHabilitarForm] = useState({
+    cep: '', bairro: '', cidade: '', estado: '', lat: '', lon: '', dias: []
+  });
+  const [habilitarGeoLoading, setHabilitarGeoLoading] = useState(false);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [apeloParaNotificar, setApeloParaNotificar] = useState(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [templatePreview, setTemplatePreview] = useState('');
   const detailGeoTimerRef = useRef(null);
   const detailGeoRequestRef = useRef(0);
+  const habilitarGeoTimerRef = useRef(null);
+  const habilitarGeoRequestRef = useRef(0);
 
   const API_URL = resolveApiUrl();
 
@@ -137,9 +152,9 @@ const ApelosDirecionadosPage = () => {
 
   const apelosFilters = useMemo(
     () => ({
-      monthFilter, statusFilter, nomeFilter, decisaoFilter, celulaCasalFilter, apenasRepetidosFilter, yearFilter, page
+      monthFilter, statusFilter, nomeFilter, decisaoFilter, celulaCasalFilter, apenasRepetidosFilter, yearFilter, dataInicioFilter, dataFimFilter, page
     }),
-    [monthFilter, statusFilter, nomeFilter, decisaoFilter, celulaCasalFilter, apenasRepetidosFilter, yearFilter, page]
+    [monthFilter, statusFilter, nomeFilter, decisaoFilter, celulaCasalFilter, apenasRepetidosFilter, yearFilter, dataInicioFilter, dataFimFilter, page]
   );
 
   const apelosQuery = useQuery({
@@ -154,6 +169,8 @@ const ApelosDirecionadosPage = () => {
       if (apelosFilters.celulaCasalFilter) params.append('celulaCasal', apelosFilters.celulaCasalFilter);
       if (apelosFilters.apenasRepetidosFilter) params.append('apenasRepetidos', apelosFilters.apenasRepetidosFilter);
       if (apelosFilters.yearFilter) params.append('year', apelosFilters.yearFilter);
+      if (apelosFilters.dataInicioFilter) params.append('dataInicio', apelosFilters.dataInicioFilter);
+      if (apelosFilters.dataFimFilter) params.append('dataFim', apelosFilters.dataFimFilter);
       params.append('page', apelosFilters.page);
       params.append('limit', 10);
       const res = await fetch(`${API_URL}/start/direcionamentos/?${params.toString()}`, {
@@ -198,7 +215,7 @@ const ApelosDirecionadosPage = () => {
   });
   const celulas = celulasQuery.data || [];
 
-  const activeFilterCount = [monthFilter, statusFilter, nomeFilter, decisaoFilter, celulaCasalFilter, apenasRepetidosFilter, yearFilter].filter(Boolean).length;
+  const activeFilterCount = [monthFilter, statusFilter, nomeFilter, decisaoFilter, celulaCasalFilter, apenasRepetidosFilter, yearFilter, dataInicioFilter, dataFimFilter].filter(Boolean).length;
 
   const clearFilters = () => {
     setNomeFilter('');
@@ -208,6 +225,8 @@ const ApelosDirecionadosPage = () => {
     setStatusFilter('');
     setCelulaCasalFilter('');
     setApenasRepetidosFilter('');
+    setDataInicioFilter('');
+    setDataFimFilter('');
     setPage(1);
   };
 
@@ -362,8 +381,9 @@ const ApelosDirecionadosPage = () => {
     setLoadingSugestoes(false);
   };
 
-  const abrirMover = (apelo) => {
+  const abrirMover = (apelo, mode = 'mover') => {
     setApeloSelecionado(apelo);
+    setMoveDialogMode(mode);
     setCelulaDestinoId('');
     setMotivo('');
     setFiltroCelula('');
@@ -418,6 +438,46 @@ const ApelosDirecionadosPage = () => {
       return;
     }
     moverApeloMutation.mutate({ apeloId: apeloSelecionado.id, destinoId: celulaDestinoId, motivoTexto: motivo.trim() });
+  };
+
+  // Consolidação: direciona para a célula escolhida já marcando como
+  // "Consolidado na célula" (usado quando a movimentação foi feita fora do sistema).
+  const consolidarApeloMutation = useMutation({
+    mutationFn: async ({ apeloId, destinoId, motivoTexto }) => {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/start/direcionamentos/${apeloId}/consolidar`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ celulaDestinoId: destinoId, motivo: motivoTexto })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.erro || 'Falha ao consolidar apelo.');
+      }
+      return res.json().catch(() => ({}));
+    },
+    onSuccess: (_data, vars) => {
+      setNotification('Apelo consolidado na célula com sucesso.');
+      sendWebhookEvent('apelo.status_changed', { apeloId: vars.apeloId, status: 'CONSOLIDADO_CELULA' });
+      setMoveDialogOpen(false);
+      invalidateApelos();
+    },
+    onError: (err) => setNotification(err.message || 'Erro ao consolidar apelo.'),
+  });
+
+  const consolidarApelo = () => {
+    if (!apeloSelecionado || !celulaDestinoId) {
+      setNotification('Selecione a célula em que o apelo foi consolidado.');
+      return;
+    }
+    if (!motivo.trim()) {
+      setNotification('Informe o motivo do direcionamento para registrar no histórico.');
+      return;
+    }
+    consolidarApeloMutation.mutate({ apeloId: apeloSelecionado.id, destinoId: celulaDestinoId, motivoTexto: motivo.trim() });
   };
 
   // Historico do apelo selecionado — so busca quando o dialog esta aberto.
@@ -639,6 +699,158 @@ const ApelosDirecionadosPage = () => {
   };
 
   const apeloSemDirecionamento = (apelo) => apelo?.status === 'NAO_HAVERAR_DIRECIONAMENTO';
+
+  // Apelos que aceitaram/voltaram para Jesus mas não marcaram encaminhamento de
+  // célula (ficaram como "Não direcionar"). Podem ser habilitados manualmente.
+  const apeloPodeHabilitarEncaminhamento = (apelo) => apelo?.status === 'NAO_HAVERAR_DIRECIONAMENTO';
+
+  const clearHabilitarGeoTimer = () => {
+    if (habilitarGeoTimerRef.current) {
+      clearTimeout(habilitarGeoTimerRef.current);
+      habilitarGeoTimerRef.current = null;
+    }
+  };
+
+  const habilitarFormVazio = () => ({
+    cep: '', bairro: '', cidade: '', estado: '', lat: '', lon: '', dias: []
+  });
+
+  const abrirHabilitarEncaminhamento = (apelo) => {
+    if (!apelo) return;
+    const diasAtuais = apeloDiasNorm(apelo);
+    // Recupera os rótulos originais (com acento) a partir dos dias já salvos.
+    const diasSelecionados = DIAS_PREFERENCIA.filter((d) => diasAtuais.includes(normalizeDiaSemana(d)));
+    setApeloHabilitar(apelo);
+    setHabilitarForm({
+      cep: normalizeCepDigits(apelo.cep_apelo || ''),
+      bairro: apelo.bairro_apelo || '',
+      cidade: apelo.cidade_apelo || '',
+      estado: apelo.estado_apelo || '',
+      lat: apelo.lat_apelo === null || apelo.lat_apelo === undefined ? '' : String(apelo.lat_apelo),
+      lon: apelo.lon_apelo === null || apelo.lon_apelo === undefined ? '' : String(apelo.lon_apelo),
+      dias: diasSelecionados,
+    });
+    setHabilitarGeoLoading(false);
+    setHabilitarDialogOpen(true);
+  };
+
+  const fecharHabilitarEncaminhamento = () => {
+    if (habilitarEncaminhamentoMutation.isPending) return;
+    clearHabilitarGeoTimer();
+    setHabilitarGeoLoading(false);
+    setHabilitarDialogOpen(false);
+    setApeloHabilitar(null);
+    setHabilitarForm(habilitarFormVazio());
+  };
+
+  const toggleHabilitarDia = (dia) => {
+    setHabilitarForm((prev) => ({
+      ...prev,
+      dias: prev.dias.includes(dia) ? prev.dias.filter((d) => d !== dia) : [...prev.dias, dia],
+    }));
+  };
+
+  // Geocodifica o CEP e preenche bairro/cidade/estado/latitude/longitude.
+  const geocodeHabilitarPorCep = async (cep) => {
+    const requestId = habilitarGeoRequestRef.current + 1;
+    habilitarGeoRequestRef.current = requestId;
+    setHabilitarGeoLoading(true);
+    try {
+      const geocodeResult = await fetchGeocode(`${cep}, Brasil`);
+      if (habilitarGeoRequestRef.current !== requestId) return;
+      if (geocodeResult) {
+        setHabilitarForm((prev) => ({
+          ...prev,
+          bairro: geocodeResult.bairro || prev.bairro || '',
+          cidade: geocodeResult.cidade || prev.cidade || '',
+          estado: geocodeResult.uf || geocodeResult.estado || prev.estado || '',
+          lat: Number.isFinite(Number(geocodeResult.lat)) ? String(geocodeResult.lat) : prev.lat,
+          lon: Number.isFinite(Number(geocodeResult.lon)) ? String(geocodeResult.lon) : prev.lon,
+        }));
+      }
+    } catch (err) {
+      console.error('Erro ao geolocalizar CEP do encaminhamento:', err);
+    } finally {
+      if (habilitarGeoRequestRef.current === requestId) {
+        setHabilitarGeoLoading(false);
+      }
+    }
+  };
+
+  const handleHabilitarCepChange = (value) => {
+    const cep = normalizeCepDigits(value);
+    setHabilitarForm((prev) => ({ ...prev, cep }));
+    clearHabilitarGeoTimer();
+    if (cep.length === 8) {
+      habilitarGeoTimerRef.current = setTimeout(() => geocodeHabilitarPorCep(cep), 500);
+    } else {
+      setHabilitarGeoLoading(false);
+    }
+  };
+
+  const habilitarEncaminhamentoMutation = useMutation({
+    mutationFn: async ({
+      apeloId, cep, bairro, cidade, estado, lat, lon, dias
+    }) => {
+      const token = localStorage.getItem('token');
+      // Tira o apelo de "NAO_HAVERAR_DIRECIONAMENTO" e informa CEP/dias/coordenadas
+      // para que ele entre na fila automática e seja direcionado para a célula da
+      // mesma rede seguindo as regras estabelecidas.
+      const res = await fetch(`${API_URL}/start/direcionamentos/${apeloId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          cep_apelo: cep,
+          bairro_apelo: bairro || null,
+          cidade_apelo: cidade || null,
+          estado_apelo: estado || null,
+          lat_apelo: Number.isFinite(Number(lat)) && lat !== '' ? Number(lat) : null,
+          lon_apelo: Number.isFinite(Number(lon)) && lon !== '' ? Number(lon) : null,
+          dias_semana: dias,
+          direcionado_celula: true,
+          status: 'APELO_CADASTRADO',
+          motivo_status: 'Encaminhamento de célula habilitado manualmente'
+        })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.erro || 'Falha ao habilitar encaminhamento.');
+      }
+      return res.json().catch(() => ({}));
+    },
+    onSuccess: (_data, vars) => {
+      setNotification('Encaminhamento habilitado. O apelo entrou na fila e será direcionado automaticamente.');
+      sendWebhookEvent('apelo.status_changed', { apeloId: vars.apeloId, status: 'APELO_CADASTRADO' });
+      setHabilitarDialogOpen(false);
+      setApeloHabilitar(null);
+      setHabilitarForm(habilitarFormVazio());
+      invalidateApelos();
+    },
+    onError: (err) => setNotification(err.message || 'Erro ao habilitar encaminhamento.'),
+  });
+
+  const confirmarHabilitarEncaminhamento = () => {
+    if (!apeloHabilitar) return;
+    const cep = normalizeCepDigits(habilitarForm.cep);
+    if (cep.length !== 8) {
+      setNotification('Informe um CEP válido (8 dígitos) para habilitar o encaminhamento.');
+      return;
+    }
+    if (habilitarForm.dias.length === 0) {
+      setNotification('Selecione ao menos um dia de preferência.');
+      return;
+    }
+    habilitarEncaminhamentoMutation.mutate({
+      apeloId: apeloHabilitar.id,
+      cep,
+      bairro: habilitarForm.bairro.trim(),
+      cidade: habilitarForm.cidade.trim(),
+      estado: habilitarForm.estado.trim(),
+      lat: habilitarForm.lat,
+      lon: habilitarForm.lon,
+      dias: habilitarForm.dias,
+    });
+  };
 
   const celulasMesmaRede = (apelo, filtro = filtroCelula) => {
     if (!apelo) return [];
@@ -914,6 +1126,10 @@ const ApelosDirecionadosPage = () => {
       clearTimeout(detailGeoTimerRef.current);
       detailGeoTimerRef.current = null;
     }
+    if (habilitarGeoTimerRef.current) {
+      clearTimeout(habilitarGeoTimerRef.current);
+      habilitarGeoTimerRef.current = null;
+    }
   }, []);
 
   const celulasDisponiveis = (apeloSelecionado ? celulasMesmaRede(apeloSelecionado) : [])
@@ -1017,6 +1233,26 @@ const ApelosDirecionadosPage = () => {
                     </MenuItem>
                   ))}
                 </TextField>
+                <TextField
+                  label="Direcionado de"
+                  type="date"
+                  size="small"
+                  value={dataInicioFilter}
+                  onChange={(e) => { setDataInicioFilter(e.target.value); setPage(1); }}
+                  InputLabelProps={{ shrink: true }}
+                  inputProps={{ max: dataFimFilter || undefined }}
+                  sx={{ width: 170 }}
+                />
+                <TextField
+                  label="Direcionado até"
+                  type="date"
+                  size="small"
+                  value={dataFimFilter}
+                  onChange={(e) => { setDataFimFilter(e.target.value); setPage(1); }}
+                  InputLabelProps={{ shrink: true }}
+                  inputProps={{ min: dataInicioFilter || undefined }}
+                  sx={{ width: 170 }}
+                />
                 <TextField
                   select
                   label="Decisão"
@@ -1186,6 +1422,17 @@ const ApelosDirecionadosPage = () => {
                     <TableCell>{apelo?.celulaAtual?.lider || '-'}</TableCell>
                     <TableCell>{renderStatusChip(apelo.status)}</TableCell>
                     <TableCell align="right">
+                      {apeloPodeHabilitarEncaminhamento(apelo) && (
+                        <Tooltip title="Habilitar encaminhamento de célula">
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            onClick={() => abrirHabilitarEncaminhamento(apelo)}
+                          >
+                            <AltRouteIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
                       <Tooltip title="Ações">
                         <span>
                           <IconButton
@@ -1238,9 +1485,13 @@ const ApelosDirecionadosPage = () => {
               <ListItemIcon><AutorenewIcon fontSize="small" /></ListItemIcon>
               <ListItemText>Alterar status</ListItemText>
             </MenuItem>,
-            <MenuItem key="mover" onClick={() => { setRowMenuAnchor(null); if (apelo) abrirMover(apelo); }}>
+            <MenuItem key="mover" onClick={() => { setRowMenuAnchor(null); if (apelo) abrirMover(apelo, 'mover'); }}>
               <ListItemIcon><SwapHorizIcon fontSize="small" /></ListItemIcon>
               <ListItemText>Mover para outra célula</ListItemText>
+            </MenuItem>,
+            <MenuItem key="consolidar" onClick={() => { setRowMenuAnchor(null); if (apelo) abrirMover(apelo, 'consolidar'); }}>
+              <ListItemIcon><CheckCircleIcon fontSize="small" sx={{ color: 'success.main' }} /></ListItemIcon>
+              <ListItemText>Consolidar em célula (movida fora do sistema)</ListItemText>
             </MenuItem>,
             <Divider key="div" />,
             <MenuItem
@@ -1256,8 +1507,14 @@ const ApelosDirecionadosPage = () => {
       </Menu>
 
       <Dialog open={moveDialogOpen} onClose={() => setMoveDialogOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Mover apelo</DialogTitle>
+        <DialogTitle>{moveDialogMode === 'consolidar' ? 'Consolidar apelo na célula' : 'Mover apelo'}</DialogTitle>
         <DialogContent>
+          {moveDialogMode === 'consolidar' && (
+            <Alert severity="success" sx={{ mb: 1 }}>
+              Selecione a célula em que o apelo já está participando. Ele será marcado
+              diretamente como <strong>Consolidado na célula</strong>, sem passar por &quot;em movimentação&quot;.
+            </Alert>
+          )}
           <Typography variant="body2" gutterBottom>
             Apelo: {apeloSelecionado?.nome || '-'}
           </Typography>
@@ -1458,13 +1715,24 @@ const ApelosDirecionadosPage = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setMoveDialogOpen(false)}>Cancelar</Button>
-          <Button
-            variant="contained"
-            onClick={moverApelo}
-            disabled={!celulaDestinoId || !motivo.trim() || moverApeloMutation.isPending}
-          >
-            Mover
-          </Button>
+          {moveDialogMode === 'consolidar' ? (
+            <Button
+              variant="contained"
+              color="success"
+              onClick={consolidarApelo}
+              disabled={!celulaDestinoId || !motivo.trim() || consolidarApeloMutation.isPending}
+            >
+              {consolidarApeloMutation.isPending ? 'Consolidando...' : 'Consolidar na célula'}
+            </Button>
+          ) : (
+            <Button
+              variant="contained"
+              onClick={moverApelo}
+              disabled={!celulaDestinoId || !motivo.trim() || moverApeloMutation.isPending}
+            >
+              Mover
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 
@@ -1886,6 +2154,123 @@ const ApelosDirecionadosPage = () => {
             disabled={notificarLiderMutation.isPending}
           >
             Enviar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={habilitarDialogOpen} onClose={fecharHabilitarEncaminhamento} fullWidth maxWidth="sm">
+        <DialogTitle>Habilitar encaminhamento de célula</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" gutterBottom>
+            Apelo: <strong>{apeloHabilitar?.nome || '-'}</strong>
+          </Typography>
+          <Typography variant="body2" color="textSecondary" gutterBottom sx={{ mb: 2 }}>
+            Decisão: {DECISAO_OPTIONS.find((o) => o.value === apeloHabilitar?.decisao)?.label || apeloHabilitar?.decisao || '-'}
+            {' · '}Rede: {apeloHabilitar?.rede || '-'}
+          </Typography>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Preencha o CEP e os dias de preferência. Ao salvar, o apelo entra na fila e é
+            direcionado automaticamente para a célula da mesma rede seguindo as regras estabelecidas
+            (proximidade e dia de preferência).
+          </Alert>
+          <TextField
+            fullWidth
+            size="small"
+            label="CEP"
+            required
+            margin="normal"
+            value={habilitarForm.cep}
+            onChange={(e) => handleHabilitarCepChange(e.target.value)}
+            error={habilitarForm.cep.length > 0 && habilitarForm.cep.length !== 8}
+            helperText="8 dígitos. Ao digitar, bairro, cidade, estado e coordenadas são buscados automaticamente."
+            inputProps={{ inputMode: 'numeric', maxLength: 8 }}
+          />
+          {habilitarGeoLoading && (
+            <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 0.5 }}>
+              Buscando localização a partir do CEP...
+            </Typography>
+          )}
+          <TextField
+            fullWidth
+            size="small"
+            label="Bairro"
+            margin="normal"
+            value={habilitarForm.bairro}
+            onChange={(e) => setHabilitarForm((prev) => ({ ...prev, bairro: e.target.value }))}
+            helperText="Preenchido pelo CEP; você pode ajustar se necessário."
+          />
+          <Grid container spacing={1}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Cidade"
+                margin="normal"
+                value={habilitarForm.cidade}
+                InputProps={{ readOnly: true }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Estado"
+                margin="normal"
+                value={habilitarForm.estado}
+                InputProps={{ readOnly: true }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Latitude"
+                margin="normal"
+                value={habilitarForm.lat}
+                InputProps={{ readOnly: true }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Longitude"
+                margin="normal"
+                value={habilitarForm.lon}
+                InputProps={{ readOnly: true }}
+              />
+            </Grid>
+          </Grid>
+          <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>
+            Dias de preferência
+          </Typography>
+          <Box display="flex" gap={1} flexWrap="wrap">
+            {DIAS_PREFERENCIA.map((dia) => (
+              <Chip
+                key={dia}
+                label={dia}
+                clickable
+                color={habilitarForm.dias.includes(dia) ? 'primary' : 'default'}
+                variant={habilitarForm.dias.includes(dia) ? 'filled' : 'outlined'}
+                onClick={() => toggleHabilitarDia(dia)}
+              />
+            ))}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={fecharHabilitarEncaminhamento} disabled={habilitarEncaminhamentoMutation.isPending}>
+            Cancelar
+          </Button>
+          <Button
+            variant="contained"
+            onClick={confirmarHabilitarEncaminhamento}
+            disabled={
+              habilitarEncaminhamentoMutation.isPending
+              || habilitarForm.cep.length !== 8
+              || habilitarForm.dias.length === 0
+            }
+          >
+            {habilitarEncaminhamentoMutation.isPending ? 'Habilitando...' : 'Habilitar e direcionar'}
           </Button>
         </DialogActions>
       </Dialog>

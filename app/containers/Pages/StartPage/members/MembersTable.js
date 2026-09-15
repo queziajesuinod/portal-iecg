@@ -47,7 +47,8 @@ const MembersTable = ({
   onOpenEdit,
   onDeleteMember,
   showLeaderColumns,
-  canManage
+  canManage,
+  canNotify
 }) => (
   <>
     <Table size="small">
@@ -157,7 +158,7 @@ const MembersTable = ({
                       label={updatingMemberId === member.id ? 'Salvando...' : isActive ? 'Ativo' : 'Inativo'}
                     />
                   )}
-                  {canManage && incompleto && (
+                  {canNotify && incompleto && (
                     <Tooltip title={temContato ? `Notificar para atualizar dados (${completude}%)` : 'Sem telefone para notificar'}>
                       <span>
                         <IconButton
@@ -262,6 +263,7 @@ MembersTable.propTypes = {
   onDeleteMember: PropTypes.func.isRequired,
   showLeaderColumns: PropTypes.bool,
   canManage: PropTypes.bool,
+  canNotify: PropTypes.bool,
 };
 
 MembersTable.defaultProps = {
@@ -273,6 +275,7 @@ MembersTable.defaultProps = {
   onNotifyLeaderCells: () => {},
   showLeaderColumns: false,
   canManage: true,
+  canNotify: true,
 };
 
 export default MembersTable;

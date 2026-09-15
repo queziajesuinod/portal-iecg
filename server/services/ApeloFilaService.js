@@ -32,6 +32,14 @@ const CONFIG = {
   timeoutGeocoding: 5000,
   statusTransitionDelayMs: 20 * 1000,
 
+  // Processamento em lote (background): fileiras de N apelos, com pausa entre
+  // cada direcionamento e uma pausa maior entre as fileiras.
+  lote: {
+    tamanhoFileira: 10, // Quantos apelos por fileira
+    delayEntreApelosMs: 55 * 1000, // Pausa entre um direcionamento e o próximo
+    delayEntreFileirasMs: 15 * 60 * 1000 // Pausa após concluir uma fileira
+  },
+
   // Validação da origem do apelo
   validacaoOrigem: {
     maxDivergenciaKm: 2 // Se coordenada salva divergir muito do CEP, usa CEP
@@ -181,6 +189,8 @@ const normalizeDiaSemana = (dia) => {
 
   return mapa[dia.toLowerCase().trim()] || null;
 };
+
+const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
 const scheduleStatusTransition = (apeloId) => {
   setTimeout(async () => {
@@ -395,6 +405,27 @@ class ScoringEngine {
 
 // ==================== SERVIÇO PRINCIPAL ====================
 class ApeloFilaService {
+  constructor() {
+    // Estado (em memória) do processamento em lote em background.
+    this.loteState = this._loteStateInicial();
+  }
+
+  _loteStateInicial() {
+    return {
+      running: false,
+      cancelar: false,
+      startedAt: null,
+      finishedAt: null,
+      processados: 0,
+      direcionados: 0,
+      semCelula: 0,
+      fileiraAtual: 0,
+      aguardandoProximaFileiraAte: null,
+      ultimoResultado: null,
+      erro: null
+    };
+  }
+
   async proximoApelo() {
     return ApeloDirecionadoCelula.findOne({
       where: {
@@ -946,6 +977,115 @@ class ApeloFilaService {
       score,
       detalhesScore: detalhes
     };
+  }
+
+  // ==================== PROCESSAMENTO EM LOTE (BACKGROUND) ====================
+
+  getLoteStatus() {
+    const { lote } = CONFIG;
+    return {
+      ...this.loteState,
+      config: {
+        tamanhoFileira: lote.tamanhoFileira,
+        delayEntreApelosMs: lote.delayEntreApelosMs,
+        delayEntreFileirasMs: lote.delayEntreFileirasMs
+      }
+    };
+  }
+
+  cancelarLote() {
+    if (!this.loteState.running) {
+      return { mensagem: 'Nenhum processamento em lote em execução.', ...this.getLoteStatus() };
+    }
+    this.loteState.cancelar = true;
+    return { mensagem: 'Cancelamento solicitado. O lote encerra após o apelo atual.', ...this.getLoteStatus() };
+  }
+
+  // Inicia o processamento em background e retorna imediatamente (não aguarda o
+  // término, que pode levar horas). Estado observável via getLoteStatus().
+  async iniciarProcessamentoEmLote() {
+    if (this.loteState.running) {
+      return { mensagem: 'Processamento em lote já está em execução.', ...this.getLoteStatus() };
+    }
+
+    this.loteState = { ...this._loteStateInicial(), running: true, startedAt: new Date() };
+
+    // Dispara sem await — o controller responde 202 imediatamente.
+    this._executarLote().catch((err) => {
+      console.error('Erro no processamento em lote da fila:', err);
+      this.loteState.running = false;
+      this.loteState.finishedAt = new Date();
+      this.loteState.erro = err.message || String(err);
+    });
+
+    return { mensagem: 'Processamento em lote iniciado.', ...this.getLoteStatus() };
+  }
+
+  // Espera "ms" mas verifica o cancelamento a cada ~2s, para que "Parar lote"
+  // tenha efeito rápido mesmo durante a pausa longa entre fileiras.
+  async _aguardarCancelavel(ms) {
+    const passo = 2000;
+    let restante = ms;
+    while (restante > 0 && !this.loteState.cancelar) {
+      const espera = Math.min(passo, restante);
+      await sleep(espera);
+      restante -= espera;
+    }
+  }
+
+  // Reaproveita processarFila() (que já pula SEM_CELULA e direciona o próximo),
+  // aplicando a pausa entre cada direcionamento e a pausa longa entre fileiras.
+  async _executarLote() {
+    const { tamanhoFileira, delayEntreApelosMs, delayEntreFileirasMs } = CONFIG.lote;
+    try {
+      while (!this.loteState.cancelar) {
+        this.loteState.fileiraAtual += 1;
+        this.loteState.aguardandoProximaFileiraAte = null;
+        console.log(`\n📦 Iniciando fileira #${this.loteState.fileiraAtual} (até ${tamanhoFileira} apelos)`);
+
+        for (let i = 0; i < tamanhoFileira; i += 1) {
+          if (this.loteState.cancelar) break;
+
+          const resultado = await this.processarFila();
+          // processarFila só retorna apeloId quando processou algo; sem apeloId => fila vazia.
+          if (!resultado || !resultado.apeloId) {
+            console.log('🏁 Fila vazia — processamento em lote concluído.');
+            return;
+          }
+
+          this.loteState.processados += 1;
+          this.loteState.ultimoResultado = resultado;
+          if (resultado.celula) {
+            this.loteState.direcionados += 1;
+          } else {
+            this.loteState.semCelula += 1;
+          }
+
+          // Pausa entre um direcionamento e o próximo (menos após o último da fileira).
+          const ehUltimoDaFileira = i === tamanhoFileira - 1;
+          if (!ehUltimoDaFileira && !this.loteState.cancelar) {
+            await this._aguardarCancelavel(delayEntreApelosMs);
+          }
+        }
+
+        if (this.loteState.cancelar) break;
+
+        // Só faz a pausa longa se ainda restam apelos na fila.
+        const restante = await this.proximoApelo();
+        if (!restante) {
+          console.log('🏁 Fila vazia após a fileira — processamento em lote concluído.');
+          return;
+        }
+
+        this.loteState.aguardandoProximaFileiraAte = new Date(Date.now() + delayEntreFileirasMs);
+        console.log(`⏸️  Fileira concluída. Aguardando ${Math.round(delayEntreFileirasMs / 60000)} min até a próxima fileira.`);
+        await this._aguardarCancelavel(delayEntreFileirasMs);
+      }
+    } finally {
+      this.loteState.running = false;
+      this.loteState.finishedAt = new Date();
+      this.loteState.aguardandoProximaFileiraAte = null;
+    }
   }
 
   getHealthStatus() {
