@@ -66,86 +66,111 @@ async function loadData(registrationId) {
   return { registration, payments };
 }
 
+// Rotulos "Meio de pagamento" no estilo Cielo (Cielo2Pix, Cielo Credito...).
+function meioPagamento(p) {
+  if (p.method === 'pix') return 'Cielo Pix';
+  if (p.method === 'credit_card') return 'Cielo Credito';
+  if (p.provider === 'cielo') return 'Cielo';
+  return METHOD_LABELS[p.method] || p.method;
+}
+
+function linhaDado(label, value) {
+  return `<div class="row"><span class="label">${esc(label)}</span><span class="val">${esc(value || '---')}</span></div>`;
+}
+
+// Um bloco por transacao, no mesmo formato do "Resumo de Transacoes" da Cielo.
+function blocoTransacao(p) {
+  const info = cieloInfo(p);
+  const valorCapturado = (Number(p.amount) || 0) + (Number(p.taxa) || 0);
+  const formaLabel = p.method === 'credit_card'
+    ? `Cartao de Credito${p.installments && p.installments > 1 ? ` (${p.installments}x)` : ''}`
+    : (METHOD_LABELS[p.method] || p.method);
+
+  // Dados da transacao conforme o meio.
+  const dadosTransacao = [];
+  dadosTransacao.push(linhaDado('ID da transacao', p.providerPaymentId || info.tid));
+  if (p.method === 'pix') {
+    dadosTransacao.push(linhaDado('Identificador da transacao (txid)', p.pixTransactionId));
+    dadosTransacao.push(linhaDado('Codigo End to End (e2eid)', p.pixEndToEndId));
+  } else if (p.method === 'credit_card') {
+    if (p.cardBrand) dadosTransacao.push(linhaDado('Bandeira', p.cardBrand));
+    dadosTransacao.push(linhaDado('Codigo de autorizacao', info.authorizationCode));
+    dadosTransacao.push(linhaDado('NSU (ProofOfSale)', info.proofOfSale));
+    dadosTransacao.push(linhaDado('Tid', info.tid));
+  }
+
+  return `
+  <div class="tx">
+    <div class="amount">${money(valorCapturado)}</div>
+    <div class="when">${esc(fmtDateTime(p.confirmedAt || p.createdAt))}</div>
+
+    <div class="grp">
+      <div class="row"><span class="label">Situacao</span><span class="badge">Paga</span></div>
+      ${linhaDado('Valor Capturado', money(valorCapturado))}
+      ${linhaDado('Valor Cancelado / Estornado', '---')}
+    </div>
+
+    <div class="grp">
+      ${linhaDado('Meio de pagamento', meioPagamento(p))}
+      ${linhaDado('Forma de pagamento', formaLabel)}
+    </div>
+
+    <div class="grp">
+      <h3>Dados da Transacao</h3>
+      ${dadosTransacao.join('')}
+    </div>
+  </div>`;
+}
+
 function buildHtml({ registration, payments }) {
   const buyer = registration.buyerData || {};
   const buyerName = buyer.buyer_name || buyer.nome || buyer.name || '-';
   const buyerDoc = buyer.buyer_document || buyer.cpf || buyer.documento || buyer.cnpj || '';
-  const buyerEmail = buyer.buyer_email || buyer.email || '';
+  const buyerCity = buyer.buyer_city || buyer.cidade || buyer.city || '';
   const eventTitle = registration.event?.title || 'Evento';
 
   const totalPago = payments.reduce((sum, p) => sum + (Number(p.amount) || 0) + (Number(p.taxa) || 0), 0);
-
-  const linhas = payments.map((p, i) => {
-    const info = cieloInfo(p);
-    const metodo = METHOD_LABELS[p.method] || p.method;
-    const ids = [];
-    if (p.method === 'credit_card') {
-      if (p.cardBrand) ids.push(`Bandeira: ${esc(p.cardBrand)}`);
-      if (p.installments) ids.push(`Parcelas: ${esc(p.installments)}x`);
-      if (info.authorizationCode) ids.push(`Autorizacao: ${esc(info.authorizationCode)}`);
-      if (info.proofOfSale) ids.push(`NSU: ${esc(info.proofOfSale)}`);
-      if (info.tid) ids.push(`Tid: ${esc(info.tid)}`);
-    } else if (p.method === 'pix') {
-      if (p.pixEndToEndId) ids.push(`EndToEndId: ${esc(p.pixEndToEndId)}`);
-      else if (p.pixTransactionId) ids.push(`Txid: ${esc(p.pixTransactionId)}`);
-    } else if (p.providerPaymentId) {
-      ids.push(`Ref.: ${esc(p.providerPaymentId)}`);
-    }
-    const idsHtml = ids.length ? `<div class="ids">${ids.join(' &nbsp;·&nbsp; ')}</div>` : '';
-    const valorLinha = (Number(p.amount) || 0) + (Number(p.taxa) || 0);
-    return `
-      <tr>
-        <td>${i + 1}</td>
-        <td>${esc(fmtDateTime(p.confirmedAt || p.createdAt))}</td>
-        <td>${esc(metodo)}${idsHtml}</td>
-        <td class="r">${money(valorLinha)}</td>
-      </tr>`;
-  }).join('');
+  const blocos = payments.map(blocoTransacao).join('');
+  const totalHtml = payments.length > 1
+    ? `<div class="total"><span>Total pago (${payments.length} pagamentos)</span><span>${money(totalPago)}</span></div>`
+    : '';
 
   return `<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="utf-8"><title>Comprovante de Pagamento</title>
 <style>
   * { box-sizing: border-box; }
   body { font-family: Arial, Helvetica, sans-serif; color: #1f2937; font-size: 12px; }
-  h1 { font-size: 18px; margin: 0 0 4px; color: #111827; }
+  h1 { font-size: 17px; margin: 0 0 2px; color: #111827; }
+  h3 { font-size: 12px; margin: 12px 0 6px; color: #111827; }
   .sub { color: #6b7280; margin: 0 0 18px; font-size: 12px; }
-  .box { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
-  .row { display: flex; justify-content: space-between; margin: 3px 0; }
+  .grp { padding: 8px 0; border-bottom: 1px solid #eef0f2; }
+  .grp:last-child { border-bottom: 0; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin: 4px 0; }
   .label { color: #6b7280; }
-  .val { font-weight: 600; color: #111827; }
-  table { width: 100%; border-collapse: collapse; margin-top: 6px; }
-  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #eee; vertical-align: top; }
-  th { color: #6b7280; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; }
-  td.r, th.r { text-align: right; }
-  .ids { color: #6b7280; font-size: 10px; margin-top: 3px; }
-  .total { display: flex; justify-content: space-between; margin-top: 12px; font-size: 15px; }
-  .total .val { color: #16a34a; }
-  .foot { color: #9ca3af; font-size: 10px; margin-top: 22px; text-align: center; line-height: 1.5; }
-  .badge { display:inline-block; background:#dcfce7; color:#166534; font-weight:700; font-size:11px; padding:3px 10px; border-radius:999px; }
+  .val { font-weight: 600; color: #111827; text-align: right; word-break: break-all; }
+  .tx { border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px 18px; margin-bottom: 16px; }
+  .amount { font-size: 22px; font-weight: 700; color: #111827; }
+  .when { color: #6b7280; margin: 0 0 10px; }
+  .badge { display:inline-block; background:#dcfce7; color:#166534; font-weight:700; font-size:11px; padding:3px 12px; border-radius:999px; }
+  .total { display: flex; justify-content: space-between; font-size: 15px; font-weight: 700; color: #111827; padding: 8px 2px; }
+  .foot { color: #9ca3af; font-size: 10px; margin-top: 18px; text-align: center; line-height: 1.5; }
 </style></head>
 <body>
   <h1>Comprovante de Pagamento</h1>
-  <p class="sub">${esc(eventTitle)} &nbsp;·&nbsp; <span class="badge">PAGO</span></p>
+  <p class="sub">${esc(eventTitle)} &nbsp;·&nbsp; Pedido ${esc(registration.orderCode)}</p>
 
-  <div class="box">
-    <div class="row"><span class="label">Codigo do pedido</span><span class="val">${esc(registration.orderCode)}</span></div>
-    <div class="row"><span class="label">Comprador</span><span class="val">${esc(buyerName)}</span></div>
-    ${buyerDoc ? `<div class="row"><span class="label">Documento</span><span class="val">${esc(buyerDoc)}</span></div>` : ''}
-    ${buyerEmail ? `<div class="row"><span class="label">E-mail</span><span class="val">${esc(buyerEmail)}</span></div>` : ''}
+  <div class="tx">
+    <h3 style="margin-top:0">Dados do comprador</h3>
+    ${linhaDado('Nome do cliente', buyerName)}
+    ${linhaDado('Documento (CPF/CNPJ)', buyerDoc)}
+    ${linhaDado('Cidade', buyerCity)}
   </div>
 
-  <div class="box">
-    <table>
-      <thead>
-        <tr><th>#</th><th>Data</th><th>Forma de pagamento</th><th class="r">Valor</th></tr>
-      </thead>
-      <tbody>${linhas}</tbody>
-    </table>
-    <div class="total"><span class="val" style="color:#111827">Total pago</span><span class="val">${money(totalPago)}</span></div>
-  </div>
+  ${blocos}
+  ${totalHtml}
 
   <p class="foot">
-    Documento gerado automaticamente pelo Portal IECG como comprovante dos pagamentos processados.<br>
+    Documento gerado pelo Portal IECG como comprovante dos pagamentos processados via Cielo.<br>
     Nao possui valor fiscal. Emitido em ${esc(fmtDateTime(new Date()))}.
   </p>
 </body></html>`;

@@ -9,6 +9,7 @@ import {
   AccordionDetails,
   AccordionSummary,
   Alert,
+  Autocomplete,
   Badge,
   Box,
   Button,
@@ -100,6 +101,7 @@ const ApelosDirecionadosPage = () => {
   const [apeloSelecionado, setApeloSelecionado] = useState(null);
   const [celulaDestinoId, setCelulaDestinoId] = useState('');
   const [filtroCelula, setFiltroCelula] = useState('');
+  const [filtroLider, setFiltroLider] = useState('');
   const [apenasCasal, setApenasCasal] = useState(false);
   const [apenasMesmoDia, setApenasMesmoDia] = useState(false);
   const [motivo, setMotivo] = useState('');
@@ -387,6 +389,7 @@ const ApelosDirecionadosPage = () => {
     setCelulaDestinoId('');
     setMotivo('');
     setFiltroCelula('');
+    setFiltroLider('');
     // Se o apelo é de casal, já abre filtrando por células de casal.
     setApenasCasal(Boolean(apelo?.celula_casal || apelo?.conjuge_apelo_id));
     setApenasMesmoDia(false);
@@ -852,15 +855,24 @@ const ApelosDirecionadosPage = () => {
     });
   };
 
+  // Nome do lider da celula (varias origens possiveis do serializer/coluna).
+  const getLiderNome = (c) => c?.leaderUser?.name || c?.leaderMember?.fullName || c?.lider || '';
+  // Filtra por lider quando ha texto digitado (contem, sem acento/caixa).
+  const matchLider = (c) => {
+    if (!filtroLider) return true;
+    return normalizeSearchValue(getLiderNome(c)).includes(normalizeSearchValue(filtroLider));
+  };
+
   const celulasMesmaRede = (apelo, filtro = filtroCelula) => {
     if (!apelo) return [];
     const redeApelo = normalizeRede(apelo?.rede);
     if (!redeApelo) return [];
     const filtradas = celulas.filter((c) => normalizeRede(c.rede) === redeApelo);
     const baseSemAtual = filtradas.filter((c) => c.id !== apelo?.celulaAtual?.id);
-    if (!filtro) return baseSemAtual;
+    const porLider = baseSemAtual.filter(matchLider);
+    if (!filtro) return porLider;
     const termo = normalizeSearchValue(filtro);
-    return baseSemAtual.filter((c) => normalizeSearchValue(c.celula).includes(termo));
+    return porLider.filter((c) => normalizeSearchValue(c.celula).includes(termo));
   };
 
   const formatDate = (v) => formatDateInAppTimezone(v, '-');
@@ -1136,8 +1148,19 @@ const ApelosDirecionadosPage = () => {
     .filter((c) => !apenasCasal || c.casalCelulaId);
   const celulasRedeSemFiltro = useMemo(
     () => (apeloSelecionado ? celulasMesmaRede(apeloSelecionado, '') : []),
-    [apeloSelecionado, celulas]
+    [apeloSelecionado, celulas, filtroLider]
   );
+  // Nomes de lideres (unicos) das celulas da mesma rede — opcoes do filtro por lider.
+  const lideresDaRede = useMemo(() => {
+    if (!apeloSelecionado) return [];
+    const redeApelo = normalizeRede(apeloSelecionado?.rede);
+    if (!redeApelo) return [];
+    const nomes = celulas
+      .filter((c) => normalizeRede(c.rede) === redeApelo && c.id !== apeloSelecionado?.celulaAtual?.id)
+      .map(getLiderNome)
+      .filter(Boolean);
+    return Array.from(new Set(nomes)).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [apeloSelecionado, celulas]);
   const celulasRedeOrdenadas = useMemo(() => {
     if (!apeloSelecionado || celulasRedeSemFiltro.length === 0) return [];
     const coords = apeloCoords;
@@ -1166,17 +1189,19 @@ const ApelosDirecionadosPage = () => {
     return base;
   }, [sugestoes, apenasCasal, apenasMesmoDia]);
   const sugestoesFiltradas = useMemo(() => {
+    const porLider = sugestoesBase.filter(matchLider);
     const filtradas = filtroCelula
-      ? sugestoesBase.filter((c) => normalizeSearchValue(c.celula).includes(normalizeSearchValue(filtroCelula)))
-      : sugestoesBase;
+      ? porLider.filter((c) => normalizeSearchValue(c.celula).includes(normalizeSearchValue(filtroCelula)))
+      : porLider;
     return filtradas.slice(0, limiteSugestoes);
-  }, [sugestoesBase, filtroCelula, limiteSugestoes]);
+  }, [sugestoesBase, filtroCelula, filtroLider, limiteSugestoes]);
 
   const totalSugestoesFiltradas = useMemo(() => {
-    if (!filtroCelula) return sugestoesBase.length;
+    const porLider = sugestoesBase.filter(matchLider);
+    if (!filtroCelula) return porLider.length;
     const termo = normalizeSearchValue(filtroCelula);
-    return sugestoesBase.filter((c) => normalizeSearchValue(c.celula).includes(termo)).length;
-  }, [sugestoesBase, filtroCelula]);
+    return porLider.filter((c) => normalizeSearchValue(c.celula).includes(termo)).length;
+  }, [sugestoesBase, filtroCelula, filtroLider]);
   const mostrarFallbackCelulas = !loadingSugestoes && sugestoes.length === 0 && celulasRedeOrdenadas.length > 0;
 
   return (
@@ -1538,6 +1563,21 @@ const ApelosDirecionadosPage = () => {
             value={filtroCelula}
             onChange={(e) => setFiltroCelula(e.target.value)}
           />
+          <Autocomplete
+            freeSolo
+            options={lideresDaRede}
+            inputValue={filtroLider}
+            onInputChange={(_e, value) => setFiltroLider(value)}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Filtrar por líder"
+                margin="normal"
+                size="small"
+                placeholder="Digite o começo do nome do líder"
+              />
+            )}
+          />
           <Box sx={{
             mt: 0.5, mb: 0.5, display: 'flex', gap: 1, flexWrap: 'wrap'
           }}>
@@ -1580,7 +1620,7 @@ const ApelosDirecionadosPage = () => {
             {celulasDisponiveis.map((c) => (
               <MenuItem key={c.id} value={c.id}>
                 <Box component="span" display="flex" alignItems="center" gap={1} width="100%">
-                  <span>{c.celula} {c.rede ? `- ${c.rede}` : ''}</span>
+                  <span>{c.celula}{c.rede ? ` - ${c.rede}` : ''}{getLiderNome(c) ? ` · Líder: ${getLiderNome(c)}` : ''}</span>
                   {renderJaDirecionadoChip(c.id)}
                 </Box>
               </MenuItem>
@@ -1646,6 +1686,7 @@ const ApelosDirecionadosPage = () => {
                           )}
                           {renderJaDirecionadoChip(c.id)}
                         </Box>
+                        <Typography variant="caption" display="block">Líder: {getLiderNome(c) || '-'}</Typography>
                         <Typography variant="caption" display="block">Rede: {c.rede}</Typography>
                         <Typography variant="caption" display="block">Bairro: {c.bairro || '-'}</Typography>
                         <Typography variant="caption" display="block">Dia: {c.dia || '-'}</Typography>
@@ -1696,6 +1737,7 @@ const ApelosDirecionadosPage = () => {
                               <Typography variant="subtitle2">{c.celula}</Typography>
                               {renderJaDirecionadoChip(c.id)}
                             </Box>
+                            <Typography variant="caption" display="block">Líder: {getLiderNome(c) || '-'}</Typography>
                             <Typography variant="caption" display="block">Rede: {c.rede}</Typography>
                             <Typography variant="caption" display="block">Bairro: {c.bairro || '-'}</Typography>
                             <Typography variant="caption" display="block">Dia: {c.dia || '-'}</Typography>
