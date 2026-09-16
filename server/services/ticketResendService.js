@@ -44,27 +44,61 @@ function buildTicketLink(orderCode) {
   return `${getTicketBaseUrl()}/${encodeURIComponent(orderCode)}`;
 }
 
+// Link para o comprovante de pagamento (PDF servido pela API publica).
+function buildReceiptLink(orderCode) {
+  const base = (process.env.PUBLIC_BASE_URL || process.env.REACT_APP_API_URL || '').replace(/\/+$/, '');
+  return `${base}/api/public/events/registrations/${encodeURIComponent(orderCode)}/payment-receipt`;
+}
+
+// Anexo do comprovante de pagamento (PDF), quando ha pagamento confirmado. Tolerante a falha.
+async function buildReceiptAttachment(registrationId, orderCode) {
+  try {
+    const paymentReceiptPdfService = require('./paymentReceiptPdfService');
+    if (!(await paymentReceiptPdfService.registrationHasConfirmedPayment(registrationId))) return null;
+    const pdf = await paymentReceiptPdfService.generateForRegistration(registrationId);
+    if (!pdf) return null;
+    return [{ filename: `comprovante-${orderCode}.pdf`, content: pdf, contentType: 'application/pdf' }];
+  } catch (err) {
+    console.error(`[ticket] falha ao gerar comprovante de pagamento (${orderCode}): ${err.message}`);
+    return null;
+  }
+}
+
+async function hasConfirmedPayment(registrationId) {
+  try {
+    return await require('./paymentReceiptPdfService').registrationHasConfirmedPayment(registrationId);
+  } catch (_) {
+    return false;
+  }
+}
+
 function buildWhatsappMessage({
-  buyerName, eventName, eventDate, orderCode
+  buyerName, eventName, eventDate, orderCode, receiptLink
 }) {
   const link = buildTicketLink(orderCode);
   const greeting = buyerName ? `Olá, *${buyerName.split(' ')[0]}*!` : 'Olá!';
   const dataFormatada = eventDate
     ? moment(eventDate).tz(TIMEZONE).format('DD/MM/YYYY [às] HH:mm')
     : null;
-  return [
+  const linhas = [
     greeting,
     '',
     `Seguem os ingressos da sua inscrição em *${eventName}*${dataFormatada ? ` (${dataFormatada})` : ''}.`,
     '',
     `🎟️ Código do pedido: *${orderCode}*`,
     `🔗 Acesse seu ingresso: ${link}`,
+  ];
+  if (receiptLink) {
+    linhas.push(`🧾 Comprovante de pagamento: ${receiptLink}`);
+  }
+  linhas.push(
     '',
     'Apresente este link na entrada do evento para fazer check-in.',
     '',
     'Em caso de dúvidas, responda esta mensagem.',
     'Equipe IECG 🙏',
-  ].join('\n');
+  );
+  return linhas.join('\n');
 }
 
 function buildEmailHtml({
@@ -177,6 +211,7 @@ async function resendByWhatsapp(registrationId, { instanceName } = {}) {
     eventName: registration.event?.title || registration.event?.name || 'evento',
     eventDate: registration.event?.startDate || registration.event?.date,
     orderCode: registration.orderCode,
+    receiptLink: (await hasConfirmedPayment(registration.id)) ? buildReceiptLink(registration.orderCode) : null,
   });
 
   const evolutionInstance = instanceName || process.env.EVOLUTION_INSTANCE_NAME;
@@ -220,14 +255,17 @@ async function resendByEmail(registrationId) {
   const html = buildEmailHtml(ctx);
   const text = buildEmailText(ctx);
   const subject = `🎟️ Seu ingresso — ${ctx.eventName}`;
-  const attachments = await buildTermAttachment(registration.id, registration.orderCode);
+  const attachments = [
+    ...((await buildTermAttachment(registration.id, registration.orderCode)) || []),
+    ...((await buildReceiptAttachment(registration.id, registration.orderCode)) || []),
+  ];
 
   const result = await emailService.sendMail({
     to: recipient,
     subject,
     html,
     text,
-    attachments,
+    attachments: attachments.length ? attachments : undefined,
   });
 
   return {
@@ -243,6 +281,20 @@ async function resend(registrationId, channel, options = {}) {
   if (channel === 'whatsapp') return resendByWhatsapp(registrationId, options);
   if (channel === 'email') return resendByEmail(registrationId);
   throw new Error(`Canal "${channel}" não suportado. Use "email" ou "whatsapp".`);
+}
+
+let ticketWhatsappColumnsCheck = null;
+async function hasTicketWhatsappColumns() {
+  if (ticketWhatsappColumnsCheck !== null) return ticketWhatsappColumnsCheck;
+  try {
+    const queryInterface = Registration.sequelize.getQueryInterface();
+    const schema = process.env.DB_SCHEMA || 'dev_iecg';
+    const description = await queryInterface.describeTable({ tableName: 'Registrations', schema });
+    ticketWhatsappColumnsCheck = Boolean(description.ticketWhatsappSentAt && description.ticketWhatsappLastError);
+  } catch (_) {
+    ticketWhatsappColumnsCheck = false;
+  }
+  return ticketWhatsappColumnsCheck;
 }
 
 async function autoSendTicketEmailOnConfirmed(registrationId, { force = false } = {}) {
@@ -294,13 +346,16 @@ async function autoSendTicketEmailOnConfirmed(registrationId, { force = false } 
   };
 
   try {
-    const attachments = await buildTermAttachment(registration.id, registration.orderCode);
+    const attachments = [
+      ...((await buildTermAttachment(registration.id, registration.orderCode)) || []),
+      ...((await buildReceiptAttachment(registration.id, registration.orderCode)) || []),
+    ];
     const result = await emailService.sendMail({
       to: recipient,
       subject: `🎟️ Seu ingresso — ${ctx.eventName}`,
       html: buildEmailHtml(ctx),
       text: buildEmailText(ctx),
-      attachments,
+      attachments: attachments.length ? attachments : undefined,
     });
     await registration.update({
       ticketEmailSentAt: new Date(),
@@ -366,13 +421,82 @@ async function autoSendPendingTickets({ limit = 50 } = {}) {
   };
 }
 
+// Envio automatico do ticket por WhatsApp ao confirmar (idempotente via ticketWhatsappSentAt).
+async function autoSendTicketWhatsappOnConfirmed(registrationId, { force = false } = {}) {
+  if (!(await hasTicketWhatsappColumns())) {
+    return { skipped: true, reason: 'missing_ticket_whatsapp_columns' };
+  }
+  const registration = await Registration.findByPk(registrationId, {
+    include: [{ model: Event, as: 'event' }],
+  });
+  if (!registration) return { skipped: true, reason: 'registration_not_found' };
+  if (registration.paymentStatus !== 'confirmed') return { skipped: true, reason: `payment_status=${registration.paymentStatus}` };
+  if (!registration.orderCode) return { skipped: true, reason: 'no_order_code' };
+  if (!force && registration.ticketWhatsappSentAt) {
+    return { skipped: true, reason: 'already_sent', sentAt: registration.ticketWhatsappSentAt };
+  }
+
+  const buyer = registration.buyerData || {};
+  const normalizedPhone = normalizeWhatsappDigits(buyer.buyer_whatsapp || buyer.buyer_phone);
+  if (!normalizedPhone) {
+    await registration.update({ ticketWhatsappLastError: 'Comprador sem WhatsApp valido em buyerData' });
+    return { skipped: true, reason: 'no_buyer_whatsapp' };
+  }
+
+  const message = buildWhatsappMessage({
+    buyerName: buyer.buyer_name,
+    eventName: registration.event?.title || registration.event?.name || 'evento',
+    eventDate: registration.event?.startDate || registration.event?.date,
+    orderCode: registration.orderCode,
+    receiptLink: (await hasConfirmedPayment(registration.id)) ? buildReceiptLink(registration.orderCode) : null,
+  });
+
+  try {
+    const result = await evolutionApiService.enviarMensagemTexto(
+      normalizedPhone, message, process.env.EVOLUTION_INSTANCE_NAME
+    );
+    if (!result.sucesso) throw new Error(result.erro || 'Falha ao enviar via Evolution API');
+    await registration.update({ ticketWhatsappSentAt: new Date(), ticketWhatsappLastError: null });
+    console.log(`[ticket-auto-whatsapp] enviado ${registration.orderCode} -> ${normalizedPhone}`);
+    return {
+      delivered: true, recipient: normalizedPhone, externalId: result.externalId, orderCode: registration.orderCode
+    };
+  } catch (err) {
+    await registration.update({ ticketWhatsappLastError: String(err.message).slice(0, 2000) });
+    console.error(`[ticket-auto-whatsapp] falhou ${registration.orderCode}: ${err.message}`);
+    throw err;
+  }
+}
+
+// Orquestra o envio do ticket ao confirmar, conforme os canais habilitados no evento.
+async function autoSendTicketOnConfirmed(registrationId) {
+  const registration = await Registration.findByPk(registrationId, {
+    include: [{ model: Event, as: 'event', attributes: ['id', 'ticketChannels'] }],
+  });
+  if (!registration) return { skipped: true, reason: 'registration_not_found' };
+
+  const channels = registration.event?.ticketChannels || { email: true, whatsapp: false };
+  const results = {};
+
+  if (channels.email !== false) {
+    try { results.email = await autoSendTicketEmailOnConfirmed(registrationId); } catch (err) { results.email = { error: err.message }; }
+  }
+  if (channels.whatsapp === true) {
+    try { results.whatsapp = await autoSendTicketWhatsappOnConfirmed(registrationId); } catch (err) { results.whatsapp = { error: err.message }; }
+  }
+  return results;
+}
+
 module.exports = {
   resend,
   resendByWhatsapp,
   resendByEmail,
   autoSendTicketEmailOnConfirmed,
+  autoSendTicketWhatsappOnConfirmed,
+  autoSendTicketOnConfirmed,
   autoSendPendingTickets,
   buildTicketLink,
+  buildReceiptLink,
   buildWhatsappMessage,
   buildEmailHtml,
   buildEmailText,

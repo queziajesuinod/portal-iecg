@@ -47,6 +47,7 @@ import EventDetails from '../Pages/Events/EventDetails';
 import CheckInManagement from '../Pages/Events/CheckInManagement';
 import NotificationsManagement from '../Pages/Events/NotificationsManagement';
 import EventCoordinators from '../Pages/Events/EventCoordinators';
+import EventWaitlist from '../Pages/Events/EventWaitlist';
 import CouponsPage from '../Pages/Events/CouponsPage';
 import FormBuilder from '../Pages/Events/FormBuilder';
 import RegistrationDetails from '../Pages/Events/RegistrationDetails';
@@ -172,6 +173,7 @@ function Application({ history }) {
             <ProtectedRoute exact path="/app/events/:id/checkin" component={CheckInManagement} isAuthenticated={isAuthenticated} requiredPermission="EVENTS_ACESS" />
             <ProtectedRoute exact path="/app/events/:id/notificacoes" component={NotificationsManagement} isAuthenticated={isAuthenticated} requiredPermission="EVENTS_ACESS" />
             <ProtectedRoute exact path="/app/events/:id/coordenadores" component={EventCoordinators} isAuthenticated={isAuthenticated} requiredPermission="EVENTS_COORDINATOR_MANAGE" />
+            <ProtectedRoute exact path="/app/events/:id/lista-espera" component={EventWaitlist} isAuthenticated={isAuthenticated} requiredPermission="EVENTS_ACESS" />
             <ProtectedRoute exact path="/app/cupons" component={CouponsPage} isAuthenticated={isAuthenticated} />
             <ProtectedRoute exact path="/app/financeiro" component={FinancialPage} isAuthenticated={isAuthenticated} requiredPermission="EVENTS_ACESS" />
             <ProtectedRoute exact path="/app/notificacoes/grupos" component={NotificacoesGruposPage} isAuthenticated={isAuthenticated} requiredPermission="NOTIFICACOES_VIEW" />

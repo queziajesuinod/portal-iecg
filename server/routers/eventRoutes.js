@@ -11,6 +11,7 @@ const housingController = require('../controllers/housingController');
 const teamsController = require('../controllers/teamsController');
 const eventCoordinatorController = require('../controllers/eventCoordinatorController');
 const liabilityTermController = require('../controllers/liabilityTermController');
+const waitlistController = require('../controllers/waitlistController');
 const requirePermission = require('../middlewares/requirePermission');
 const { eventVisibilityGuard } = require('../services/eventVisibility');
 const requireEventAccess = requirePermission(['EVENTS_ACESS', 'EVENTS_ACCESS', 'EVENTOS_LISTAR']);
@@ -66,6 +67,11 @@ router.post('/coordinators/:id/validate', requireCoordinatorManage, eventCoordin
 router.post('/coordinators/:id/send', requireCoordinatorManage, eventCoordinatorController.enviar);
 router.post('/coordinators/:id/test', requireCoordinatorManage, eventCoordinatorController.enviarTeste);
 
+// ============= LISTA DE ESPERA (por id da entrada — ANTES DE /:id) =============
+router.delete('/waitlist/:id', waitlistController.remover);
+router.post('/waitlist/:id/offer', waitlistController.ofertar);
+router.post('/waitlist/:id/resend', waitlistController.reenviar);
+
 // ============= INSCRIÇÕES (ADMIN) (ANTES DE /:id) =============
 router.get('/registrations', registrationController.listar);
 router.get('/registrations/:id', registrationController.buscarPorId);
@@ -104,6 +110,8 @@ router.get('/:eventId/registrations', registrationController.listarPorEvento);
 router.get('/:eventId/registration-attendees/confirmed', registrationController.listarInscritosConfirmadosPorEvento);
 router.get('/:eventId/tickets-summary', eventController.resumoIngressos);
 router.get('/:eventId/registration-stats', eventController.estatisticasInscricoes);
+router.get('/:eventId/waitlist/summary', waitlistController.resumo);
+router.get('/:eventId/waitlist', waitlistController.listar);
 
 // ============= HOSPEDAGEM =============
 router.get('/:eventId/housing/config', housingController.getConfig);

@@ -718,6 +718,10 @@ async function criarEvento(body, userId) {
     registrationPaymentMode,
     minDepositAmount,
     maxPaymentCount,
+    waitlistEnabled,
+    waitlistOfferTtlHours,
+    waitlistChannels,
+    ticketChannels,
   } = body;
 
   if (!title) {
@@ -750,6 +754,14 @@ async function criarEvento(body, userId) {
     registrationPaymentMode: normalizedPaymentMode,
     minDepositAmount: eventRequiresPayment && normalizedPaymentMode === 'BALANCE_DUE' ? (minDepositAmount || null) : null,
     maxPaymentCount: eventRequiresPayment && normalizedPaymentMode === 'BALANCE_DUE' ? (maxPaymentCount || null) : null,
+    waitlistEnabled: Boolean(waitlistEnabled),
+    waitlistOfferTtlHours: Number(waitlistOfferTtlHours) > 0 ? Number(waitlistOfferTtlHours) : 12,
+    waitlistChannels: waitlistChannels && typeof waitlistChannels === 'object'
+      ? waitlistChannels
+      : { email: true, whatsapp: false },
+    ticketChannels: ticketChannels && typeof ticketChannels === 'object'
+      ? ticketChannels
+      : { email: true, whatsapp: false },
     currentRegistrations: 0,
     isActive: true,
     createdBy: userId,
@@ -808,6 +820,16 @@ async function atualizarEvento(id, body) {
     ? (body.maxPaymentCount != null ? body.maxPaymentCount : event.maxPaymentCount)
     : null;
   event.isActive = body.isActive != null ? body.isActive : event.isActive;
+  if (body.waitlistEnabled != null) event.waitlistEnabled = Boolean(body.waitlistEnabled);
+  if (body.waitlistOfferTtlHours != null && Number(body.waitlistOfferTtlHours) > 0) {
+    event.waitlistOfferTtlHours = Number(body.waitlistOfferTtlHours);
+  }
+  if (body.waitlistChannels != null && typeof body.waitlistChannels === 'object') {
+    event.waitlistChannels = body.waitlistChannels;
+  }
+  if (body.ticketChannels != null && typeof body.ticketChannels === 'object') {
+    event.ticketChannels = body.ticketChannels;
+  }
 
   await event.save();
   if (!nextRequiresPayment) {

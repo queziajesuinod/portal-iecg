@@ -1364,6 +1364,16 @@ function EventDetails() {
             <Button
               fullWidth
               variant="outlined"
+              startIcon={<GroupsIcon />}
+              onClick={() => history.push(`/app/events/${id}/lista-espera`)}
+            >
+              Lista de espera
+            </Button>
+          </Grid>
+          <Grid item xs={12} sm={6} md="auto">
+            <Button
+              fullWidth
+              variant="outlined"
               startIcon={<BedIcon />}
               onClick={() => history.push(`/app/events/${id}/housing`)}
             >

@@ -30,11 +30,19 @@ router.post('/:eventId/registration-rules/validate', registrationRuleController.
 // ============= PROCESSAR INSCRIÇÃO =============
 router.post('/register', registrationController.processar);
 
+// ============= LISTA DE ESPERA =============
+const waitlistController = require('../controllers/waitlistController');
+router.post('/:eventId/waitlist', waitlistController.entrar);
+router.get('/:eventId/waitlist/position', waitlistController.posicao);
+
 // ============= CONSULTAR INSCRIÇÃO POR CÓDIGO =============
 router.get('/registrations/:orderCode', registrationController.buscarPorCodigo);
 
 // ============= PDF DO TERMO ASSINADO =============
 router.get('/registrations/:orderCode/term-pdf', liabilityTermController.downloadPdf);
+
+// ============= COMPROVANTE DE PAGAMENTO (PDF) =============
+router.get('/registrations/:orderCode/payment-receipt', registrationController.downloadPaymentReceipt);
 
 // ============= PAGAMENTOS PARCIAIS =============
 router.post('/registrations/:id/payments', registrationController.criarPagamento);

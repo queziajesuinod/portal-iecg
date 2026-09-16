@@ -136,6 +136,14 @@ module.exports = (sequelize) => {
       type: DataTypes.TEXT,
       allowNull: true,
     },
+    ticketWhatsappSentAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    ticketWhatsappLastError: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
   }, {
     sequelize,
     modelName: 'Registration',
@@ -148,15 +156,16 @@ module.exports = (sequelize) => {
           const previous = instance._previousDataValues || {};
           const wasConfirmed = previous.paymentStatus === 'confirmed';
           const isConfirmed = instance.paymentStatus === 'confirmed';
-          if (!wasConfirmed && isConfirmed && !instance.ticketEmailSentAt) {
+          if (!wasConfirmed && isConfirmed) {
             setImmediate(() => {
               const ticketResend = require('../services/ticketResendService');
-              ticketResend.autoSendTicketEmailOnConfirmed(instance.id)
-                .catch((err) => console.error(`[ticket-auto-email] erro ao processar ${instance.id}: ${err.message}`));
+              // Envia o ticket nos canais habilitados no evento (email/whatsapp), cada um idempotente.
+              ticketResend.autoSendTicketOnConfirmed(instance.id)
+                .catch((err) => console.error(`[ticket-auto-send] erro ao processar ${instance.id}: ${err.message}`));
             });
           }
         } catch (err) {
-          console.error('[Registration.afterUpdate] erro no hook ticket-email:', err.message);
+          console.error('[Registration.afterUpdate] erro no hook ticket-send:', err.message);
         }
       },
     },

@@ -82,7 +82,11 @@ function EventForm() {
     requiresPayment: true,
     registrationPaymentMode: 'SINGLE',
     minDepositAmount: '',
-    maxPaymentCount: ''
+    maxPaymentCount: '',
+    waitlistEnabled: false,
+    waitlistOfferTtlHours: '12',
+    waitlistChannels: { email: true, whatsapp: false },
+    ticketChannels: { email: true, whatsapp: false }
   });
 
   useEffect(() => {
@@ -118,7 +122,15 @@ function EventForm() {
         requiresPayment: evento.requiresPayment !== false,
         registrationPaymentMode: evento.registrationPaymentMode || 'SINGLE',
         minDepositAmount: evento.minDepositAmount != null ? evento.minDepositAmount.toString() : '',
-        maxPaymentCount: evento.maxPaymentCount != null ? evento.maxPaymentCount.toString() : ''
+        maxPaymentCount: evento.maxPaymentCount != null ? evento.maxPaymentCount.toString() : '',
+        waitlistEnabled: evento.waitlistEnabled === true,
+        waitlistOfferTtlHours: evento.waitlistOfferTtlHours != null ? evento.waitlistOfferTtlHours.toString() : '12',
+        waitlistChannels: evento.waitlistChannels && typeof evento.waitlistChannels === 'object'
+          ? { email: evento.waitlistChannels.email !== false, whatsapp: evento.waitlistChannels.whatsapp === true }
+          : { email: true, whatsapp: false },
+        ticketChannels: evento.ticketChannels && typeof evento.ticketChannels === 'object'
+          ? { email: evento.ticketChannels.email !== false, whatsapp: evento.ticketChannels.whatsapp === true }
+          : { email: true, whatsapp: false }
       });
       setEditorState(htmlToEditorState(evento.description || ''));
     } catch (error) {
@@ -250,6 +262,9 @@ function EventForm() {
         maxPaymentCount: formData.requiresPayment && formData.registrationPaymentMode === 'BALANCE_DUE' && formData.maxPaymentCount
           ? parseInt(formData.maxPaymentCount, 10)
           : null,
+        waitlistEnabled: formData.waitlistEnabled === true,
+        waitlistOfferTtlHours: formData.waitlistOfferTtlHours ? parseInt(formData.waitlistOfferTtlHours, 10) : 12,
+        waitlistChannels: formData.waitlistChannels || { email: true, whatsapp: false },
       };
 
       if (isEdicao) {
@@ -461,6 +476,127 @@ function EventForm() {
                       </Box>
                     </Grid>
                   )}
+                  <Grid item xs={12}>
+                    <Typography variant="h6" gutterBottom>
+                      Envio do ingresso
+                    </Typography>
+                    <Box
+                      component="div"
+                      sx={{
+                        background: theme.palette.background.paper,
+                        borderRadius: 2,
+                        p: 2,
+                        boxShadow: theme.shadows[1],
+                      }}
+                    >
+                      <Typography variant="body2" color="textSecondary" sx={{ mb: 0.5 }}>
+                        Canais de envio do ticket quando o pagamento é confirmado
+                      </Typography>
+                      <FormControlLabel
+                        control={(
+                          <Switch
+                            checked={formData.ticketChannels.email !== false}
+                            onChange={(e) => setFormData((prev) => ({
+                              ...prev,
+                              ticketChannels: { ...prev.ticketChannels, email: e.target.checked }
+                            }))}
+                            disabled={loading}
+                          />
+                        )}
+                        label="E-mail"
+                      />
+                      <FormControlLabel
+                        control={(
+                          <Switch
+                            checked={formData.ticketChannels.whatsapp === true}
+                            onChange={(e) => setFormData((prev) => ({
+                              ...prev,
+                              ticketChannels: { ...prev.ticketChannels, whatsapp: e.target.checked }
+                            }))}
+                            disabled={loading}
+                          />
+                        )}
+                        label="WhatsApp"
+                      />
+                      <Typography variant="caption" color="textSecondary" display="block">
+                        O comprovante de pagamento (PDF) vai anexo no e-mail, por link no WhatsApp e fica disponível para download na tela do ingresso.
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Typography variant="h6" gutterBottom>
+                      Lista de espera
+                    </Typography>
+                    <Box
+                      component="div"
+                      sx={{
+                        background: theme.palette.background.paper,
+                        borderRadius: 2,
+                        p: 2,
+                        boxShadow: theme.shadows[1],
+                      }}
+                    >
+                      <FormControlLabel
+                        control={(
+                          <Switch
+                            name="waitlistEnabled"
+                            checked={formData.waitlistEnabled}
+                            onChange={handleChange}
+                            disabled={loading}
+                          />
+                        )}
+                        label="Habilitar lista de espera quando os lotes lotarem/encerrarem"
+                      />
+                      {formData.waitlistEnabled && (
+                        <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                          <Grid item xs={12} sm={4}>
+                            <TextField
+                              fullWidth
+                              type="number"
+                              label="Prazo da oferta (horas)"
+                              name="waitlistOfferTtlHours"
+                              value={formData.waitlistOfferTtlHours}
+                              onChange={handleChange}
+                              disabled={loading}
+                              inputProps={{ min: 1 }}
+                              helperText="Tempo para pagar após receber a vaga"
+                            />
+                          </Grid>
+                          <Grid item xs={12} sm={8}>
+                            <Typography variant="body2" color="textSecondary" sx={{ mb: 0.5 }}>
+                              Canais de notificação da oferta
+                            </Typography>
+                            <FormControlLabel
+                              control={(
+                                <Switch
+                                  checked={formData.waitlistChannels.email !== false}
+                                  onChange={(e) => setFormData((prev) => ({
+                                    ...prev,
+                                    waitlistChannels: { ...prev.waitlistChannels, email: e.target.checked }
+                                  }))}
+                                  disabled={loading}
+                                />
+                              )}
+                              label="E-mail"
+                            />
+                            <FormControlLabel
+                              control={(
+                                <Switch
+                                  checked={formData.waitlistChannels.whatsapp === true}
+                                  onChange={(e) => setFormData((prev) => ({
+                                    ...prev,
+                                    waitlistChannels: { ...prev.waitlistChannels, whatsapp: e.target.checked }
+                                  }))}
+                                  disabled={loading}
+                                />
+                              )}
+                              label="WhatsApp"
+                            />
+                          </Grid>
+                        </Grid>
+                      )}
+                    </Box>
+                  </Grid>
                   <Grid item xs={12}>
                     <Typography variant="h6" gutterBottom>
                       Localização & Coordenadas

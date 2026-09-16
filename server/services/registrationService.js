@@ -650,6 +650,17 @@ async function ajustarContadoresDeStatus(registration, statusAnterior) {
     });
   }
 
+  // Se esta inscricao veio de uma oferta da lista de espera, marca a entrada como atendida
+  // assim que o pagamento entra (partial p/ eventos BALANCE_DUE, ou confirmed).
+  const ficouPago = ['partial', 'confirmed'].includes(registration.paymentStatus)
+    && !['partial', 'confirmed'].includes(statusAnterior);
+  if (ficouPago) {
+    setImmediate(() => {
+      require('./waitlistService').marcarComoAtendida(registration.id)
+        .catch((err) => console.error('[waitlist] marcarComoAtendida falhou:', err.message));
+    });
+  }
+
   const novoStatusContabilizavel = isCountablePaymentStatus(registration.paymentStatus);
   const statusAnteriorContabilizavel = isCountablePaymentStatus(statusAnterior);
 
@@ -673,12 +684,26 @@ async function ajustarContadoresDeStatus(registration, statusAnterior) {
   }
 
   const lotesCounts = await contarInscritosPorLote(registration.id);
-  const batchUpdates = Object.entries(lotesCounts)
+  const loteIdsAfetados = Object.entries(lotesCounts)
     .filter(([batchId, count]) => batchId && count > 0)
-    .map(([batchId, count]) => batchService.incrementarQuantidade(batchId, count * (novoStatusContabilizavel ? 1 : -1)));
+    .map(([batchId]) => batchId);
+  const batchUpdates = loteIdsAfetados.map(
+    (batchId) => batchService.incrementarQuantidade(batchId, lotesCounts[batchId] * (novoStatusContabilizavel ? 1 : -1))
+  );
 
   if (batchUpdates.length) {
     await Promise.all(batchUpdates);
+  }
+
+  // Vaga(s) liberada(s) — status deixou de ser contabilizavel (cancelado/expirado/etc):
+  // aciona a lista de espera para ofertar aos proximos da fila de cada lote afetado.
+  if (!novoStatusContabilizavel && loteIdsAfetados.length) {
+    loteIdsAfetados.forEach((batchId) => {
+      setImmediate(() => {
+        require('./waitlistService').onSlotFreed(batchId)
+          .catch((err) => console.error(`[waitlist] onSlotFreed(${batchId}) falhou:`, err.message));
+      });
+    });
   }
 }
 /* eslint-enable no-param-reassign */
@@ -757,7 +782,9 @@ async function processarInscricao(dadosInscricao) {
 
   // So serializamos PIX com CPF — que e exatamente o caso coberto pela checagem de
   // duplicata em processarInscricaoInterna. CPF vazio fica pra camada de idempotencia.
-  if (!isPix || !cpf || !dadosInscricao?.eventId) {
+  // Materializacao da lista de espera (origemListaEspera) ja roda sob lock por lote
+  // e precisa criar uma inscricao NOVA (nao reaproveitar PIX pendente) — bypassa aqui.
+  if (!isPix || !cpf || !dadosInscricao?.eventId || dadosInscricao?.origemListaEspera) {
     return processarInscricaoInterna(dadosInscricao);
   }
 
@@ -779,8 +806,9 @@ async function processarInscricaoInterna(dadosInscricao) {
   } = dadosInscricao;
 
   // 0. Verificar duplicidade: PIX pendente do mesmo CPF no mesmo evento dentro da janela de expiração
+  //    (pulado na materializacao da lista de espera — cada oferta gera inscricao propria)
   const isPix = paymentData?.method === 'pix';
-  if (isPix && buyerData) {
+  if (isPix && buyerData && !dadosInscricao.origemListaEspera) {
     const parsedTimeout = Number(process.env.PIX_PENDING_TIMEOUT_MINUTES);
     const timeoutMinutes = Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : 120;
     const cutoff = new Date(Date.now() - timeoutMinutes * 60 * 1000);
@@ -1010,6 +1038,74 @@ async function processarInscricaoInterna(dadosInscricao) {
         status: 'confirmed',
         paymentId: null,
         reason: eventRequiresPayment ? 'zero_amount' : 'free_event'
+      }
+    };
+  }
+
+  // 8.0. Lista de espera (BALANCE_DUE): cria inscricao PENDENTE sem cobranca. A vaga fica
+  //      reservada (pending e' contabilizavel) durante a janela da oferta e a pessoa escolhe
+  //      sinal/total na tela de pagamento pendente (RegistrationView -> criarPagamentoOnline).
+  if (dadosInscricao.criarPendenteSemPagamento) {
+    const registration = await Registration.create({
+      id: uuid.v4(),
+      orderCode,
+      eventId,
+      batchId: null,
+      couponId,
+      quantity,
+      buyerData,
+      originalPrice: precoOriginal,
+      discountAmount: desconto,
+      finalPrice: precoFinal,
+      paymentStatus: 'pending',
+      paymentId: null,
+      paymentMethod: null,
+      cieloResponse: null,
+      pixQrCode: null,
+      pixQrCodeBase64: null,
+      pixTransactionId: null,
+      pixEndToEndId: null
+    });
+
+    const attendeesPromises = attendeesData.map((attendee, index) => RegistrationAttendee.create({
+      id: uuid.v4(),
+      registrationId: registration.id,
+      batchId: attendee.batchId,
+      attendeeData: attendee.data || attendee,
+      attendeeNumber: index + 1
+    }));
+    await Promise.all(attendeesPromises);
+
+    const attendees = await RegistrationAttendee.findAll({
+      where: { registrationId: registration.id },
+      include: [{ model: EventBatch, as: 'batch', attributes: ['id', 'name', 'price'] }],
+      order: [['attendeeNumber', 'ASC']]
+    });
+    registration.attendees = attendees;
+    await prepararRegistroComCampos(registration);
+
+    // Registrar aceites do termo (auditoria), se houver.
+    await liabilityTermService.persistAcceptances({
+      event: evento, registration, attendees, buyerData, attendeesData, termAcceptances, clientMeta,
+    });
+
+    // Reserva a vaga (pending e' contabilizavel).
+    await ajustarContadoresDeStatus(registration, null);
+
+    const registrationPayload = await montarPayloadWebhookInscricao(registration.id);
+    webhookEmitter.emit('registration.created', {
+      registrationId: registration.id,
+      registration: registrationPayload,
+      data: dadosInscricao
+    });
+
+    return {
+      sucesso: true,
+      orderCode,
+      registration,
+      attendees,
+      pagamento: {
+        sucesso: true, status: 'pending', paymentId: null, reason: 'waitlist_pending'
       }
     };
   }

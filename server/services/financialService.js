@@ -1212,9 +1212,104 @@ async function computeEventTicketNet(eventId) {
   return toMoney(toMoney(ticketGross) - toMoney(processorFees));
 }
 
+/**
+ * Detalha os valores financeiros de um evento por inscrição e no total,
+ * usando a MESMA base do módulo Financeiro (mesma lógica de `listFinancialRecords`):
+ *  - gross         = SUM(amount + taxa)  (valor bruto que o cliente pagou)
+ *  - processorFee  = taxa total da processadora (config vigente)
+ *  - customerFee   = taxa que o cliente pagou (payment.taxa)
+ *  - merchantFee   = processorFee − customerFee (taxa absorvida pelo estabelecimento)
+ *  - net           = gross − processorFee (valor líquido)
+ * Inscrições confirmed/partial sem RegistrationPayment entram só com o gross (finalPrice).
+ *
+ * @returns {{ byRegistration: Object<string, {gross,processorFee,merchantFee,customerFee,net}>,
+ *             totals: {gross,processorFees,merchantFees,customerFees,net} }}
+ */
+async function computeEventFinancialBreakdown(eventId) {
+  const empty = {
+    byRegistration: {},
+    totals: {
+      gross: 0, processorFees: 0, merchantFees: 0, customerFees: 0, net: 0
+    }
+  };
+  if (!eventId) return empty;
+
+  const feeConfigModel = await getActiveFeeConfig();
+  const feeConfig = serializeFeeConfig(feeConfigModel);
+
+  const paymentsForSummary = await RegistrationPayment.findAll({
+    where: { status: 'confirmed' },
+    attributes: ['amount', 'taxa', 'provider', 'method', 'installments', 'cardBrand', 'providerPayload', 'registrationId'],
+    include: [
+      {
+        model: Registration,
+        as: 'registration',
+        attributes: ['id', 'eventId'],
+        where: { eventId },
+        required: true
+      }
+    ]
+  });
+
+  const byRegistration = {};
+  const ensureBucket = (regId) => {
+    if (!byRegistration[regId]) {
+      byRegistration[regId] = {
+        gross: 0, processorFee: 0, merchantFee: 0, customerFee: 0, net: 0
+      };
+    }
+    return byRegistration[regId];
+  };
+  const totals = {
+    gross: 0, processorFees: 0, merchantFees: 0, customerFees: 0, net: 0
+  };
+
+  const confirmedRegistrationIds = new Set(paymentsForSummary.map((p) => p.registrationId));
+
+  paymentsForSummary.forEach((payment) => {
+    const grossAmount = toMoney(toMoney(payment.amount) + toMoney(payment.taxa || 0));
+    const feeAmount = toMoney(calculateConfiguredFee(payment, feeConfig).feeAmount);
+    const { customerFeeAmount } = calculateCustomerFeeAmount(payment);
+    const merchantFeeAmount = toMoney(feeAmount - customerFeeAmount);
+    const netAmount = toMoney(grossAmount - feeAmount);
+
+    const bucket = ensureBucket(payment.registrationId);
+    bucket.gross = toMoney(bucket.gross + grossAmount);
+    bucket.processorFee = toMoney(bucket.processorFee + feeAmount);
+    bucket.merchantFee = toMoney(bucket.merchantFee + merchantFeeAmount);
+    bucket.customerFee = toMoney(bucket.customerFee + customerFeeAmount);
+    bucket.net = toMoney(bucket.net + netAmount);
+
+    totals.gross = toMoney(totals.gross + grossAmount);
+    totals.processorFees = toMoney(totals.processorFees + feeAmount);
+    totals.merchantFees = toMoney(totals.merchantFees + merchantFeeAmount);
+    totals.customerFees = toMoney(totals.customerFees + customerFeeAmount);
+    totals.net = toMoney(totals.net + netAmount);
+  });
+
+  // Inscrições confirmed/partial sem pagamento registrado — só o bruto (finalPrice), sem taxas.
+  const confirmedRegistrations = await Registration.findAll({
+    where: { eventId, paymentStatus: { [Op.in]: ['confirmed', 'partial'] } },
+    attributes: ['id', 'finalPrice']
+  });
+  confirmedRegistrations
+    .filter((reg) => !confirmedRegistrationIds.has(reg.id))
+    .forEach((reg) => {
+      const grossAmount = toMoney(reg.finalPrice || 0);
+      const bucket = ensureBucket(reg.id);
+      bucket.gross = toMoney(bucket.gross + grossAmount);
+      bucket.net = toMoney(bucket.net + grossAmount);
+      totals.gross = toMoney(totals.gross + grossAmount);
+      totals.net = toMoney(totals.net + grossAmount);
+    });
+
+  return { byRegistration, totals };
+}
+
 module.exports = {
   listFinancialRecords,
   computeEventTicketNet,
+  computeEventFinancialBreakdown,
   getExpensesForExport,
   getEntriesForExport,
   getFeeConfig,

@@ -217,6 +217,31 @@ async function generateForRegistration(registrationId) {
   }
 }
 
+// Render generico de HTML -> PDF (A4), reaproveitando a mesma instancia do browser.
+// Usado por outros comprovantes (ex.: comprovante de pagamento).
+async function renderHtmlToPdf(html, { margin } = {}) {
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+  try {
+    await page.setContent(html, { waitUntil: 'load', timeout: 30000 });
+    await page.evaluate(() => Promise.all(
+      Array.prototype.slice.call(document.images).map((img) => (img.complete
+        ? Promise.resolve()
+        : new Promise((res) => { img.onload = res; img.onerror = res; }))),
+    ));
+    const pdf = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: margin || {
+        top: '14mm', bottom: '14mm', left: '14mm', right: '14mm',
+      },
+    });
+    return Buffer.isBuffer(pdf) ? pdf : Buffer.from(pdf);
+  } finally {
+    await page.close().catch(() => {});
+  }
+}
+
 // True se a inscricao tem termo assinado (para expor botao/anexo).
 async function registrationHasSignedTerm(registrationId) {
   const count = await RegistrationTermAcceptance.count({ where: { registrationId } });
@@ -233,4 +258,5 @@ module.exports = {
   registrationHasSignedTerm,
   findRegistrationByOrderCode,
   buildDoc,
+  renderHtmlToPdf,
 };

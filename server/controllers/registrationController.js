@@ -1,6 +1,7 @@
 const registrationService = require('../services/registrationService');
 const ticketResendService = require('../services/ticketResendService');
 const liabilityTermPdfService = require('../services/liabilityTermPdfService');
+const paymentReceiptPdfService = require('../services/paymentReceiptPdfService');
 
 // Rotas administrativas
 async function listar(req, res) {
@@ -184,10 +185,27 @@ async function buscarPorCodigo(req, res) {
     const id = plain && plain.id;
     if (id) {
       plain.hasSignedTerm = await liabilityTermPdfService.registrationHasSignedTerm(id).catch(() => false);
+      plain.hasPaymentReceipt = await paymentReceiptPdfService.registrationHasConfirmedPayment(id).catch(() => false);
     }
     res.status(200).json(plain);
   } catch (err) {
     res.status(404).json({ message: err.message });
+  }
+}
+
+// GET /registrations/:orderCode/payment-receipt (público) — comprovante de pagamento (PDF).
+async function downloadPaymentReceipt(req, res) {
+  try {
+    const reg = await paymentReceiptPdfService.findRegistrationByOrderCode(req.params.orderCode);
+    if (!reg) return res.status(404).json({ message: 'Inscrição não encontrada' });
+    const pdf = await paymentReceiptPdfService.generateForRegistration(reg.id);
+    if (!pdf) return res.status(404).json({ message: 'Esta inscrição não possui pagamento confirmado' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="comprovante-${reg.orderCode}.pdf"`);
+    return res.send(pdf);
+  } catch (err) {
+    console.error('Erro ao gerar comprovante de pagamento:', err);
+    return res.status(500).json({ message: err.message || 'Erro ao gerar comprovante de pagamento' });
   }
 }
 
@@ -356,6 +374,7 @@ module.exports = {
   cancelar,
   processar,
   buscarPorCodigo,
+  downloadPaymentReceipt,
   verificarStatus,
   obterInfoCancelamento,
   recalcularStatus,

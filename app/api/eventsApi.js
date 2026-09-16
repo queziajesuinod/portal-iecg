@@ -261,3 +261,23 @@ export const enviarTesteCoordenador = (id) => fetchWithAuth(`${API_URL}/api/admi
 });
 
 export const listarLogsCoordenador = (id) => fetchWithAuth(`${API_URL}/api/admin/events/coordinators/${id}/logs`);
+
+// ============= LISTA DE ESPERA (admin) =============
+export const listarListaEspera = (eventId, params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/waitlist${qs ? `?${qs}` : ''}`);
+};
+
+export const resumoListaEspera = (eventId) => fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/waitlist/summary`);
+
+export const removerEntradaListaEspera = (id) => fetchWithAuth(`${API_URL}/api/admin/events/waitlist/${id}`, {
+  method: 'DELETE',
+});
+
+export const ofertarEntradaListaEspera = (id) => fetchWithAuth(`${API_URL}/api/admin/events/waitlist/${id}/offer`, {
+  method: 'POST',
+});
+
+export const reenviarOfertaListaEspera = (id) => fetchWithAuth(`${API_URL}/api/admin/events/waitlist/${id}/resend`, {
+  method: 'POST',
+});

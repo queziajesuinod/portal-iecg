@@ -124,6 +124,30 @@ module.exports = (sequelize) => {
       defaultValue: false,
       comment: 'Quando true, exige aceite/assinatura do termo antes de confirmar a inscricao'
     },
+    waitlistEnabled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: 'Habilita lista de espera quando os lotes lotam/encerram'
+    },
+    waitlistOfferTtlHours: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 12,
+      comment: 'Prazo (horas) para pagar apos receber a oferta de vaga'
+    },
+    waitlistChannels: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: { email: true, whatsapp: false },
+      comment: 'Canais de notificacao da lista de espera: { email, whatsapp }'
+    },
+    ticketChannels: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: { email: true, whatsapp: false },
+      comment: 'Canais de envio do ticket ao confirmar: { email, whatsapp }'
+    },
     createdBy: {
       type: DataTypes.UUID,
       allowNull: false,

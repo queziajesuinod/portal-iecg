@@ -52,6 +52,7 @@ const TICKET_EMAIL_RESGATE_BATCH_SIZE = parsePositiveInt(process.env.TICKET_EMAI
 const SCHEDULER_CAMPAIGN_LIMIT_PER_TICK = parsePositiveInt(process.env.SCHEDULER_CAMPAIGN_LIMIT_PER_TICK, 1);
 const SCHEDULER_SEQUENCE_LIMIT_PER_TICK = parsePositiveInt(process.env.SCHEDULER_SEQUENCE_LIMIT_PER_TICK, 1);
 const COORDINATOR_REPORT_BATCH_SIZE = parsePositiveInt(process.env.COORDINATOR_REPORT_BATCH_SIZE, 5);
+const WAITLIST_EXPIRE_BATCH_SIZE = parsePositiveInt(process.env.WAITLIST_EXPIRE_BATCH_SIZE, 20);
 
 async function tickCampaigns() {
   const now = new Date();
@@ -264,6 +265,18 @@ async function tickCoordinatorReports() {
   }
 }
 
+async function tickWaitlistOffers() {
+  try {
+    const waitlistService = require('./services/waitlistService');
+    const result = await waitlistService.expirarOfertasVencidas({ limit: WAITLIST_EXPIRE_BATCH_SIZE });
+    if (result.expired > 0 || result.fulfilled > 0) {
+      console.log(`[Scheduler] lista de espera: ofertas expiradas=${result.expired}, atendidas=${result.fulfilled}`);
+    }
+  } catch (err) {
+    console.error('[Scheduler] Erro na expiracao de ofertas da lista de espera:', err.message);
+  }
+}
+
 const safe = (fn) => fn().catch((err) => console.error(`[Scheduler] Erro no tick (${fn.name}):`, err.message));
 
 async function tick() {
@@ -285,6 +298,7 @@ async function tick() {
       tickTicketEmailResgate,
       tickClipCleanup,
       tickCoordinatorReports,
+      tickWaitlistOffers,
     ].reduce((promise, fn) => promise.then(() => safe(fn)), Promise.resolve());
   } catch (err) {
     console.error('[Scheduler] Erro no tick:', err.message);

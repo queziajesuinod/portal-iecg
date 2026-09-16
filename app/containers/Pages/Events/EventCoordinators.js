@@ -99,7 +99,7 @@ function EventCoordinators() {
   const fieldLabel = (key) => allFields.find((f) => f.key === key)?.label || key;
 
   // Campos que fazem sentido para "contabilizar por" (exclui valores/datas/identificadores).
-  const NON_GROUPABLE = ['payment.finalPrice', 'payment.paidTotal', 'payment.remaining', 'registration.createdAt', 'registration.orderCode', 'attendee.nome'];
+  const NON_GROUPABLE = ['payment.finalPrice', 'payment.paidTotal', 'payment.remaining', 'payment.grossValue', 'payment.merchantFee', 'payment.customerFee', 'payment.netValue', 'registration.createdAt', 'registration.orderCode', 'attendee.nome'];
   const groupableFields = useMemo(
     () => allFields.filter((f) => !NON_GROUPABLE.includes(f.key)),
     [allFields]

@@ -10,10 +10,11 @@ async function listarLotesPorEvento(eventId) {
 
   const { RegistrationAttendee, Registration } = require('../models');
 
-  const event = await Event.findByPk(eventId, { attributes: ['registrationPaymentMode'] });
+  const event = await Event.findByPk(eventId, { attributes: ['registrationPaymentMode', 'waitlistEnabled'] });
   const confirmedStatuses = event?.registrationPaymentMode === 'BALANCE_DUE'
     ? ['confirmed', 'partial']
     : ['confirmed'];
+  const waitlistEnabled = Boolean(event?.waitlistEnabled);
 
   const lotesComVagas = await Promise.all(lotes.map(async (lote) => {
     const inscritosOcupados = await RegistrationAttendee.count({
@@ -44,12 +45,19 @@ async function listarLotesPorEvento(eventId) {
       ? lote.maxQuantity - inscritosOcupados
       : null;
 
+    // Lote esgotado (limite atingido) — sinaliza para o front oferecer lista de espera.
+    const esgotado = lote.maxQuantity ? (vagasDisponiveis <= 0) : false;
+
     return {
       ...lote.toJSON(),
       price: Number(lote.price),
       vagasDisponiveis,
       inscritosOcupados,
-      inscritosConfirmados
+      inscritosConfirmados,
+      esgotado,
+      waitlistEnabled,
+      // Lista de espera disponivel para este lote quando o evento habilita e o lote esgotou.
+      waitlistAvailable: waitlistEnabled && esgotado
     };
   }));
 

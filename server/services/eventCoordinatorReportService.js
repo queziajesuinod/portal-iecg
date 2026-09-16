@@ -54,7 +54,20 @@ const STANDARD_FIELDS = [
   { key: 'payment.status', label: 'Status do pagamento' },
   { key: 'payment.finalPrice', label: 'Valor final (pedido)' },
   { key: 'payment.paidTotal', label: 'Valor pago (pedido)' },
-  { key: 'payment.remaining', label: 'Saldo restante (pedido)' }
+  { key: 'payment.remaining', label: 'Saldo restante (pedido)' },
+  { key: 'payment.grossValue', label: 'Valor bruto (pedido)' },
+  { key: 'payment.merchantFee', label: 'Taxa do estabelecimento (pedido)' },
+  { key: 'payment.customerFee', label: 'Taxa do cliente (pedido)' },
+  { key: 'payment.netValue', label: 'Valor liquido (pedido)' }
+];
+
+// Colunas financeiras acrescentadas automaticamente as listas quando o
+// conteudo "Valor liquido" esta habilitado (base: financialService).
+const FINANCIAL_FIELDS = [
+  'payment.grossValue',
+  'payment.merchantFee',
+  'payment.customerFee',
+  'payment.netValue'
 ];
 
 const DEFAULT_LIST_FIELDS = ['attendee.nome', 'batch.name', 'payment.status'];
@@ -97,7 +110,7 @@ async function getFieldOptions(eventId) {
  */
 function resolveField(key, ctx) {
   const {
-    attendeeData, buyerData, batch, registration, resumo
+    attendeeData, buyerData, batch, registration, resumo, financial, financialPrimary
   } = ctx;
 
   switch (key) {
@@ -112,6 +125,11 @@ function resolveField(key, ctx) {
     case 'payment.finalPrice': return money(registration?.finalPrice);
     case 'payment.paidTotal': return money(resumo?.paidTotal);
     case 'payment.remaining': return money(resumo?.remaining);
+    // Valores por pedido: so na primeira linha do pedido (evita soma inflada no Excel).
+    case 'payment.grossValue': return financialPrimary && financial ? money(financial.gross) : '';
+    case 'payment.merchantFee': return financialPrimary && financial ? money(financial.merchantFee) : '';
+    case 'payment.customerFee': return financialPrimary && financial ? money(financial.customerFee) : '';
+    case 'payment.netValue': return financialPrimary && financial ? money(financial.net) : '';
     default: {
       if (key.startsWith('form.')) {
         const v = attendeeData?.[key.slice('form.'.length)];
@@ -253,6 +271,9 @@ async function buildReport(coordinator, opts = {}) {
     confirmed: 0,
     partial: 0,
     newCount: 0,
+    grossValue: 0,
+    merchantFees: 0,
+    customerFees: 0,
     netValue: 0,
     isBalanceDue
   };
@@ -265,9 +286,32 @@ async function buildReport(coordinator, opts = {}) {
     }
   });
 
-  if (content.netValue !== false) {
-    summary.netValue = await financialService.computeEventTicketNet(eventId);
+  // Detalhamento financeiro por inscricao (bruto, taxas, liquido), na mesma
+  // base do modulo Financeiro. Alimenta as colunas por linha e os totais.
+  const showFinancial = content.netValue !== false;
+  if (showFinancial) {
+    const breakdown = await financialService.computeEventFinancialBreakdown(eventId);
+    const seenReg = new Set();
+    contexts.forEach((ctx) => {
+      const regId = ctx.registration?.id;
+      ctx.financial = breakdown.byRegistration[regId] || null;
+      // Marca apenas a 1a linha de cada pedido: os valores por pedido saem so
+      // nela, para que somar a coluna no Excel bata com o total do resumo.
+      if (regId && !seenReg.has(regId)) {
+        ctx.financialPrimary = true;
+        seenReg.add(regId);
+      }
+    });
+    summary.grossValue = breakdown.totals.gross;
+    summary.merchantFees = breakdown.totals.merchantFees;
+    summary.customerFees = breakdown.totals.customerFees;
+    summary.netValue = breakdown.totals.net;
   }
+
+  // Acrescenta as colunas financeiras as listas quando habilitado.
+  const withFinancialCols = (fields) => (showFinancial
+    ? Array.from(new Set([...fields, ...FINANCIAL_FIELDS]))
+    : fields);
 
   // Contabilizacao por campo (ex.: por Setor, por Lote) para exibir na mensagem.
   summary.breakdowns = buildBreakdowns(contexts, content.breakdownFields, fieldOptions);
@@ -282,7 +326,7 @@ async function buildReport(coordinator, opts = {}) {
   if (withAttachments && content.fullList !== false && contexts.length) {
     attachments.push({
       filename: `inscritos_${baseName}_${dateTag}.csv`,
-      content: rowsToCsv(listFields, contexts, fieldOptions),
+      content: rowsToCsv(withFinancialCols(listFields), contexts, fieldOptions),
       contentType: 'text/csv; charset=utf-8'
     });
   }
@@ -296,7 +340,7 @@ async function buildReport(coordinator, opts = {}) {
     if (newContexts.length) {
       attachments.push({
         filename: `novos_inscritos_${baseName}_${dateTag}.csv`,
-        content: rowsToCsv(listFields, newContexts, fieldOptions),
+        content: rowsToCsv(withFinancialCols(listFields), newContexts, fieldOptions),
         contentType: 'text/csv; charset=utf-8'
       });
     }
@@ -307,11 +351,11 @@ async function buildReport(coordinator, opts = {}) {
     const partialContexts = contexts.filter((ctx) => ctx.resumo?.derivedStatus === 'partial');
     if (partialContexts.length) {
       // Garante colunas de saldo/pago na lista de parciais, na ordem escolhida + extras.
-      const partialFields = Array.from(new Set([
+      const partialFields = withFinancialCols(Array.from(new Set([
         ...listFields,
         'payment.paidTotal',
         'payment.remaining'
-      ]));
+      ])));
       attachments.push({
         filename: `parciais_${baseName}_${dateTag}.csv`,
         content: rowsToCsv(partialFields, partialContexts, fieldOptions),
@@ -369,7 +413,19 @@ function buildEmailHtml({
         <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:bold;">${summary.newCount}</td>
       </tr>` : '';
 
-  const netRow = (content.netValue !== false) ? `
+  const financialRows = (content.netValue !== false) ? `
+      <tr>
+        <td style="padding:8px 12px;color:#555;">Valor total bruto</td>
+        <td style="padding:8px 12px;text-align:right;font-weight:bold;">${money(summary.grossValue)}</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px;color:#555;">Total de taxas do estabelecimento</td>
+        <td style="padding:8px 12px;text-align:right;font-weight:bold;color:#b23b3b;">${money(summary.merchantFees)}</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px;color:#555;">Total de taxas do cliente</td>
+        <td style="padding:8px 12px;text-align:right;font-weight:bold;">${money(summary.customerFees)}</td>
+      </tr>
       <tr>
         <td style="padding:8px 12px;color:#555;">Valor liquido do evento</td>
         <td style="padding:8px 12px;text-align:right;font-weight:bold;color:#1b7e3c;">${money(summary.netValue)}</td>
@@ -403,7 +459,7 @@ function buildEmailHtml({
     <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px;">
       ${rows}
       ${newRow}
-      ${netRow}
+      ${financialRows}
     </table>
     ${breakdownsHtml}
     ${anexoLista}
@@ -427,6 +483,9 @@ function buildWhatsappText({
     lines.push(`Novos inscritos: *${summary.newCount}*`);
   }
   if (content.netValue !== false) {
+    lines.push(`Valor total bruto: *${money(summary.grossValue)}*`);
+    lines.push(`Total de taxas do estabelecimento: *${money(summary.merchantFees)}*`);
+    lines.push(`Total de taxas do cliente: *${money(summary.customerFees)}*`);
     lines.push(`Valor liquido: *${money(summary.netValue)}*`);
   }
   (summary.breakdowns || []).forEach((bd) => {
