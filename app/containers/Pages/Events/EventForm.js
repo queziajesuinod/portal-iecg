@@ -86,6 +86,7 @@ function EventForm() {
     waitlistEnabled: false,
     waitlistOfferTtlHours: '12',
     waitlistChannels: { email: true, whatsapp: false },
+    waitlistAutoOffer: true,
     ticketChannels: { email: true, whatsapp: false }
   });
 
@@ -128,6 +129,7 @@ function EventForm() {
         waitlistChannels: evento.waitlistChannels && typeof evento.waitlistChannels === 'object'
           ? { email: evento.waitlistChannels.email !== false, whatsapp: evento.waitlistChannels.whatsapp === true }
           : { email: true, whatsapp: false },
+        waitlistAutoOffer: evento.waitlistAutoOffer !== false,
         ticketChannels: evento.ticketChannels && typeof evento.ticketChannels === 'object'
           ? { email: evento.ticketChannels.email !== false, whatsapp: evento.ticketChannels.whatsapp === true }
           : { email: true, whatsapp: false }
@@ -592,6 +594,23 @@ function EventForm() {
                               )}
                               label="WhatsApp"
                             />
+                          </Grid>
+                          <Grid item xs={12}>
+                            <FormControlLabel
+                              control={(
+                                <Switch
+                                  checked={formData.waitlistAutoOffer !== false}
+                                  onChange={(e) => setFormData((prev) => ({ ...prev, waitlistAutoOffer: e.target.checked }))}
+                                  disabled={loading}
+                                />
+                              )}
+                              label="Troca automática (oferta ao próximo da fila do mesmo lote)"
+                            />
+                            <Typography variant="caption" color="textSecondary" display="block">
+                              Desligue para <strong>aprovação manual</strong>: quando abrir vaga, ninguém é ofertado
+                              automaticamente — você avalia na tela “Lista de espera” e pode aprovar alguém de outro lote
+                              para a vaga que sobrou (útil quando as vagas são divididas por unidade).
+                            </Typography>
                           </Grid>
                         </Grid>
                       )}

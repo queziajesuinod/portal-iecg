@@ -122,12 +122,23 @@ function blocoTransacao(p) {
   </div>`;
 }
 
+// Dados do recebedor (estabelecimento). A Cielo nao devolve isso na transacao — vem de
+// configuracao (.env). Ajuste RECEBEDOR_NOME / RECEBEDOR_CNPJ / RECEBEDOR_CIDADE no ambiente.
+function recebedorInfo() {
+  return {
+    nome: process.env.RECEBEDOR_NOME || process.env.CIELO_SOFT_DESCRIPTOR || 'IECG - Igreja Evangelica Comunidade Global',
+    cnpj: process.env.RECEBEDOR_CNPJ || '',
+    cidade: process.env.RECEBEDOR_CIDADE || '',
+  };
+}
+
 function buildHtml({ registration, payments }) {
   const buyer = registration.buyerData || {};
   const buyerName = buyer.buyer_name || buyer.nome || buyer.name || '-';
   const buyerDoc = buyer.buyer_document || buyer.cpf || buyer.documento || buyer.cnpj || '';
   const buyerCity = buyer.buyer_city || buyer.cidade || buyer.city || '';
   const eventTitle = registration.event?.title || 'Evento';
+  const recebedor = recebedorInfo();
 
   const totalPago = payments.reduce((sum, p) => sum + (Number(p.amount) || 0) + (Number(p.taxa) || 0), 0);
   const blocos = payments.map(blocoTransacao).join('');
@@ -158,6 +169,13 @@ function buildHtml({ registration, payments }) {
 <body>
   <h1>Comprovante de Pagamento</h1>
   <p class="sub">${esc(eventTitle)} &nbsp;·&nbsp; Pedido ${esc(registration.orderCode)}</p>
+
+  <div class="tx">
+    <h3 style="margin-top:0">Dados do recebedor</h3>
+    ${linhaDado('Recebedor', recebedor.nome)}
+    ${recebedor.cnpj ? linhaDado('CNPJ', recebedor.cnpj) : ''}
+    ${recebedor.cidade ? linhaDado('Cidade', recebedor.cidade) : ''}
+  </div>
 
   <div class="tx">
     <h3 style="margin-top:0">Dados do comprador</h3>

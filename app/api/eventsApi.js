@@ -270,12 +270,15 @@ export const listarListaEspera = (eventId, params = {}) => {
 
 export const resumoListaEspera = (eventId) => fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/waitlist/summary`);
 
+export const overviewListaEspera = (eventId) => fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/waitlist/overview`);
+
 export const removerEntradaListaEspera = (id) => fetchWithAuth(`${API_URL}/api/admin/events/waitlist/${id}`, {
   method: 'DELETE',
 });
 
-export const ofertarEntradaListaEspera = (id) => fetchWithAuth(`${API_URL}/api/admin/events/waitlist/${id}/offer`, {
+export const ofertarEntradaListaEspera = (id, targetBatchId = null) => fetchWithAuth(`${API_URL}/api/admin/events/waitlist/${id}/offer`, {
   method: 'POST',
+  body: JSON.stringify(targetBatchId ? { targetBatchId } : {}),
 });
 
 export const reenviarOfertaListaEspera = (id) => fetchWithAuth(`${API_URL}/api/admin/events/waitlist/${id}/resend`, {

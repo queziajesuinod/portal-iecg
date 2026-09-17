@@ -111,6 +111,7 @@ router.get('/:eventId/registration-attendees/confirmed', registrationController.
 router.get('/:eventId/tickets-summary', eventController.resumoIngressos);
 router.get('/:eventId/registration-stats', eventController.estatisticasInscricoes);
 router.get('/:eventId/waitlist/summary', waitlistController.resumo);
+router.get('/:eventId/waitlist/overview', waitlistController.overview);
 router.get('/:eventId/waitlist', waitlistController.listar);
 
 // ============= HOSPEDAGEM =============

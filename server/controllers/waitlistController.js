@@ -66,6 +66,17 @@ async function resumo(req, res) {
   }
 }
 
+// GET /api/events/:eventId/waitlist/overview — panorama por lote (vagas + fila)
+async function overview(req, res) {
+  try {
+    const data = await waitlistService.overviewPorEvento(req.params.eventId);
+    return res.status(200).json(data);
+  } catch (err) {
+    console.error('Erro no panorama da lista de espera:', err.message);
+    return res.status(500).json({ message: 'Erro ao carregar panorama da lista de espera' });
+  }
+}
+
 // DELETE /api/events/waitlist/:id
 async function remover(req, res) {
   try {
@@ -76,10 +87,12 @@ async function remover(req, res) {
   }
 }
 
-// POST /api/events/waitlist/:id/offer
+// POST /api/events/waitlist/:id/offer  (body: { targetBatchId? } para aprovacao cross-lote)
 async function ofertar(req, res) {
   try {
-    const { entry, registration } = await waitlistService.ofertarAgora(req.params.id);
+    const { entry, registration } = await waitlistService.ofertarAgora(req.params.id, {
+      targetBatchId: req.body?.targetBatchId,
+    });
     return res.status(200).json({
       sucesso: true,
       entry: { id: entry.id, status: entry.status, offerExpiresAt: entry.offerExpiresAt },
@@ -105,6 +118,7 @@ module.exports = {
   posicao,
   listar,
   resumo,
+  overview,
   remover,
   ofertar,
   reenviar,

@@ -721,6 +721,7 @@ async function criarEvento(body, userId) {
     waitlistEnabled,
     waitlistOfferTtlHours,
     waitlistChannels,
+    waitlistAutoOffer,
     ticketChannels,
   } = body;
 
@@ -759,6 +760,7 @@ async function criarEvento(body, userId) {
     waitlistChannels: waitlistChannels && typeof waitlistChannels === 'object'
       ? waitlistChannels
       : { email: true, whatsapp: false },
+    waitlistAutoOffer: waitlistAutoOffer !== false,
     ticketChannels: ticketChannels && typeof ticketChannels === 'object'
       ? ticketChannels
       : { email: true, whatsapp: false },
@@ -827,6 +829,7 @@ async function atualizarEvento(id, body) {
   if (body.waitlistChannels != null && typeof body.waitlistChannels === 'object') {
     event.waitlistChannels = body.waitlistChannels;
   }
+  if (body.waitlistAutoOffer != null) event.waitlistAutoOffer = Boolean(body.waitlistAutoOffer);
   if (body.ticketChannels != null && typeof body.ticketChannels === 'object') {
     event.ticketChannels = body.ticketChannels;
   }

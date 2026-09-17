@@ -19,6 +19,7 @@ const {
 } = require('../models');
 const { COUNTABLE_PAYMENT_STATUSES } = require('../constants/registrationStatuses');
 const registrationService = require('./registrationService');
+const batchService = require('./batchService');
 
 const ACTIVE_ENTRY_STATUSES = ['waiting', 'offered'];
 
@@ -198,12 +199,19 @@ async function entrarNaFila(dados = {}) {
  * se o evento for gratuito), reservando a vaga, e marca a entrada como 'offered'.
  * Retorna a Registration criada, ou null se nao foi possivel materializar.
  */
-async function materializarOferta(entry, event) {
+async function materializarOferta(entry, event, { targetBatchId } = {}) {
   const eventRequiresPayment = event.requiresPayment !== false;
   const isBalanceDue = event.registrationPaymentMode === 'BALANCE_DUE';
 
+  // Aprovacao cross-lote: quando o admin aprova para um lote diferente do desejado
+  // (ex.: vaga sobrou na unidade Y para alguem da fila da unidade X), sobrescreve o
+  // lote de todos os inscritos. O preco e' recalculado pelo lote de destino.
+  const loteAlvo = targetBatchId || entry.batchId;
+  const attendeesData = (entry.payload?.attendeesData || []).map((a) => ({ ...a, batchId: loteAlvo }));
+
   const dados = {
     ...entry.payload,
+    attendeesData,
     eventId: event.id,
     origemListaEspera: true,
   };
@@ -280,6 +288,9 @@ async function onSlotFreed(batchId) {
 
     const event = await Event.findByPk(batch.eventId);
     if (!event || !event.waitlistEnabled) return { offered: 0 };
+    // Modo manual: nao oferta automaticamente — o admin avalia e aprova na tela de gestao
+    // (inclusive aprovando alguem de outro lote para a vaga que abriu).
+    if (event.waitlistAutoOffer === false) return { offered: 0, manual: true };
 
     let ofertados = 0;
     // Enquanto houver vaga e proximo na fila que caiba, oferta.
@@ -448,6 +459,46 @@ async function resumoPorEvento(eventId) {
   }, {});
 }
 
+/**
+ * Panorama por lote para a tela de avaliacao: vagas ocupadas/livres e tamanho da fila.
+ * Permite ao admin decidir aprovar alguem de outro lote para a vaga que sobrou.
+ */
+async function overviewPorEvento(eventId) {
+  const event = await Event.findByPk(eventId, {
+    attributes: ['id', 'waitlistEnabled', 'waitlistAutoOffer', 'waitlistOfferTtlHours']
+  });
+  const lotes = await EventBatch.findAll({
+    where: { eventId },
+    order: [['order', 'ASC']],
+    attributes: ['id', 'name', 'sector', 'maxQuantity']
+  });
+
+  const batches = [];
+  for (const lote of lotes) {
+    const ocupados = await contarOcupadosLote(lote.id);
+    const livres = lote.maxQuantity ? Math.max(0, lote.maxQuantity - ocupados) : null;
+    const waiting = await WaitlistEntry.count({ where: { batchId: lote.id, status: 'waiting' } });
+    const offered = await WaitlistEntry.count({ where: { batchId: lote.id, status: 'offered' } });
+    batches.push({
+      batchId: lote.id,
+      name: lote.name,
+      sector: lote.sector,
+      maxQuantity: lote.maxQuantity,
+      ocupados,
+      livres,
+      waiting,
+      offered,
+    });
+  }
+
+  return {
+    waitlistEnabled: Boolean(event?.waitlistEnabled),
+    waitlistAutoOffer: event?.waitlistAutoOffer !== false,
+    waitlistOfferTtlHours: event?.waitlistOfferTtlHours || 12,
+    batches,
+  };
+}
+
 async function removerEntrada(id) {
   const entry = await WaitlistEntry.findByPk(id);
   if (!entry) throw new Error('Entrada da lista de espera nao encontrada');
@@ -468,7 +519,7 @@ async function removerEntrada(id) {
   return entry;
 }
 
-async function ofertarAgora(id) {
+async function ofertarAgora(id, { targetBatchId } = {}) {
   const entry = await WaitlistEntry.findByPk(id);
   if (!entry) throw new Error('Entrada da lista de espera nao encontrada');
   if (entry.status !== 'waiting') {
@@ -477,8 +528,17 @@ async function ofertarAgora(id) {
   const event = await Event.findByPk(entry.eventId);
   if (!event) throw new Error('Evento nao encontrado');
 
-  return withBatchLock(entry.batchId, async () => {
-    const registration = await materializarOferta(entry, event);
+  // Lote de destino pode ser diferente do desejado (aprovacao cross-lote).
+  const loteAlvo = targetBatchId || entry.batchId;
+  const batch = await EventBatch.findByPk(loteAlvo);
+  if (!batch || batch.eventId !== entry.eventId) {
+    throw new Error('Lote de destino invalido para este evento');
+  }
+
+  return withBatchLock(loteAlvo, async () => {
+    // Mensagem clara quando o lote de destino nao tem vaga para a quantidade da entrada.
+    await batchService.verificarDisponibilidade(loteAlvo, entry.quantity);
+    const registration = await materializarOferta(entry, event, { targetBatchId: loteAlvo });
     if (!registration) {
       throw new Error(entry.lastError || 'Nao foi possivel materializar a oferta');
     }
@@ -507,6 +567,7 @@ module.exports = {
   consultarPosicaoPublica,
   listarPorEvento,
   resumoPorEvento,
+  overviewPorEvento,
   removerEntrada,
   ofertarAgora,
   reenviarOferta,

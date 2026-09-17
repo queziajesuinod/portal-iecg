@@ -102,6 +102,7 @@ const ApelosDirecionadosPage = () => {
   const [celulaDestinoId, setCelulaDestinoId] = useState('');
   const [filtroCelula, setFiltroCelula] = useState('');
   const [filtroLider, setFiltroLider] = useState('');
+  const [filtroPastorGeracao, setFiltroPastorGeracao] = useState('');
   const [apenasCasal, setApenasCasal] = useState(false);
   const [apenasMesmoDia, setApenasMesmoDia] = useState(false);
   const [motivo, setMotivo] = useState('');
@@ -118,6 +119,8 @@ const ApelosDirecionadosPage = () => {
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [detailApelo, setDetailApelo] = useState(null);
   const [detailForm, setDetailForm] = useState({
+    nome: '',
+    whatsapp: '',
     bairro_apelo: '',
     cep_apelo: '',
     cidade_apelo: '',
@@ -390,6 +393,7 @@ const ApelosDirecionadosPage = () => {
     setMotivo('');
     setFiltroCelula('');
     setFiltroLider('');
+    setFiltroPastorGeracao('');
     // Se o apelo é de casal, já abre filtrando por células de casal.
     setApenasCasal(Boolean(apelo?.celula_casal || apelo?.conjuge_apelo_id));
     setApenasMesmoDia(false);
@@ -857,10 +861,17 @@ const ApelosDirecionadosPage = () => {
 
   // Nome do lider da celula (varias origens possiveis do serializer/coluna).
   const getLiderNome = (c) => c?.leaderUser?.name || c?.leaderMember?.fullName || c?.lider || '';
+  // Nome do Pastor de Geracao da celula.
+  const getPastorGeracao = (c) => c?.pastorGeracaoMemberRef?.fullName || c?.pastor_geracao || '';
   // Filtra por lider quando ha texto digitado (contem, sem acento/caixa).
   const matchLider = (c) => {
     if (!filtroLider) return true;
     return normalizeSearchValue(getLiderNome(c)).includes(normalizeSearchValue(filtroLider));
+  };
+  // Filtra por Pastor de Geracao selecionado (igualdade, sem acento/caixa).
+  const matchPastor = (c) => {
+    if (!filtroPastorGeracao) return true;
+    return normalizeSearchValue(getPastorGeracao(c)) === normalizeSearchValue(filtroPastorGeracao);
   };
 
   const celulasMesmaRede = (apelo, filtro = filtroCelula) => {
@@ -869,10 +880,10 @@ const ApelosDirecionadosPage = () => {
     if (!redeApelo) return [];
     const filtradas = celulas.filter((c) => normalizeRede(c.rede) === redeApelo);
     const baseSemAtual = filtradas.filter((c) => c.id !== apelo?.celulaAtual?.id);
-    const porLider = baseSemAtual.filter(matchLider);
-    if (!filtro) return porLider;
+    const porFiltros = baseSemAtual.filter(matchPastor).filter(matchLider);
+    if (!filtro) return porFiltros;
     const termo = normalizeSearchValue(filtro);
-    return porLider.filter((c) => normalizeSearchValue(c.celula).includes(termo));
+    return porFiltros.filter((c) => normalizeSearchValue(c.celula).includes(termo));
   };
 
   const formatDate = (v) => formatDateInAppTimezone(v, '-');
@@ -1015,6 +1026,8 @@ const ApelosDirecionadosPage = () => {
         ? [apelo.bairro_proximo]
         : [];
     setDetailForm({
+      nome: apelo.nome || '',
+      whatsapp: apelo.whatsapp || '',
       bairro_apelo: apelo.bairro_apelo || '',
       cep_apelo: normalizeCepDigits(apelo.cep_apelo || ''),
       cidade_apelo: apelo.cidade_apelo || '',
@@ -1081,6 +1094,8 @@ const ApelosDirecionadosPage = () => {
     setDetailDialogOpen(false);
     setDetailApelo(null);
     setDetailForm({
+      nome: '',
+      whatsapp: '',
       bairro_apelo: '',
       cep_apelo: '',
       cidade_apelo: '',
@@ -1095,12 +1110,18 @@ const ApelosDirecionadosPage = () => {
 
   const salvarDetalheApelo = async () => {
     if (!detailApelo) return;
+    if (!(detailForm.nome || '').trim()) {
+      setNotification('O nome do apelo é obrigatório.');
+      return;
+    }
     setDetailSaving(true);
     try {
       const token = localStorage.getItem('token');
       const latApelo = Number(detailForm.lat_apelo);
       const lonApelo = Number(detailForm.lon_apelo);
       const payload = {
+        nome: detailForm.nome.trim(),
+        whatsapp: (detailForm.whatsapp || '').trim() || null,
         bairro_apelo: detailForm.bairro_apelo || null,
         cep_apelo: normalizeCepDigits(detailForm.cep_apelo) || null,
         cidade_apelo: detailForm.cidade_apelo || null,
@@ -1148,16 +1169,28 @@ const ApelosDirecionadosPage = () => {
     .filter((c) => !apenasCasal || c.casalCelulaId);
   const celulasRedeSemFiltro = useMemo(
     () => (apeloSelecionado ? celulasMesmaRede(apeloSelecionado, '') : []),
-    [apeloSelecionado, celulas, filtroLider]
+    [apeloSelecionado, celulas, filtroLider, filtroPastorGeracao]
   );
   // Nomes de lideres (unicos) das celulas da mesma rede — opcoes do filtro por lider.
+  // Respeita o Pastor de Geracao selecionado (so mostra lideres daquele pastor).
   const lideresDaRede = useMemo(() => {
     if (!apeloSelecionado) return [];
     const redeApelo = normalizeRede(apeloSelecionado?.rede);
     if (!redeApelo) return [];
     const nomes = celulas
-      .filter((c) => normalizeRede(c.rede) === redeApelo && c.id !== apeloSelecionado?.celulaAtual?.id)
+      .filter((c) => normalizeRede(c.rede) === redeApelo && c.id !== apeloSelecionado?.celulaAtual?.id && matchPastor(c))
       .map(getLiderNome)
+      .filter(Boolean);
+    return Array.from(new Set(nomes)).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [apeloSelecionado, celulas, filtroPastorGeracao]);
+  // Pastores de Geracao (unicos) das celulas da mesma rede — opcoes do filtro por pastor.
+  const pastoresDaRede = useMemo(() => {
+    if (!apeloSelecionado) return [];
+    const redeApelo = normalizeRede(apeloSelecionado?.rede);
+    if (!redeApelo) return [];
+    const nomes = celulas
+      .filter((c) => normalizeRede(c.rede) === redeApelo && c.id !== apeloSelecionado?.celulaAtual?.id)
+      .map(getPastorGeracao)
       .filter(Boolean);
     return Array.from(new Set(nomes)).sort((a, b) => a.localeCompare(b, 'pt-BR'));
   }, [apeloSelecionado, celulas]);
@@ -1189,19 +1222,19 @@ const ApelosDirecionadosPage = () => {
     return base;
   }, [sugestoes, apenasCasal, apenasMesmoDia]);
   const sugestoesFiltradas = useMemo(() => {
-    const porLider = sugestoesBase.filter(matchLider);
+    const porFiltros = sugestoesBase.filter(matchPastor).filter(matchLider);
     const filtradas = filtroCelula
-      ? porLider.filter((c) => normalizeSearchValue(c.celula).includes(normalizeSearchValue(filtroCelula)))
-      : porLider;
+      ? porFiltros.filter((c) => normalizeSearchValue(c.celula).includes(normalizeSearchValue(filtroCelula)))
+      : porFiltros;
     return filtradas.slice(0, limiteSugestoes);
-  }, [sugestoesBase, filtroCelula, filtroLider, limiteSugestoes]);
+  }, [sugestoesBase, filtroCelula, filtroLider, filtroPastorGeracao, limiteSugestoes]);
 
   const totalSugestoesFiltradas = useMemo(() => {
-    const porLider = sugestoesBase.filter(matchLider);
-    if (!filtroCelula) return porLider.length;
+    const porFiltros = sugestoesBase.filter(matchPastor).filter(matchLider);
+    if (!filtroCelula) return porFiltros.length;
     const termo = normalizeSearchValue(filtroCelula);
-    return porLider.filter((c) => normalizeSearchValue(c.celula).includes(termo)).length;
-  }, [sugestoesBase, filtroCelula, filtroLider]);
+    return porFiltros.filter((c) => normalizeSearchValue(c.celula).includes(termo)).length;
+  }, [sugestoesBase, filtroCelula, filtroLider, filtroPastorGeracao]);
   const mostrarFallbackCelulas = !loadingSugestoes && sugestoes.length === 0 && celulasRedeOrdenadas.length > 0;
 
   return (
@@ -1563,6 +1596,23 @@ const ApelosDirecionadosPage = () => {
             value={filtroCelula}
             onChange={(e) => setFiltroCelula(e.target.value)}
           />
+          {pastoresDaRede.length > 0 && (
+            <TextField
+              select
+              label="Filtrar por Pastor de Geração"
+              fullWidth
+              margin="normal"
+              size="small"
+              value={filtroPastorGeracao}
+              onChange={(e) => { setFiltroPastorGeracao(e.target.value); setFiltroLider(''); }}
+              helperText="Ao selecionar, a lista de líderes/células mostra só as desse pastor."
+            >
+              <MenuItem value="">Todos os pastores</MenuItem>
+              {pastoresDaRede.map((p) => (
+                <MenuItem key={p} value={p}>{p}</MenuItem>
+              ))}
+            </TextField>
+          )}
           <Autocomplete
             freeSolo
             options={lideresDaRede}
@@ -1687,6 +1737,7 @@ const ApelosDirecionadosPage = () => {
                           {renderJaDirecionadoChip(c.id)}
                         </Box>
                         <Typography variant="caption" display="block">Líder: {getLiderNome(c) || '-'}</Typography>
+                        <Typography variant="caption" display="block">Pastor de Geração: {getPastorGeracao(c) || '-'}</Typography>
                         <Typography variant="caption" display="block">Rede: {c.rede}</Typography>
                         <Typography variant="caption" display="block">Bairro: {c.bairro || '-'}</Typography>
                         <Typography variant="caption" display="block">Dia: {c.dia || '-'}</Typography>
@@ -1738,6 +1789,7 @@ const ApelosDirecionadosPage = () => {
                               {renderJaDirecionadoChip(c.id)}
                             </Box>
                             <Typography variant="caption" display="block">Líder: {getLiderNome(c) || '-'}</Typography>
+                            <Typography variant="caption" display="block">Pastor de Geração: {getPastorGeracao(c) || '-'}</Typography>
                             <Typography variant="caption" display="block">Rede: {c.rede}</Typography>
                             <Typography variant="caption" display="block">Bairro: {c.bairro || '-'}</Typography>
                             <Typography variant="caption" display="block">Dia: {c.dia || '-'}</Typography>
@@ -1785,16 +1837,31 @@ const ApelosDirecionadosPage = () => {
             <>
               <Grid container spacing={1}>
                 <Grid item xs={12} sm={6}>
-                  <Typography variant="caption" color="textSecondary">Nome</Typography>
-                  <Typography variant="body2">{detailApelo.nome}</Typography>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Nome"
+                    required
+                    value={detailForm.nome}
+                    onChange={(e) => handleDetailFormChange('nome', e.target.value)}
+                    disabled={detailSaving}
+                    error={!(detailForm.nome || '').trim()}
+                  />
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <Typography variant="caption" color="textSecondary">Decisão</Typography>
                   {renderDecisaoChip(detailApelo.decisao)}
                 </Grid>
                 <Grid item xs={12} sm={6}>
-                  <Typography variant="caption" color="textSecondary">WhatsApp</Typography>
-                  <Typography variant="body2">{detailApelo.whatsapp || '-'}</Typography>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="WhatsApp"
+                    value={detailForm.whatsapp}
+                    onChange={(e) => handleDetailFormChange('whatsapp', e.target.value)}
+                    disabled={detailSaving}
+                    helperText="Somente números ou no formato do WhatsApp"
+                  />
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <TextField

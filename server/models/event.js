@@ -136,6 +136,12 @@ module.exports = (sequelize) => {
       defaultValue: 12,
       comment: 'Prazo (horas) para pagar apos receber a oferta de vaga'
     },
+    waitlistAutoOffer: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+      comment: 'true = oferta automatica FIFO por lote; false = aprovacao manual pelo admin'
+    },
     waitlistChannels: {
       type: DataTypes.JSONB,
       allowNull: false,
