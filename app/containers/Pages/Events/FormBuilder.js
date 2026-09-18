@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useConfirm } from '../../../utils/useConfirm';
+import React, {
+  useState, useEffect, useRef, useCallback, useMemo
+} from 'react';
+import PropTypes from 'prop-types';
 import { Helmet } from 'react-helmet';
 import { PapperBlock, Notification } from 'dan-components';
 import {
@@ -39,15 +41,15 @@ import BackIcon from '@mui/icons-material/ArrowBack';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { useHistory, useParams } from 'react-router-dom';
+import brand from 'dan-api/dummy/brand';
 import {
   listarCamposPorEvento,
   criarCampo,
-  criarCamposEmLote,
   atualizarCampo,
   deletarCampo,
   buscarEvento
 } from '../../../api/eventsApi';
-import brand from 'dan-api/dummy/brand';
+import { useConfirm } from '../../../utils/useConfirm';
 
 const TIPOS_CAMPO = [
   { value: 'text', label: 'Texto' },
@@ -83,6 +85,7 @@ function FormBuilder() {
     options: []
   });
   const [opcaoTemp, setOpcaoTemp] = useState('');
+  const dragOpcaoIndex = useRef(null);
 
   useEffect(() => {
     carregarDados();
@@ -159,7 +162,9 @@ function FormBuilder() {
   };
 
   const handleChangeCampo = (e) => {
-    const { name, value, checked, type } = e.target;
+    const {
+      name, value, checked, type
+    } = e.target;
     setFormCampo(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value
@@ -194,6 +199,22 @@ function FormBuilder() {
     }));
   };
 
+  const handleReordenarOpcao = (fromIndex, toIndex) => {
+    if (
+      fromIndex === null
+      || toIndex === null
+      || fromIndex === toIndex
+    ) {
+      return;
+    }
+    setFormCampo(prev => {
+      const novasOpcoes = [...prev.options];
+      const [movida] = novasOpcoes.splice(fromIndex, 1);
+      novasOpcoes.splice(toIndex, 0, movida);
+      return { ...prev, options: novasOpcoes };
+    });
+  };
+
   const handleSalvarCampo = () => {
     if (!formCampo.fieldLabel || !formCampo.fieldName) {
       setNotification('Label e nome do campo são obrigatórios');
@@ -208,10 +229,9 @@ function FormBuilder() {
 
     if (campoAtual) {
       // Editar campo existente
-      setCampos(prev => prev.map(c => 
-        c.id === campoAtual.id 
-          ? { ...c, ...formCampo }
-          : c
+      setCampos(prev => prev.map(c => (c.id === campoAtual.id
+        ? { ...c, ...formCampo }
+        : c)
       ));
     } else {
       // Adicionar novo campo
@@ -227,7 +247,9 @@ function FormBuilder() {
   };
 
   const handleDeletarCampo = async (campo) => {
-    const okCampo = await confirm({ title: 'Deletar campo', message: `Tem certeza que deseja deletar o campo "${campo.fieldLabel}"?`, confirmText: 'Deletar', confirmColor: 'error', severity: 'error' });
+    const okCampo = await confirm({
+      title: 'Deletar campo', message: `Tem certeza que deseja deletar o campo "${campo.fieldLabel}"?`, confirmText: 'Deletar', confirmColor: 'error', severity: 'error'
+    });
     if (okCampo) {
       if (campo.id.toString().startsWith('temp_')) {
         // Campo temporário (não salvo ainda)
@@ -291,7 +313,7 @@ function FormBuilder() {
       const camposExistentes = campos.filter(c => !c.id.toString().startsWith('temp_'));
       // Separar campos novos (temp_) dos existentes
       const camposNovos = campos.filter(c => c.id.toString().startsWith('temp_'));
-      
+
       if (camposNovos.length > 0) {
         const camposParaSalvar = camposNovos.map((campo, index) => ({
           eventId: id,
@@ -355,7 +377,9 @@ function FormBuilder() {
     [campos]
   );
 
-  const FieldListItem = React.memo(({ campo, index, listLength, section }) => (
+  const FieldListItem = React.memo(({
+    campo, index, listLength, section
+  }) => (
     <Draggable draggableId={String(campo.id)} index={index}>
       {(provided) => (
         <ListItem
@@ -366,47 +390,54 @@ function FormBuilder() {
           <span {...provided.dragHandleProps} style={{ display: 'flex', alignItems: 'center', marginRight: 8 }}>
             <DragIndicatorIcon fontSize="small" />
           </span>
-      <ListItemText
-        primary={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Typography variant="subtitle2">{campo.fieldLabel}</Typography>
-            {campo.isRequired && <Chip label="Obrigatório" size="small" color="secondary" />}
-          </div>
-        }
-        secondary={`Tipo: ${TIPOS_CAMPO.find(t => t.value === campo.fieldType)?.label} | Nome: ${campo.fieldName}`}
-      />
-      <ListItemSecondaryAction>
-        <IconButton
-          size="small"
-          disabled={index === 0}
-          onClick={() => handleMoverCampo(section, index, 'up')}
-        >
-          <ArrowUpIcon />
-        </IconButton>
-        <IconButton
-          size="small"
-          disabled={index === listLength - 1}
-          onClick={() => handleMoverCampo(section, index, 'down')}
-        >
-          <ArrowDownIcon />
-        </IconButton>
-        <IconButton
-          size="small"
-          onClick={() => handleAbrirDialog(campo)}
-        >
-          <EditIcon />
-        </IconButton>
-        <IconButton
-          size="small"
-          onClick={() => handleDeletarCampo(campo)}
-        >
-          <DeleteIcon />
-        </IconButton>
-      </ListItemSecondaryAction>
+          <ListItemText
+            primary={
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Typography variant="subtitle2">{campo.fieldLabel}</Typography>
+                {campo.isRequired && <Chip label="Obrigatório" size="small" color="secondary" />}
+              </div>
+            }
+            secondary={`Tipo: ${TIPOS_CAMPO.find(t => t.value === campo.fieldType)?.label} | Nome: ${campo.fieldName}`}
+          />
+          <ListItemSecondaryAction>
+            <IconButton
+              size="small"
+              disabled={index === 0}
+              onClick={() => handleMoverCampo(section, index, 'up')}
+            >
+              <ArrowUpIcon />
+            </IconButton>
+            <IconButton
+              size="small"
+              disabled={index === listLength - 1}
+              onClick={() => handleMoverCampo(section, index, 'down')}
+            >
+              <ArrowDownIcon />
+            </IconButton>
+            <IconButton
+              size="small"
+              onClick={() => handleAbrirDialog(campo)}
+            >
+              <EditIcon />
+            </IconButton>
+            <IconButton
+              size="small"
+              onClick={() => handleDeletarCampo(campo)}
+            >
+              <DeleteIcon />
+            </IconButton>
+          </ListItemSecondaryAction>
         </ListItem>
       )}
     </Draggable>
   ));
+  FieldListItem.displayName = 'FieldListItem';
+  FieldListItem.propTypes = {
+    campo: PropTypes.object.isRequired,
+    index: PropTypes.number.isRequired,
+    listLength: PropTypes.number.isRequired,
+    section: PropTypes.string.isRequired
+  };
 
   const skeletonListItems = Array.from({ length: 3 }).map((_, idx) => (
     <ListItem key={`field-skeleton-${idx}`}>
@@ -416,7 +447,9 @@ function FormBuilder() {
 
   function ListItemContentSkeleton() {
     return (
-      <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{
+        width: '100%', display: 'flex', flexDirection: 'column', gap: 8
+      }}>
         <Skeleton width="60%" />
         <Skeleton width="40%" />
       </div>
@@ -442,137 +475,141 @@ function FormBuilder() {
         desc="Configure os campos que serão preenchidos na inscrição"
       >
         <DragDropContext onDragEnd={handleDragEnd}>
-        <Grid container spacing={3}>
-          {/* Campos do Comprador */}
-          <Grid item xs={12} md={6}>
-            <Card>
-              <CardContent>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <Typography variant="h6">
+          <Grid container spacing={3}>
+            {/* Campos do Comprador */}
+            <Grid item xs={12} md={6}>
+              <Card>
+                <CardContent>
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16
+                  }}>
+                    <Typography variant="h6">
                     Dados do Comprador
-                  </Typography>
-                  <Button
-                    size="small"
-                    startIcon={<AddIcon />}
-                    disabled={headerSkeleton}
-                    onClick={() => {
-                      setFormCampo(prev => ({ ...prev, section: 'buyer' }));
-                      handleAbrirDialog();
-                    }}
-                  >
+                    </Typography>
+                    <Button
+                      size="small"
+                      startIcon={<AddIcon />}
+                      disabled={headerSkeleton}
+                      onClick={() => {
+                        setFormCampo(prev => ({ ...prev, section: 'buyer' }));
+                        handleAbrirDialog();
+                      }}
+                    >
                     Adicionar
-                  </Button>
-                </div>
-                <Typography variant="body2" color="textSecondary" gutterBottom>
+                    </Button>
+                  </div>
+                  <Typography variant="body2" color="textSecondary" gutterBottom>
                   Preenchido 1 vez por inscrição
-                </Typography>
-                <Divider style={{ margin: '16px 0' }} />
-                {headerSkeleton ? (
-                  <List>
-                    {skeletonListItems}
-                  </List>
-                ) : camposComprador.length === 0 ? (
-                  <Typography variant="body2" color="textSecondary">
-                    Nenhum campo adicionado
                   </Typography>
-                ) : (
-                  <Droppable droppableId="buyer">
-                    {(provided) => (
-                      <List ref={provided.innerRef} {...provided.droppableProps}>
-                        {camposComprador.map((campo, index) => (
-                          <FieldListItem
-                            key={campo.id}
-                            campo={campo}
-                            index={index}
-                            listLength={camposComprador.length}
-                            section="buyer"
-                          />
-                        ))}
-                        {provided.placeholder}
-                      </List>
-                    )}
-                  </Droppable>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
+                  <Divider style={{ margin: '16px 0' }} />
+                  {headerSkeleton ? (
+                    <List>
+                      {skeletonListItems}
+                    </List>
+                  ) : camposComprador.length === 0 ? (
+                    <Typography variant="body2" color="textSecondary">
+                    Nenhum campo adicionado
+                    </Typography>
+                  ) : (
+                    <Droppable droppableId="buyer">
+                      {(provided) => (
+                        <List ref={provided.innerRef} {...provided.droppableProps}>
+                          {camposComprador.map((campo, index) => (
+                            <FieldListItem
+                              key={campo.id}
+                              campo={campo}
+                              index={index}
+                              listLength={camposComprador.length}
+                              section="buyer"
+                            />
+                          ))}
+                          {provided.placeholder}
+                        </List>
+                      )}
+                    </Droppable>
+                  )}
+                </CardContent>
+              </Card>
+            </Grid>
 
-          {/* Campos dos Inscritos */}
-          <Grid item xs={12} md={6}>
-            <Card>
-              <CardContent>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <Typography variant="h6">
+            {/* Campos dos Inscritos */}
+            <Grid item xs={12} md={6}>
+              <Card>
+                <CardContent>
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16
+                  }}>
+                    <Typography variant="h6">
                     Dados dos Inscritos
-                  </Typography>
-                  <Button
-                    size="small"
-                    startIcon={<AddIcon />}
-                    disabled={headerSkeleton}
-                    onClick={() => {
-                      setFormCampo(prev => ({ ...prev, section: 'attendee' }));
-                      handleAbrirDialog();
-                    }}
-                  >
+                    </Typography>
+                    <Button
+                      size="small"
+                      startIcon={<AddIcon />}
+                      disabled={headerSkeleton}
+                      onClick={() => {
+                        setFormCampo(prev => ({ ...prev, section: 'attendee' }));
+                        handleAbrirDialog();
+                      }}
+                    >
                     Adicionar
-                  </Button>
-                </div>
-                <Typography variant="body2" color="textSecondary" gutterBottom>
+                    </Button>
+                  </div>
+                  <Typography variant="body2" color="textSecondary" gutterBottom>
                   Repetido para cada inscrito
-                </Typography>
-                <Divider style={{ margin: '16px 0' }} />
-                {headerSkeleton ? (
-                  <List>
-                    {skeletonListItems}
-                  </List>
-                ) : camposInscritos.length === 0 ? (
-                  <Typography variant="body2" color="textSecondary">
-                    Nenhum campo adicionado
                   </Typography>
-                ) : (
-                  <Droppable droppableId="attendee">
-                    {(provided) => (
-                      <List ref={provided.innerRef} {...provided.droppableProps}>
-                        {camposInscritos.map((campo, index) => (
-                          <FieldListItem
-                            key={campo.id}
-                            campo={campo}
-                            index={index}
-                            listLength={camposInscritos.length}
-                            section="attendee"
-                          />
-                        ))}
-                        {provided.placeholder}
-                      </List>
-                    )}
-                  </Droppable>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
+                  <Divider style={{ margin: '16px 0' }} />
+                  {headerSkeleton ? (
+                    <List>
+                      {skeletonListItems}
+                    </List>
+                  ) : camposInscritos.length === 0 ? (
+                    <Typography variant="body2" color="textSecondary">
+                    Nenhum campo adicionado
+                    </Typography>
+                  ) : (
+                    <Droppable droppableId="attendee">
+                      {(provided) => (
+                        <List ref={provided.innerRef} {...provided.droppableProps}>
+                          {camposInscritos.map((campo, index) => (
+                            <FieldListItem
+                              key={campo.id}
+                              campo={campo}
+                              index={index}
+                              listLength={camposInscritos.length}
+                              section="attendee"
+                            />
+                          ))}
+                          {provided.placeholder}
+                        </List>
+                      )}
+                    </Droppable>
+                  )}
+                </CardContent>
+              </Card>
+            </Grid>
 
-          {/* Botões de Ação */}
-          <Grid item xs={12}>
-            <div style={{ display: 'flex', gap: 16 }}>
-              <Button
-                variant="contained"
-                color="primary"
-                startIcon={<SaveIcon />}
-                onClick={handleSalvarFormulario}
-                disabled={loading || campos.length === 0}
-              >
-                {loading ? 'Salvando...' : 'Salvar Formulário'}
-              </Button>
-              <Button
-                variant="outlined"
-                startIcon={<BackIcon />}
-                onClick={() => history.push(`/app/events/${id}`)}
-              >
+            {/* Botões de Ação */}
+            <Grid item xs={12}>
+              <div style={{ display: 'flex', gap: 16 }}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  startIcon={<SaveIcon />}
+                  onClick={handleSalvarFormulario}
+                  disabled={loading || campos.length === 0}
+                >
+                  {loading ? 'Salvando...' : 'Salvar Formulário'}
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<BackIcon />}
+                  onClick={() => history.push(`/app/events/${id}`)}
+                >
                 Voltar
-              </Button>
-            </div>
+                </Button>
+              </div>
+            </Grid>
           </Grid>
-        </Grid>
         </DragDropContext>
       </PapperBlock>
 
@@ -676,13 +713,51 @@ function FormBuilder() {
                   </Button>
                 </div>
                 {formCampo.options.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <Typography variant="caption" color="textSecondary">
+                      Arraste pelo ícone para reordenar
+                    </Typography>
                     {formCampo.options.map((opcao, index) => (
-                      <Chip
+                      <div
                         key={index}
-                        label={opcao}
-                        onDelete={() => handleRemoverOpcao(index)}
-                      />
+                        draggable
+                        onDragStart={() => {
+                          dragOpcaoIndex.current = index;
+                        }}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          handleReordenarOpcao(dragOpcaoIndex.current, index);
+                          dragOpcaoIndex.current = null;
+                        }}
+                        onDragEnd={() => {
+                          dragOpcaoIndex.current = null;
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '4px 8px',
+                          border: '1px solid rgba(0, 0, 0, 0.12)',
+                          borderRadius: 8,
+                          background: '#fff'
+                        }}
+                      >
+                        <DragIndicatorIcon
+                          fontSize="small"
+                          style={{ color: 'rgba(0, 0, 0, 0.38)', cursor: 'grab' }}
+                        />
+                        <Typography variant="body2" style={{ flex: 1 }}>
+                          {opcao}
+                        </Typography>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleRemoverOpcao(index)}
+                          aria-label="Remover opção"
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </div>
                     ))}
                   </div>
                 )}

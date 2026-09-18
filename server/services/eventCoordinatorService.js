@@ -9,7 +9,7 @@
 const moment = require('moment-timezone');
 const { Op } = require('sequelize');
 const {
-  EventCoordinator, EventCoordinatorLog, EventBatch, Member
+  EventCoordinator, EventCoordinatorLog, EventBatch, Member, Registration, RegistrationPayment
 } = require('../models');
 const reportService = require('./eventCoordinatorReportService');
 const emailService = require('./emailService');
@@ -85,6 +85,37 @@ async function isWithinWindow(coordinator, now = new Date()) {
   if (starts.length && now.getTime() < Math.min(...starts)) return false;
   if (ends.length && now.getTime() > Math.max(...ends)) return false;
   return true;
+}
+
+// Houve alteracao no evento desde o ultimo relatorio? (evita notificar sem novidade).
+// - Primeiro envio (sem lastSentAt): manda so se ja existe alguma inscricao.
+// - Demais: manda se alguma inscricao foi criada/atualizada desde o ultimo envio
+//   (novos inscritos, confirmacoes de pagamento, edicoes, cancelamentos) OU se houve
+//   qualquer pagamento novo/atualizado (ex.: parcial->parcial, que nao bumpa a inscricao).
+async function houveAlteracaoDesde(coordinator) {
+  if (!coordinator.lastSentAt) {
+    const total = await Registration.count({ where: { eventId: coordinator.eventId } });
+    return total > 0;
+  }
+  const alterados = await Registration.count({
+    where: { eventId: coordinator.eventId, updatedAt: { [Op.gt]: coordinator.lastSentAt } }
+  });
+  if (alterados > 0) {
+    return true;
+  }
+  // Pagamentos novos/atualizados que podem nao ter mexido no updatedAt da inscricao
+  // (pagamento parcial seguido de outro parcial mantem o status 'partial').
+  const pagamentos = await RegistrationPayment.count({
+    where: { updatedAt: { [Op.gt]: coordinator.lastSentAt } },
+    include: [{
+      model: Registration,
+      as: 'registration',
+      attributes: [],
+      required: true,
+      where: { eventId: coordinator.eventId }
+    }]
+  });
+  return pagamentos > 0;
 }
 
 // ===================== CRUD =====================
@@ -345,6 +376,16 @@ async function dispatchDue(now = new Date(), limit = 5) {
       const within = await isWithinWindow(coordinator, now);
       if (!within) {
         // Fora do periodo de inscricao: reagenda para reavaliar depois, sem enviar.
+        coordinator.nextRunAt = computeNextRunAt(coordinator, now);
+        // eslint-disable-next-line no-await-in-loop
+        await coordinator.save();
+        skipped += 1;
+        continue;
+      }
+      // Sem alteracao desde o ultimo relatorio: reagenda e nao notifica.
+      // eslint-disable-next-line no-await-in-loop
+      const houveMudanca = await houveAlteracaoDesde(coordinator);
+      if (!houveMudanca) {
         coordinator.nextRunAt = computeNextRunAt(coordinator, now);
         // eslint-disable-next-line no-await-in-loop
         await coordinator.save();

@@ -88,7 +88,9 @@ import { getPaymentStatusChipSx, getPaymentStatusLabel } from '../../../constant
 import {
   formatDateInAppTimezone,
   formatDateTimeInAppTimezone,
-  getTodayDateInputValue
+  getTodayDateInputValue,
+  toDateTimeLocalInput,
+  dateTimeLocalToISO
 } from '../../../utils/dateTime';
 import CancelRegistrationDialog from '../../../components/CancelRegistrationDialog';
 
@@ -348,8 +350,8 @@ function EventDetails() {
         name: lote.name,
         price: evento?.requiresPayment === false ? '0' : String(lote.price ?? ''),
         maxQuantity: lote.maxQuantity || '',
-        startDate: lote.startDate ? lote.startDate.substring(0, 16) : '',
-        endDate: lote.endDate ? lote.endDate.substring(0, 16) : '',
+        startDate: toDateTimeLocalInput(lote.startDate),
+        endDate: toDateTimeLocalInput(lote.endDate),
         order: lote.order || '',
         sector: lote.sector || '',
         isActive: lote.isActive
@@ -393,6 +395,9 @@ function EventDetails() {
     const dados = {
       ...formLote,
       eventId: id,
+      // datetime-local é hora de Campo Grande — grava o instante UTC correto.
+      startDate: formLote.startDate ? dateTimeLocalToISO(formLote.startDate) : null,
+      endDate: formLote.endDate ? dateTimeLocalToISO(formLote.endDate) : null,
       price: evento?.requiresPayment === false ? 0 : parseFloat(formLote.price),
       maxQuantity: formLote.maxQuantity ? parseInt(formLote.maxQuantity, 10) : null,
       order: formLote.order ? parseInt(formLote.order, 10) : 0,

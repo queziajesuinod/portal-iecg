@@ -30,7 +30,7 @@ import {
   enviarRelatorioCoordenador, enviarTesteCoordenador
 } from '../../../api/eventsApi';
 import { listarMembros } from '../../../api/membersApi';
-import { formatDateTimeInAppTimezone } from '../../../utils/dateTime';
+import { formatDateTimeInAppTimezone, toDateTimeLocalInput, dateTimeLocalToISO } from '../../../utils/dateTime';
 
 const CONTENT_LABELS = {
   newRegistrants: 'Novos inscritos',
@@ -132,8 +132,8 @@ function EventCoordinators() {
         intervalDays: coordenador.intervalDays ?? 2,
         sendHour: coordenador.sendHour ?? 8,
         windowSource: coordenador.windowSource || 'BATCH_PERIOD',
-        windowStart: coordenador.windowStart ? coordenador.windowStart.substring(0, 16) : '',
-        windowEnd: coordenador.windowEnd ? coordenador.windowEnd.substring(0, 16) : '',
+        windowStart: toDateTimeLocalInput(coordenador.windowStart),
+        windowEnd: toDateTimeLocalInput(coordenador.windowEnd),
         isActive: coordenador.isActive !== false
       });
     } else {
@@ -181,8 +181,8 @@ function EventCoordinators() {
       intervalDays: Number(form.intervalDays) || 2,
       sendHour: Number(form.sendHour) || 0,
       windowSource: form.windowSource,
-      windowStart: form.windowSource === 'CUSTOM' && form.windowStart ? form.windowStart : null,
-      windowEnd: form.windowSource === 'CUSTOM' && form.windowEnd ? form.windowEnd : null,
+      windowStart: form.windowSource === 'CUSTOM' && form.windowStart ? dateTimeLocalToISO(form.windowStart) : null,
+      windowEnd: form.windowSource === 'CUSTOM' && form.windowEnd ? dateTimeLocalToISO(form.windowEnd) : null,
       isActive: form.isActive
     };
     salvarMutation.mutate({ coordId: editing?.id || null, dados });
