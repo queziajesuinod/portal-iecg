@@ -124,6 +124,18 @@ module.exports = (sequelize) => {
       defaultValue: false,
       comment: 'Quando true, exige aceite/assinatura do termo antes de confirmar a inscricao'
     },
+    housingEnabled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: 'Habilita o modulo de hospedagem (mostra o botao no painel do evento)'
+    },
+    teamsEnabled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: 'Habilita o modulo de times (mostra o botao no painel do evento)'
+    },
     waitlistEnabled: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
@@ -141,6 +153,18 @@ module.exports = (sequelize) => {
       allowNull: false,
       defaultValue: true,
       comment: 'true = oferta automatica FIFO por lote; false = aprovacao manual pelo admin'
+    },
+    allowBelowMinimumDeposit: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: 'Permite solicitar inscricao com entrada abaixo do sinal minimo (sujeito a aprovacao)'
+    },
+    belowMinDepositTtlHours: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 24,
+      comment: 'Prazo (horas) para pagar apos a aprovacao da entrada abaixo do minimo'
     },
     waitlistChannels: {
       type: DataTypes.JSONB,

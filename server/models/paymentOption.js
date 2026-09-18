@@ -57,6 +57,13 @@ module.exports = (sequelize) => {
       comment: 'true = evento absorve a taxa de parcelamento (não repassa). '
         + 'false (padrão) = repassa automaticamente a taxa da Cielo por bandeira.'
     },
+    interestFreeUpToInstallments: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 1,
+      comment: 'Parcelas sem juros ate este numero (1 = juros a partir de 2x). '
+        + 'Ex.: 3 => 1x/2x/3x sem juros; juros a partir de 4x.'
+    },
     isActive: {
       type: DataTypes.BOOLEAN,
       defaultValue: true

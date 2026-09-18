@@ -148,7 +148,7 @@ module.exports = [
         name: 'Cupons de Desconto',
         link: '/app/cupons',
         icon: 'ion-ios-pricetag-outline',
-        permission: 'EVENTS_ACESS'
+        permission: 'COUPONS_MANAGE'
       },
       {
         key: 'financeiroEventos',

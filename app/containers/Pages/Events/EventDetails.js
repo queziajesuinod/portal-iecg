@@ -303,7 +303,8 @@ function EventDetails() {
     paymentType: 'credit_card',
     maxInstallments: 1,
     installmentInterestRates: {},
-    absorverTaxaParcelamento: false
+    absorverTaxaParcelamento: false,
+    interestFreeUpToInstallments: 1
   });
 
   useEffect(() => {
@@ -487,7 +488,8 @@ function EventDetails() {
         installmentInterestRates: Object.keys(normalizedRates).length > 0
           ? normalizedRates
           : buildLegacyRates(maxInstallments, pagamento.interestRate),
-        absorverTaxaParcelamento: !!pagamento.absorverTaxaParcelamento
+        absorverTaxaParcelamento: !!pagamento.absorverTaxaParcelamento,
+        interestFreeUpToInstallments: pagamento.interestFreeUpToInstallments || 1
       });
     } else {
       setPagamentoEdicao(null);
@@ -495,7 +497,8 @@ function EventDetails() {
         paymentType: 'credit_card',
         maxInstallments: 1,
         installmentInterestRates: {},
-        absorverTaxaParcelamento: false
+        absorverTaxaParcelamento: false,
+        interestFreeUpToInstallments: 1
       });
     }
     setDialogPagamentoAberto(true);
@@ -528,10 +531,15 @@ function EventDetails() {
       formPagamento.installmentInterestRates,
       maxInstallments
     );
+    const interestFreeUpToInstallments = Math.min(
+      maxInstallments,
+      Math.max(1, parseInt(formPagamento.interestFreeUpToInstallments, 10) || 1)
+    );
     const dados = {
       ...formPagamento,
       maxInstallments,
-      installmentInterestRates
+      installmentInterestRates,
+      interestFreeUpToInstallments
     };
     salvarPagamentoMutation.mutate({ pagamentoId: pagamentoEdicao?.id || null, dados });
   };
@@ -1340,16 +1348,18 @@ function EventDetails() {
               Regras de Bloqueio
             </Button>
           </Grid>
-          <Grid item xs={12} sm={6} md="auto">
-            <Button
-              fullWidth
-              variant="outlined"
-              startIcon={<DescriptionIcon />}
-              onClick={() => history.push(`/app/events/${id}/termo`)}
-            >
-              Termo de Responsabilidade
-            </Button>
-          </Grid>
+          {evento?.requiresLiabilityTerm && (
+            <Grid item xs={12} sm={6} md="auto">
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<DescriptionIcon />}
+                onClick={() => history.push(`/app/events/${id}/termo`)}
+              >
+                Termo de Responsabilidade
+              </Button>
+            </Grid>
+          )}
           <Grid item xs={12} sm={6} md="auto">
             <Button
               fullWidth
@@ -1360,36 +1370,54 @@ function EventDetails() {
               Coordenadores
             </Button>
           </Grid>
-          <Grid item xs={12} sm={6} md="auto">
-            <Button
-              fullWidth
-              variant="outlined"
-              startIcon={<GroupsIcon />}
-              onClick={() => history.push(`/app/events/${id}/lista-espera`)}
-            >
-              Lista de espera
-            </Button>
-          </Grid>
-          <Grid item xs={12} sm={6} md="auto">
-            <Button
-              fullWidth
-              variant="outlined"
-              startIcon={<BedIcon />}
-              onClick={() => history.push(`/app/events/${id}/housing`)}
-            >
-              Hospedagem
-            </Button>
-          </Grid>
-          <Grid item xs={12} sm={6} md="auto">
-            <Button
-              fullWidth
-              variant="outlined"
-              startIcon={<GroupsIcon />}
-              onClick={() => history.push(`/app/events/${id}/teams`)}
-            >
-              Times
-            </Button>
-          </Grid>
+          {evento?.waitlistEnabled && (
+            <Grid item xs={12} sm={6} md="auto">
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<GroupsIcon />}
+                onClick={() => history.push(`/app/events/${id}/lista-espera`)}
+              >
+                Lista de espera
+              </Button>
+            </Grid>
+          )}
+          {evento?.allowBelowMinimumDeposit && (
+            <Grid item xs={12} sm={6} md="auto">
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<GroupsIcon />}
+                onClick={() => history.push(`/app/events/${id}/solicitacoes-entrada`)}
+              >
+                Solicitações de entrada
+              </Button>
+            </Grid>
+          )}
+          {evento?.housingEnabled && (
+            <Grid item xs={12} sm={6} md="auto">
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<BedIcon />}
+                onClick={() => history.push(`/app/events/${id}/housing`)}
+              >
+                Hospedagem
+              </Button>
+            </Grid>
+          )}
+          {evento?.teamsEnabled && (
+            <Grid item xs={12} sm={6} md="auto">
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<GroupsIcon />}
+                onClick={() => history.push(`/app/events/${id}/teams`)}
+              >
+                Times
+              </Button>
+            </Grid>
+          )}
         </Grid>
       </PapperBlock>
 
@@ -2154,6 +2182,24 @@ function EventDetails() {
                     inputProps={{ min: 1, max: 12 }}
                   />
                 </Grid>
+
+                {Number(formPagamento.maxInstallments || 1) > 1 && (
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Parcelas sem juros até"
+                      value={formPagamento.interestFreeUpToInstallments ?? 1}
+                      onChange={(e) => {
+                        const max = Number(formPagamento.maxInstallments || 1);
+                        const v = Math.max(1, Math.min(max, Number(e.target.value) || 1));
+                        setFormPagamento((prev) => ({ ...prev, interestFreeUpToInstallments: v }));
+                      }}
+                      inputProps={{ min: 1, max: Number(formPagamento.maxInstallments || 1) }}
+                      helperText={`Até ${formPagamento.interestFreeUpToInstallments ?? 1}x sem juros; juros a partir de ${(Number(formPagamento.interestFreeUpToInstallments ?? 1)) + 1}x. (1 = juros já a partir de 2x)`}
+                    />
+                  </Grid>
+                )}
 
                 <Grid item xs={12}>
                   <FormControlLabel

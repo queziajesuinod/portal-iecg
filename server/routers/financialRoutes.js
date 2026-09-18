@@ -4,6 +4,8 @@ const requirePermission = require('../middlewares/requirePermission');
 
 const router = express.Router();
 const requireFinancialAccess = requirePermission(['EVENTS_ACESS', 'EVENTS_ACCESS', 'EVENTOS_LISTAR']);
+// Configurar a tabela de taxas (escrita) exige permissao dedicada — coordenador nao tem.
+const requireFeeConfigManage = requirePermission(['FEE_CONFIG_MANAGE']);
 
 router.use(requireFinancialAccess);
 
@@ -11,7 +13,7 @@ router.get('/records', financialController.listRecords);
 router.get('/entries/export', financialController.exportEntries);
 router.get('/fee-config', financialController.getFeeConfig);
 router.get('/fee-config/historico', financialController.getHistoricoFeeConfig);
-router.put('/fee-config', financialController.updateFeeConfig);
+router.put('/fee-config', requireFeeConfigManage, financialController.updateFeeConfig);
 router.get('/expenses/export', financialController.exportExpenses);
 router.post('/expenses', financialController.createExpense);
 router.put('/expenses/:id', financialController.updateExpense);

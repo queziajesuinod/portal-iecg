@@ -50,6 +50,12 @@ function buildPaymentOptionPayload(dados = {}, current = null) {
     dados.absorverTaxaParcelamento ?? current?.absorverTaxaParcelamento ?? false
   );
 
+  // Parcelas sem juros ate X (1 = juros a partir de 2x). Limitado a [1, maxInstallments].
+  const rawFreeUpTo = Number(dados.interestFreeUpToInstallments ?? current?.interestFreeUpToInstallments ?? 1);
+  const interestFreeUpToInstallments = Number.isInteger(rawFreeUpTo) && rawFreeUpTo >= 1
+    ? Math.min(rawFreeUpTo, maxInstallments)
+    : 1;
+
   return {
     paymentType,
     maxInstallments: isCreditCard ? maxInstallments : 1,
@@ -57,6 +63,7 @@ function buildPaymentOptionPayload(dados = {}, current = null) {
     interestType: isCreditCard ? sanitizedInterestType : 'percentage',
     installmentInterestRates,
     absorverTaxaParcelamento: isCreditCard ? absorverTaxaParcelamento : false,
+    interestFreeUpToInstallments: isCreditCard ? interestFreeUpToInstallments : 1,
     isActive: dados.isActive ?? current?.isActive ?? true
   };
 }
@@ -122,6 +129,7 @@ async function atualizar(id, dados) {
   paymentOption.interestType = payload.interestType;
   paymentOption.installmentInterestRates = payload.installmentInterestRates;
   paymentOption.absorverTaxaParcelamento = payload.absorverTaxaParcelamento;
+  paymentOption.interestFreeUpToInstallments = payload.interestFreeUpToInstallments;
   paymentOption.isActive = payload.isActive;
 
   await paymentOption.save();

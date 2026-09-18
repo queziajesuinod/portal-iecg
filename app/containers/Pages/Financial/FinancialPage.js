@@ -64,6 +64,7 @@ import {
   deletarEntradaManual
 } from '../../../api/financialApi';
 import { getPaymentStatusLabel, getPaymentStatusChipSx } from '../../../constants/paymentStatus';
+import { hasAnyPermission } from '../../../utils/permissions';
 import { useConfirm } from '../../../utils/useConfirm';
 import {
   formatDateInAppTimezone,
@@ -1079,9 +1080,11 @@ function FinancialPage() {
       >
         <Box display="flex" justifyContent="space-between" alignItems="center" style={{ marginBottom: 16 }}>
           <Typography variant="h6">Configuracao de Taxas</Typography>
-          <Button variant="outlined" color="primary" onClick={() => setFeeConfigModalOpen(true)}>
-            Configurar taxas
-          </Button>
+          {hasAnyPermission(['FEE_CONFIG_MANAGE']) && (
+            <Button variant="outlined" color="primary" onClick={() => setFeeConfigModalOpen(true)}>
+              Configurar taxas
+            </Button>
+          )}
         </Box>
 
         <Grid container spacing={2} alignItems="flex-end" style={{ marginBottom: 16 }}>

@@ -284,3 +284,20 @@ export const ofertarEntradaListaEspera = (id, targetBatchId = null) => fetchWith
 export const reenviarOfertaListaEspera = (id) => fetchWithAuth(`${API_URL}/api/admin/events/waitlist/${id}/resend`, {
   method: 'POST',
 });
+
+// ============= SOLICITAÇÃO DE ENTRADA ABAIXO DO MÍNIMO (admin) =============
+export const listarSolicitacoesEntrada = (eventId, params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/deposit-requests${qs ? `?${qs}` : ''}`);
+};
+
+export const resumoSolicitacoesEntrada = (eventId) => fetchWithAuth(`${API_URL}/api/admin/events/${eventId}/deposit-requests/summary`);
+
+export const aprovarSolicitacaoEntrada = (id, approvedAmount = null) => fetchWithAuth(`${API_URL}/api/admin/events/deposit-requests/${id}/approve`, {
+  method: 'POST',
+  body: JSON.stringify(approvedAmount != null ? { approvedAmount } : {}),
+});
+
+export const recusarSolicitacaoEntrada = (id) => fetchWithAuth(`${API_URL}/api/admin/events/deposit-requests/${id}/reject`, {
+  method: 'POST',
+});

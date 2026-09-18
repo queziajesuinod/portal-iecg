@@ -79,7 +79,11 @@ async function getPublicFeeConfig(req, res) {
   try {
     const config = await financialService.getFeeConfig();
     res.status(200).json({
-      creditCardBrandRates: config.creditCardBrandRates || {}
+      creditCardBrandRates: config.creditCardBrandRates || {},
+      // Taxa default GERAL (fallback quando a bandeira nao e reconhecida/nao tem taxa),
+      // para o checkout exibir o mesmo valor que sera cobrado.
+      creditCardInstallmentPercent: config.creditCardInstallmentPercent || {},
+      creditCardDefaultPercent: Number(config.creditCardDefaultPercent) || 0
     });
   } catch (error) {
     res.status(500).json({ message: error.message || 'Erro ao carregar taxas' });

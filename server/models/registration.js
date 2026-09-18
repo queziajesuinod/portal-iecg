@@ -144,6 +144,35 @@ module.exports = (sequelize) => {
       type: DataTypes.TEXT,
       allowNull: true,
     },
+    depositApprovalStatus: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      defaultValue: 'none',
+      comment: 'none | requested | approved | rejected (solicitacao de entrada abaixo do minimo)'
+    },
+    requestedDepositAmount: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      comment: 'Valor de entrada que a pessoa solicitou (abaixo do minimo)'
+    },
+    approvedDepositAmount: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      comment: 'Valor de entrada aprovado pelo admin (min efetivo desta inscricao)'
+    },
+    depositApprovedBy: {
+      type: DataTypes.UUID,
+      allowNull: true,
+    },
+    depositApprovedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    depositOfferExpiresAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'Prazo para pagar apos a aprovacao da entrada'
+    },
   }, {
     sequelize,
     modelName: 'Registration',

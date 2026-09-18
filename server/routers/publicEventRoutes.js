@@ -35,6 +35,10 @@ const waitlistController = require('../controllers/waitlistController');
 router.post('/:eventId/waitlist', waitlistController.entrar);
 router.get('/:eventId/waitlist/position', waitlistController.posicao);
 
+// ============= SOLICITAÇÃO DE ENTRADA ABAIXO DO MÍNIMO =============
+const depositRequestController = require('../controllers/depositRequestController');
+router.post('/:eventId/deposit-request', depositRequestController.solicitar);
+
 // ============= CONSULTAR INSCRIÇÃO POR CÓDIGO =============
 router.get('/registrations/:orderCode', registrationController.buscarPorCodigo);
 

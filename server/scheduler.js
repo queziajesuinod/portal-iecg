@@ -277,6 +277,18 @@ async function tickWaitlistOffers() {
   }
 }
 
+async function tickDepositRequests() {
+  try {
+    const depositRequestService = require('./services/depositRequestService');
+    const result = await depositRequestService.expirarAprovacoesVencidas({ limit: WAITLIST_EXPIRE_BATCH_SIZE });
+    if (result.expired > 0) {
+      console.log(`[Scheduler] solicitacoes de entrada: aprovacoes expiradas=${result.expired}`);
+    }
+  } catch (err) {
+    console.error('[Scheduler] Erro na expiracao de aprovacoes de entrada:', err.message);
+  }
+}
+
 const safe = (fn) => fn().catch((err) => console.error(`[Scheduler] Erro no tick (${fn.name}):`, err.message));
 
 async function tick() {
@@ -299,6 +311,7 @@ async function tick() {
       tickClipCleanup,
       tickCoordinatorReports,
       tickWaitlistOffers,
+      tickDepositRequests,
     ].reduce((promise, fn) => promise.then(() => safe(fn)), Promise.resolve());
   } catch (err) {
     console.error('[Scheduler] Erro no tick:', err.message);

@@ -723,6 +723,11 @@ async function criarEvento(body, userId) {
     waitlistChannels,
     waitlistAutoOffer,
     ticketChannels,
+    allowBelowMinimumDeposit,
+    belowMinDepositTtlHours,
+    requiresLiabilityTerm,
+    housingEnabled,
+    teamsEnabled,
   } = body;
 
   if (!title) {
@@ -764,6 +769,11 @@ async function criarEvento(body, userId) {
     ticketChannels: ticketChannels && typeof ticketChannels === 'object'
       ? ticketChannels
       : { email: true, whatsapp: false },
+    allowBelowMinimumDeposit: Boolean(allowBelowMinimumDeposit),
+    belowMinDepositTtlHours: Number(belowMinDepositTtlHours) > 0 ? Number(belowMinDepositTtlHours) : 24,
+    requiresLiabilityTerm: Boolean(requiresLiabilityTerm),
+    housingEnabled: Boolean(housingEnabled),
+    teamsEnabled: Boolean(teamsEnabled),
     currentRegistrations: 0,
     isActive: true,
     createdBy: userId,
@@ -833,6 +843,13 @@ async function atualizarEvento(id, body) {
   if (body.ticketChannels != null && typeof body.ticketChannels === 'object') {
     event.ticketChannels = body.ticketChannels;
   }
+  if (body.allowBelowMinimumDeposit != null) event.allowBelowMinimumDeposit = Boolean(body.allowBelowMinimumDeposit);
+  if (body.belowMinDepositTtlHours != null && Number(body.belowMinDepositTtlHours) > 0) {
+    event.belowMinDepositTtlHours = Number(body.belowMinDepositTtlHours);
+  }
+  if (body.requiresLiabilityTerm != null) event.requiresLiabilityTerm = Boolean(body.requiresLiabilityTerm);
+  if (body.housingEnabled != null) event.housingEnabled = Boolean(body.housingEnabled);
+  if (body.teamsEnabled != null) event.teamsEnabled = Boolean(body.teamsEnabled);
 
   await event.save();
   if (!nextRequiresPayment) {
@@ -916,8 +933,11 @@ async function duplicarEvento(eventId, userId) {
         id: uuid.v4(),
         title: copyTitle,
         description: event.description,
-        startDate: event.startDate,
-        endDate: event.endDate,
+        // Duplicado nasce SEM datas: um evento e' "finalizado" quando a data esta no
+        // passado. Copiar as datas do original faria o duplicado nascer finalizado.
+        // O admin define as datas da nova edicao ao editar.
+        startDate: null,
+        endDate: null,
         location: event.location,
         imageUrl: event.imageUrl,
         maxRegistrations: event.maxRegistrations,
@@ -947,8 +967,9 @@ async function duplicarEvento(eventId, userId) {
         name: batch.name,
         price: newEvent.requiresPayment === false ? 0 : batch.price,
         maxQuantity: batch.maxQuantity,
-        startDate: batch.startDate,
-        endDate: batch.endDate,
+        // Lotes tambem sem datas (evita lote "encerrado" por data antiga no duplicado).
+        startDate: null,
+        endDate: null,
         isActive: batch.isActive,
         order: batch.order,
       },

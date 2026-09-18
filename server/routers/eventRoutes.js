@@ -12,6 +12,7 @@ const teamsController = require('../controllers/teamsController');
 const eventCoordinatorController = require('../controllers/eventCoordinatorController');
 const liabilityTermController = require('../controllers/liabilityTermController');
 const waitlistController = require('../controllers/waitlistController');
+const depositRequestController = require('../controllers/depositRequestController');
 const requirePermission = require('../middlewares/requirePermission');
 const { eventVisibilityGuard } = require('../services/eventVisibility');
 const requireEventAccess = requirePermission(['EVENTS_ACESS', 'EVENTS_ACCESS', 'EVENTOS_LISTAR']);
@@ -29,9 +30,9 @@ router.use(requireEventAccess);
 router.param('eventId', (req, res, next) => eventVisibilityGuard('eventId')(req, res, next));
 
 // ============= CUPONS (ANTES DE /:id) =============
-router.get('/coupons', couponController.listar);
-router.get('/coupons/:id', couponController.buscarPorId);
-// Criar/editar/remover cupom: somente admin (ADMIN_FULL_ACCESS) ou perfil com COUPONS_MANAGE.
+// Todo o modulo de cupom exige COUPONS_MANAGE (coordenador nao tem acesso).
+router.get('/coupons', requireCouponsManage, couponController.listar);
+router.get('/coupons/:id', requireCouponsManage, couponController.buscarPorId);
 router.post('/coupons', requireCouponsManage, couponController.criar);
 router.put('/coupons/:id', requireCouponsManage, couponController.atualizar);
 router.delete('/coupons/:id', requireCouponsManage, couponController.remover);
@@ -71,6 +72,10 @@ router.post('/coordinators/:id/test', requireCoordinatorManage, eventCoordinator
 router.delete('/waitlist/:id', waitlistController.remover);
 router.post('/waitlist/:id/offer', waitlistController.ofertar);
 router.post('/waitlist/:id/resend', waitlistController.reenviar);
+
+// ============= SOLICITAÇÃO DE ENTRADA (por id da inscrição — ANTES DE /:id) =============
+router.post('/deposit-requests/:id/approve', depositRequestController.aprovar);
+router.post('/deposit-requests/:id/reject', depositRequestController.recusar);
 
 // ============= INSCRIÇÕES (ADMIN) (ANTES DE /:id) =============
 router.get('/registrations', registrationController.listar);
@@ -113,6 +118,8 @@ router.get('/:eventId/registration-stats', eventController.estatisticasInscricoe
 router.get('/:eventId/waitlist/summary', waitlistController.resumo);
 router.get('/:eventId/waitlist/overview', waitlistController.overview);
 router.get('/:eventId/waitlist', waitlistController.listar);
+router.get('/:eventId/deposit-requests/summary', depositRequestController.resumo);
+router.get('/:eventId/deposit-requests', depositRequestController.listar);
 
 // ============= HOSPEDAGEM =============
 router.get('/:eventId/housing/config', housingController.getConfig);

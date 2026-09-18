@@ -268,25 +268,43 @@ function normalizarBandeiraParaTaxa(brand) {
  * Taxa TOTAL da Cielo (%) para a bandeira e a quantidade de parcelas, lida da
  * configuração global de taxas (creditCardBrandRates). Retorna null se não houver.
  */
-function obterTaxaCieloPorBandeira(cieloBrandRates, brand, installments) {
-  if (!cieloBrandRates || typeof cieloBrandRates !== 'object') {
+// Resolve a taxa TOTAL da Cielo (%) para a parcela: primeiro a taxa especifica da
+// bandeira; se a bandeira nao for reconhecida OU nao tiver taxa cadastrada, cai na
+// TAXA DEFAULT GERAL do fee config (creditCardInstallmentPercent[parcela] -> creditCardDefaultPercent).
+// `taxas` = { brandRates, installmentPercent, defaultPercent }.
+function obterTaxaCielo(taxas, brand, installments) {
+  if (!taxas || typeof taxas !== 'object') {
     return null;
   }
+  const inst = String(installments);
+
+  // 1) Especifica da bandeira.
+  const brandRates = taxas.brandRates && typeof taxas.brandRates === 'object' ? taxas.brandRates : {};
   const brandKey = normalizarBandeiraParaTaxa(brand);
-  if (!brandKey) {
-    return null;
+  const cfg = brandKey ? brandRates[brandKey] : null;
+  if (cfg) {
+    const map = cfg.installmentPercent && typeof cfg.installmentPercent === 'object' ? cfg.installmentPercent : {};
+    const perInstallment = Number(map[inst]);
+    if (Number.isFinite(perInstallment) && perInstallment > 0) {
+      return perInstallment;
+    }
+    const def = Number(cfg.defaultPercent);
+    if (Number.isFinite(def) && def > 0) {
+      return def;
+    }
   }
-  const cfg = cieloBrandRates[brandKey];
-  if (!cfg) {
-    return null;
+
+  // 2) Fallback: taxa default geral (bandeira nao reconhecida ou sem taxa da bandeira).
+  const geralMap = taxas.installmentPercent && typeof taxas.installmentPercent === 'object' ? taxas.installmentPercent : {};
+  const geralPer = Number(geralMap[inst]);
+  if (Number.isFinite(geralPer) && geralPer > 0) {
+    return geralPer;
   }
-  const map = cfg.installmentPercent && typeof cfg.installmentPercent === 'object' ? cfg.installmentPercent : {};
-  const perInstallment = Number(map[String(installments)]);
-  if (Number.isFinite(perInstallment) && perInstallment > 0) {
-    return perInstallment;
+  const geralDef = Number(taxas.defaultPercent);
+  if (Number.isFinite(geralDef) && geralDef > 0) {
+    return geralDef;
   }
-  const def = Number(cfg.defaultPercent);
-  return Number.isFinite(def) && def > 0 ? def : null;
+  return null;
 }
 
 /**
@@ -298,7 +316,7 @@ function obterTaxaCieloPorBandeira(cieloBrandRates, brand, installments) {
  *   - 2x+ → usa a taxa TOTAL da Cielo daquela bandeira/parcela (config global)
  *     com gross-up: total = base ÷ (1 − taxa%/100), para cobrir 100% da taxa.
  *
- * opts: { brand, cieloBrandRates } — sem opts, cai no comportamento legado
+ * opts: { brand, taxasRepasse } — sem opts, cai no comportamento legado
  * (juros configurado por parcela no próprio evento), preservando compatibilidade.
  */
 function calcularValorComJurosPorParcelas(valorBase, paymentOption, parcelas, opts = {}) {
@@ -310,13 +328,19 @@ function calcularValorComJurosPorParcelas(valorBase, paymentOption, parcelas, op
     return valor;
   }
 
+  // Parcelas sem juros ate X: quem parcela ate esse limite nao paga juros.
+  const freeUpTo = Number(paymentOption.interestFreeUpToInstallments) || 1;
+  if (installments <= freeUpTo) {
+    return valor;
+  }
+
   // Opt-out por evento: absorve a taxa de parcelamento.
   if (paymentOption.absorverTaxaParcelamento) {
     return valor;
   }
 
-  // Preferencial: taxa real da Cielo por bandeira, com gross-up.
-  const taxaCielo = obterTaxaCieloPorBandeira(opts.cieloBrandRates, opts.brand, installments);
+  // Preferencial: taxa real da Cielo (bandeira -> default geral), com gross-up.
+  const taxaCielo = obterTaxaCielo(opts.taxasRepasse, opts.brand, installments);
   if (Number.isFinite(taxaCielo) && taxaCielo > 0 && taxaCielo < 100) {
     return normalizarValor(valor / (1 - (taxaCielo / 100)));
   }
@@ -333,6 +357,13 @@ function calcularValorComJurosPorParcelas(valorBase, paymentOption, parcelas, op
 
   const legacyRate = Number(paymentOption.interestRate || 0);
   if (!Number.isFinite(legacyRate) || legacyRate <= 0) {
+    // Parcela cobravel (2x+, sem absorver, acima do "sem juros"), mas NENHUMA taxa foi
+    // resolvida (nem bandeira, nem default geral, nem juros do evento). Cobra o valor base
+    // — mantido por compatibilidade, mas logado para nao passar despercebido.
+    console.warn(
+      `[taxa-parcelamento] cobranca em ${installments}x SEM taxa resolvida `
+      + `(paymentOption=${paymentOption?.id || '?'}, brand=${opts.brand || 'n/d'}). Valor base mantido.`
+    );
     return valor;
   }
 
@@ -362,7 +393,7 @@ function detectarBandeiraParaTaxa(paymentOption, paymentData = {}) {
  * Carrega as taxas Cielo por bandeira (config global) apenas quando há repasse
  * de parcelamento a calcular. Retorna null caso contrário.
  */
-async function obterCieloBrandRatesParaRepasse(paymentOption, parcelas) {
+async function obterTaxasCieloParaRepasse(paymentOption, parcelas) {
   const installments = Number(parcelas) || 1;
   if (
     paymentOption?.paymentType !== 'credit_card'
@@ -373,7 +404,12 @@ async function obterCieloBrandRatesParaRepasse(paymentOption, parcelas) {
   }
   try {
     const feeConfig = await financialService.getFeeConfig();
-    return feeConfig?.creditCardBrandRates || null;
+    if (!feeConfig) return null;
+    return {
+      brandRates: feeConfig.creditCardBrandRates || {},
+      installmentPercent: feeConfig.creditCardInstallmentPercent || {},
+      defaultPercent: Number(feeConfig.creditCardDefaultPercent) || 0,
+    };
   } catch (error) {
     console.error('[registrationService] Falha ao carregar taxas Cielo para repasse:', error.message);
     return null;
@@ -1139,10 +1175,10 @@ async function processarInscricaoInterna(dadosInscricao) {
     : precoFinal;
   // Repasse automático da taxa de parcelamento por bandeira (2x+), da config global.
   const bandeiraParaTaxa = detectarBandeiraParaTaxa(paymentOption, paymentData);
-  const cieloBrandRates = await obterCieloBrandRatesParaRepasse(paymentOption, parcelas);
+  const taxasRepasse = await obterTaxasCieloParaRepasse(paymentOption, parcelas);
   const valorFinalComJuros = calcularValorComJurosPorParcelas(valorBasePagamento, paymentOption, parcelas, {
     brand: bandeiraParaTaxa,
-    cieloBrandRates
+    taxasRepasse
   });
 
   // 8.2. Processar pagamento conforme o tipo
@@ -1759,9 +1795,15 @@ async function criarPagamentoOnline(registrationId, payload = {}) {
     throw new Error('Valor do pagamento não pode ser maior que o saldo restante');
   }
 
-  if (registration.event?.minDepositAmount && resumoAtual?.paidTotal === 0) {
-    if (amount < Number(registration.event.minDepositAmount)) {
-      throw new Error(`Valor mínimo de sinal é R$ ${Number(registration.event.minDepositAmount).toFixed(2).replace('.', ',')}`);
+  // Minimo efetivo desta inscricao: se teve entrada abaixo do minimo APROVADA, usa o
+  // valor aprovado; caso contrario, o sinal minimo do evento.
+  const minSinalEfetivo = (registration.depositApprovalStatus === 'approved' && registration.approvedDepositAmount != null)
+    ? Number(registration.approvedDepositAmount)
+    : Number(registration.event?.minDepositAmount || 0);
+
+  if (minSinalEfetivo && resumoAtual?.paidTotal === 0) {
+    if (amount < minSinalEfetivo) {
+      throw new Error(`Valor mínimo de pagamento é R$ ${minSinalEfetivo.toFixed(2).replace('.', ',')}`);
     }
   }
 
@@ -1785,16 +1827,16 @@ async function criarPagamentoOnline(registrationId, payload = {}) {
     throw new Error('Valor do pagamento nÃ£o pode ser maior que o saldo restante');
   }
 
-  if (registration.event?.minDepositAmount && resumoAtual?.paidTotal === 0) {
-    if (amount < Number(registration.event.minDepositAmount)) {
-      throw new Error(`Valor mÃ­nimo de sinal Ã© R$ ${Number(registration.event.minDepositAmount).toFixed(2).replace('.', ',')}`);
+  if (minSinalEfetivo && resumoAtual?.paidTotal === 0) {
+    if (amount < minSinalEfetivo) {
+      throw new Error(`Valor mínimo de pagamento é R$ ${minSinalEfetivo.toFixed(2).replace('.', ',')}`);
     }
   }
   const bandeiraParaTaxa = detectarBandeiraParaTaxa(paymentOption, paymentData);
-  const cieloBrandRates = await obterCieloBrandRatesParaRepasse(paymentOption, parcelas);
+  const taxasRepasse = await obterTaxasCieloParaRepasse(paymentOption, parcelas);
   const valorFinalComJuros = calcularValorComJurosPorParcelas(amount, paymentOption, parcelas, {
     brand: bandeiraParaTaxa,
-    cieloBrandRates
+    taxasRepasse
   });
 
   const merchantOrderId = `${registration.orderCode}-P${pagamentosExistentes.length + 1}`;

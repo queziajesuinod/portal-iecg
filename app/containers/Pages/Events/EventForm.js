@@ -83,6 +83,11 @@ function EventForm() {
     registrationPaymentMode: 'SINGLE',
     minDepositAmount: '',
     maxPaymentCount: '',
+    allowBelowMinimumDeposit: false,
+    belowMinDepositTtlHours: '24',
+    requiresLiabilityTerm: false,
+    housingEnabled: false,
+    teamsEnabled: false,
     waitlistEnabled: false,
     waitlistOfferTtlHours: '12',
     waitlistChannels: { email: true, whatsapp: false },
@@ -124,6 +129,11 @@ function EventForm() {
         registrationPaymentMode: evento.registrationPaymentMode || 'SINGLE',
         minDepositAmount: evento.minDepositAmount != null ? evento.minDepositAmount.toString() : '',
         maxPaymentCount: evento.maxPaymentCount != null ? evento.maxPaymentCount.toString() : '',
+        allowBelowMinimumDeposit: evento.allowBelowMinimumDeposit === true,
+        belowMinDepositTtlHours: evento.belowMinDepositTtlHours != null ? evento.belowMinDepositTtlHours.toString() : '24',
+        requiresLiabilityTerm: evento.requiresLiabilityTerm === true,
+        housingEnabled: evento.housingEnabled === true,
+        teamsEnabled: evento.teamsEnabled === true,
         waitlistEnabled: evento.waitlistEnabled === true,
         waitlistOfferTtlHours: evento.waitlistOfferTtlHours != null ? evento.waitlistOfferTtlHours.toString() : '12',
         waitlistChannels: evento.waitlistChannels && typeof evento.waitlistChannels === 'object'
@@ -474,10 +484,89 @@ function EventForm() {
                               helperText="Opcional"
                             />
                           </Grid>
+                          <Grid item xs={12}>
+                            <FormControlLabel
+                              control={(
+                                <Switch
+                                  checked={formData.allowBelowMinimumDeposit === true}
+                                  onChange={(e) => setFormData((prev) => ({ ...prev, allowBelowMinimumDeposit: e.target.checked }))}
+                                  disabled={loading}
+                                />
+                              )}
+                              label="Permitir solicitar entrada abaixo do sinal mínimo (sujeito a aprovação)"
+                            />
+                            <Typography variant="caption" color="textSecondary" display="block">
+                              Quem não tem o mínimo pode pedir para entrar com o valor que consegue. Você aprova (ou recusa) na aba
+                              “Solicitações de entrada” do evento; se aprovar, a pessoa paga o valor liberado.
+                            </Typography>
+                          </Grid>
+                          {formData.allowBelowMinimumDeposit && (
+                            <Grid item xs={12} sm={6}>
+                              <TextField
+                                fullWidth
+                                type="number"
+                                label="Prazo para pagar após aprovar (horas)"
+                                name="belowMinDepositTtlHours"
+                                value={formData.belowMinDepositTtlHours}
+                                onChange={handleChange}
+                                disabled={loading}
+                                inputProps={{ min: 1 }}
+                                helperText="Após aprovar, tempo para a pessoa pagar antes de expirar"
+                              />
+                            </Grid>
+                          )}
                         </Grid>
                       </Box>
                     </Grid>
                   )}
+                  <Grid item xs={12}>
+                    <Typography variant="h6" gutterBottom>
+                      Recursos do evento
+                    </Typography>
+                    <Box
+                      component="div"
+                      sx={{
+                        background: theme.palette.background.paper,
+                        borderRadius: 2,
+                        p: 2,
+                        boxShadow: theme.shadows[1],
+                      }}
+                    >
+                      <Typography variant="body2" color="textSecondary" sx={{ mb: 0.5 }}>
+                        Marque o que este evento terá. O botão correspondente só aparece no painel do evento quando habilitado.
+                      </Typography>
+                      <FormControlLabel
+                        control={(
+                          <Switch
+                            checked={formData.requiresLiabilityTerm === true}
+                            onChange={(e) => setFormData((prev) => ({ ...prev, requiresLiabilityTerm: e.target.checked }))}
+                            disabled={loading}
+                          />
+                        )}
+                        label="Termo de responsabilidade"
+                      />
+                      <FormControlLabel
+                        control={(
+                          <Switch
+                            checked={formData.housingEnabled === true}
+                            onChange={(e) => setFormData((prev) => ({ ...prev, housingEnabled: e.target.checked }))}
+                            disabled={loading}
+                          />
+                        )}
+                        label="Hospedagem"
+                      />
+                      <FormControlLabel
+                        control={(
+                          <Switch
+                            checked={formData.teamsEnabled === true}
+                            onChange={(e) => setFormData((prev) => ({ ...prev, teamsEnabled: e.target.checked }))}
+                            disabled={loading}
+                          />
+                        )}
+                        label="Times"
+                      />
+                    </Box>
+                  </Grid>
                   <Grid item xs={12}>
                     <Typography variant="h6" gutterBottom>
                       Envio do ingresso
