@@ -34,6 +34,7 @@ import {
 } from '../../../api/eventsApi';
 import { fetchGeocode } from '../../../utils/googleGeocode';
 import { EVENT_TYPE_OPTIONS } from '../../../constants/eventTypes';
+import { toDateTimeLocalInput, dateTimeLocalToISO } from '../../../utils/dateTime';
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 const toDataUrl = (file) => new Promise((resolve, reject) => {
@@ -111,8 +112,8 @@ function EventForm() {
       setFormData({
         title: evento.title || '',
         description: evento.description || '',
-        startDate: evento.startDate ? evento.startDate.substring(0, 16) : '',
-        endDate: evento.endDate ? evento.endDate.substring(0, 16) : '',
+        startDate: toDateTimeLocalInput(evento.startDate),
+        endDate: toDateTimeLocalInput(evento.endDate),
         location: evento.location || '',
         imageUrl: evento.imageUrl || '',
         maxRegistrations: evento.maxRegistrations || '',
@@ -262,6 +263,10 @@ function EventForm() {
       const dados = {
         ...formData,
         description: descriptionHtml,
+        // O input datetime-local é hora de parede de Campo Grande — converte para o
+        // instante UTC correto ao gravar (evita o horário aparecer -4h no ticket).
+        startDate: formData.startDate ? dateTimeLocalToISO(formData.startDate) : null,
+        endDate: formData.endDate ? dateTimeLocalToISO(formData.endDate) : null,
         maxRegistrations: formData.maxRegistrations ? parseInt(formData.maxRegistrations, 10) : null,
         maxPerBuyer: formData.maxPerBuyer ? parseInt(formData.maxPerBuyer, 10) : null,
         latitude: formData.latitude ? parseFloat(formData.latitude) : null,
