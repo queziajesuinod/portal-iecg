@@ -1,5 +1,5 @@
 import React, {
-  useState, useEffect, useRef, useCallback, useMemo
+  useState, useEffect, useCallback, useMemo
 } from 'react';
 import PropTypes from 'prop-types';
 import { Helmet } from 'react-helmet';
@@ -85,7 +85,6 @@ function FormBuilder() {
     options: []
   });
   const [opcaoTemp, setOpcaoTemp] = useState('');
-  const dragOpcaoIndex = useRef(null);
 
   useEffect(() => {
     carregarDados();
@@ -300,6 +299,12 @@ function FormBuilder() {
     const section = destination.droppableId;
     reorderSection(section, source.index, destination.index);
   }, [reorderSection]);
+
+  const handleDragEndOpcao = useCallback((result) => {
+    const { destination, source } = result;
+    if (!destination) return;
+    handleReordenarOpcao(source.index, destination.index);
+  }, []);
 
   const handleSalvarFormulario = async () => {
     if (campos.length === 0) {
@@ -713,53 +718,68 @@ function FormBuilder() {
                   </Button>
                 </div>
                 {formCampo.options.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <>
                     <Typography variant="caption" color="textSecondary">
                       Arraste pelo ícone para reordenar
                     </Typography>
-                    {formCampo.options.map((opcao, index) => (
-                      <div
-                        key={index}
-                        draggable
-                        onDragStart={() => {
-                          dragOpcaoIndex.current = index;
-                        }}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          handleReordenarOpcao(dragOpcaoIndex.current, index);
-                          dragOpcaoIndex.current = null;
-                        }}
-                        onDragEnd={() => {
-                          dragOpcaoIndex.current = null;
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          padding: '4px 8px',
-                          border: '1px solid rgba(0, 0, 0, 0.12)',
-                          borderRadius: 8,
-                          background: '#fff'
-                        }}
-                      >
-                        <DragIndicatorIcon
-                          fontSize="small"
-                          style={{ color: 'rgba(0, 0, 0, 0.38)', cursor: 'grab' }}
-                        />
-                        <Typography variant="body2" style={{ flex: 1 }}>
-                          {opcao}
-                        </Typography>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleRemoverOpcao(index)}
-                          aria-label="Remover opção"
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </div>
-                    ))}
-                  </div>
+                    <DragDropContext onDragEnd={handleDragEndOpcao}>
+                      <Droppable droppableId="opcoes-campo">
+                        {(providedDrop) => (
+                          <div
+                            ref={providedDrop.innerRef}
+                            {...providedDrop.droppableProps}
+                            style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
+                          >
+                            {formCampo.options.map((opcao, index) => (
+                              <Draggable
+                                key={`opcao-${index}`}
+                                draggableId={`opcao-${index}`}
+                                index={index}
+                              >
+                                {(providedDrag) => (
+                                  <div
+                                    ref={providedDrag.innerRef}
+                                    {...providedDrag.draggableProps}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 8,
+                                      padding: '4px 8px',
+                                      border: '1px solid rgba(0, 0, 0, 0.12)',
+                                      borderRadius: 8,
+                                      background: '#fff',
+                                      ...providedDrag.draggableProps.style
+                                    }}
+                                  >
+                                    <span
+                                      {...providedDrag.dragHandleProps}
+                                      style={{ display: 'flex', alignItems: 'center', cursor: 'grab' }}
+                                    >
+                                      <DragIndicatorIcon
+                                        fontSize="small"
+                                        style={{ color: 'rgba(0, 0, 0, 0.38)' }}
+                                      />
+                                    </span>
+                                    <Typography variant="body2" style={{ flex: 1 }}>
+                                      {opcao}
+                                    </Typography>
+                                    <IconButton
+                                      size="small"
+                                      onClick={() => handleRemoverOpcao(index)}
+                                      aria-label="Remover opção"
+                                    >
+                                      <DeleteIcon fontSize="small" />
+                                    </IconButton>
+                                  </div>
+                                )}
+                              </Draggable>
+                            ))}
+                            {providedDrop.placeholder}
+                          </div>
+                        )}
+                      </Droppable>
+                    </DragDropContext>
+                  </>
                 )}
               </Grid>
             )}
