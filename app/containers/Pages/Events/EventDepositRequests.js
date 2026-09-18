@@ -10,6 +10,7 @@ import {
 import BackIcon from '@mui/icons-material/ArrowBack';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { useHistory, useParams } from 'react-router-dom';
 import brand from 'dan-api/dummy/brand';
 import { useConfirm } from '../../../utils/useConfirm';
@@ -28,7 +29,16 @@ const STATUS_META = {
 
 const money = (v) => `R$ ${(Number(v) || 0).toFixed(2).replace('.', ',')}`;
 const buyerNome = (b = {}) => b.buyer_name || b.nome || b.name || '(sem nome)';
-const buyerContato = (b = {}) => b.buyer_email || b.email || b.buyer_whatsapp || b.buyer_phone || '-';
+const buyerEmail = (b = {}) => b.buyer_email || b.email || '';
+const buyerTelefone = (b = {}) => b.buyer_whatsapp || b.buyer_phone || b.whatsapp || b.telefone || b.celular || '';
+// Link do WhatsApp (wa.me) a partir do telefone: normaliza dígitos e prefixa 55 (Brasil)
+// quando vier sem DDI.
+const whatsappLink = (tel) => {
+  const digits = String(tel || '').replace(/\D/g, '');
+  if (!digits) return null;
+  const full = digits.length <= 11 ? `55${digits}` : digits;
+  return `https://wa.me/${full}`;
+};
 
 function EventDepositRequests() {
   const { id } = useParams();
@@ -160,11 +170,31 @@ function EventDepositRequests() {
                 {registros.map((r) => {
                   const meta = STATUS_META[r.depositApprovalStatus] || { label: r.depositApprovalStatus, color: 'default' };
                   const busy = busyId === r.id;
+                  const email = buyerEmail(r.buyerData);
+                  const telefone = buyerTelefone(r.buyerData);
+                  const waLink = whatsappLink(telefone);
                   return (
                     <TableRow key={r.id}>
                       <TableCell>
                         <Typography variant="body2" fontWeight="bold">{buyerNome(r.buyerData)}</Typography>
-                        <Typography variant="caption" color="textSecondary">{buyerContato(r.buyerData)} · {r.orderCode}</Typography>
+                        <Typography variant="caption" color="textSecondary" display="block">
+                          {email ? `${email} · ` : ''}{r.orderCode}
+                        </Typography>
+                        {telefone && (
+                          <Typography variant="caption" display="block">
+                            {waLink ? (
+                              <a
+                                href={waLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ color: '#128C7E', fontWeight: 600, textDecoration: 'none' }}
+                              >
+                                <WhatsAppIcon style={{ fontSize: 14, verticalAlign: 'text-bottom', marginRight: 3 }} />
+                                {telefone}
+                              </a>
+                            ) : telefone}
+                          </Typography>
+                        )}
                       </TableCell>
                       <TableCell align="right">{money(r.finalPrice)}</TableCell>
                       <TableCell align="right">{r.event?.minDepositAmount != null ? money(r.event.minDepositAmount) : '-'}</TableCell>

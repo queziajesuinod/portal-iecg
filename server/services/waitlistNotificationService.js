@@ -62,15 +62,14 @@ function emailShell(title, bodyHtml) {
 }
 
 function tmplJoined({
-  nome, eventName, batchName, position
+  nome, eventName, batchName
 }) {
   const ola = nome ? `Ola, <strong>${firstName(nome)}</strong>!` : 'Ola!';
-  const pos = position ? ` Sua posicao atual e <strong>#${position}</strong>.` : '';
   const html = emailShell('Voce entrou na lista de espera', `
     <p style="font-size:16px;margin:0 0 16px;">${ola}</p>
     <p style="font-size:15px;line-height:1.5;margin:0 0 16px;">
       O lote <strong>${batchName}</strong> de <strong>${eventName}</strong> esta esgotado, entao voce entrou na
-      <strong>lista de espera</strong>.${pos}
+      <strong>lista de espera</strong>.
     </p>
     <p style="font-size:15px;line-height:1.5;margin:0 0 8px;">
       Assim que uma vaga abrir, enviaremos um link para voce concluir o pagamento e garantir sua inscricao.
@@ -79,7 +78,7 @@ function tmplJoined({
   const text = [
     nome ? `Ola, ${firstName(nome)}!` : 'Ola!',
     '',
-    `O lote ${batchName} de ${eventName} esta esgotado. Voce entrou na lista de espera.${position ? ` Posicao atual: #${position}.` : ''}`,
+    `O lote ${batchName} de ${eventName} esta esgotado. Voce entrou na lista de espera.`,
     'Assim que abrir vaga, enviaremos um link para concluir o pagamento.',
     '',
     'Equipe IECG',
@@ -176,13 +175,12 @@ async function enviar(entry, tmpl) {
   return result;
 }
 
-async function notifyJoined(entry, { position } = {}) {
+async function notifyJoined(entry) {
   const { event, batch } = await loadContext(entry);
   return enviar(entry, tmplJoined({
     nome: entry.contactName,
     eventName: event?.title || 'evento',
     batchName: batch?.name || 'lote',
-    position,
   }));
 }
 
