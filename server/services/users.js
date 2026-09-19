@@ -5,7 +5,8 @@ const {
   User,
   Perfil,
   Permissao,
-  Member
+  Member,
+  sequelize
 } = require('../models');
 const { buildPermissionInclude } = require('./permissionResolver');
 const { hashPassword } = require('./passwordService');
@@ -247,8 +248,12 @@ async function findMemberCandidateByUser(user) {
 }
 
 async function getTodosUsers() {
-  // Lista leve: sem árvore de permissões (só necessária na autenticação) e sem dados de cônjuge.
-  // Reduz drasticamente o payload em memória quando há muitos usuários.
+  // Lista leve e RÁPIDA: usa consultas `raw` (sem hidratar milhares de models do
+  // Sequelize, que era o gargalo) e monta o payload em JS. Sem árvore de permissões
+  // (só necessária na autenticação) e sem dados de cônjuge.
+  const schema = process.env.DB_SCHEMA || 'dev_iecg';
+
+  // 1) Usuários + perfil primário (belongsTo) numa query raw.
   const users = await User.findAll({
     attributes: [
       'id', 'name', 'email', 'username', 'active', 'image',
@@ -259,18 +264,45 @@ async function getTodosUsers() {
         model: Perfil,
         attributes: ['id', 'descricao'],
         required: false
-      },
-      {
-        model: Perfil,
-        as: 'perfis',
-        attributes: ['id', 'descricao'],
-        through: { attributes: [] },
-        required: false
       }
-    ]
+    ],
+    raw: true,
+    nest: true
   });
 
-  return attachLinkedMembers(users);
+  if (!users.length) return [];
+
+  // 2) Perfis (belongsToMany) de todos os usuários numa única query agrupada —
+  //    evita o LEFT JOIN + hidratação aninhada do include belongsToMany.
+  const perfisRows = await sequelize.query(
+    `SELECT up."userId" AS "userId", p.id AS id, p.descricao AS descricao
+       FROM "${schema}"."UserPerfis" up
+       JOIN "${schema}"."Perfis" p ON p.id = up."perfilId"`,
+    { type: sequelize.QueryTypes.SELECT }
+  );
+  const perfisByUser = new Map();
+  perfisRows.forEach((row) => {
+    if (!perfisByUser.has(row.userId)) perfisByUser.set(row.userId, []);
+    perfisByUser.get(row.userId).push({ id: row.id, descricao: row.descricao });
+  });
+
+  // 3) Membros vinculados numa única query (userId nao nulo), sem lista IN gigante.
+  const members = await Member.findAll({
+    where: { userId: { [Op.ne]: null } },
+    attributes: ['id', 'fullName', 'email', 'phone', 'whatsapp', 'status', 'userId'],
+    raw: true
+  });
+  const memberByUser = new Map();
+  members.forEach((m) => {
+    memberByUser.set(String(m.userId), serializeLinkedMember(m));
+  });
+
+  // 4) Monta o payload final com a mesma forma de antes (Perfil, perfis[], linkedMember).
+  return users.map((user) => ({
+    ...user,
+    perfis: perfisByUser.get(user.id) || [],
+    linkedMember: memberByUser.get(String(user.id)) || null
+  }));
 }
 
 async function updateUser(id, updateData) {
